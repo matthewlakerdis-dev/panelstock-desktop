@@ -14368,26 +14368,10 @@ ${xrefStart}
     }, [rows, q, sort]);
     const totalSOH = variants.reduce((s, v) => s + v.qty, 0);
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-start justify-between mb-6", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { className: "text-xl font-semibold text-slate-900 tracking-tight", children: "Stock on Hand" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "text-sm text-slate-500 mt-0.5", children: "Every full panel and off-cut currently in the warehouse." })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center gap-2", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: onExportExcel, className: "flex items-center gap-1.5 text-sm font-medium text-slate-600 border border-slate-200 bg-white rounded-lg px-3 py-2 hover:bg-slate-50", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FileSpreadsheet, { size: 15 }),
-            " Excel"
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: onExportPDF, className: "flex items-center gap-1.5 text-sm font-medium text-slate-600 border border-slate-200 bg-white rounded-lg px-3 py-2 hover:bg-slate-50", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Printer, { size: 15 }),
-            " PDF"
-          ] }),
-          view === "offcuts" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: onAddOffcut, className: "flex items-center gap-1.5 text-sm font-medium text-white bg-cyan-800 rounded-lg px-3 py-2 hover:bg-cyan-900", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Plus, { size: 15 }),
-            " Add off-cut"
-          ] })
-        ] })
-      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "flex items-start justify-between mb-6", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { className: "text-xl font-semibold text-slate-900 tracking-tight", children: "Stock on Hand" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "text-sm text-slate-500 mt-0.5", children: "Every full panel and off-cut currently in the warehouse." })
+      ] }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "grid grid-cols-3 gap-4 mb-6", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bg-white border border-slate-200 rounded-xl p-4", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-xs font-medium text-slate-400 uppercase tracking-wide mb-1", children: "Total panels on hand" }),
@@ -14404,28 +14388,44 @@ ${xrefStart}
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bg-white border border-slate-200 rounded-xl overflow-hidden", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-100", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "relative w-80", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Search, { size: 15, className: "absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-              "input",
-              {
-                value: q,
-                onChange: (e) => setQ(e.target.value),
-                placeholder: "Search colour, material, size, SKU\u2026",
-                className: "w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm outline-none focus:border-cyan-800 focus:bg-white"
-              }
-            )
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center bg-slate-100 rounded-lg p-0.5 text-sm font-medium", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setView("panels"), className: `px-3 py-1.5 rounded-md ${view === "panels" ? "bg-white shadow-sm text-slate-900" : "text-slate-500"}`, children: [
-              "Full panels (",
-              variants.length,
-              ")"
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center gap-3", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "relative w-80", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Search, { size: 15, className: "absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                "input",
+                {
+                  value: q,
+                  onChange: (e) => setQ(e.target.value),
+                  placeholder: "Search colour, material, size, SKU\u2026",
+                  className: "w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm outline-none focus:border-cyan-800 focus:bg-white"
+                }
+              )
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setView("offcuts"), className: `px-3 py-1.5 rounded-md ${view === "offcuts" ? "bg-white shadow-sm text-slate-900" : "text-slate-500"}`, children: [
-              "Off-cuts (",
-              offcuts.length,
-              ")"
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center bg-slate-100 rounded-lg p-0.5 text-sm font-medium", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setView("panels"), className: `px-3 py-1.5 rounded-md ${view === "panels" ? "bg-white shadow-sm text-slate-900" : "text-slate-500"}`, children: [
+                "Full panels (",
+                variants.length,
+                ")"
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setView("offcuts"), className: `px-3 py-1.5 rounded-md ${view === "offcuts" ? "bg-white shadow-sm text-slate-900" : "text-slate-500"}`, children: [
+                "Off-cuts (",
+                offcuts.length,
+                ")"
+              ] })
+            ] })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center gap-2", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: onExportExcel, className: "flex items-center gap-1.5 text-sm font-medium text-slate-600 border border-slate-200 bg-white rounded-lg px-3 py-2 hover:bg-slate-50", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FileSpreadsheet, { size: 15 }),
+              " Excel"
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: onExportPDF, className: "flex items-center gap-1.5 text-sm font-medium text-slate-600 border border-slate-200 bg-white rounded-lg px-3 py-2 hover:bg-slate-50", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Printer, { size: 15 }),
+              " PDF"
+            ] }),
+            view === "offcuts" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: onAddOffcut, className: "flex items-center gap-1.5 text-sm font-medium text-white bg-cyan-800 rounded-lg px-3 py-2 hover:bg-cyan-900", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Plus, { size: 15 }),
+              " Add off-cut"
             ] })
           ] })
         ] }),
