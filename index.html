@@ -14487,6 +14487,20 @@ ${xrefStart}
     ] });
   }
   var inputCls = "w-full bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-cyan-800";
+  function capitalizeWords(str) {
+    return str.replace(/(^|\s)\S/g, (c) => c.toUpperCase());
+  }
+  function CapitalizedInput({ value, onChange, className, ...props }) {
+    const ref = useRef(null);
+    function handleChange(e) {
+      const pos = e.target.selectionStart;
+      onChange(capitalizeWords(e.target.value));
+      requestAnimationFrame(() => {
+        if (ref.current) ref.current.setSelectionRange(pos, pos);
+      });
+    }
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { ref, className: className || inputCls, value, onChange: handleChange, ...props });
+  }
   function PageHeading({ icon, title, subtitle, action }) {
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-start justify-between mb-6", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center gap-3", children: [
@@ -14579,7 +14593,7 @@ ${xrefStart}
               selected.sku
             ] })
           ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm text-slate-400 mb-4 pb-4 border-b border-slate-100", children: "Select a material from the list" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Supplier / PO reference (optional)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, value: ref, onChange: (e) => setRef(e.target.value) }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Supplier / PO reference (optional)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CapitalizedInput, { value: ref, onChange: setRef }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Quantity received", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, type: "number", value: qty, onChange: (e) => setQty(e.target.value) }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: submit, disabled: !selected || !qty, className: "w-full bg-cyan-800 disabled:opacity-40 text-white font-semibold rounded-lg py-2.5 text-sm hover:bg-cyan-900", children: "Add to SOH" })
         ] })
@@ -14685,7 +14699,7 @@ ${xrefStart}
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bg-white border border-slate-200 rounded-xl p-5 h-fit sticky top-0", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SelectedItemSummary, { selected }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Order number", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, value: jobRef, onChange: (e) => setJobRef(e.target.value), placeholder: "e.g. WO-1042" }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Job reference (optional)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, value: customer, onChange: (e) => setCustomer(e.target.value), placeholder: "e.g. Meridian Constructions" }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Job reference (optional)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CapitalizedInput, { value: customer, onChange: setCustomer, placeholder: "e.g. Meridian Constructions" }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Quantity to dispatch", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, type: "number", value: qty, onChange: (e) => setQty(e.target.value) }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: submit, disabled: !selected || !qty, className: "w-full bg-cyan-800 disabled:opacity-40 text-white font-semibold rounded-lg py-2.5 text-sm hover:bg-cyan-900", children: "Confirm dispatch" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "text-xs text-slate-400 mt-3 leading-relaxed", children: "Leaving a usable off-cut behind? Dispatch the full sheet here, then log the remainder from Stock \u2192 Off-cuts \u2192 Add." })
@@ -14910,7 +14924,7 @@ ${xrefStart}
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "grid grid-cols-2 gap-3", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Quantity", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, type: "number", value: form.qty, onChange: set("qty") }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Note (optional)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, value: form.note, onChange: set("note"), placeholder: "e.g. leftover from WO-1042" }) })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Note (optional)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CapitalizedInput, { value: form.note, onChange: (v) => setForm({ ...form, note: v }), placeholder: "e.g. leftover from WO-1042" }) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: submit, disabled: !selected || !form.width || !form.height || !form.qty, className: "w-full bg-cyan-800 disabled:opacity-40 text-white font-semibold rounded-lg py-2.5 text-sm mt-1 hover:bg-cyan-900", children: "Add off-cut" })
     ] });
@@ -15363,8 +15377,8 @@ ${xrefStart}
       mode && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bg-white border border-slate-200 rounded-xl p-5 mb-6", children: [
         isEditing && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm font-semibold text-cyan-800 mb-3", children: "Editing material" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "grid grid-cols-2 gap-4", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Colour / finish", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, value: form.color, onChange: set("color"), placeholder: "e.g. Bronze Anodised" }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Material", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, value: form.material, onChange: set("material"), placeholder: "e.g. ACP, Solid Aluminium" }) })
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Colour / finish", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CapitalizedInput, { value: form.color, onChange: (v) => setForm({ ...form, color: v }), placeholder: "e.g. Bronze Anodised" }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Material", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CapitalizedInput, { value: form.material, onChange: (v) => setForm({ ...form, material: v }), placeholder: "e.g. ACP, Solid Aluminium" }) })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "grid grid-cols-4 gap-4", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Thickness (mm)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, type: "number", value: form.thickness, onChange: set("thickness") }) }),
@@ -15926,7 +15940,7 @@ ${xrefStart}
                 /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => onRemoveReason(r.id), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Trash2, { size: 15, className: "text-slate-400 hover:text-red-700" }) })
               ] }, r.id)) }),
               /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex gap-2", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, placeholder: "New reason\u2026", value: newReason, onChange: (e) => setNewReason(e.target.value) }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CapitalizedInput, { placeholder: "New reason\u2026", value: newReason, onChange: setNewReason }),
                 /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => {
                   onAddReason(newReason);
                   setNewReason("");
