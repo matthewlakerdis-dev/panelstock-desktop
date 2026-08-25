@@ -15499,7 +15499,10 @@ ${xrefStart}
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "space-y-1.5", children: loaded && backups.map((b) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm text-slate-700", children: fmtBackupTimestamp(b.timestamp) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-xs text-slate-400", children: b.takenBy === "scheduled" ? "Automatic" : `Manual \u2014 by ${b.takenBy || "unknown"}` })
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "text-xs text-slate-400", children: [
+            "By ",
+            b.takenBy === "scheduled" ? "System" : b.takenBy || "unknown"
+          ] })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => handleRestore(b.timestamp), disabled: busy, className: "text-sm font-semibold text-red-700 disabled:opacity-50 hover:underline", children: "Restore" })
       ] }, b.timestamp)) })
@@ -15562,7 +15565,7 @@ ${xrefStart}
     }
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const isConfigured = form.workerUrl && form.secret;
-    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bg-white border border-slate-300 rounded-xl p-5 max-w-xl", children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bg-white border border-slate-300 rounded-xl p-5", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm font-semibold text-slate-800 mb-1", children: "Email reports" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "text-sm text-slate-500 mb-4 leading-relaxed", children: `Stock data syncs across every device automatically. Email reports: ${form.enabled ? "Enabled" : "Paused"} \u2014 ${describeDays(form.days)} at ${form.time}, to ${form.recipients.length} recipient${form.recipients.length === 1 ? "" : "s"}.` }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Field, { label: "Recipients", children: [
@@ -15847,7 +15850,7 @@ ${xrefStart}
           s.key
         )) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "col-span-3", children: [
-          section === "general" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "space-y-4 max-w-xl", children: [
+          section === "general" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "space-y-4 max-w-xl mx-auto", children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bg-white border border-slate-300 rounded-xl p-5", children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm font-semibold text-slate-800 mb-1", children: "Standard Operating Procedures" }),
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "text-sm text-slate-500 mb-3 leading-relaxed", children: "Step-by-step guide covering every part of the app, with real screenshots." }),
@@ -15884,7 +15887,7 @@ ${xrefStart}
             ] })
           ] }),
           section === "catalog" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CatalogAdmin, { catalog, onAdd: onAddCatalogItem, onRemove: onRemoveCatalogItem, onEdit: onEditCatalogItem, onAddBulk: onAddCatalogItemsBulk, onExportExcel: onExportCatalogExcel, onExportPDF: onExportCatalogPDF }),
-          section === "reasons" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "max-w-xl", children: [
+          section === "reasons" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "max-w-xl mx-auto", children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
               PageHeading,
               {
@@ -15979,7 +15982,7 @@ ${xrefStart}
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeading, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(User, { size: 18 }), title: "Manage Users", subtitle: "Grant or remove admin access, reset a forgotten PIN, or remove a user entirely." }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AdminPanel, { username, workerUrl, secret: workerSecret, onLogTxn })
           ] }),
-          section === "email" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+          section === "email" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "max-w-xl mx-auto", children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeading, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Mail, { size: 18 }), title: "Email Reports", subtitle: "Scheduled reports sent automatically by the server." }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmailReportsAdmin, { config: emailConfig, onSave: onSaveEmailConfig, onSendNow: onSendReportNow, onPushLocalData })
           ] }),
