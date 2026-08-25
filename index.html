@@ -13000,6 +13000,13 @@
     const d = new Date(iso);
     return d.toLocaleString(void 0, { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
   }
+  function fmtDDMMYY(iso) {
+    const d = new Date(iso);
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const yy = String(d.getFullYear()).slice(-2);
+    return `${dd}/${mm}/${yy}`;
+  }
   function parseCSV(text) {
     const rows = [];
     let row = [], field = "", inQuotes = false;
@@ -13881,6 +13888,7 @@ ${xrefStart}
       const nextVariants = [...variants, { id: uid(), catalogId, sku, color, material, thickness, width, height, qty: 0, reorderPoint: reorderPoint || 0 }];
       setVariants(nextVariants);
       persist({ catalog: nextCatalog, variants: nextVariants });
+      logTxn({ type: "catalog", desc: `Added ${color} ${material} ${thickness}mm ${fmtDim(width, height)} to the catalog (SKU ${sku})`, qty: "" });
       showToast("Material added to catalog");
     }
     function addCatalogItemsBulk(rows) {
@@ -13897,15 +13905,19 @@ ${xrefStart}
       setCatalog(nextCatalog);
       setVariants(nextVariants);
       persist({ catalog: nextCatalog, variants: nextVariants });
+      logTxn({ type: "catalog", desc: `Bulk imported ${rows.length} material${rows.length === 1 ? "" : "s"} to the catalog`, qty: "" });
       showToast(`${rows.length} material${rows.length === 1 ? "" : "s"} imported`);
     }
     function removeCatalogItem(id) {
+      const removed = catalog.find((c) => c.id === id);
       const next = catalog.filter((c) => c.id !== id);
       setCatalog(next);
       persist({ catalog: next });
+      if (removed) logTxn({ type: "catalog", desc: `Removed ${removed.color} ${removed.material} ${removed.thickness}mm ${fmtDim(removed.width, removed.height)} from the catalog (SKU ${removed.sku})`, qty: "" });
       showToast("Removed from catalog");
     }
     function editCatalogItem(id, { color, material, thickness, width, height, reorderPoint }) {
+      const before = catalog.find((c) => c.id === id);
       const nextCatalog = catalog.map(
         (c) => c.id === id ? { ...c, color, material, thickness, width, height, reorderPoint: reorderPoint || 0 } : c
       );
@@ -13915,31 +13927,8 @@ ${xrefStart}
       );
       setVariants(nextVariants);
       persist({ catalog: nextCatalog, variants: nextVariants });
+      if (before) logTxn({ type: "catalog", desc: `Edited catalog entry ${before.sku}: now ${color} ${material} ${thickness}mm ${fmtDim(width, height)}`, qty: "" });
       showToast("Material updated");
-    }
-    function buildBackup() {
-      return JSON.stringify({ version: 1, exportedAt: (/* @__PURE__ */ new Date()).toISOString(), variants, offcuts, transactions, reasons, catalog }, null, 2);
-    }
-    function restoreBackup(jsonText) {
-      let data;
-      try {
-        data = JSON.parse(jsonText);
-      } catch {
-        return { ok: false, message: "That doesn't look like valid backup text \u2014 check you copied the whole thing." };
-      }
-      if (!data || typeof data !== "object") return { ok: false, message: "Backup format not recognised." };
-      const nextVariants = Array.isArray(data.variants) ? data.variants : variants;
-      const nextOffcuts = Array.isArray(data.offcuts) ? data.offcuts : offcuts;
-      const nextTransactions = Array.isArray(data.transactions) ? data.transactions : transactions;
-      const nextReasons = Array.isArray(data.reasons) ? data.reasons : reasons;
-      const nextCatalog = Array.isArray(data.catalog) ? data.catalog : catalog;
-      setVariants(nextVariants);
-      setOffcuts(nextOffcuts);
-      setTransactions(nextTransactions);
-      setReasons(nextReasons);
-      setCatalog(nextCatalog);
-      persist({ variants: nextVariants, offcuts: nextOffcuts, transactions: nextTransactions, reasons: nextReasons, catalog: nextCatalog });
-      return { ok: true, message: "Restored successfully." };
     }
     function receiveStock({ catalogId, qty, ref }) {
       const cat = catalog.find((c) => c.id === catalogId);
@@ -14288,8 +14277,7 @@ ${xrefStart}
               onRemoveCatalogItem: removeCatalogItem,
               onEditCatalogItem: editCatalogItem,
               onAddCatalogItemsBulk: addCatalogItemsBulk,
-              onBuildBackup: buildBackup,
-              onRestoreBackup: restoreBackup,
+              onLogTxn: logTxn,
               onResetAllSOH: resetAllSOH,
               onResetAllInformation: resetAllInformation
             }
@@ -15428,35 +15416,11 @@ ${xrefStart}
       ] }) })
     ] });
   }
-  function BackupRestore({ onBuildBackup, onRestoreBackup, username, workerUrl, workerSecret }) {
-    const [showRestore, setShowRestore] = useState(false);
-    const [pasteText, setPasteText] = useState("");
+  function BackupRestore({ username, workerUrl, workerSecret, onLogTxn }) {
+    const [loaded, setLoaded] = useState(false);
+    const [backups, setBackups] = useState([]);
+    const [busy, setBusy] = useState(false);
     const [status, setStatus] = useState(null);
-    const [backupOutput, setBackupOutput] = useState(null);
-    const [autoOpen, setAutoOpen] = useState(false);
-    const [autoLoaded, setAutoLoaded] = useState(false);
-    const [autoBackups, setAutoBackups] = useState([]);
-    const [autoBusy, setAutoBusy] = useState(false);
-    const [autoStatus, setAutoStatus] = useState(null);
-    async function handleBackup() {
-      const json = onBuildBackup();
-      try {
-        await navigator.clipboard.writeText(json);
-        setStatus({ kind: "ok", msg: "Copied \u2014 paste it somewhere safe!" });
-        setBackupOutput(null);
-      } catch {
-        setStatus({ kind: "err", msg: "Couldn't copy automatically \u2014 tap the box below, select all, then copy manually." });
-        setBackupOutput(json);
-      }
-    }
-    function handleRestore() {
-      const result = onRestoreBackup(pasteText);
-      setStatus({ kind: result.ok ? "ok" : "err", msg: result.message });
-      if (result.ok) {
-        setPasteText("");
-        setShowRestore(false);
-      }
-    }
     async function callWorker(path, body) {
       const res = await fetch(`${workerUrl.replace(/\/$/, "")}${path}`, {
         method: "POST",
@@ -15466,112 +15430,79 @@ ${xrefStart}
       return res.json();
     }
     async function loadBackups() {
-      setAutoBusy(true);
-      setAutoStatus(null);
+      setBusy(true);
+      setStatus(null);
       try {
         const result = await callWorker("/admin/backups", { username });
-        setAutoBusy(false);
+        setBusy(false);
         if (!result.ok) {
-          setAutoStatus({ kind: "err", msg: result.error || "Could not load backups." });
+          setStatus({ kind: "err", msg: result.error || "Could not load backups." });
           return;
         }
-        setAutoBackups(result.backups || []);
-        setAutoLoaded(true);
+        setBackups(result.backups || []);
+        setLoaded(true);
       } catch {
-        setAutoBusy(false);
-        setAutoStatus({ kind: "err", msg: "Could not reach the server." });
+        setBusy(false);
+        setStatus({ kind: "err", msg: "Could not reach the server." });
       }
     }
+    useEffect(() => {
+      loadBackups();
+    }, []);
     async function handleBackupNow() {
-      setAutoBusy(true);
-      setAutoStatus(null);
+      setBusy(true);
+      setStatus(null);
       try {
         const result = await callWorker("/admin/backup-now", { username });
         if (!result.ok) {
-          setAutoBusy(false);
-          setAutoStatus({ kind: "err", msg: result.error || "Could not take a backup." });
+          setBusy(false);
+          setStatus({ kind: "err", msg: result.error || "Could not take a backup." });
           return;
         }
         await loadBackups();
-        setAutoBusy(false);
-        setAutoStatus({ kind: "ok", msg: "Backup taken just now." });
+        setBusy(false);
+        setStatus({ kind: "ok", msg: "Backup taken just now." });
+        onLogTxn({ type: "backup", desc: "Manually triggered a backup", qty: "" });
       } catch {
-        setAutoBusy(false);
-        setAutoStatus({ kind: "err", msg: "Could not reach the server." });
+        setBusy(false);
+        setStatus({ kind: "err", msg: "Could not reach the server." });
       }
     }
-    async function handleAutoRestore(timestamp) {
+    async function handleRestore(timestamp) {
       const label = fmtBackupTimestamp(timestamp);
       if (!window.confirm(`Restore the backup from ${label}? This replaces all current stock data, catalog, and activity history with that snapshot. This cannot be undone.`)) return;
-      setAutoBusy(true);
-      setAutoStatus(null);
+      setBusy(true);
+      setStatus(null);
       try {
         const result = await callWorker("/admin/restore-backup", { username, timestamp });
-        setAutoBusy(false);
+        setBusy(false);
         if (!result.ok) {
-          setAutoStatus({ kind: "err", msg: result.error || "Could not restore that backup." });
+          setStatus({ kind: "err", msg: result.error || "Could not restore that backup." });
           return;
         }
-        setAutoStatus({ kind: "ok", msg: `Restored the backup from ${label}. Reopen this device's app to see the restored data (other devices will pick it up automatically within a few seconds).` });
+        setStatus({ kind: "ok", msg: `Restored the backup from ${label}. Reopen this device's app to see the restored data (other devices will pick it up automatically within a few seconds).` });
       } catch {
-        setAutoBusy(false);
-        setAutoStatus({ kind: "err", msg: "Could not reach the server." });
+        setBusy(false);
+        setStatus({ kind: "err", msg: "Could not reach the server." });
       }
     }
-    function toggleAutoOpen() {
-      if (autoOpen) {
-        setAutoOpen(false);
-        return;
-      }
-      setAutoOpen(true);
-      if (!autoLoaded) loadBackups();
-    }
-    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "grid grid-cols-2 gap-6", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bg-white border border-slate-300 rounded-xl p-5", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm font-semibold text-slate-800 mb-1", children: "Manual backup" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "text-sm text-slate-500 mb-4 leading-relaxed", children: "Back up before asking for app changes, and restore after \u2014 this protects your catalog and stock data no matter what happens to the app itself." }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex gap-2 mb-3", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: handleBackup, className: "flex-1 bg-cyan-800 text-white font-semibold rounded-lg py-2.5 text-sm hover:bg-cyan-900", children: "Copy full backup" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setShowRestore(!showRestore), className: "flex-1 border border-slate-300 bg-slate-50 rounded-lg py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-100", children: showRestore ? "Cancel" : "Restore from backup" })
-        ] }),
-        status && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: `text-sm mb-2 font-medium ${status.kind === "ok" ? "text-green-800" : "text-red-800"}`, children: status.msg }),
-        backupOutput && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "mb-2", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("textarea", { readOnly: true, value: backupOutput, onFocus: (e) => e.target.select(), className: "w-full h-28 text-xs font-mono bg-slate-50 border border-slate-300 rounded-lg p-2 outline-none" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "text-xs text-slate-500 mt-1", children: "Click the box, then select all and copy." })
-        ] }),
-        showRestore && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-            "textarea",
-            {
-              value: pasteText,
-              onChange: (e) => setPasteText(e.target.value),
-              placeholder: "Paste your backup text here\u2026",
-              className: "w-full h-28 text-xs font-mono bg-slate-50 border border-slate-300 rounded-lg p-2 mb-2 outline-none focus:border-cyan-800"
-            }
-          ),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: handleRestore, disabled: !pasteText.trim(), className: "w-full bg-slate-900 disabled:opacity-40 text-white font-semibold rounded-lg py-2.5 text-sm hover:bg-slate-800", children: "Restore this data" })
-        ] })
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bg-white border border-slate-300 rounded-xl p-5", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm font-semibold text-slate-800 mb-1", children: "Backups" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "text-sm text-slate-500 mb-4 leading-relaxed", children: "A snapshot is taken automatically once a day and kept for 14 days \u2014 or take one right now below." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: handleBackupNow, disabled: busy, className: "flex items-center justify-center gap-1.5 bg-cyan-800 disabled:opacity-50 text-white font-semibold rounded-lg py-2.5 px-4 text-sm mb-4 hover:bg-cyan-900", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Save, { size: 14 }),
+        " Backup now"
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bg-white border border-slate-300 rounded-xl p-5", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center justify-between mb-1", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm font-semibold text-slate-800", children: "Automated backups" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: toggleAutoOpen, className: "text-sm font-semibold text-cyan-800 hover:underline", children: autoOpen ? "Hide" : "Show" })
+      busy && !loaded && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "text-sm text-slate-400", children: "Loading\u2026" }),
+      status && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: `text-sm mb-2 ${status.kind === "err" ? "text-red-800" : "text-green-800"}`, children: status.msg }),
+      loaded && backups.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm text-slate-400", children: "No backups yet \u2014 take one above, or wait for the first automatic one." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "space-y-1.5", children: loaded && backups.map((b) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm text-slate-700", children: fmtBackupTimestamp(b.timestamp) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-xs text-slate-400", children: b.takenBy === "scheduled" ? "Automatic" : `Manual \u2014 by ${b.takenBy || "unknown"}` })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "text-sm text-slate-500 mb-4 leading-relaxed", children: "A snapshot is taken automatically once a day and kept for 14 days \u2014 or take one right now below." }),
-        autoOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "space-y-1.5", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: handleBackupNow, disabled: autoBusy, className: "w-full flex items-center justify-center gap-1.5 bg-cyan-800 disabled:opacity-50 text-white font-semibold rounded-lg py-2.5 text-sm mb-2 hover:bg-cyan-900", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Save, { size: 14 }),
-            " Backup now"
-          ] }),
-          autoBusy && !autoLoaded && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "text-sm text-slate-400", children: "Loading\u2026" }),
-          autoStatus && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: `text-sm mb-1 ${autoStatus.kind === "err" ? "text-red-800" : "text-green-800"}`, children: autoStatus.msg }),
-          autoLoaded && autoBackups.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm text-slate-400", children: "No backups yet \u2014 take one above, or wait for the first automatic one." }),
-          autoLoaded && autoBackups.map((timestamp) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "text-sm text-slate-700", children: fmtBackupTimestamp(timestamp) }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => handleAutoRestore(timestamp), disabled: autoBusy, className: "text-sm font-semibold text-red-700 disabled:opacity-50 hover:underline", children: "Restore" })
-          ] }, timestamp))
-        ] })
-      ] })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => handleRestore(b.timestamp), disabled: busy, className: "text-sm font-semibold text-red-700 disabled:opacity-50 hover:underline", children: "Restore" })
+      ] }, b.timestamp)) })
     ] });
   }
   var WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -15696,7 +15627,7 @@ ${xrefStart}
       }
     );
   }
-  function AdminPanel({ username, workerUrl, secret }) {
+  function AdminPanel({ username, workerUrl, secret, onLogTxn }) {
     const [loaded, setLoaded] = useState(false);
     const [users, setUsers] = useState([]);
     const [regCode, setRegCode] = useState("");
@@ -15749,6 +15680,7 @@ ${xrefStart}
         setRegCode(newRegCode);
         setNewRegCode("");
         setStatus({ kind: "ok", msg: "Registration code updated." });
+        onLogTxn({ type: "user", desc: "Changed the registration code", qty: "" });
       } catch {
         setBusy(false);
         setStatus({ kind: "err", msg: "Could not reach the server." });
@@ -15765,6 +15697,7 @@ ${xrefStart}
           return;
         }
         setUsers((prev) => prev.map((u) => u.username === targetUsername ? { ...u, isAdmin: makeAdmin } : u));
+        onLogTxn({ type: "user", desc: `${makeAdmin ? "Granted" : "Removed"} admin access ${makeAdmin ? "to" : "from"} ${targetUsername}`, qty: "" });
       } catch {
         setBusy(false);
         setStatus({ kind: "err", msg: "Could not reach the server." });
@@ -15781,6 +15714,7 @@ ${xrefStart}
           return;
         }
         setStatus({ kind: "ok", msg: `${targetUsername}'s PIN was reset \u2014 they'll set a new one next time they log in with the default PIN.` });
+        onLogTxn({ type: "user", desc: `Reset PIN for ${targetUsername}`, qty: "" });
       } catch {
         setBusy(false);
         setStatus({ kind: "err", msg: "Could not reach the server." });
@@ -15799,6 +15733,7 @@ ${xrefStart}
         }
         setUsers((prev) => prev.filter((u) => u.username !== targetUsername));
         setStatus({ kind: "ok", msg: `${targetUsername} was removed.` });
+        onLogTxn({ type: "user", desc: `Removed user ${targetUsername}`, qty: "" });
       } catch {
         setBusy(false);
         setStatus({ kind: "err", msg: "Could not reach the server." });
@@ -15887,7 +15822,7 @@ ${xrefStart}
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: handleReset, disabled: !canReset, className: "w-full bg-red-800 disabled:opacity-40 text-white font-semibold rounded-lg py-2.5 text-sm hover:bg-red-900", children: "Reset all information" })
     ] });
   }
-  function SettingsPage({ reasons, onAddReason, onRemoveReason, onExportExcel, onExportPDF, onExportActivityExcel, onExportActivityPDF, onExportCatalogExcel, onExportCatalogPDF, emailConfig, onSaveEmailConfig, onSendReportNow, onPushLocalData, onOpenDamageLog, transactions, onVoidTransaction, username, isAdmin, catalog, onAddCatalogItem, onRemoveCatalogItem, onEditCatalogItem, onAddCatalogItemsBulk, onBuildBackup, onRestoreBackup, onResetAllSOH, onResetAllInformation, workerUrl, workerSecret }) {
+  function SettingsPage({ reasons, onAddReason, onRemoveReason, onExportExcel, onExportPDF, onExportActivityExcel, onExportActivityPDF, onExportCatalogExcel, onExportCatalogPDF, emailConfig, onSaveEmailConfig, onSendReportNow, onPushLocalData, onOpenDamageLog, transactions, onVoidTransaction, username, isAdmin, catalog, onAddCatalogItem, onRemoveCatalogItem, onEditCatalogItem, onAddCatalogItemsBulk, onLogTxn, onResetAllSOH, onResetAllInformation, workerUrl, workerSecret }) {
     const [newReason, setNewReason] = useState("");
     const [section, setSection] = useState("general");
     const sections = [
@@ -15901,7 +15836,7 @@ ${xrefStart}
     ];
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeading, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Settings2, { size: 18 }), title: "Settings", subtitle: `Signed in as ${username || "Unknown"}${isAdmin ? " \xB7 Admin" : ""}` }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "grid grid-cols-4 gap-6", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "grid grid-cols-4 gap-3", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("nav", { className: "space-y-0.5", children: sections.map((s) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           "button",
           {
@@ -15912,7 +15847,7 @@ ${xrefStart}
           s.key
         )) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "col-span-3", children: [
-          section === "general" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "space-y-6 max-w-xl", children: [
+          section === "general" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "space-y-4 max-w-xl", children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bg-white border border-slate-300 rounded-xl p-5", children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm font-semibold text-slate-800 mb-1", children: "Standard Operating Procedures" }),
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "text-sm text-slate-500 mb-3 leading-relaxed", children: "Step-by-step guide covering every part of the app, with real screenshots." }),
@@ -15946,18 +15881,22 @@ ${xrefStart}
                   " PDF"
                 ] })
               ] })
-            ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bg-white border border-slate-300 rounded-xl p-5", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm font-semibold text-slate-800 mb-3", children: "Damage report" }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: onOpenDamageLog, className: "flex items-center gap-1.5 border border-slate-300 bg-slate-50 rounded-lg px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-100", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ClipboardList, { size: 15 }),
-                " View damage log"
-              ] })
             ] })
           ] }),
           section === "catalog" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CatalogAdmin, { catalog, onAdd: onAddCatalogItem, onRemove: onRemoveCatalogItem, onEdit: onEditCatalogItem, onAddBulk: onAddCatalogItemsBulk, onExportExcel: onExportCatalogExcel, onExportPDF: onExportCatalogPDF }),
           section === "reasons" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "max-w-xl", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeading, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AlertTriangle, { size: 18 }), title: "Damage Reason Codes", subtitle: "Every reason has a 3-digit code, assigned automatically and never reused." }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              PageHeading,
+              {
+                icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AlertTriangle, { size: 18 }),
+                title: "Damage Reason Codes",
+                subtitle: "Every reason has a 3-digit code, assigned automatically and never reused.",
+                action: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: onOpenDamageLog, className: "flex items-center gap-1.5 border border-slate-300 bg-white rounded-lg px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50", children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ClipboardList, { size: 15 }),
+                  " View damage log"
+                ] })
+              }
+            ),
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bg-white border border-slate-300 rounded-xl p-5", children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "space-y-1.5 mb-4", children: reasons.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2", children: [
                 /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "text-sm text-slate-700", children: [
@@ -15981,7 +15920,7 @@ ${xrefStart}
               {
                 icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ClipboardList, { size: 18 }),
                 title: "Recent Activity",
-                subtitle: "Every receipt, dispatch, and damage write-off, newest first.",
+                subtitle: "Every receipt, dispatch, damage write-off, and admin action, newest first.",
                 action: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center gap-2", children: [
                   /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: onExportActivityExcel, className: "flex items-center gap-1.5 text-sm font-medium text-slate-600 border border-slate-300 bg-white rounded-lg px-3 py-2 hover:bg-slate-50", children: [
                     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FileSpreadsheet, { size: 15 }),
@@ -15994,22 +15933,24 @@ ${xrefStart}
                 ] })
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "bg-white border border-slate-300 rounded-xl overflow-hidden", children: transactions.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyState, { text: "No activity yet." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", { className: "w-full text-sm", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "bg-white border border-slate-300 rounded-xl overflow-hidden", children: transactions.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyState, { text: "No activity yet." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", { className: "w-full text-sm table-fixed", children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { className: "bg-slate-50/60", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { children: [
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Type" }),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Description" }),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Qty" }),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "User" }),
-                isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "w-16" })
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "w-20 px-2 py-1.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Date" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "w-24 px-2 py-1.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Type" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-2 py-1.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Description" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "w-28 px-2 py-1.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "SKU" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "w-16 px-2 py-1.5 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Qty" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "w-28 px-2 py-1.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "User" }),
+                isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "w-14" })
               ] }) }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: transactions.slice(0, 100).map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { className: `border-t border-slate-100 ${t.voided ? "opacity-50" : ""}`, children: [
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-2.5", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: `font-semibold uppercase text-xs px-1.5 py-0.5 rounded ${t.type === "receipt" ? "bg-green-50 text-green-800" : t.type === "dispatch" ? "bg-slate-100 text-cyan-800" : t.type === "damage" ? "bg-red-50 text-red-800" : t.type === "reset" ? "bg-purple-100 text-purple-800" : "bg-stone-100 text-amber-800"}`, children: t.type }) }),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("td", { className: "px-4 py-2.5 text-slate-600", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: transactions.slice(0, 100).map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { className: `border-t border-slate-100 align-top ${t.voided ? "opacity-50" : ""}`, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-2 py-1.5 text-slate-400 font-mono text-xs whitespace-normal break-words", children: fmtDDMMYY(t.timestamp) }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-2 py-1.5 whitespace-normal break-words", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: `font-semibold uppercase text-xs px-1.5 py-0.5 rounded inline-block ${t.type === "receipt" ? "bg-green-50 text-green-800" : t.type === "dispatch" ? "bg-slate-100 text-cyan-800" : t.type === "damage" ? "bg-red-50 text-red-800" : t.type === "reset" ? "bg-purple-100 text-purple-800" : t.type === "catalog" ? "bg-indigo-50 text-indigo-800" : t.type === "user" ? "bg-blue-50 text-blue-800" : t.type === "backup" ? "bg-teal-50 text-teal-800" : "bg-stone-100 text-amber-800"}`, children: t.type }) }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("td", { className: "px-2 py-1.5 text-slate-600 whitespace-normal break-words", children: [
                   /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: t.voided ? "line-through" : "", children: [
                     t.desc,
                     t.ref ? ` \xB7 ${t.ref}` : "",
-                    t.customer ? ` \xB7 ${t.customer}` : "",
-                    t.reason ? ` \xB7 ${t.reason}` : ""
+                    t.customer ? ` \xB7 ${t.customer}` : ""
                   ] }),
                   t.voided && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "text-xs text-red-700 font-medium mt-0.5", children: [
                     "VOIDED by ",
@@ -16018,9 +15959,10 @@ ${xrefStart}
                     new Date(t.voidedAt).toLocaleString()
                   ] })
                 ] }),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-2.5 text-right font-mono text-slate-700", children: t.qty }),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-2.5 text-slate-400", children: t.user }),
-                isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-2.5 text-right", children: !t.voided && (t.type === "receipt" || t.type === "dispatch" || t.type === "damage") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-2 py-1.5 text-slate-400 font-mono text-xs whitespace-normal break-words", children: t.sku || "" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-2 py-1.5 text-right font-mono text-slate-700 whitespace-normal break-words", children: t.qty }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-2 py-1.5 text-slate-400 whitespace-normal break-words", children: t.user }),
+                isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-2 py-1.5 text-right", children: !t.voided && (t.type === "receipt" || t.type === "dispatch" || t.type === "damage") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
                   "button",
                   {
                     onClick: () => {
@@ -16035,7 +15977,7 @@ ${xrefStart}
           ] }),
           section === "users" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeading, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(User, { size: 18 }), title: "Manage Users", subtitle: "Grant or remove admin access, reset a forgotten PIN, or remove a user entirely." }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AdminPanel, { username, workerUrl, secret: workerSecret })
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AdminPanel, { username, workerUrl, secret: workerSecret, onLogTxn })
           ] }),
           section === "email" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeading, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Mail, { size: 18 }), title: "Email Reports", subtitle: "Scheduled reports sent automatically by the server." }),
@@ -16043,7 +15985,7 @@ ${xrefStart}
           ] }),
           section === "backup" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeading, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Save, { size: 18 }), title: "Backup, Reset & Recovery", subtitle: "Protect your data, or start fresh for a new stocktake." }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "mb-6", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BackupRestore, { onBuildBackup, onRestoreBackup, username, workerUrl, workerSecret }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "mb-6", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BackupRestore, { username, workerUrl, workerSecret, onLogTxn }) }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "grid grid-cols-2 gap-6", children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)(StocktakeReset, { onReset: onResetAllSOH }),
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FullReset, { onReset: onResetAllInformation })
