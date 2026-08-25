@@ -12996,6 +12996,10 @@
   var genSku = () => "AL-" + Math.random().toString(36).slice(2, 8).toUpperCase();
   var todayStr = () => (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
   var fmtDim = (w, h) => `${w} \xD7 ${h}`;
+  function fmtBackupTimestamp(iso) {
+    const d = new Date(iso);
+    return d.toLocaleString(void 0, { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
+  }
   function parseCSV(text) {
     const rows = [];
     let row = [], field = "", inQuotes = false;
@@ -15431,7 +15435,7 @@ ${xrefStart}
     const [backupOutput, setBackupOutput] = useState(null);
     const [autoOpen, setAutoOpen] = useState(false);
     const [autoLoaded, setAutoLoaded] = useState(false);
-    const [autoDates, setAutoDates] = useState([]);
+    const [autoBackups, setAutoBackups] = useState([]);
     const [autoBusy, setAutoBusy] = useState(false);
     const [autoStatus, setAutoStatus] = useState(null);
     async function handleBackup() {
@@ -15471,25 +15475,44 @@ ${xrefStart}
           setAutoStatus({ kind: "err", msg: result.error || "Could not load backups." });
           return;
         }
-        setAutoDates(result.dates || []);
+        setAutoBackups(result.backups || []);
         setAutoLoaded(true);
       } catch {
         setAutoBusy(false);
         setAutoStatus({ kind: "err", msg: "Could not reach the server." });
       }
     }
-    async function handleAutoRestore(date) {
-      if (!window.confirm(`Restore the automated backup from ${date}? This replaces all current stock data, catalog, and activity history with that snapshot. This cannot be undone.`)) return;
+    async function handleBackupNow() {
       setAutoBusy(true);
       setAutoStatus(null);
       try {
-        const result = await callWorker("/admin/restore-backup", { username, date });
+        const result = await callWorker("/admin/backup-now", { username });
+        if (!result.ok) {
+          setAutoBusy(false);
+          setAutoStatus({ kind: "err", msg: result.error || "Could not take a backup." });
+          return;
+        }
+        await loadBackups();
+        setAutoBusy(false);
+        setAutoStatus({ kind: "ok", msg: "Backup taken just now." });
+      } catch {
+        setAutoBusy(false);
+        setAutoStatus({ kind: "err", msg: "Could not reach the server." });
+      }
+    }
+    async function handleAutoRestore(timestamp) {
+      const label = fmtBackupTimestamp(timestamp);
+      if (!window.confirm(`Restore the backup from ${label}? This replaces all current stock data, catalog, and activity history with that snapshot. This cannot be undone.`)) return;
+      setAutoBusy(true);
+      setAutoStatus(null);
+      try {
+        const result = await callWorker("/admin/restore-backup", { username, timestamp });
         setAutoBusy(false);
         if (!result.ok) {
           setAutoStatus({ kind: "err", msg: result.error || "Could not restore that backup." });
           return;
         }
-        setAutoStatus({ kind: "ok", msg: `Restored ${date}. Reopen this device's app to see the restored data (other devices will pick it up automatically within a few seconds).` });
+        setAutoStatus({ kind: "ok", msg: `Restored the backup from ${label}. Reopen this device's app to see the restored data (other devices will pick it up automatically within a few seconds).` });
       } catch {
         setAutoBusy(false);
         setAutoStatus({ kind: "err", msg: "Could not reach the server." });
@@ -15534,15 +15557,19 @@ ${xrefStart}
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm font-semibold text-slate-800", children: "Automated backups" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: toggleAutoOpen, className: "text-sm font-semibold text-cyan-800 hover:underline", children: autoOpen ? "Hide" : "Show" })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "text-sm text-slate-500 mb-4 leading-relaxed", children: "A snapshot is taken automatically once a day and kept for 14 days \u2014 no need to remember to back up yourself." }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "text-sm text-slate-500 mb-4 leading-relaxed", children: "A snapshot is taken automatically once a day and kept for 14 days \u2014 or take one right now below." }),
         autoOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "space-y-1.5", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: handleBackupNow, disabled: autoBusy, className: "w-full flex items-center justify-center gap-1.5 bg-cyan-800 disabled:opacity-50 text-white font-semibold rounded-lg py-2.5 text-sm mb-2 hover:bg-cyan-900", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Save, { size: 14 }),
+            " Backup now"
+          ] }),
           autoBusy && !autoLoaded && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "text-sm text-slate-400", children: "Loading\u2026" }),
           autoStatus && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: `text-sm mb-1 ${autoStatus.kind === "err" ? "text-red-800" : "text-green-800"}`, children: autoStatus.msg }),
-          autoLoaded && autoDates.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm text-slate-400", children: "No automated backups yet \u2014 the first one is taken within a day of the app going live." }),
-          autoLoaded && autoDates.map((date) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "text-sm text-slate-700", children: date }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => handleAutoRestore(date), disabled: autoBusy, className: "text-sm font-semibold text-red-700 disabled:opacity-50 hover:underline", children: "Restore" })
-          ] }, date))
+          autoLoaded && autoBackups.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm text-slate-400", children: "No backups yet \u2014 take one above, or wait for the first automatic one." }),
+          autoLoaded && autoBackups.map((timestamp) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "text-sm text-slate-700", children: fmtBackupTimestamp(timestamp) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => handleAutoRestore(timestamp), disabled: autoBusy, className: "text-sm font-semibold text-red-700 disabled:opacity-50 hover:underline", children: "Restore" })
+          ] }, timestamp))
         ] })
       ] })
     ] });
