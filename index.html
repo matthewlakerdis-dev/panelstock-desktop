@@ -13215,6 +13215,7 @@ ${xrefStart}
       if (block.type === "text" || block.type === "link") return block.side ? 0 : (block.size || 9) + 5;
       if (block.type === "space") return block.height;
       if (block.type === "image") return block.side ? 0 : block.displayHeight + 8;
+      if (block.type === "rect") return 0;
       return 0;
     }
     blocks.forEach((block) => {
@@ -13282,7 +13283,12 @@ endobj
       let imgIdx = 0;
       let content = "";
       pm.page.blocks.forEach((b) => {
-        if (b.type === "text") {
+        if (b.type === "rect") {
+          content += `0.93 0.93 0.93 rg
+${margin - 4} ${b.y - b.height} ${pageWidth - 2 * margin + 8} ${b.height} re f
+0 0 0 rg
+`;
+        } else if (b.type === "text") {
           const bx = b.x !== void 0 ? b.x : margin;
           content += `BT /F1 ${b.size || 9} Tf ${bx} ${b.y} Td (${escapePdfText(b.text)}) Tj ET
 `;
@@ -13419,22 +13425,26 @@ ${xrefStart}
     L.push({ text: `Generated ${(/* @__PURE__ */ new Date()).toLocaleString()}  \xB7  Total units: ${totalSOH}`, size: 10 });
     L.push({ text: "", size: 10 });
     L.push({ text: "FULL PANELS", size: 13 });
+    let rowIdx = 0;
     groupByMaterialLargestFirst(variants).forEach(({ material, items }) => {
       L.push({ text: "", size: 8 });
       L.push({ text: material, size: 16 });
-      L.push({ text: pad("SKU", 18) + pad("Colour", 26) + pad("Thk", 10) + pad("Dimensions", 20) + "Qty", size: 12 });
+      L.push({ text: pad("SKU", 22) + pad("Colour", 34) + pad("Thk", 11) + pad("Dimensions", 24) + "Qty", size: 12 });
       items.forEach((v) => {
-        L.push({ text: pad(v.sku, 18) + pad(v.color, 26) + pad(v.thickness + "mm", 10) + pad(fmtDim(v.width, v.height), 20) + v.qty, size: 12 });
+        L.push({ text: pad(v.sku, 22) + pad(v.color, 34) + pad(v.thickness + "mm", 11) + pad(fmtDim(v.width, v.height), 24) + v.qty, size: 12, shaded: rowIdx % 2 === 1 });
+        rowIdx++;
       });
     });
     L.push({ text: "", size: 10 });
     L.push({ text: "OFF-CUTS", size: 13 });
+    rowIdx = 0;
     groupByMaterialLargestFirst(offcuts).forEach(({ material, items }) => {
       L.push({ text: "", size: 8 });
       L.push({ text: material, size: 16 });
-      L.push({ text: pad("SKU", 18) + pad("Colour", 26) + pad("Thk", 10) + pad("Dimensions", 20) + pad("Qty", 8) + "Note", size: 12 });
+      L.push({ text: pad("SKU", 22) + pad("Colour", 34) + pad("Thk", 11) + pad("Dimensions", 24) + "Qty", size: 12 });
       items.forEach((o) => {
-        L.push({ text: pad(o.sku, 18) + pad(o.color, 26) + pad(o.thickness + "mm", 10) + pad(fmtDim(o.width, o.height), 20) + pad(o.qty, 8) + (o.note || ""), size: 12 });
+        L.push({ text: pad(o.sku, 22) + pad(o.color, 34) + pad(o.thickness + "mm", 11) + pad(fmtDim(o.width, o.height), 24) + o.qty, size: 12, shaded: rowIdx % 2 === 1 });
+        rowIdx++;
       });
     });
     return L;
@@ -13452,9 +13462,9 @@ ${xrefStart}
     L.push({ text: "PanelStock \u2014 Activity Log", size: 18 });
     L.push({ text: `Generated ${(/* @__PURE__ */ new Date()).toLocaleString()} \xB7 ${transactions.length} entries`, size: 10 });
     L.push({ text: "", size: 10 });
-    const W = { date: 10, type: 10, desc: 38, qty: 6, ref: 11, customer: 13, reason: 13, user: 11 };
+    const W = { date: 10, type: 10, desc: 38, qty: 6, refReason: 22, customer: 13, user: 11 };
     L.push({
-      text: pad("Date", W.date) + pad("Type", W.type) + pad("Description", W.desc) + pad("Qty", W.qty) + pad("Ref", W.ref) + pad("Customer", W.customer) + pad("Reason", W.reason) + "User",
+      text: pad("Date", W.date) + pad("Type", W.type) + pad("Description", W.desc) + pad("Qty", W.qty) + pad("Ref/Reason", W.refReason) + pad("Customer", W.customer) + "User",
       size: 10
     });
     transactions.forEach((t, idx) => {
@@ -13464,14 +13474,13 @@ ${xrefStart}
         type: wrapText(t.type, W.type - 2),
         desc: wrapText(t.desc, W.desc - 2),
         qty: wrapText(String(t.qty), W.qty - 2),
-        ref: wrapText(t.ref || "", W.ref - 2),
+        refReason: wrapText(t.ref || t.reason || "", W.refReason - 2),
         customer: wrapText(t.customer || "", W.customer - 2),
-        reason: wrapText(t.reason || "", W.reason - 2),
         user: wrapText(t.user || "", W.user - 2)
       };
       const maxLines = Math.max(1, ...Object.values(cols).map((c) => c.length));
       for (let i = 0; i < maxLines; i++) {
-        const rowText = pad(cols.date[i] || "", W.date) + pad(cols.type[i] || "", W.type) + pad(cols.desc[i] || "", W.desc) + pad(cols.qty[i] || "", W.qty) + pad(cols.ref[i] || "", W.ref) + pad(cols.customer[i] || "", W.customer) + pad(cols.reason[i] || "", W.reason) + (cols.user[i] || "");
+        const rowText = pad(cols.date[i] || "", W.date) + pad(cols.type[i] || "", W.type) + pad(cols.desc[i] || "", W.desc) + pad(cols.qty[i] || "", W.qty) + pad(cols.refReason[i] || "", W.refReason) + pad(cols.customer[i] || "", W.customer) + (cols.user[i] || "");
         L.push({ text: rowText, size: 10, strike: !!t.voided, shaded });
       }
       if (t.voided) {
@@ -14114,8 +14123,8 @@ ${xrefStart}
       L.push({ text: `Generated ${(/* @__PURE__ */ new Date()).toLocaleString()} \xB7 ${catalog.length} materials`, size: 10 });
       L.push({ text: "", size: 10 });
       L.push({ text: pad("SKU", 18) + pad("Colour", 26) + pad("Material", 20) + pad("Thk", 8) + pad("Dimensions", 20) + "Reorder", size: 11 });
-      catalog.forEach((c) => {
-        L.push({ text: pad(c.sku, 18) + pad(c.color, 26) + pad(c.material, 20) + pad(c.thickness + "mm", 8) + pad(fmtDim(c.width, c.height), 20) + (c.reorderPoint || 0), size: 11 });
+      catalog.forEach((c, idx) => {
+        L.push({ text: pad(c.sku, 18) + pad(c.color, 26) + pad(c.material, 20) + pad(c.thickness + "mm", 8) + pad(fmtDim(c.width, c.height), 20) + (c.reorderPoint || 0), size: 11, shaded: idx % 2 === 1 });
       });
       prepareExport(buildPdfBlob(L), `Catalog_${todayStr()}.pdf`);
     }
@@ -14130,12 +14139,15 @@ ${xrefStart}
       const PHOTO_COL_X = 500;
       const PHOTO_MAX = 120;
       const PHOTO_GAP = 10;
-      damageTxns.forEach((t) => {
-        let textHeight = 0;
-        blocks.push({ type: "text", text: new Date(t.timestamp).toLocaleString(), size: 9 });
-        textHeight += 9 + 5;
+      damageTxns.forEach((t, idx) => {
         const entryPhotos = (t.photoIds || []).map((pid) => photos[pid]).filter(Boolean);
-        let photoHeight = 0;
+        const textHeight = 9 + 5 + (12 + 5) + (9 + 5) + (9 + 5) + (t.voided ? 9 + 5 : 0);
+        const photoHeight = entryPhotos.length > 0 ? PHOTO_MAX : 0;
+        const rowHeight = Math.max(textHeight, photoHeight);
+        if (idx % 2 === 1) {
+          blocks.push({ type: "rect", height: rowHeight + 8 });
+        }
+        blocks.push({ type: "text", text: new Date(t.timestamp).toLocaleString(), size: 9 });
         if (entryPhotos.length > 0) {
           let px = PHOTO_COL_X;
           entryPhotos.slice(0, 3).forEach((photo) => {
@@ -14150,23 +14162,17 @@ ${xrefStart}
               displayWidth,
               displayHeight
             });
-            photoHeight = Math.max(photoHeight, displayHeight);
             px += PHOTO_MAX + PHOTO_GAP;
           });
         } else {
           blocks.push({ type: "text", text: "(no photo)", size: 9, x: PHOTO_COL_X, side: true });
         }
         blocks.push({ type: "text", text: t.voided ? `${t.desc}  \u2014  VOIDED` : t.desc, size: 12 });
-        textHeight += 12 + 5;
         blocks.push({ type: "text", text: `SKU: ${t.sku || "\u2014"}    Qty: ${t.qty}    Reason: ${t.reasonCode ? `[${t.reasonCode}] ` : ""}${t.reason || "\u2014"}`, size: 9 });
-        textHeight += 9 + 5;
         blocks.push({ type: "text", text: `Logged by: ${t.user || "\u2014"}`, size: 9 });
-        textHeight += 9 + 5;
         if (t.voided) {
           blocks.push({ type: "text", text: `Voided by: ${t.voidedBy || "\u2014"} on ${t.voidedAt ? new Date(t.voidedAt).toLocaleString() : "\u2014"}`, size: 9 });
-          textHeight += 9 + 5;
         }
-        const rowHeight = Math.max(textHeight, photoHeight);
         blocks.push({ type: "space", height: rowHeight - textHeight + 18 });
       });
       prepareExport(buildRichPdfBlob(blocks), `Damage_Report_${todayStr()}.pdf`);
@@ -14352,14 +14358,24 @@ ${xrefStart}
     const [q, setQ] = useState("");
     const [view, setView] = useState("panels");
     const [sort, setSort] = useState({ key: "material", dir: "asc" });
+    const [materialFilter, setMaterialFilter] = useState("");
+    const [colourFilter, setColourFilter] = useState("");
     function onSort(key) {
       setSort((s) => s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
     }
+    useEffect(() => {
+      setMaterialFilter("");
+      setColourFilter("");
+    }, [view]);
     const rows = view === "panels" ? variants : offcuts;
+    const materialOptions = useMemo(() => [...new Set(rows.map((v) => v.material))].sort(), [rows]);
+    const colourOptions = useMemo(() => [...new Set(rows.map((v) => v.color))].sort(), [rows]);
     const filtered = useMemo(() => {
       let list = rows.filter(
         (v) => `${v.color} ${v.material} ${v.thickness} ${v.width} ${v.height} ${v.sku}${v.note || ""}`.toLowerCase().includes(q.toLowerCase())
       );
+      if (materialFilter) list = list.filter((v) => v.material === materialFilter);
+      if (colourFilter) list = list.filter((v) => v.color === colourFilter);
       list = [...list].sort((a, b) => {
         let av = a[sort.key], bv = b[sort.key];
         if (sort.key === "size") {
@@ -14375,7 +14391,7 @@ ${xrefStart}
         return 0;
       });
       return list;
-    }, [rows, q, sort]);
+    }, [rows, q, sort, materialFilter, colourFilter]);
     const totalSOH = variants.reduce((s, v) => s + v.qty, 0);
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "flex items-start justify-between mb-6", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
@@ -14410,6 +14426,14 @@ ${xrefStart}
                   className: "w-full bg-slate-50 border border-slate-300 rounded-lg pl-9 pr-3 py-2 text-sm outline-none focus:border-cyan-800 focus:bg-white"
                 }
               )
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { value: materialFilter, onChange: (e) => setMaterialFilter(e.target.value), className: "bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-cyan-800 focus:bg-white", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "All materials" }),
+              materialOptions.map((m) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: m, children: m }, m))
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { value: colourFilter, onChange: (e) => setColourFilter(e.target.value), className: "bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-cyan-800 focus:bg-white", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "All colours" }),
+              colourOptions.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: c, children: c }, c))
             ] }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center bg-slate-100 rounded-lg p-0.5 text-sm font-medium", children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setView("panels"), className: `px-3 py-1.5 rounded-md ${view === "panels" ? "bg-white shadow-sm text-slate-900" : "text-slate-500"}`, children: [
