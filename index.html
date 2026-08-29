@@ -14030,6 +14030,20 @@ ${xrefStart}
       persist({ variants: next });
       showToast("Reorder point updated");
     }
+    function editOffcut(offcutId, { width, height, qty, note }) {
+      const before = offcuts.find((o) => o.id === offcutId);
+      const next = offcuts.map((o) => o.id === offcutId ? { ...o, width, height, qty, note: note || "" } : o);
+      setOffcuts(next);
+      persist({ offcuts: next });
+      if (before) {
+        logTxn({
+          type: "catalog",
+          desc: `Corrected off-cut ${before.sku}: ${fmtDim(before.width, before.height)} qty ${before.qty} \u2192 ${fmtDim(width, height)} qty ${qty}`,
+          qty: ""
+        });
+      }
+      showToast("Off-cut updated");
+    }
     function addReason(label) {
       if (!label.trim()) return;
       const maxCode = reasons.reduce((m, r) => Math.max(m, parseInt(r.code, 10) || 0), 0);
@@ -14320,6 +14334,10 @@ ${xrefStart}
           onUpdateReorder: (val) => {
             updateReorderPoint(detailItem.id, val);
             setDetailItem({ ...detailItem, reorderPoint: val });
+          },
+          onEditOffcut: (vals) => {
+            editOffcut(detailItem.id, vals);
+            setDetailItem({ ...detailItem, ...vals });
           },
           onPrintLabel: () => printLabel(detailItem)
         }
@@ -15164,8 +15182,15 @@ ${xrefStart}
       ] })
     ] }) });
   }
-  function ItemDetailModal({ item, onClose, onUpdateReorder, onPrintLabel }) {
+  function ItemDetailModal({ item, onClose, onUpdateReorder, onEditOffcut, onPrintLabel }) {
     const [rp, setRp] = useState(item.reorderPoint || 0);
+    const [editForm, setEditForm] = useState({ width: String(item.width), height: String(item.height), qty: String(item.qty), note: item.note || "" });
+    const setEdit = (k) => (e) => setEditForm({ ...editForm, [k]: e.target.value });
+    const canSaveEdit = editForm.width && editForm.height && editForm.qty;
+    function saveEdit() {
+      if (!canSaveEdit) return;
+      onEditOffcut({ width: Number(editForm.width), height: Number(editForm.height), qty: Number(editForm.qty), note: editForm.note });
+    }
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Modal, { title: "Item detail", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Tag, { size: 16, className: "text-cyan-800" }), onClose, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center gap-3 mb-4", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "w-14 h-14 rounded-lg border border-black/10", style: { backgroundColor: swatchColour(item.color) } }),
@@ -15195,7 +15220,17 @@ ${xrefStart}
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, type: "number", value: rp, onChange: (e) => setRp(e.target.value) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => onUpdateReorder(Number(rp) || 0), className: "bg-slate-900 text-white px-3 rounded-lg text-sm font-semibold hover:bg-slate-800", children: "Save" })
       ] }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: onPrintLabel, className: "w-full flex items-center justify-center gap-2 border border-slate-300 bg-slate-50 rounded-lg py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-100", children: [
+      item.itemType === "offcut" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "border border-slate-200 rounded-xl p-3 mb-1", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-xs font-semibold text-slate-600 mb-2", children: "Fix a mistake \u2014 edit this off-cut's size, quantity, or note" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "grid grid-cols-2 gap-3", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Width (mm)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, type: "number", value: editForm.width, onChange: setEdit("width") }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Height (mm)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, type: "number", value: editForm.height, onChange: setEdit("height") }) })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Quantity", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, type: "number", value: editForm.qty, onChange: setEdit("qty") }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Note (optional)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CapitalizedInput, { value: editForm.note, onChange: (v) => setEditForm({ ...editForm, note: v }), placeholder: "e.g. leftover from WO-1042" }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: saveEdit, disabled: !canSaveEdit, className: "w-full bg-slate-900 disabled:opacity-40 text-white font-semibold rounded-lg py-2 text-sm hover:bg-slate-800", children: "Save changes" })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: onPrintLabel, className: "w-full flex items-center justify-center gap-2 border border-slate-300 bg-slate-50 rounded-lg py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-100 mt-3", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Tag, { size: 14 }),
         " Print label"
       ] })
