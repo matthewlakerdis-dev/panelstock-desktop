@@ -37,6 +37,7 @@
     return true;
   };
 </script>
+<script src="panelstock-client.js"></script>
 <script>
 (() => {
   var __create = Object.create;
@@ -12976,11 +12977,11 @@
     cncPanels: "panelstock:cncPanels"
   };
   var BAKED_WORKER_URL = "https://panelstock-reports.matthewlakerdis.workers.dev";
-  var BAKED_SHARED_SECRET = "5KrJX1Hyh3_iBkekDsFeTY-omgfX2b8e";
-  var CNC_PUBLIC_TOKEN = "CaFrQiKQ6f01cDmnHmpf8HEKEGPiJK4o";
+  // Individual sessions are managed by panelstock-client.js.
+  var CNC_PUBLIC_TOKEN = null;
   var DEFAULT_EMAIL_CONFIG = {
     workerUrl: BAKED_WORKER_URL,
-    secret: BAKED_SHARED_SECRET,
+    secret: "session-managed",
     recipients: [],
     days: [0, 1, 2, 3, 4, 5, 6],
     time: "07:00",
@@ -13511,16 +13512,9 @@ ${xrefStart}
     return L;
   }
   async function fetchAllFromWorker(cfg) {
-    try {
-      const res = await fetch(`${cfg.workerUrl.replace(/\/$/, "")}/data`, {
-        headers: { Authorization: `Bearer ${cfg.secret}` }
-      });
-      if (!res.ok) return null;
-      return await res.json();
-    } catch {
-      return null;
-    }
+    try { return await PanelStock.snapshot(); } catch { return null; }
   }
+
   function App() {
     const [tab, setTab] = useState("stock");
     const [loading, setLoading] = useState(true);
@@ -13544,208 +13538,70 @@ ${xrefStart}
     const pendingSyncRef = useRef({});
     const [syncStatus, setSyncStatus] = useState("synced");
     useEffect(() => {
+      let active = true;
       (async () => {
-        const [u, adminFlag, lastU, lastHidden, ec] = await Promise.all([
-          loadKey(STORAGE_KEYS.username, null, false),
-          loadKey(STORAGE_KEYS.isAdmin, false, false),
-          loadKey(STORAGE_KEYS.lastUsername, "", false),
-          loadKey(STORAGE_KEYS.lastHiddenAt, null, false),
-          loadKey(STORAGE_KEYS.emailConfig, DEFAULT_EMAIL_CONFIG)
-        ]);
-        const sessionExpired = lastHidden && Date.now() - lastHidden >= 30 * 60 * 1e3;
-        if (sessionExpired) {
-          setUsername(null);
-          setIsAdmin(false);
+        try {
+          const user = await PanelStock.init(BAKED_WORKER_URL);
+          const remembered = await loadKey(STORAGE_KEYS.lastUsername, "", false);
+          if (!active) return;
+          setRememberedUsername(remembered || "");
+          setEmailConfig({ ...DEFAULT_EMAIL_CONFIG, workerUrl: BAKED_WORKER_URL, secret: "session-managed" });
+          // Never restore identity or permissions from editable localStorage flags.
           saveKey(STORAGE_KEYS.username, null, false);
           saveKey(STORAGE_KEYS.isAdmin, false, false);
-        } else {
-          setUsername(u);
-          setIsAdmin(!!adminFlag);
-        }
-        setRememberedUsername(lastU || "");
-        const mergedEmailConfig = { ...DEFAULT_EMAIL_CONFIG, ...ec, workerUrl: BAKED_WORKER_URL, secret: BAKED_SHARED_SECRET };
-        const [v, o, t, r, c, ph, cnc] = await Promise.all([
-          loadKey(STORAGE_KEYS.variants, []),
-          loadKey(STORAGE_KEYS.offcuts, []),
-          loadKey(STORAGE_KEYS.transactions, []),
-          loadKey(STORAGE_KEYS.reasons, null),
-          loadKey(STORAGE_KEYS.catalog, []),
-          loadKey(STORAGE_KEYS.photos, {}),
-          loadKey(STORAGE_KEYS.cncPanels, [])
-        ]);
-        let loaded = {
-          variants: v,
-          offcuts: o,
-          transactions: t,
-          reasons: r === null ? DEFAULT_REASONS : r,
-          catalog: c,
-          photos: ph,
-          cncPanels: cnc
-        };
-        if (mergedEmailConfig.workerUrl && mergedEmailConfig.secret) {
-          const remote = await fetchAllFromWorker(mergedEmailConfig);
-          if (remote) {
-            loaded = {
-              variants: remote.variants || [],
-              offcuts: remote.offcuts || [],
-              transactions: remote.transactions || [],
-              reasons: remote.reasons && remote.reasons.length ? remote.reasons : DEFAULT_REASONS,
-              catalog: remote.catalog || [],
-              photos: remote.photos || {},
-              cncPanels: remote.cncPanels || []
-            };
-            try {
-              const cfgRes = await fetch(`${mergedEmailConfig.workerUrl.replace(/\/$/, "")}/config`, {
-                headers: { Authorization: `Bearer ${mergedEmailConfig.secret}` }
-              });
-              if (cfgRes.ok) {
-                const remoteCfg = await cfgRes.json();
-                if (remoteCfg) {
-                  Object.assign(mergedEmailConfig, remoteCfg, { workerUrl: mergedEmailConfig.workerUrl, secret: mergedEmailConfig.secret });
-                }
-              }
-            } catch {
+          saveKey(STORAGE_KEYS.emailConfig, { workerUrl: BAKED_WORKER_URL });
+          if (user) {
+            const shareResponse = await PanelStock.apiFetch(BAKED_WORKER_URL + "/cnc-share");
+            if (shareResponse.ok) CNC_PUBLIC_TOKEN = (await shareResponse.json()).token;
+            const data = await PanelStock.snapshot();
+            if (!active) return;
+            if (data) { setVariants(data.variants || []); setOffcuts(data.offcuts || []);
+          setTransactions(data.transactions || []); setReasons(data.reasons?.length ? data.reasons : DEFAULT_REASONS);
+          setCatalog(data.catalog || []); setPhotos(data.photos || {}); setCncPanels(data.cncPanels || []); setUsername(user.username); setIsAdmin(user.isAdmin); }
+            if (user.isAdmin) {
+              const response = await PanelStock.apiFetch(BAKED_WORKER_URL + "/config");
+              if (response.ok && active) setEmailConfig({ ...DEFAULT_EMAIL_CONFIG, ...await response.json(), workerUrl: BAKED_WORKER_URL, secret: "session-managed" });
             }
           }
-        }
-        setVariants(loaded.variants);
-        setOffcuts(loaded.offcuts);
-        setTransactions(loaded.transactions);
-        const reasonsWithCodes = ensureReasonCodes(loaded.reasons);
-        setReasons(reasonsWithCodes);
-        setCatalog(loaded.catalog);
-        setPhotos(loaded.photos);
-        setCncPanels(loaded.cncPanels || []);
-        setEmailConfig(mergedEmailConfig);
-        const savedPending = await loadKey(STORAGE_KEYS.pendingSync, {}, false);
-        if (savedPending && Object.keys(savedPending).length) {
-          pendingSyncRef.current = savedPending;
-          setPendingSyncState(savedPending);
-          setSyncStatus("offline");
-        }
-        if (loaded.reasons === DEFAULT_REASONS) saveKey(STORAGE_KEYS.reasons, DEFAULT_REASONS);
-        else if (reasonsWithCodes !== loaded.reasons) persist({ reasons: reasonsWithCodes });
-        setLoading(false);
+        } catch (error) { console.warn("Startup could not verify shared stock", error.message); }
+        finally { if (active) setLoading(false); }
       })();
+      return () => { active = false; };
     }, []);
     useEffect(() => {
-      if (!emailConfig.workerUrl || !emailConfig.secret) return;
-      let cancelled = false;
+      if (!username) return;
+      let active = true, refreshing = false;
+      const onSync = event => setSyncStatus(event.detail.status);
+      const onExpired = () => { setUsername(null); setIsAdmin(false); };
       async function refresh() {
-        await flushPendingSync();
-        if (cancelled) return;
-        const remote = await fetchAllFromWorker(emailConfig);
-        if (remote && !cancelled) {
-          const pending = pendingSyncRef.current;
-          if (!("variants" in pending)) setVariants(remote.variants || []);
-          if (!("offcuts" in pending)) setOffcuts(remote.offcuts || []);
-          if (!("catalog" in pending)) setCatalog(remote.catalog || []);
-          if (!("reasons" in pending)) setReasons(remote.reasons && remote.reasons.length ? remote.reasons : DEFAULT_REASONS);
-          if (!("transactions" in pending)) setTransactions(remote.transactions || []);
-          if (!("photos" in pending)) setPhotos(remote.photos || {});
-          if (!("cncPanels" in pending)) setCncPanels(remote.cncPanels || []);
-        }
+        if (refreshing || document.visibilityState === "hidden") return;
+        refreshing = true;
+        try {
+          const data = await PanelStock.snapshot();
+          if (data && active) { setVariants(data.variants || []); setOffcuts(data.offcuts || []);
+          setTransactions(data.transactions || []); setReasons(data.reasons?.length ? data.reasons : DEFAULT_REASONS);
+          setCatalog(data.catalog || []); setPhotos(data.photos || {}); setCncPanels(data.cncPanels || []); }
+        } catch { if (active) setSyncStatus("offline"); }
+        finally { refreshing = false; }
       }
-      const interval = setInterval(refresh, 4e3);
-      function onVisible() {
-        if (document.visibilityState === "visible") refresh();
-      }
-      document.addEventListener("visibilitychange", onVisible);
+      const timer = setInterval(refresh, 4000);
+      window.addEventListener("panelstock-sync", onSync);
+      window.addEventListener("panelstock-session-expired", onExpired);
       window.addEventListener("online", refresh);
-      return () => {
-        cancelled = true;
-        clearInterval(interval);
-        document.removeEventListener("visibilitychange", onVisible);
-        window.removeEventListener("online", refresh);
-      };
-    }, [emailConfig.workerUrl, emailConfig.secret]);
+      document.addEventListener("visibilitychange", refresh);
+      setSyncStatus(PanelStock.status);
+      return () => { active = false; clearInterval(timer); window.removeEventListener("panelstock-sync", onSync); window.removeEventListener("panelstock-session-expired", onExpired); window.removeEventListener("online", refresh); document.removeEventListener("visibilitychange", refresh); };
+    }, [username]);
     function showToast(msg, kind = "ok") {
       setToast({ msg, kind });
       setTimeout(() => setToast(null), 2600);
     }
-    function setPendingSync(next) {
-      pendingSyncRef.current = next;
-      setPendingSyncState(next);
-      saveKey(STORAGE_KEYS.pendingSync, next, false);
-    }
-    async function pushToWorkerCore(fields, configOverride = null) {
-      const cfg = configOverride || emailConfig;
-      if (!cfg.workerUrl || !cfg.secret) return true;
-      const body = {};
-      ["variants", "offcuts", "catalog", "reasons", "transactions", "photos", "cncPanels"].forEach((f) => {
-        if (fields[f] !== void 0) body[f] = fields[f];
-      });
-      if (!Object.keys(body).length) return true;
-      try {
-        const res = await fetch(`${cfg.workerUrl.replace(/\/$/, "")}/data`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${cfg.secret}` },
-          body: JSON.stringify(body)
-        });
-        return res.ok;
-      } catch {
-        return false;
-      }
-    }
-    function pushToWorker(fields, configOverride = null) {
-      pushToWorkerCore(fields, configOverride).then((ok) => {
-        if (ok) {
-          const next = { ...pendingSyncRef.current };
-          let changed = false;
-          Object.keys(fields).forEach((k) => {
-            if (k in next) {
-              delete next[k];
-              changed = true;
-            }
-          });
-          if (changed) setPendingSync(next);
-          setSyncStatus(Object.keys(next).length ? "offline" : "synced");
-        } else {
-          setPendingSync({ ...pendingSyncRef.current, ...fields });
-          setSyncStatus("offline");
-        }
-      });
-    }
-    async function flushPendingSync() {
-      const pending = pendingSyncRef.current;
-      const keys = Object.keys(pending);
-      if (!keys.length) {
-        setSyncStatus("synced");
-        return true;
-      }
-      setSyncStatus("syncing");
-      const ok = await pushToWorkerCore(pending);
-      if (ok) {
-        setPendingSync({});
-        setSyncStatus("synced");
-        return true;
-      }
-      setSyncStatus("offline");
-      return false;
-    }
     function persist(next) {
-      if (next.variants) saveKey(STORAGE_KEYS.variants, next.variants);
-      if (next.offcuts) saveKey(STORAGE_KEYS.offcuts, next.offcuts);
-      if (next.transactions) saveKey(STORAGE_KEYS.transactions, next.transactions);
-      if (next.reasons) saveKey(STORAGE_KEYS.reasons, next.reasons);
-      if (next.catalog) saveKey(STORAGE_KEYS.catalog, next.catalog);
-      if (next.photos) saveKey(STORAGE_KEYS.photos, next.photos);
-      if (next.cncPanels) saveKey(STORAGE_KEYS.cncPanels, next.cncPanels);
-      pushToWorker(next);
+      PanelStock.stage(next, { variants, offcuts, transactions, reasons, catalog, photos, cncPanels });
     }
     async function pushAllLocalDataNow() {
-      if (!emailConfig.workerUrl || !emailConfig.secret) return { ok: false, message: "Set up the Worker URL and secret first." };
-      try {
-        const res = await fetch(`${emailConfig.workerUrl.replace(/\/$/, "")}/data`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${emailConfig.secret}` },
-          body: JSON.stringify({ variants, offcuts, catalog, reasons, transactions, photos, cncPanels })
-        });
-        if (!res.ok) return { ok: false, message: `Worker responded with ${res.status}` };
-        return { ok: true, message: "Pushed this device's data to the shared backend." };
-      } catch {
-        return { ok: false, message: "Could not reach the Worker URL." };
-      }
+      const ok = await PanelStock.flush();
+      return { ok, message: ok ? "Pending changes synchronized." : "Pending changes could not be synchronized. Check the connection or review the warning." };
     }
     async function saveEmailConfig(next) {
       const merged = { ...emailConfig, ...next };
@@ -13753,9 +13609,9 @@ ${xrefStart}
       saveKey(STORAGE_KEYS.emailConfig, merged);
       if (!merged.workerUrl || !merged.secret) return { ok: true };
       try {
-        const res = await fetch(`${merged.workerUrl.replace(/\/$/, "")}/config`, {
+        const res = await PanelStock.apiFetch(`${merged.workerUrl.replace(/\/$/, "")}/config`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${merged.secret}` },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             recipients: merged.recipients,
             days: merged.days,
@@ -13783,9 +13639,9 @@ ${xrefStart}
     async function sendReportNow() {
       if (!emailConfig.workerUrl || !emailConfig.secret) return { ok: false, message: "Set up the Worker URL and secret first." };
       try {
-        const res = await fetch(`${emailConfig.workerUrl.replace(/\/$/, "")}/send-now`, {
+        const res = await PanelStock.apiFetch(`${emailConfig.workerUrl.replace(/\/$/, "")}/send-now`, {
           method: "POST",
-          headers: { Authorization: `Bearer ${emailConfig.secret}` }
+          headers: {  }
         });
         const body = await res.json().catch(() => ({}));
         if (!res.ok) return { ok: false, message: body.error || body.body || `Failed (${res.status})` };
@@ -13795,23 +13651,12 @@ ${xrefStart}
       }
     }
     function setAndSaveUsername(name, admin, remember) {
-      setUsername(name);
-      setIsAdmin(!!admin);
-      saveKey(STORAGE_KEYS.username, name, false);
-      saveKey(STORAGE_KEYS.isAdmin, !!admin, false);
-      if (remember) {
-        setRememberedUsername(name);
-        saveKey(STORAGE_KEYS.lastUsername, name, false);
-      } else {
-        setRememberedUsername("");
-        saveKey(STORAGE_KEYS.lastUsername, null, false);
-      }
+      saveKey(STORAGE_KEYS.lastUsername, remember ? name : "", false);
+      location.reload();
     }
     function logOut() {
-      setUsername(null);
-      setIsAdmin(false);
-      saveKey(STORAGE_KEYS.username, null, false);
-      saveKey(STORAGE_KEYS.isAdmin, false, false);
+      setUsername(null); setIsAdmin(false);
+      void PanelStock.logout();
     }
     const INACTIVITY_LIMIT_MS = 30 * 60 * 1e3;
     useEffect(() => {
@@ -13856,7 +13701,7 @@ ${xrefStart}
       };
     }, [loading, username]);
     function logTxn(entry) {
-      const next = [{ id: uid(), timestamp: (/* @__PURE__ */ new Date()).toISOString(), user: username || "Unknown", ...entry }, ...transactions].slice(0, 800);
+      const next = [{ id: uid(), timestamp: (/* @__PURE__ */ new Date()).toISOString(), user: username || "Unknown", ...entry }, ...transactions];
       setTransactions(next);
       persist({ transactions: next });
     }
@@ -13874,6 +13719,7 @@ ${xrefStart}
         if (!v) {
           note = " \u2014 material no longer exists, SOH not adjusted";
         } else {
+          if (txn.type === "receipt" && v.qty < txn.qty) return showToast("Cannot void this receipt: some panels have already been used.", "err");
           const delta = txn.type === "receipt" ? -txn.qty : txn.qty;
           nextVariants = variants.map((x) => x.id === v.id ? { ...x, qty: Math.max(0, x.qty + delta) } : x);
           setVariants(nextVariants);
@@ -13929,11 +13775,11 @@ ${xrefStart}
         timestamp: (/* @__PURE__ */ new Date()).toISOString(),
         user: username || "Unknown",
         type: "reset",
-        desc: `FULL RESET \u2014 cleared catalog (${catalogCount} materials), ${panelTypes} panel type(s), ${offcutCount} off-cut(s), damage reasons restored to default, and ${activityCount} prior activity entries`,
+        desc: `FULL RESET \u2014 cleared catalog (${catalogCount} materials), ${panelTypes} panel type(s), ${offcutCount} off-cut(s), damage reasons restored to default, and preserved ${activityCount} prior activity entries`,
         qty: 0
       };
-      setTransactions([resetEntry]);
-      persist({ variants: [], offcuts: [], catalog: [], reasons: DEFAULT_REASONS, photos: {}, transactions: [resetEntry] });
+      setTransactions([resetEntry, ...transactions]);
+      persist({ variants: [], offcuts: [], catalog: [], reasons: DEFAULT_REASONS, photos: {}, transactions: [resetEntry, ...transactions] });
       showToast("All stock information has been reset");
     }
     function addCncPanel({ orderNumber, jobReference, sheetNumber, panelNumber }) {
@@ -14106,10 +13952,11 @@ ${xrefStart}
       showToast(`Written off (${reason})`);
     }
     function addOffcut({ color, material, thickness, width, height, qty, note }) {
-      const next = [...offcuts, { id: uid(), sku: genSku(), color, material, thickness, width, height, qty, note: note || "" }];
+      const sku = genSku();
+      const next = [...offcuts, { id: uid(), sku, color, material, thickness, width, height, qty, note: note || "" }];
       setOffcuts(next);
       persist({ offcuts: next });
-      logTxn({ type: "offcut_add", desc: `${color} ${material} ${thickness}mm ${fmtDim(width, height)}`, qty });
+      logTxn({ type: "offcut_add", itemType: "offcut", sku, desc: `${color} ${material} ${thickness}mm ${fmtDim(width, height)}`, qty });
       showToast("Off-cut added to SOH");
     }
     function updateReorderPoint(variantId, value) {
@@ -14897,7 +14744,7 @@ ${xrefStart}
   function JobsPage({ transactions }) {
     const [openJob, setOpenJob] = useState(null);
     const [q, setQ] = useState("");
-    const dispatches = transactions.filter((t) => t.type === "dispatch");
+    const dispatches = transactions.filter((t) => t.type === "dispatch" && !t.voided);
     const jobMap = {};
     dispatches.forEach((t) => {
       const key = `${t.ref || "No reference"}|||${t.customer || "No customer"}`;
@@ -15395,9 +15242,9 @@ ${xrefStart}
       setConfirmPin("");
     }
     async function callWorker(path, body) {
-      const res = await fetch(`${workerUrl.replace(/\/$/, "")}${path}`, {
+      const res = await PanelStock.apiFetch(`${workerUrl.replace(/\/$/, "")}${path}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${secret}` },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body)
       });
       return res.json();
@@ -15454,8 +15301,8 @@ ${xrefStart}
       }
     }
     async function handleSetPin() {
-      if (newPin.length < 4) {
-        setError("PIN must be at least 4 digits.");
+      if (!/^\d{6,12}$/.test(newPin)) {
+        setError("PIN must contain 6–12 digits.");
         return;
       }
       if (newPin !== confirmPin) {
@@ -15810,9 +15657,9 @@ ${xrefStart}
     const [busy, setBusy] = useState(false);
     const [status, setStatus] = useState(null);
     async function callWorker(path, body) {
-      const res = await fetch(`${workerUrl.replace(/\/$/, "")}${path}`, {
+      const res = await PanelStock.apiFetch(`${workerUrl.replace(/\/$/, "")}${path}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${workerSecret}` },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body)
       });
       return res.json();
@@ -15857,18 +15704,19 @@ ${xrefStart}
       }
     }
     async function handleRestore(timestamp) {
+      if (PanelStock.pending) { setStatus({ kind: "err", msg: "Synchronize or resolve pending changes before restoring a backup." }); return; }
       const label = fmtBackupTimestamp(timestamp);
-      if (!window.confirm(`Restore the backup from ${label}? This replaces all current stock data, catalog, and activity history with that snapshot. This cannot be undone.`)) return;
+      if (!window.confirm(`Restore the backup from ${label}? This replaces current stock and catalog with that snapshot. Activity history is preserved and a recovery backup is taken first.`)) return;
       setBusy(true);
       setStatus(null);
       try {
-        const result = await callWorker("/admin/restore-backup", { username, timestamp });
+        const result = await callWorker("/admin/restore-backup", { username, timestamp, expectedRevision: PanelStock.revision });
         setBusy(false);
         if (!result.ok) {
           setStatus({ kind: "err", msg: result.error || "Could not restore that backup." });
           return;
         }
-        setStatus({ kind: "ok", msg: `Restored the backup from ${label}. Reopen this device's app to see the restored data (other devices will pick it up automatically within a few seconds).` });
+        location.reload();
       } catch {
         setBusy(false);
         setStatus({ kind: "err", msg: "Could not reach the server." });
@@ -16026,9 +15874,9 @@ ${xrefStart}
     const [status, setStatus] = useState(null);
     const [busy, setBusy] = useState(false);
     async function callWorker(path, body) {
-      const res = await fetch(`${workerUrl.replace(/\/$/, "")}${path}`, {
+      const res = await PanelStock.apiFetch(`${workerUrl.replace(/\/$/, "")}${path}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${secret}` },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body)
       });
       return res.json();
@@ -16205,7 +16053,7 @@ ${xrefStart}
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm font-semibold text-red-800", children: "Full reset \u2014 all information" })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { className: "text-sm text-slate-500 mb-4 leading-relaxed", children: [
-        "Wipes the entire materials catalog, all SOH and off-cuts, damage reasons (restored to default), and the full activity history. Registered users, admin status, and PINs are ",
+        "Wipes the entire materials catalog, all SOH and off-cuts, damage reasons (restored to default), while preserving the activity history. Registered users, admin status, and PINs are ",
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "font-semibold text-slate-700", children: "not" }),
         " affected \u2014 nobody needs to log in again. This cannot be undone."
       ] }),
