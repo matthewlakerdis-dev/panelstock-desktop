@@ -13706,6 +13706,7 @@ ${xrefStart}
       persist({ transactions: next });
     }
     function voidTransaction(txnId) {
+      if (!isAdmin) return showToast("Admin access required to void activity", "err");
       const txn = transactions.find((t) => t.id === txnId);
       if (!txn) return;
       if (txn.voided) return showToast("Already voided", "err");
@@ -13769,7 +13770,6 @@ ${xrefStart}
       setOffcuts([]);
       setCatalog([]);
       setReasons(DEFAULT_REASONS);
-      setPhotos({});
       const resetEntry = {
         id: uid(),
         timestamp: (/* @__PURE__ */ new Date()).toISOString(),
@@ -13779,7 +13779,7 @@ ${xrefStart}
         qty: 0
       };
       setTransactions([resetEntry, ...transactions]);
-      persist({ variants: [], offcuts: [], catalog: [], reasons: DEFAULT_REASONS, photos: {}, transactions: [resetEntry, ...transactions] });
+      persist({ variants: [], offcuts: [], catalog: [], reasons: DEFAULT_REASONS, transactions: [resetEntry, ...transactions] });
       showToast("All stock information has been reset");
     }
     function addCncPanel({ orderNumber, jobReference, sheetNumber, panelNumber }) {
@@ -13960,12 +13960,14 @@ ${xrefStart}
       showToast("Off-cut added to SOH");
     }
     function updateReorderPoint(variantId, value) {
+      if (!isAdmin) return showToast("Admin access required to change reorder points", "err");
       const next = variants.map((v) => v.id === variantId ? { ...v, reorderPoint: value } : v);
       setVariants(next);
       persist({ variants: next });
       showToast("Reorder point updated");
     }
     function editOffcut(offcutId, { width, height, qty, note }) {
+      if (!isAdmin) return showToast("Admin access required to correct offcuts", "err");
       const before = offcuts.find((o) => o.id === offcutId);
       const next = offcuts.map((o) => o.id === offcutId ? { ...o, width, height, qty, note: note || "" } : o);
       setOffcuts(next);
