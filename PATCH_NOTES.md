@@ -26,6 +26,6 @@ This update must be released together with PanelStock mobile and the shared Clou
 
 The coordinated code passed 19 local automated checks and both GitHub verification workflows before this documentation update. Synthetic-data browser checks covered both logins, cross-app receiving, dispatch, administrator voiding, stock reversal and corrected job totals.
 
-Cloud staging and production migration remain pending because the Cloudflare connection previously rejected staging KV creation with authentication error 10000. Do not deploy this frontend against the old backend: login is incompatible.
+Cloudflare access is restored. The isolated staging backend passed 12 cloud integration tests and five additional workflow checks with synthetic data and email disabled. Cloud-backed visual checks and production migration remain pending. Do not deploy this frontend against the old backend: login is incompatible.
 
 See the [coordinated release checklist](https://github.com/matthewlakerdis-dev/panelstock/blob/fix/security-and-stock-integrity/RELEASE.md) and [mobile/backend PR #1](https://github.com/matthewlakerdis-dev/panelstock/pull/1).
