@@ -12883,6 +12883,13 @@
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("rect", { x: "2", y: "7", width: "20", height: "14", rx: "2" }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" })
   ] });
+  var Grid3x3 = (p) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Icon, { ...p, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("rect", { x: "3", y: "3", width: "18", height: "18", rx: "2" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("line", { x1: "3", y1: "9", x2: "21", y2: "9" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("line", { x1: "3", y1: "15", x2: "21", y2: "15" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("line", { x1: "9", y1: "3", x2: "9", y2: "21" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("line", { x1: "15", y1: "3", x2: "15", y2: "21" })
+  ] });
   var Trash2 = (p) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Icon, { ...p, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("polyline", { points: "3 6 5 6 21 6" }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" }),
@@ -12961,7 +12968,8 @@
     pendingSync: "panelstock:pendingSync",
     catalog: "panelstock:catalog",
     photos: "panelstock:photos",
-    emailConfig: "panelstock:emailConfig"
+    emailConfig: "panelstock:emailConfig",
+    cncPanels: "panelstock:cncPanels"
   };
   var BAKED_WORKER_URL = "https://panelstock-reports.matthewlakerdis.workers.dev";
   var BAKED_SHARED_SECRET = "5KrJX1Hyh3_iBkekDsFeTY-omgfX2b8e";
@@ -13508,6 +13516,7 @@ ${xrefStart}
     const [reasons, setReasons] = useState([]);
     const [catalog, setCatalog] = useState([]);
     const [photos, setPhotos] = useState({});
+    const [cncPanels, setCncPanels] = useState([]);
     const [username, setUsername] = useState(null);
     const [rememberedUsername, setRememberedUsername] = useState("");
     const [isAdmin, setIsAdmin] = useState(false);
@@ -13541,13 +13550,14 @@ ${xrefStart}
         }
         setRememberedUsername(lastU || "");
         const mergedEmailConfig = { ...DEFAULT_EMAIL_CONFIG, ...ec, workerUrl: BAKED_WORKER_URL, secret: BAKED_SHARED_SECRET };
-        const [v, o, t, r, c, ph] = await Promise.all([
+        const [v, o, t, r, c, ph, cnc] = await Promise.all([
           loadKey(STORAGE_KEYS.variants, []),
           loadKey(STORAGE_KEYS.offcuts, []),
           loadKey(STORAGE_KEYS.transactions, []),
           loadKey(STORAGE_KEYS.reasons, null),
           loadKey(STORAGE_KEYS.catalog, []),
-          loadKey(STORAGE_KEYS.photos, {})
+          loadKey(STORAGE_KEYS.photos, {}),
+          loadKey(STORAGE_KEYS.cncPanels, [])
         ]);
         let loaded = {
           variants: v,
@@ -13555,7 +13565,8 @@ ${xrefStart}
           transactions: t,
           reasons: r === null ? DEFAULT_REASONS : r,
           catalog: c,
-          photos: ph
+          photos: ph,
+          cncPanels: cnc
         };
         if (mergedEmailConfig.workerUrl && mergedEmailConfig.secret) {
           const remote = await fetchAllFromWorker(mergedEmailConfig);
@@ -13566,7 +13577,8 @@ ${xrefStart}
               transactions: remote.transactions || [],
               reasons: remote.reasons && remote.reasons.length ? remote.reasons : DEFAULT_REASONS,
               catalog: remote.catalog || [],
-              photos: remote.photos || {}
+              photos: remote.photos || {},
+              cncPanels: remote.cncPanels || []
             };
             try {
               const cfgRes = await fetch(`${mergedEmailConfig.workerUrl.replace(/\/$/, "")}/config`, {
@@ -13589,6 +13601,7 @@ ${xrefStart}
         setReasons(reasonsWithCodes);
         setCatalog(loaded.catalog);
         setPhotos(loaded.photos);
+        setCncPanels(loaded.cncPanels || []);
         setEmailConfig(mergedEmailConfig);
         const savedPending = await loadKey(STORAGE_KEYS.pendingSync, {}, false);
         if (savedPending && Object.keys(savedPending).length) {
@@ -13616,6 +13629,7 @@ ${xrefStart}
           if (!("reasons" in pending)) setReasons(remote.reasons && remote.reasons.length ? remote.reasons : DEFAULT_REASONS);
           if (!("transactions" in pending)) setTransactions(remote.transactions || []);
           if (!("photos" in pending)) setPhotos(remote.photos || {});
+          if (!("cncPanels" in pending)) setCncPanels(remote.cncPanels || []);
         }
       }
       const interval = setInterval(refresh, 4e3);
@@ -13644,7 +13658,7 @@ ${xrefStart}
       const cfg = configOverride || emailConfig;
       if (!cfg.workerUrl || !cfg.secret) return true;
       const body = {};
-      ["variants", "offcuts", "catalog", "reasons", "transactions", "photos"].forEach((f) => {
+      ["variants", "offcuts", "catalog", "reasons", "transactions", "photos", "cncPanels"].forEach((f) => {
         if (fields[f] !== void 0) body[f] = fields[f];
       });
       if (!Object.keys(body).length) return true;
@@ -13702,6 +13716,7 @@ ${xrefStart}
       if (next.reasons) saveKey(STORAGE_KEYS.reasons, next.reasons);
       if (next.catalog) saveKey(STORAGE_KEYS.catalog, next.catalog);
       if (next.photos) saveKey(STORAGE_KEYS.photos, next.photos);
+      if (next.cncPanels) saveKey(STORAGE_KEYS.cncPanels, next.cncPanels);
       pushToWorker(next);
     }
     async function pushAllLocalDataNow() {
@@ -13710,7 +13725,7 @@ ${xrefStart}
         const res = await fetch(`${emailConfig.workerUrl.replace(/\/$/, "")}/data`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${emailConfig.secret}` },
-          body: JSON.stringify({ variants, offcuts, catalog, reasons, transactions, photos })
+          body: JSON.stringify({ variants, offcuts, catalog, reasons, transactions, photos, cncPanels })
         });
         if (!res.ok) return { ok: false, message: `Worker responded with ${res.status}` };
         return { ok: true, message: "Pushed this device's data to the shared backend." };
@@ -13744,6 +13759,7 @@ ${xrefStart}
           setReasons(remote.reasons && remote.reasons.length ? remote.reasons : DEFAULT_REASONS);
           setTransactions(remote.transactions || []);
           setPhotos(remote.photos || {});
+          setCncPanels(remote.cncPanels || []);
         }
         return { ok: true };
       } catch (e) {
@@ -13905,6 +13921,76 @@ ${xrefStart}
       setTransactions([resetEntry]);
       persist({ variants: [], offcuts: [], catalog: [], reasons: DEFAULT_REASONS, photos: {}, transactions: [resetEntry] });
       showToast("All stock information has been reset");
+    }
+    function addCncPanel({ orderNumber, sheetNumber, panelNumber }) {
+      const entry = {
+        id: uid(),
+        orderNumber,
+        sheetNumber,
+        panelNumber,
+        status: "pending",
+        uploadedBy: username || "Unknown",
+        uploadedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        completedBy: null,
+        completedAt: null
+      };
+      const next = [...cncPanels, entry];
+      setCncPanels(next);
+      persist({ cncPanels: next });
+      logTxn({ type: "cnc", desc: `Scheduled panel for CNC: Order ${orderNumber} \xB7 Sheet ${sheetNumber} \xB7 Panel ${panelNumber}`, qty: "" });
+      showToast("Panel added to CNC schedule");
+    }
+    function addCncPanelsBulk(rows) {
+      const now = (/* @__PURE__ */ new Date()).toISOString();
+      const newEntries = rows.map((r) => ({
+        id: uid(),
+        orderNumber: r.orderNumber,
+        sheetNumber: r.sheetNumber,
+        panelNumber: r.panelNumber,
+        status: "pending",
+        uploadedBy: username || "Unknown",
+        uploadedAt: now,
+        completedBy: null,
+        completedAt: null
+      }));
+      const next = [...cncPanels, ...newEntries];
+      setCncPanels(next);
+      persist({ cncPanels: next });
+      logTxn({ type: "cnc", desc: `Bulk scheduled ${rows.length} panel${rows.length === 1 ? "" : "s"} for CNC`, qty: "" });
+      showToast(`${rows.length} panel${rows.length === 1 ? "" : "s"} added to CNC schedule`);
+    }
+    function completeCncPanel(id) {
+      const panel = cncPanels.find((p) => p.id === id);
+      if (!panel) return;
+      const next = cncPanels.map(
+        (p) => p.id === id ? { ...p, status: "completed", completedBy: username || "Unknown", completedAt: (/* @__PURE__ */ new Date()).toISOString() } : p
+      );
+      setCncPanels(next);
+      persist({ cncPanels: next });
+      logTxn({ type: "cnc", desc: `Completed CNC cut: Order ${panel.orderNumber} \xB7 Sheet ${panel.sheetNumber} \xB7 Panel ${panel.panelNumber}`, qty: "" });
+      showToast("Panel marked as completed");
+    }
+    function removeCncPanel(id) {
+      const panel = cncPanels.find((p) => p.id === id);
+      const next = cncPanels.filter((p) => p.id !== id);
+      setCncPanels(next);
+      persist({ cncPanels: next });
+      if (panel) logTxn({ type: "cnc", desc: `Removed CNC schedule entry: Order ${panel.orderNumber} \xB7 Sheet ${panel.sheetNumber} \xB7 Panel ${panel.panelNumber}`, qty: "" });
+      showToast("Removed from CNC schedule");
+    }
+    function exportCncExcel() {
+      const rows = cncPanels.map((p) => ({
+        "Order Number": p.orderNumber,
+        "Sheet Number": p.sheetNumber,
+        "Panel Number": p.panelNumber,
+        Status: p.status === "completed" ? "Completed" : "Pending",
+        "Uploaded By": p.uploadedBy || "",
+        "Uploaded At": p.uploadedAt ? new Date(p.uploadedAt).toLocaleString() : "",
+        "Completed By": p.completedBy || "",
+        "Completed At": p.completedAt ? new Date(p.completedAt).toLocaleString() : ""
+      }));
+      const csv = rowsToCSV(rows);
+      prepareExport(new Blob([csv], { type: "text/csv" }), `CNC_Tracker_${todayStr()}.csv`);
     }
     function addCatalogItem({ color, material, thickness, width, height, reorderPoint }) {
       const catalogId = uid();
@@ -14221,9 +14307,10 @@ ${xrefStart}
       { key: "receive", label: "Receive", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Package, { size: 16 }) },
       { key: "dispatch", label: "Dispatch", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Truck, { size: 16 }) },
       { key: "damage", label: "Damage", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AlertTriangle, { size: 16 }) },
+      { key: "cnc", label: "CNC", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Grid3x3, { size: 16 }) },
       { key: "jobs", label: "Jobs", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Briefcase, { size: 16 }) }
     ];
-    const pageLabels = { stock: "Stock", receive: "Receive", dispatch: "Dispatch", damage: "Damage", jobs: "Jobs", settings: "Settings" };
+    const pageLabels = { stock: "Stock", receive: "Receive", dispatch: "Dispatch", damage: "Damage", cnc: "CNC", jobs: "Jobs", settings: "Settings" };
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex h-screen bg-slate-50 text-slate-900 font-sans", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("aside", { className: "w-60 bg-slate-900 flex flex-col shrink-0", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "px-4 py-5 border-b border-white/10", children: [
@@ -14285,6 +14372,18 @@ ${xrefStart}
           tab === "receive" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReceivePage, { catalog, variants, onSubmit: receiveStock }),
           tab === "dispatch" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DispatchPage, { variants, offcuts, onSubmit: dispatchItem }),
           tab === "damage" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DamagePage, { variants, offcuts, reasons, onSubmit: writeOffDamage, onViewLog: () => setDamageLogOpen(true) }),
+          tab === "cnc" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            CncPage,
+            {
+              cncPanels,
+              isAdmin,
+              onAddPanel: addCncPanel,
+              onAddPanelsBulk: addCncPanelsBulk,
+              onCompletePanel: completeCncPanel,
+              onRemovePanel: removeCncPanel,
+              onExportExcel: exportCncExcel
+            }
+          ),
           tab === "jobs" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(JobsPage, { transactions }),
           tab === "settings" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
             SettingsPage,
@@ -14849,6 +14948,220 @@ ${xrefStart}
             ] }, l.id)) })
           ] }, key);
         }) })
+      ] })
+    ] });
+  }
+  function CncPage({ cncPanels, isAdmin, onAddPanel, onAddPanelsBulk, onCompletePanel, onRemovePanel, onExportExcel }) {
+    const [view, setView] = useState("pending");
+    const [q, setQ] = useState("");
+    const [addOpen, setAddOpen] = useState(false);
+    const [bulkOpen, setBulkOpen] = useState(false);
+    const [form, setForm] = useState({ orderNumber: "", sheetNumber: "", panelNumber: "" });
+    const [bulkRows, setBulkRows] = useState([]);
+    const [bulkErrors, setBulkErrors] = useState([]);
+    const bulkFileRef = useRef(null);
+    const pending = cncPanels.filter((p) => p.status !== "completed");
+    const completed = cncPanels.filter((p) => p.status === "completed");
+    const rows = view === "pending" ? pending : completed;
+    const filtered = rows.filter((p) => `${p.orderNumber} ${p.sheetNumber} ${p.panelNumber}`.toLowerCase().includes(q.toLowerCase())).sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));
+    function submitAdd() {
+      if (!form.orderNumber || !form.sheetNumber || !form.panelNumber) return;
+      onAddPanel(form);
+      setForm({ orderNumber: "", sheetNumber: "", panelNumber: "" });
+      setAddOpen(false);
+    }
+    function downloadTemplate() {
+      const csv = "OrderNumber,SheetNumber,PanelNumber\nWO-1042,1,1\nWO-1042,1,2\n";
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "cnc_template.csv";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1e3);
+    }
+    function handleBulkFile(file) {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const parsed = parseCSV(String(reader.result || ""));
+        if (parsed.length < 2) {
+          setBulkRows([]);
+          setBulkErrors(["The file has no data rows."]);
+          return;
+        }
+        const header = parsed[0].map((h) => h.trim().toLowerCase());
+        const idx = {
+          orderNumber: header.findIndex((h) => h === "ordernumber" || h === "order number"),
+          sheetNumber: header.findIndex((h) => h === "sheetnumber" || h === "sheet number"),
+          panelNumber: header.findIndex((h) => h === "panelnumber" || h === "panel number")
+        };
+        const missing = ["orderNumber", "sheetNumber", "panelNumber"].filter((k) => idx[k] === -1);
+        if (missing.length) {
+          setBulkRows([]);
+          setBulkErrors([`Missing required column(s): ${missing.join(", ")}. Download the template below for the exact format.`]);
+          return;
+        }
+        const valid = [];
+        const errors = [];
+        parsed.slice(1).forEach((r, i) => {
+          const rowNum = i + 2;
+          const orderNumber = (r[idx.orderNumber] || "").trim();
+          const sheetNumber = (r[idx.sheetNumber] || "").trim();
+          const panelNumber = (r[idx.panelNumber] || "").trim();
+          if (!orderNumber || !sheetNumber || !panelNumber) {
+            errors.push(`Row ${rowNum}: missing order, sheet, or panel number.`);
+            return;
+          }
+          valid.push({ orderNumber, sheetNumber, panelNumber });
+        });
+        setBulkRows(valid);
+        setBulkErrors(errors);
+      };
+      reader.readAsText(file);
+    }
+    function confirmBulkImport() {
+      if (bulkRows.length === 0) return;
+      onAddPanelsBulk(bulkRows);
+      setBulkRows([]);
+      setBulkErrors([]);
+      setBulkOpen(false);
+    }
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        PageHeading,
+        {
+          icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Grid3x3, { size: 18 }),
+          title: "CNC Tracker",
+          subtitle: "Panels scheduled to be cut, and their completion status.",
+          action: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center gap-2", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: onExportExcel, className: "flex items-center gap-1.5 text-sm font-medium text-slate-600 border border-slate-300 bg-white rounded-lg px-3 py-2 hover:bg-slate-50", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FileSpreadsheet, { size: 15 }),
+              " Export full history"
+            ] }),
+            isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => {
+                setBulkOpen(!bulkOpen);
+                setAddOpen(false);
+              }, className: "flex items-center gap-1.5 text-sm font-medium text-slate-600 border border-slate-300 bg-white rounded-lg px-3 py-2 hover:bg-slate-50", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Upload, { size: 15 }),
+                " Bulk upload"
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => {
+                setAddOpen(!addOpen);
+                setBulkOpen(false);
+              }, className: "flex items-center gap-1.5 text-sm font-medium text-white bg-cyan-800 rounded-lg px-3 py-2 hover:bg-cyan-900", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Plus, { size: 15 }),
+                " Schedule panel"
+              ] })
+            ] })
+          ] })
+        }
+      ),
+      isAdmin && bulkOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bg-white border border-slate-300 rounded-xl p-5 mb-6", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm font-semibold text-slate-800 mb-1", children: "Bulk upload from a spreadsheet" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { className: "text-sm text-slate-500 mb-3 leading-relaxed", children: [
+          "Upload a CSV with columns: ",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "font-mono text-xs bg-slate-100 px-1.5 py-0.5 rounded", children: "OrderNumber, SheetNumber, PanelNumber" }),
+          "."
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: downloadTemplate, className: "text-sm font-semibold text-cyan-800 mb-3 hover:underline", children: "Download template CSV" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { ref: bulkFileRef, type: "file", accept: ".csv,text/csv", className: "hidden", onChange: (e) => handleBulkFile(e.target.files?.[0]) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => bulkFileRef.current?.click(), className: "w-full flex items-center justify-center gap-2 border border-dashed border-slate-300 bg-slate-50 rounded-lg py-3 text-sm font-semibold text-slate-600 mb-3 hover:bg-slate-100", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FileSpreadsheet, { size: 16 }),
+          " Choose CSV file"
+        ] }),
+        bulkErrors.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "bg-red-50 border border-red-200 rounded-lg p-3 mb-3 space-y-0.5", children: bulkErrors.map((e, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm text-red-800", children: e }, i)) }),
+        bulkRows.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "text-sm font-semibold text-slate-600 mb-1.5", children: [
+            bulkRows.length,
+            " panel",
+            bulkRows.length === 1 ? "" : "s",
+            " ready to import:"
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "max-h-40 overflow-y-auto space-y-1 mb-3 border border-slate-200 rounded-lg p-2 bg-slate-50", children: bulkRows.map((r, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "text-sm text-slate-600 px-1.5 py-1", children: [
+            "Order ",
+            r.orderNumber,
+            " \xB7 Sheet ",
+            r.sheetNumber,
+            " \xB7 Panel ",
+            r.panelNumber
+          ] }, i)) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: confirmBulkImport, className: "w-full bg-cyan-800 text-white font-semibold rounded-lg py-2.5 text-sm hover:bg-cyan-900", children: [
+            "Import ",
+            bulkRows.length,
+            " panel",
+            bulkRows.length === 1 ? "" : "s"
+          ] })
+        ] })
+      ] }),
+      isAdmin && addOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bg-white border border-slate-300 rounded-xl p-5 mb-6", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "grid grid-cols-3 gap-4", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Order number", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CapitalizedInput, { value: form.orderNumber, onChange: (v) => setForm({ ...form, orderNumber: v }), placeholder: "e.g. WO-1042" }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Sheet number", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, value: form.sheetNumber, onChange: (e) => setForm({ ...form, sheetNumber: e.target.value }), placeholder: "e.g. 1" }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Panel number", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, value: form.panelNumber, onChange: (e) => setForm({ ...form, panelNumber: e.target.value }), placeholder: "e.g. 1" }) })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex gap-2", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: submitAdd, disabled: !form.orderNumber || !form.sheetNumber || !form.panelNumber, className: "bg-cyan-800 disabled:opacity-40 text-white font-semibold rounded-lg py-2.5 px-5 text-sm hover:bg-cyan-900", children: "Add to schedule" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setAddOpen(false), className: "text-slate-500 font-medium text-sm px-3", children: "Cancel" })
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bg-white border border-slate-300 rounded-xl overflow-hidden", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-100", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center gap-3", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "relative w-80", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Search, { size: 15, className: "absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "input",
+              {
+                value: q,
+                onChange: (e) => setQ(e.target.value),
+                placeholder: "Search order, sheet, or panel number\u2026",
+                className: "w-full bg-slate-50 border border-slate-300 rounded-lg pl-9 pr-3 py-2 text-sm outline-none focus:border-cyan-800 focus:bg-white"
+              }
+            )
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center bg-slate-100 rounded-lg p-0.5 text-sm font-medium", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setView("pending"), className: `px-3 py-1.5 rounded-md ${view === "pending" ? "bg-white shadow-sm text-slate-900" : "text-slate-500"}`, children: [
+              "Pending (",
+              pending.length,
+              ")"
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setView("completed"), className: `px-3 py-1.5 rounded-md ${view === "completed" ? "bg-white shadow-sm text-slate-900" : "text-slate-500"}`, children: [
+              "Completed (",
+              completed.length,
+              ")"
+            ] })
+          ] })
+        ] }) }),
+        filtered.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyState, { text: view === "pending" ? "No panels currently scheduled for the CNC." : "No completed panels yet." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", { className: "w-full text-sm", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { className: "bg-slate-50/60", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Order Number" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Sheet" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Panel" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Uploaded" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: view === "pending" ? "" : "Completed" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "w-32" })
+          ] }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: filtered.map((p, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { className: `border-t border-slate-100 ${i % 2 === 1 ? "bg-slate-50/30" : ""}`, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3 font-medium text-slate-800", children: p.orderNumber }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3 font-mono text-slate-500", children: p.sheetNumber }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3 font-mono text-slate-500", children: p.panelNumber }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("td", { className: "px-4 py-3 text-slate-400 text-xs", children: [
+              p.uploadedBy,
+              " \xB7 ",
+              new Date(p.uploadedAt).toLocaleDateString()
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3 text-slate-400 text-xs", children: view === "completed" && p.completedAt && `${p.completedBy} \xB7 ${new Date(p.completedAt).toLocaleString()}` }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center justify-end gap-3", children: [
+              view === "pending" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => onCompletePanel(p.id), className: "text-xs font-semibold text-white bg-green-700 rounded-lg px-3 py-1.5 hover:bg-green-800", children: "Mark complete" }),
+              isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => {
+                if (window.confirm("Remove this panel from the CNC schedule? This cannot be undone.")) onRemovePanel(p.id);
+              }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Trash2, { size: 15, className: "text-slate-400 hover:text-red-700" }) })
+            ] }) })
+          ] }, p.id)) })
+        ] })
       ] })
     ] });
   }
@@ -15999,7 +16312,7 @@ ${xrefStart}
               ] }) }),
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: transactions.slice(0, 100).map((t, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { className: `border-t border-slate-100 align-top ${i % 2 === 1 ? "bg-slate-50/50" : ""} ${t.voided ? "opacity-50" : ""}`, children: [
                 /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-2 py-1.5 text-slate-400 font-mono text-xs whitespace-normal break-words", children: fmtDDMMYY(t.timestamp) }),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-2 py-1.5 whitespace-normal break-words", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: `font-semibold uppercase text-xs px-1.5 py-0.5 rounded inline-block ${t.type === "receipt" ? "bg-green-50 text-green-800" : t.type === "dispatch" ? "bg-slate-100 text-cyan-800" : t.type === "damage" ? "bg-red-50 text-red-800" : t.type === "reset" ? "bg-purple-100 text-purple-800" : t.type === "catalog" ? "bg-indigo-50 text-indigo-800" : t.type === "user" ? "bg-blue-50 text-blue-800" : t.type === "backup" ? "bg-teal-50 text-teal-800" : "bg-stone-100 text-amber-800"}`, children: t.type }) }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-2 py-1.5 whitespace-normal break-words", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: `font-semibold uppercase text-xs px-1.5 py-0.5 rounded inline-block ${t.type === "receipt" ? "bg-green-50 text-green-800" : t.type === "dispatch" ? "bg-slate-100 text-cyan-800" : t.type === "damage" ? "bg-red-50 text-red-800" : t.type === "reset" ? "bg-purple-100 text-purple-800" : t.type === "catalog" ? "bg-indigo-50 text-indigo-800" : t.type === "user" ? "bg-blue-50 text-blue-800" : t.type === "backup" ? "bg-teal-50 text-teal-800" : t.type === "cnc" ? "bg-orange-50 text-orange-800" : "bg-stone-100 text-amber-800"}`, children: t.type }) }),
                 /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("td", { className: "px-2 py-1.5 text-slate-600 whitespace-normal break-words", children: [
                   /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: t.voided ? "line-through" : "", children: [
                     t.desc,
