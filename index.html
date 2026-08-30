@@ -12890,6 +12890,10 @@
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("line", { x1: "9", y1: "3", x2: "9", y2: "21" }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("line", { x1: "15", y1: "3", x2: "15", y2: "21" })
   ] });
+  var LinkIcon = (p) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Icon, { ...p, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" })
+  ] });
   var Trash2 = (p) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Icon, { ...p, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("polyline", { points: "3 6 5 6 21 6" }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" }),
@@ -12973,6 +12977,7 @@
   };
   var BAKED_WORKER_URL = "https://panelstock-reports.matthewlakerdis.workers.dev";
   var BAKED_SHARED_SECRET = "5KrJX1Hyh3_iBkekDsFeTY-omgfX2b8e";
+  var CNC_PUBLIC_TOKEN = "CaFrQiKQ6f01cDmnHmpf8HEKEGPiJK4o";
   var DEFAULT_EMAIL_CONFIG = {
     workerUrl: BAKED_WORKER_URL,
     secret: BAKED_SHARED_SECRET,
@@ -13013,11 +13018,6 @@
     const mm = String(d.getMonth() + 1).padStart(2, "0");
     const yy = String(d.getFullYear()).slice(-2);
     return `${dd}/${mm}/${yy}`;
-  }
-  function splitDateTime(iso) {
-    if (!iso) return { date: "", time: "" };
-    const d = new Date(iso);
-    return { date: fmtDDMMYY(iso), time: d.toLocaleTimeString(void 0, { hour: "numeric", minute: "2-digit" }) };
   }
   function parseCSV(text) {
     const rows = [];
@@ -13378,144 +13378,6 @@ ${xrefStart}
     }
     return table;
   })();
-  function crc32(bytes) {
-    let crc = 4294967295;
-    for (let i = 0; i < bytes.length; i++) crc = CRC_TABLE[(crc ^ bytes[i]) & 255] ^ crc >>> 8;
-    return (crc ^ 4294967295) >>> 0;
-  }
-  function strToBytes(str) {
-    return new TextEncoder().encode(str);
-  }
-  function buildZip(files) {
-    const localParts = [];
-    const centralParts = [];
-    let offset = 0;
-    files.forEach(({ name, data }) => {
-      const nameBytes = strToBytes(name);
-      const crc = crc32(data);
-      const size = data.length;
-      const localHeader = new Uint8Array(30 + nameBytes.length);
-      const lv = new DataView(localHeader.buffer);
-      lv.setUint32(0, 67324752, true);
-      lv.setUint16(4, 20, true);
-      lv.setUint16(6, 0, true);
-      lv.setUint16(8, 0, true);
-      lv.setUint16(10, 0, true);
-      lv.setUint16(12, 0, true);
-      lv.setUint32(14, crc, true);
-      lv.setUint32(18, size, true);
-      lv.setUint32(22, size, true);
-      lv.setUint16(26, nameBytes.length, true);
-      lv.setUint16(28, 0, true);
-      localHeader.set(nameBytes, 30);
-      localParts.push(localHeader, data);
-      const centralHeader = new Uint8Array(46 + nameBytes.length);
-      const cv = new DataView(centralHeader.buffer);
-      cv.setUint32(0, 33639248, true);
-      cv.setUint16(4, 20, true);
-      cv.setUint16(6, 20, true);
-      cv.setUint16(8, 0, true);
-      cv.setUint16(10, 0, true);
-      cv.setUint16(12, 0, true);
-      cv.setUint16(14, 0, true);
-      cv.setUint32(16, crc, true);
-      cv.setUint32(20, size, true);
-      cv.setUint32(24, size, true);
-      cv.setUint16(28, nameBytes.length, true);
-      cv.setUint16(30, 0, true);
-      cv.setUint16(32, 0, true);
-      cv.setUint16(34, 0, true);
-      cv.setUint16(36, 0, true);
-      cv.setUint32(38, 0, true);
-      cv.setUint32(42, offset, true);
-      centralHeader.set(nameBytes, 46);
-      centralParts.push(centralHeader);
-      offset += localHeader.length + data.length;
-    });
-    const centralStart = offset;
-    let centralSize = 0;
-    centralParts.forEach((p) => {
-      centralSize += p.length;
-    });
-    const eocd = new Uint8Array(22);
-    const ev = new DataView(eocd.buffer);
-    ev.setUint32(0, 101010256, true);
-    ev.setUint16(8, files.length, true);
-    ev.setUint16(10, files.length, true);
-    ev.setUint32(12, centralSize, true);
-    ev.setUint32(16, centralStart, true);
-    const allParts = [...localParts, ...centralParts, eocd];
-    let totalLen = 0;
-    allParts.forEach((p) => {
-      totalLen += p.length;
-    });
-    const out = new Uint8Array(totalLen);
-    let pos = 0;
-    allParts.forEach((p) => {
-      out.set(p, pos);
-      pos += p.length;
-    });
-    return out;
-  }
-  function xlsxXmlEscape(str) {
-    return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-  }
-  function xlsxColLetter(n) {
-    let s = "";
-    n = n + 1;
-    while (n > 0) {
-      const rem = (n - 1) % 26;
-      s = String.fromCharCode(65 + rem) + s;
-      n = Math.floor((n - 1) / 26);
-    }
-    return s;
-  }
-  function buildXlsxBlob(rows) {
-    if (!rows.length) rows = [{}];
-    const headers = Object.keys(rows[0]);
-    const widths = headers.map((h) => {
-      let maxLen = String(h).length;
-      rows.forEach((r) => {
-        const val = r[h] == null ? "" : String(r[h]);
-        if (val.length > maxLen) maxLen = val.length;
-      });
-      return Math.min(Math.max(maxLen + 2, 8), 60);
-    });
-    const colsXml = headers.map((_, i) => `<col min="${i + 1}" max="${i + 1}" width="${widths[i]}" customWidth="1"/>`).join("");
-    function isNumeric(v) {
-      return v !== "" && v != null && !isNaN(Number(v)) && String(v).trim() !== "";
-    }
-    const headerRow = `<row r="1">${headers.map((h, i) => `<c r="${xlsxColLetter(i)}1" t="inlineStr"><is><t>${xlsxXmlEscape(h)}</t></is></c>`).join("")}</row>`;
-    const dataRows = rows.map((r, rIdx) => {
-      const rowNum = rIdx + 2;
-      const cells = headers.map((h, cIdx) => {
-        const raw = r[h] == null ? "" : r[h];
-        const cellRef = `${xlsxColLetter(cIdx)}${rowNum}`;
-        if (isNumeric(raw)) return `<c r="${cellRef}"><v>${Number(raw)}</v></c>`;
-        return `<c r="${cellRef}" t="inlineStr"><is><t>${xlsxXmlEscape(raw)}</t></is></c>`;
-      }).join("");
-      return `<row r="${rowNum}">${cells}</row>`;
-    }).join("");
-    const sheetXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols>${colsXml}</cols><sheetData>${headerRow}${dataRows}</sheetData></worksheet>`;
-    const workbookXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets></workbook>`;
-    const workbookRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`;
-    const rootRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`;
-    const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>`;
-    const files = [
-      { name: "[Content_Types].xml", data: strToBytes(contentTypes) },
-      { name: "_rels/.rels", data: strToBytes(rootRels) },
-      { name: "xl/workbook.xml", data: strToBytes(workbookXml) },
-      { name: "xl/_rels/workbook.xml.rels", data: strToBytes(workbookRels) },
-      { name: "xl/worksheets/sheet1.xml", data: strToBytes(sheetXml) }
-    ];
-    const bytes = buildZip(files);
-    return new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-  }
   function pad(str, len, gap = 2) {
     const usableLen = Math.max(1, len - gap);
     return String(str).slice(0, usableLen).padEnd(len, " ");
@@ -14132,26 +13994,6 @@ ${xrefStart}
       if (panel) logTxn({ type: "cnc", desc: `Removed CNC schedule entry: Order ${panel.orderNumber} \xB7 Sheet ${panel.sheetNumber} \xB7 Panel ${panel.panelNumber}`, qty: "" });
       showToast("Removed from CNC schedule");
     }
-    function exportCncExcel() {
-      const rows = cncPanels.map((p) => {
-        const uploaded = splitDateTime(p.uploadedAt);
-        const completed = splitDateTime(p.completedAt);
-        return {
-          order_number: p.orderNumber,
-          job_reference: p.jobReference || "",
-          sheet_number: p.sheetNumber,
-          panel_id: p.panelNumber,
-          status: p.status === "completed" ? "Completed" : "Pending",
-          uploaded_by: p.uploadedBy || "",
-          date_uploaded: uploaded.date,
-          time_uploaded: uploaded.time,
-          completed_by: p.completedBy || "",
-          date_completed: completed.date,
-          time_completed: completed.time
-        };
-      });
-      prepareExport(buildXlsxBlob(rows), `CNC_TRACKER.xlsx`);
-    }
     function addCatalogItem({ color, material, thickness, width, height, reorderPoint }) {
       const catalogId = uid();
       const sku = genSku();
@@ -14545,8 +14387,7 @@ ${xrefStart}
               onAddPanel: addCncPanel,
               onAddPanelsBulk: addCncPanelsBulk,
               onCompletePanel: completeCncPanel,
-              onRemovePanel: removeCncPanel,
-              onExportExcel: exportCncExcel
+              onRemovePanel: removeCncPanel
             }
           ),
           tab === "jobs" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(JobsPage, { transactions }),
@@ -15116,7 +14957,7 @@ ${xrefStart}
       ] })
     ] });
   }
-  function CncPage({ cncPanels, isAdmin, onAddPanel, onAddPanelsBulk, onCompletePanel, onRemovePanel, onExportExcel }) {
+  function CncPage({ cncPanels, isAdmin, onAddPanel, onAddPanelsBulk, onCompletePanel, onRemovePanel }) {
     const [view, setView] = useState("pending");
     const [q, setQ] = useState("");
     const [addOpen, setAddOpen] = useState(false);
@@ -15124,7 +14965,18 @@ ${xrefStart}
     const [form, setForm] = useState({ orderNumber: "", jobReference: "", sheetNumber: "", panelNumber: "" });
     const [bulkRows, setBulkRows] = useState([]);
     const [bulkErrors, setBulkErrors] = useState([]);
+    const [linkCopied, setLinkCopied] = useState(false);
     const bulkFileRef = useRef(null);
+    const shareableLink = `${BAKED_WORKER_URL}/cnc-tracker?token=${CNC_PUBLIC_TOKEN}`;
+    async function copyShareableLink() {
+      try {
+        await navigator.clipboard.writeText(shareableLink);
+        setLinkCopied(true);
+        setTimeout(() => setLinkCopied(false), 2500);
+      } catch {
+        window.prompt("Copy this link:", shareableLink);
+      }
+    }
     const pending = cncPanels.filter((p) => p.status !== "completed");
     const completed = cncPanels.filter((p) => p.status === "completed");
     const rows = view === "pending" ? pending : completed;
@@ -15202,11 +15054,12 @@ ${xrefStart}
         {
           icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Grid3x3, { size: 18 }),
           title: "CNC Tracker",
-          subtitle: "Panels scheduled to be cut, and their completion status.",
+          subtitle: "Panels scheduled to be cut, and their completion status. The shareable link always reflects the latest data \u2014 no need to re-send it.",
           action: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center gap-2", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: onExportExcel, className: "flex items-center gap-1.5 text-sm font-medium text-slate-600 border border-slate-300 bg-white rounded-lg px-3 py-2 hover:bg-slate-50", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FileSpreadsheet, { size: 15 }),
-              " Export full history"
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: copyShareableLink, className: "flex items-center gap-1.5 text-sm font-medium text-slate-600 border border-slate-300 bg-white rounded-lg px-3 py-2 hover:bg-slate-50", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LinkIcon, { size: 15 }),
+              " ",
+              linkCopied ? "Link copied!" : "Copy shareable link"
             ] }),
             isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => {
