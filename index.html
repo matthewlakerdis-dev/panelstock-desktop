@@ -14967,7 +14967,7 @@ ${xrefStart}
     const [bulkErrors, setBulkErrors] = useState([]);
     const [linkCopied, setLinkCopied] = useState(false);
     const bulkFileRef = useRef(null);
-    const shareableLink = `${BAKED_WORKER_URL}/cnc-tracker?token=${CNC_PUBLIC_TOKEN}`;
+    const shareableLink = `${BAKED_WORKER_URL}/cnc-tracker/view?token=${CNC_PUBLIC_TOKEN}`;
     async function copyShareableLink() {
       try {
         await navigator.clipboard.writeText(shareableLink);
