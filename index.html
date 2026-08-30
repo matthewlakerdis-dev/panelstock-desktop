@@ -13014,6 +13014,11 @@
     const yy = String(d.getFullYear()).slice(-2);
     return `${dd}/${mm}/${yy}`;
   }
+  function splitDateTime(iso) {
+    if (!iso) return { date: "", time: "" };
+    const d = new Date(iso);
+    return { date: fmtDDMMYY(iso), time: d.toLocaleTimeString(void 0, { hour: "numeric", minute: "2-digit" }) };
+  }
   function parseCSV(text) {
     const rows = [];
     let row = [], field = "", inQuotes = false;
@@ -13979,18 +13984,24 @@ ${xrefStart}
       showToast("Removed from CNC schedule");
     }
     function exportCncExcel() {
-      const rows = cncPanels.map((p) => ({
-        "Order Number": p.orderNumber,
-        "Sheet Number": p.sheetNumber,
-        "Panel Number": p.panelNumber,
-        Status: p.status === "completed" ? "Completed" : "Pending",
-        "Uploaded By": p.uploadedBy || "",
-        "Uploaded At": p.uploadedAt ? new Date(p.uploadedAt).toLocaleString() : "",
-        "Completed By": p.completedBy || "",
-        "Completed At": p.completedAt ? new Date(p.completedAt).toLocaleString() : ""
-      }));
+      const rows = cncPanels.map((p) => {
+        const uploaded = splitDateTime(p.uploadedAt);
+        const completed = splitDateTime(p.completedAt);
+        return {
+          order_number: p.orderNumber,
+          sheet_number: p.sheetNumber,
+          panel_id: p.panelNumber,
+          status: p.status === "completed" ? "Completed" : "Pending",
+          uploaded_by: p.uploadedBy || "",
+          date_uploaded: uploaded.date,
+          time_uploaded: uploaded.time,
+          completed_by: p.completedBy || "",
+          date_completed: completed.date,
+          time_completed: completed.time
+        };
+      });
       const csv = rowsToCSV(rows);
-      prepareExport(new Blob([csv], { type: "text/csv" }), `CNC_Tracker_${todayStr()}.csv`);
+      prepareExport(new Blob([csv], { type: "text/csv" }), `CNC_TRACKER.csv`);
     }
     function addCatalogItem({ color, material, thickness, width, height, reorderPoint }) {
       const catalogId = uid();
@@ -14144,7 +14155,12 @@ ${xrefStart}
     }
     function prepareExport(blob, filename) {
       const url = URL.createObjectURL(blob);
-      window.open(url, "_blank");
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 3e4);
       showToast(`${filename} ready`);
     }
