@@ -1,5 +1,12 @@
 # Security and stock reliability update
 
+## CNC whole-sheet completion — 31 August 2026
+
+- Workers can select Complete sheet from a pending CNC panel in either app. Confirmation shows the order, sheet and number of pending panels affected, including panels hidden by search.
+- Only pending panels with the exact same order and sheet numbers are completed. Earlier completion details and other sheets/orders are preserved. Individual panel completion remains available.
+- Saves through the existing atomic, retry-safe sync process with a sheet activity entry. No stock is deducted. No backend permission changes are required.
+
+
 Release: v2026.08.31. Both frontends and the shared backend are deployed. Stock editing is enabled after successful production administrator sign-in and inventory verification in both apps.
 
 This update must be released together with PanelStock mobile and the shared Cloudflare backend. The desktop layout is largely unchanged.
