@@ -1,5 +1,11 @@
 # Security and stock reliability update
 
+## Compact CNC panel views — 31 August 2026
+
+- Removed repeated job-reference and uploaded details from panel cards/rows in both apps and the shared tracker. Job headings, completion details and actions remain visible.
+- Stored data, search, and the connected Excel export remain unchanged. All 38 checks pass.
+
+
 ## CNC job groups and upload cleanup — 31 August 2026
 
 - Added collapsible job-reference groups above collapsible orders in both apps and the read-only shared tracker, with separate counts and a No job reference group.

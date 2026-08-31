@@ -15116,23 +15116,15 @@ function normalizeCncInput(row) {
         filtered.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyState, { text: view === "pending" ? "No panels currently scheduled for the CNC." : "No completed panels yet." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncJobGroups, { panels: filtered, allPanels: cncPanels, query: q, renderGroup: (groupPanels) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", { className: "w-full text-sm", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { className: "bg-slate-50/60", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Order Number" }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Job Reference" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Sheet" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Panel" }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Uploaded" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: view === "pending" ? "" : "Completed" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "w-32" })
           ] }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: groupPanels.map((p, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { className: `border-t border-slate-100 ${i % 2 === 1 ? "bg-slate-50/30" : ""}`, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3 font-medium text-slate-800", children: p.orderNumber }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3 text-slate-600", children: p.jobReference || "\u2014" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3 font-mono text-slate-500", children: p.sheetNumber }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3 font-mono text-slate-500", children: p.panelNumber }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("td", { className: "px-4 py-3 text-slate-400 text-xs", children: [
-              p.uploadedBy,
-              " \xB7 ",
-              new Date(p.uploadedAt).toLocaleDateString()
-            ] }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3 text-slate-400 text-xs", children: view === "completed" && p.completedAt && `${p.completedBy} \xB7 ${new Date(p.completedAt).toLocaleString()}` }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center justify-end gap-3", children: [
               view === "pending" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => onCompletePanel(p.id), className: "text-xs font-semibold text-white bg-green-700 rounded-lg px-3 py-1.5 hover:bg-green-800", children: "Mark complete" }),
