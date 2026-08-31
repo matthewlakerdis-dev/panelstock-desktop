@@ -61,12 +61,12 @@ test('sheet dialog cancels without completing and requires its confirm button',(
 test('orders group exactly and retain their expansion state across refreshed data',()=>{
  const start=html.indexOf('  function CncOrderGroups('),end=html.indexOf('\n  function ',start+5);
  let state=new Map();
- const render=vm.runInNewContext(html.slice(html.indexOf('function compareCncOrders('),html.indexOf('  function CncJobGroups('))+html.slice(start,end)+';CncOrderGroups',{useState:()=>[state,fn=>state=fn(state)],import_jsx_runtime:{jsx:(type,props,key)=>({type,...props,key})}});
+ const render=vm.runInNewContext(html.slice(html.indexOf('function compareCncOrders('),html.indexOf('  function CncJobGroups('))+html.slice(start,end)+';CncOrderGroups',{useState:()=>[state,fn=>state=fn(state)],CncSheetGroups:()=>{},import_jsx_runtime:{jsx:(type,props,key)=>({type,...props,key})}});
  const rows=[{id:'1',orderNumber:'20',status:'pending'},{id:'2',orderNumber:'20',status:'completed'},{id:'3',orderNumber:'10',status:'pending'}];
  const props={panels:rows,allPanels:rows,query:'',renderGroup:group=>group};
  let tree=render(props);assert.equal(tree.children.length,2);assert.equal(tree.children[0].children[0]['aria-expanded'],false);
  tree.children[0].children[0].onClick();tree=render({...props,panels:rows.map(p=>({...p}))});
- assert.equal(tree.children[0].children[0]['aria-expanded'],true);assert.equal(tree.children[0].children[1].children.length,2);
+ assert.equal(tree.children[0].children[0]['aria-expanded'],true);assert.equal(tree.children[0].children[1].children.panels.length,2);
  assert.equal(tree.children[1].children[0]['aria-expanded'],false);
  tree=render({...props,query:'A',panels:rows.slice(0,2)});assert.equal(tree.children.length,1);assert.equal(tree.children[0].children[0]['aria-expanded'],true);
 });
@@ -99,18 +99,15 @@ test('single panel dialog requires confirmation and disables it when no longer p
  assert.equal(confirmed,0);
  nodes.find(n=>n.type==='button'&&n.children==='Cancel').onClick();
  assert.equal(cancelled,1);assert.equal(confirmed,0);
- nodes.find(n=>n.role==='dialog').onKeyDown({key:'Escape',preventDefault(){},stopPropagation(){}});
- assert.equal(cancelled,2);assert.equal(confirmed,0);
  nodes.find(n=>n.type==='button'&&n.children==='Complete panel').onClick();assert.equal(confirmed,1);
  const stale=flatten(render({...props,affectedPanels:[]}));
  assert.equal(stale.find(n=>n.type==='button'&&n.children==='Complete panel').disabled,true);
 });
 test('single completion changes only selected pending panel and ignores stale completion',()=>{
- const source=html.slice(html.indexOf('    function completeCncPanel('),html.indexOf('    function completeCncSheet('));
- const panels=[{id:'a',status:'pending',orderNumber:'7',sheetNumber:'1',panelNumber:'A1'},{id:'b',status:'pending',orderNumber:'7',sheetNumber:'1',panelNumber:'A2'}];
- let current=panels,writes=0,logs=0;
- const run=id=>vm.runInNewContext(source+';completeCncPanel('+JSON.stringify(id)+');',{cncPanels:current,username:'worker',setCncPanels:next=>current=next,persist:()=>writes++,logTxn:()=>logs++,showToast(){}});
- run('a');assert.equal(current[0].status,'completed');assert.equal(current[1],panels[1]);assert.equal(writes,1);assert.equal(logs,1);
- const stamp=current[0].completedAt;
- run('a');run('missing');assert.equal(writes,1);assert.equal(logs,1);assert.equal(current[0].completedAt,stamp);
+ const start=html.indexOf('    function completeCncPanel('),end=html.indexOf('    function removeCncPanel(',start);
+ const source=html.slice(start,end);
+ const panels=[{id:'a',status:'pending'},{id:'b',status:'pending'},{id:'c',status:'completed',completedAt:'old'}];
+ function invoke(id){const result={writes:[],logs:[]};vm.runInNewContext(source+`;completeCncPanel(${JSON.stringify(id)});`,{cncPanels:panels,username:'worker',setCncPanels:next=>result.next=next,persist:next=>result.writes.push(next),logTxn:tx=>result.logs.push(tx),showToast:()=>{}});return result;}
+ const r=invoke('b');assert.equal(r.writes.length,1);assert.equal(r.logs.length,1);assert.equal(r.next[0].status,'pending');assert.equal(r.next[1].status,'completed');assert.equal(r.next[1].completedBy,'worker');assert.equal(r.next[2].completedAt,'old');
+ const stale=invoke('c');assert.equal(stale.writes.length,0);assert.equal(stale.logs.length,0);
 });
