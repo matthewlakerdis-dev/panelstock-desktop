@@ -1,5 +1,12 @@
 # PanelStock release notes
 
+## Original SOP style restored - 31 August 2026
+
+- Restored the original cover, contents, typography, colours, small corner logo, numbered steps, screenshot placement and callout styling.
+- Retained current receiving, catalog, CNC, Excel and permission instructions; both guides now contain 27 pages.
+- Added a reproducible PDF builder and retained source screenshots so future revisions preserve the agreed design.
+- Documentation-only correction; stock data and application behaviour are unchanged.
+
 ## Illustrated SOP correction - v2026.08.31.4
 
 ### Illustrated SOP correction

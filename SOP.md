@@ -1,276 +1,316 @@
-# PanelStock Standard Operating Procedures - Desktop
-Version v2026.08.31.4 | Illustrated edition | Updated 31 August 2026
+# PanelStock SOP - Desktop
+Original-style edition | Updated 31 August 2026
 
-![Lennox Facades](docs/sop/lennox-logo.png)
+## 2. Logging In & Registering
 
-## 1. Getting started and responsibilities
+First time using PanelStock on this device
 
-### Open the correct app
+1. Open the app, then select <b>Register</b>.
+2. Enter your own <b>username</b>. Use a separate account for each staff member.
+3. Enter the current <b>six-digit registration code</b> supplied by an admin.
+4. Select <b>Continue</b>, then choose and confirm a unique <b>6-12 digit personal PIN</b>.
 
-Open https://web.panelstockhq.com in your desktop browser. Use the left sidebar for Stock, Receive, Dispatch, Damage, CNC, Jobs and Settings. Use your own account so receipts, dispatches and CNC completions are attributed to you. On a shared device, sign out when finished and turn off Remember my username if appropriate.
+> Keep your personal PIN private. Never put it in job notes or share an admin login.
 
-### Register or sign in
+![2. Logging In & Registering](docs/sop/desktop-register.png)
 
-1. First use: choose Register, enter your username and the current six-digit registration code supplied by an admin, then follow the prompts to set and confirm a personal PIN.
+## Returning after the app has logged you out
 
-2. Use a unique 6-12 digit personal PIN. Do not share it or put it in job notes. For returning access, choose Log in and enter your username and PIN.
+Use your own account so stock changes and CNC completions are attributed to you.
 
-3. If your session expires, log in again. If you have pending changes, use the same account that created them. Ask an admin for help if your PIN is forgotten.
+1. Select the <b>Log in</b> tab.
+2. Check the <b>username</b>. If changes are waiting to sync, sign in as the account that created them.
+3. Enter your personal <b>PIN</b> and select <b>Log in</b>. Ask an admin for a PIN reset if you have forgotten it.
+4. On a shared device, turn off <b>Remember my username</b> if appropriate and log out when finished.
 
-### Who can do what?
+> A saved username is not a shared account. Check the sync status before leaving the device.
 
-Users and admins can receive stock, add a missing material while receiving it, dispatch stock, record damage with photos, add offcuts and complete CNC work. Users can view catalog-backed stock and use the available exports.
+![Returning after the app has logged you out](docs/sop/desktop-login.png)
 
-Admins manage the catalog in Settings, add catalog items without a receipt, use catalog bulk entry, schedule or remove CNC panels, manage users/reasons/email settings, void eligible activity and perform stocktake resets or backup restores.
+## 3. Viewing Stock & Exporting Reports
 
-> Before you leave a completed task: confirm the stock or CNC result and check the sync indicator. A message saying changes are saved on this device is not confirmation that other devices have received them.
+Check stock on hand before taking or receiving material.
 
-### Guide contents
+1. Open <b>Stock</b>. Choose <b>Full panels</b> or <b>Off-cuts</b>.
+2. Search by colour, material, thickness, size or SKU. Check the exact item before using it.
+3. Read the displayed <b>SOH</b> and compare it with the physical stock. Report discrepancies for review.
+4. Use <b>Excel</b> or <b>PDF</b> to export a report. Ordinary stock exports are snapshots, not live workbooks.
 
-2 Receiving stock | 3 Stock and offcuts | 4 Dispatch, damage and jobs | 5 CNC scheduling and completion | 6 Shared tracker and Excel | 7 Materials catalog | 8 Stocktake and administration | 9 Backup, recovery and sync
+> The shared CNC Excel workbook is different: it refreshes while open. See Section 16.
 
-![Screenshot: Use the left sidebar for warehouse operations and Settings. The lower-left indicator shows sync status.](docs/sop/desktop-stock.png)
+![3. Viewing Stock & Exporting Reports](docs/sop/desktop-stock.png)
 
-## 2. Receiving stock
+## Adding an off-cut
 
-### Material already in the catalog
+Use this when a job leaves a usable leftover piece worth keeping in stock.
 
-1. Open Receive. Search by colour, material, thickness, size or SKU, then select the correct full-panel material.
+1. Open <b>Stock</b>, choose <b>Off-cuts</b>, then select <b>Add off-cut</b>.
+2. Optionally select the original material to fill its details, or enter colour, material and thickness manually.
+3. Enter the offcut's own <b>Width</b> and <b>Height</b> - usually smaller than the original sheet.
+4. Enter the <b>Quantity</b> and an optional <b>Note</b>.
+5. Select <b>Add off-cut</b>. Scroll within the form if the button is below the visible area.
 
-2. Enter the Quantity received as a positive whole number. Add a Supplier / PO reference if available.
+> Adding an offcut does not dispatch its parent sheet. Record that full-sheet movement separately.
 
-3. Check the material, size and physical delivery quantity, then select Add to SOH. Confirm the stock total and sync status. This adds to existing stock; it does not replace the total.
+![Adding an off-cut](docs/sop/desktop-offcut.png)
 
-### Material missing from the catalog - users and admins
+## 4. Receiving Stock
 
-1. In Receive, select Add missing material. This works even when the catalog is empty. The popup is manual entry only; there is no material search list inside it.
+Use this whenever new panels physically arrive at the warehouse.
 
-2. Enter Colour / finish, Material, Thickness (mm), Width (mm) and Height (mm). Use the full sheet size being received. Dimensions must be positive.
+1. Open <b>Receive</b> in the app navigation.
+2. Search for the material, colour, thickness or SKU, then select the exact item you're receiving.
+3. Optionally enter a <b>Supplier / PO reference</b>.
+4. Enter the <b>Quantity received</b> as a positive whole number.
+5. Select <b>Add to SOH</b>. Check the new total and the sync indicator.
 
-3. Optionally enter a Reorder point, as a whole number of zero or more. Blank means zero for a new material.
+> If the material is not in the catalog, use Add missing material. Both users and admins can do this.
 
-4. Enter Quantity received and, optionally, Supplier / PO reference within the same popup.
+![4. Receiving Stock](docs/sop/desktop-receive.png)
 
-5. Select Receive stock. A new material receives a SKU, and its catalog entry and stock quantity are saved together with the receipt record. You do not need to enter the quantity again on the main Receive screen.
+## Adding missing material while receiving
 
-> If the same material, colour and dimensions already exist, the receipt uses that catalog item instead of creating a duplicate. It adds to existing stock and does not change the existing reorder point.
+Create the missing material and receive its stock in the same popup.
 
-### Checks and corrections
+1. In <b>Receive</b>, select <b>Add missing material</b>. It is available to users and admins, even with an empty catalog.
+2. Enter <b>Colour / finish</b>, <b>Material</b>, <b>Thickness</b>, <b>Width</b> and <b>Height</b>. Use positive dimensions in millimetres.
+3. Optionally enter a whole-number <b>Reorder point</b>. Blank uses zero for new materials.
+4. Enter the <b>Quantity received</b> and optional <b>Supplier / PO reference</b> in this popup.
+5. Select <b>Receive stock</b>. The catalog item, stock and receipt record are saved together.
 
-Fix any displayed validation errors before submitting. Quantity must be a positive whole number; negative and fractional receipts are rejected. Cancel or close the popup before saving to abandon the entry.
+> If a matching material already exists, its stock is increased without creating a duplicate. Existing reorder points are preserved.
 
-If a receipt was entered incorrectly, do not enter a second receipt to compensate. Ask an admin to review the activity and use the appropriate correction or void process. See section 8.
+![Adding missing material while receiving](docs/sop/desktop-missing.png)
 
-![Screenshot: Select the existing material on the left, then enter quantity and the optional supplier/PO reference.](docs/sop/desktop-receive.png)
+## 5. Dispatching to a Job
 
-![Screenshot: The popup collects material details and receipt quantity together. Available to users and admins.](docs/sop/desktop-missing.png)
+Use this whenever material is pulled from stock and sent out to a job.
 
-## 3. Stock, offcuts and exports
+1. Open <b>Dispatch</b>. Search and select the correct full panel or offcut.
+2. Enter the <b>Order number</b> and optional <b>Job reference</b>.
+3. Enter the <b>Quantity to dispatch</b>. Check available SOH and the physical item.
+4. Select <b>Confirm dispatch</b>, then verify the reduced SOH and sync status.
 
-### View stock on hand (SOH)
+> If a usable piece remains, add it through the offcut form. Do not count the same material twice.
 
-1. Open Stock. Switch between Full panels and Off-cuts. Search for the material or SKU and check colour, thickness and size before taking stock.
+![5. Dispatching to a Job](docs/sop/desktop-dispatch.png)
 
-2. Use the displayed SOH to compare with the physical count. Report discrepancies for review; do not silently adjust another material to balance the total.
+## 6. Writing Off Damaged Stock
 
-### Add a usable offcut
+Use this when damaged material must be removed from stock on hand.
 
-1. Open Stock, choose Off-cuts and select the add-offcut control.
+1. Open <b>Damage</b> and select the affected stock item.
+2. Choose the <b>Reason</b> and enter the <b>Quantity damaged</b>.
+3. Use <b>Add photo</b> to attach at least one clear photo of the damage. Evidence is required.
+4. Select <b>Write off stock</b>. Confirm the deduction from the correct item.
 
-2. Optionally search for and select the original material. This fills colour, material and thickness. Alternatively, enter those details manually.
+> Do not dispatch and write off the same quantity twice. Ask an admin to review incorrect movements.
 
-3. Enter the offcut piece's own Width and Height, Quantity and an optional Note. Do not leave the original full-sheet dimensions for a smaller piece.
+![6. Writing Off Damaged Stock](docs/sop/desktop-damage.png)
 
-4. Select Add off-cut. Check the new offcut entry and sync status.
+## 7. Job History
 
-> Adding an offcut does not dispatch its parent full sheet. Record the full-sheet stock movement separately when it is used. Do not count the same physical material both as a full sheet and as an offcut.
+Use this to review past dispatches, grouped by job.
 
-### Excel and PDF exports
+1. Open <b>Jobs</b> to find dispatch history by job reference or order number.
+2. Review the relevant job and its material movements. Check quantities and timestamps.
+3. For receipts, damage and other actions, open <b>Settings &gt; Activity Log</b>. The recorded user helps identify who made the entry.
 
-Use Excel or PDF on the relevant screen for stock, catalog or activity information. Ordinary exported reports are snapshots at export time; download another copy when you need a later snapshot.
+> Job history and activity are records of previous actions. Use current SOH to check what is available now.
 
-The CNC shared Excel workbook is different: it has a read-only refresh connection. Follow section 6 for its setup, colours and refresh behaviour. Do not expect stock exports to refresh like the CNC workbook.
+![7. Job History](docs/sop/desktop-jobs.png)
 
-![Screenshot: Choose a source material or enter the details manually. Enter the leftover size, then scroll down to Add off-cut.](docs/sop/desktop-offcut.png)
+## 8. Stocktaking Procedure
 
-## 4. Dispatch, damage and job history
+Plan the physical count before resetting quantities.
 
-### Dispatch stock to a job
+1. Pause normal stock movements. An <b>admin</b> takes a backup before starting the count.
+2. Use <b>Stocktake reset</b> in Settings and follow its confirmation. Full-panel quantities become zero and offcuts are cleared.
+3. Count the warehouse by material, colour, thickness and dimensions. Users and admins enter counted panels through <b>Receive</b>.
+4. Enter usable offcuts through the offcut form. Reconcile discrepancies and confirm all devices have synced before resuming work.
 
-1. Open Dispatch. Search and select the exact full-panel or offcut item being issued.
+> Stocktake reset preserves the catalog, damage reasons and prior activity. The reset itself is logged.
 
-2. Enter the order number, optional job reference and quantity to dispatch. Verify the available SOH and the physical material.
+![8. Stocktaking Procedure](docs/sop/desktop-backup.png)
 
-3. Select Confirm dispatch, then verify the reduced SOH and saved activity. If a usable offcut remains, add it separately using section 3.
+## 9. Voiding a Mistaken Entry
 
-### Write off damaged stock
+Reverse an eligible stock movement without removing the audit history.
 
-1. Open Damage and select the affected item. Choose the reason and enter the quantity damaged.
+1. Open <b>Settings &gt; Activity Log</b>. Find the exact receipt, dispatch or damage entry.
+2. Check the item, quantity, date and recorded user before using <b>Void</b>.
+3. Review and confirm the reversal. Check the resulting SOH.
+4. If blocked by stock or a conflict, investigate first. Do not force a duplicate correction.
 
-2. Add at least one clear photo of the damage. Photo evidence is required before the write-off can be saved.
+> Voiding preserves the original entry and records its reversal. It does not silently delete history.
 
-3. Select Write off stock. Confirm that the quantity was deducted from the correct item. The reason and photos support the damage record.
+![9. Voiding a Mistaken Entry](docs/sop/desktop-activity.png)
 
-> Do not dispatch and write off the same quantity twice. Check item type, size and quantity before confirming each movement. Ask an admin to review mistakes rather than deleting evidence or repeating the action.
+## 10. Settings: Materials Catalog
 
-### Review jobs and activity
+Manage the approved material, colour and size combinations.
 
-Use Jobs to find dispatch history by order or job reference. Use the activity controls available in Settings to review receipts, dispatches, damage and other recorded actions. Check timestamps and the recorded user when investigating a discrepancy.
+1. Open <b>Settings</b> and <b>Materials Catalog</b>.
+2. Use <b>Add material</b> for one new entry, or the edit control to correct an existing entry.
+3. Enter colour, material, thickness, width, height and optional reorder point. Check all dimensions in millimetres.
+4. Save the item. New catalog entries made here start with <b>zero stock</b>. Receive physical deliveries separately.
 
-Activity history is retained. Admin voids are recorded against eligible entries rather than silently removing history. See section 8.
+> Regular users can add missing material only with a matching receipt in Receive. Catalog editing and deletion remain admin-only.
 
-![Screenshot: Select the correct item, enter order and quantity, then confirm the dispatch.](docs/sop/desktop-dispatch.png)
+![10. Settings: Materials Catalog](docs/sop/desktop-catalog.png)
 
-![Screenshot: Select a reason and quantity and add at least one photo before Write off stock becomes available.](docs/sop/desktop-damage.png)
+## Adding catalog materials in bulk
 
-## 5. CNC scheduling and completion
+Enter multiple sizes in the app; no spreadsheet import is needed.
 
-### Schedule panels - admins
+1. In the catalog, select <b>Bulk entry</b>. Enter the required <b>Material</b> and <b>Colour</b> once.
+2. Add rows for <b>Thickness</b>, <b>Width</b>, <b>Height</b> and optional <b>Reorder point</b>.
+3. Use <b>+ Add line</b> for another size and the <b>red trash icon</b> to remove a row. Blank reorder points use zero.
+4. Select <b>Add N catalog items</b>. Correct incomplete values and duplicates before saving the whole batch.
 
-1. Open CNC. For one panel, use Schedule panel; enter the order, optional job reference, sheet and panel ID, then add it to the schedule.
+> Dimensions must be positive. Duplicate material/colour/size combinations are rejected. New items start with zero stock.
 
-2. For several panels, use Bulk entry. Enter Order number and Job reference once; both are required for bulk entry.
+![Adding catalog materials in bulk](docs/sop/desktop-catalog-bulk.png)
 
-3. Enter Sheet number and Panel ID on each row. Use + Add line for more rows and the red trash icon to remove a row. There are no spreadsheet files to upload.
+## 11. Settings: Damage Reason Codes
 
-4. Select Schedule N panels. Completely blank lines are ignored; incomplete lines and repeated sheet/panel pairs block the batch until corrected.
+Maintain the reasons used when recording damaged stock.
 
-New job references use title case. An order label such as Order #001234 becomes 001234, preserving leading zeros. A leading letter in a panel ID is capitalized. Other characters in identifiers are not globally converted.
+1. Open <b>Settings</b> and the damage-reasons controls.
+2. To add a reason, enter its description and use the add control.
+3. To remove a reason, use its trash icon. Review the choice before confirming.
 
-### Find and complete work - users and admins
+> Existing damage records retain the reason recorded at the time. Use the damage log to review past write-offs.
 
-1. Expand the job reference, then its order. Orders appear highest number first within each job. Search and Pending/Completed filters help narrow the list.
+![11. Settings: Damage Reason Codes](docs/sop/desktop-reasons.png)
 
-2. For a single panel, select Complete panel. Review the order, sheet and panel ID in the confirmation, then confirm. Cancel or Escape leaves it unchanged.
+## 12. Settings: Users
 
-3. For all pending panels on that order and sheet, select Complete sheet above Complete panel. Review every listed panel ID, scrolling if needed, then confirm.
+Give every staff member their own account.
 
-> Complete sheet includes pending panels hidden by the current search and all matching order/sheet records. Already completed panels and other sheets remain unchanged. CNC completion records progress only: it does not deduct warehouse stock.
+1. Open <b>Settings &gt; Users</b>. Give new staff the current registration code so they can register their own account.
+2. Use the admin control to grant or revoke admin access only where required.
+3. Use <b>Reset PIN</b> for a forgotten PIN. It resets that user to the current registration code and revokes existing sessions.
+4. Have the user choose a new personal PIN. Use the remove-user control only when their access should end.
 
-After completion, check the Completed view. Do not mark a sheet complete until every panel shown in the confirmation has actually been completed.
+> Keep registration codes and PINs out of screenshots, job notes and shared messages. Never share an admin login.
 
-![Screenshot: Expand the job and order. Complete sheet and Complete panel are separate actions.](docs/sop/desktop-cnc.png)
+![12. Settings: Users](docs/sop/desktop-users.png)
 
-![Screenshot: Enter required order and job reference once; add sheet/panel rows. Red trash icons remove a row.](docs/sop/desktop-cnc-bulk.png)
+## 13. Settings: Email Reports
 
-![Screenshot: Check every listed panel before confirming. Other sheets and already completed panels are unchanged.](docs/sop/desktop-confirm.png)
+Set the report recipients and delivery schedule.
 
-## 6. Shared CNC tracker and live Excel
+1. Open the <b>email-report settings</b> in Settings.
+2. Review recipient email addresses and choose the days reports should be sent.
+3. Set the time and check the displayed <b>timezone</b>.
+4. Enable the schedule and <b>save settings</b>.
+5. Use the <b>test-send</b> control to verify delivery to the intended recipients.
 
-### Share a read-only live view
+> Scheduled reports run on the server. Nobody needs to leave an app open for delivery.
 
-1. In CNC, select Copy shareable link and send it only to intended viewers. The same link reflects updated CNC data; it does not need to be regenerated for every upload or completion.
+![13. Settings: Email Reports](docs/sop/desktop-email.png)
 
-2. Open the link in a phone or desktop browser. Expand job/order groups, use search and status filters, or Expand all / Collapse all. Watch for connection warnings; a disconnected view may be stale.
+## 14. Settings: Backup & Recovery
 
-The shared page is read-only. It cannot complete panels or change stock. Use the signed-in app to record work.
+Back up before stocktakes, restores or major catalog changes.
 
-### Set up the connected workbook
+1. Open the <b>backup controls</b> in Settings. Take a current backup before any high-impact action.
+2. Review the backup date before choosing <b>Restore</b>. Pause stock changes across devices.
+3. Follow the restore confirmation. If stock changes after your review, refresh and review again.
+4. Refresh other devices after the restore and reconcile any pending changes created against the old state.
 
-1. From the shared tracker, select Excel and open the downloaded workbook in desktop Microsoft Excel.
+> Daily snapshots are normally retained for 14 days. Server restores preserve current activity history and do not roll back user credentials.
 
-2. If you trust the PanelStock source, allow editing and the workbook data connection when Excel prompts. Do not lower global Trust Center security settings. The workbook contains no macros.
+![14. Settings: Backup & Recovery](docs/sop/desktop-backup.png)
 
-3. Keep Excel open. The connection refreshes on opening and every minute while the workbook is open. Check Excel's connection or refresh messages if it stops updating.
+## Stocktake reset & Full reset
 
-### Status colours
+These controls have different effects. Read the warning before proceeding.
 
-Completed rows are green. Pending rows are yellow. The colour applies across all eleven exported columns and updates when the status refreshes. Headers and blank rows are not coloured.
+1. <b>Stocktake reset</b> sets full-panel SOH to zero and clears offcuts. Catalog entries, reasons and history remain.
+2. <b>Full reset</b> clears catalog and stock and restores default damage reasons. Prior activity is retained with a reset record.
+3. User accounts and PINs are not removed by these stock resets.
+4. Make a backup first and follow the displayed confirmation phrase. Do not use reset controls as routine housekeeping.
 
-> If you downloaded a workbook before the status-colour update, download it once again using Excel to receive the conditional-formatting rules. That new copy then continues refreshing; routine changes do not require another download.
+> A reset is not a way to erase audit history. Only admins should perform it after a deliberate review.
 
-Identifiers such as order numbers and panel IDs remain text so leading zeros are preserved. An empty schedule clears old data rows after refresh. Edits made inside Excel do not update PanelStock.
+![Stocktake reset & Full reset](docs/sop/desktop-backup.png)
 
-The workbook contains the read-only sharing link. Treat both the workbook and link as access to CNC information. For mobile/browser viewing, use the shared tracker rather than relying on desktop Excel refresh.
+## Pending changes & sync recovery
 
-![Screenshot: The shared view is read-only. Use Excel for the connected workbook, or the browser view on a phone.](docs/sop/desktop-shared.png)
+A local save is not confirmation that other devices have received the change.
 
-## 7. Materials catalog - administrators
+1. Check the connection and sync indicator. Keep the device and the account that created pending changes available.
+2. If offered, use <b>Export pending changes</b> and save the export for reconciliation.
+3. Do not clear browser storage, reinstall or discard pending work before it has been reviewed.
+4. Only one tab may edit on a device at a time. Close another editing tab if instructed; sign back in as the owner of queued changes.
 
-### Single-item management
+> Discarding pending changes does not apply them to shared stock. Contact an admin if the correct state is uncertain.
 
-1. Open Settings and Materials Catalog. Use Add material for one catalog entry, or the edit control to correct an existing entry.
+![Pending changes & sync recovery](docs/sop/desktop-stock.png)
 
-2. Enter colour/finish, material, thickness, width, height and optional reorder point. Verify dimensions in millimetres before saving.
+## 15. CNC Tracker
 
-A new catalog entry created in Settings receives a SKU and a zero-quantity stock entry. Creating catalog entries here is not a receipt. Use Receive when physical stock arrives.
+Find scheduled work by job reference, order, sheet or panel.
 
-### Bulk entry - no spreadsheet import
+1. Open <b>CNC</b>. Expand the <b>job reference</b>, then its <b>order</b>. Orders appear highest number first within each job.
+2. Use search and the <b>Pending / Completed</b> filters to find the required work.
+3. Use <b>Complete panel</b> for one panel, or <b>Complete sheet</b> above it for the whole order/sheet.
+4. Check the completion confirmation before saving. Only mark work completed after it has actually been cut.
 
-1. Select Bulk entry. Enter the required Material and Colour once for the batch.
+> Users and admins can complete CNC work. Completion records progress only; it does not deduct warehouse stock.
 
-2. Add rows for Thickness, Width, Height and Reorder point. Use + Add line for another size or the red trash icon to remove a row.
+![15. CNC Tracker](docs/sop/desktop-cnc.png)
 
-3. Leave reorder point blank to use zero. Dimensions must be positive; reorder point must be a whole number of zero or more.
+## Scheduling CNC panels
 
-4. Select Add N catalog items. Empty rows are ignored. Incomplete values and duplicate material/colour/size combinations in the catalog or batch must be corrected before the entire batch can be saved.
+Admins can schedule one panel or enter many panels together.
 
-### Permission boundary
+1. Use <b>Schedule panel</b> for a single panel, or <b>Bulk entry</b> for several.
+2. For bulk entry, enter the required <b>Order number</b> and <b>Job reference</b> once.
+3. Enter <b>Sheet number</b> and <b>Panel ID</b> on each row. Add lines as needed; use the red trash icon to remove a row.
+4. Select <b>Schedule N panels</b>. Blank rows are ignored; incomplete or repeated sheet/panel pairs must be corrected.
 
-Regular users do not gain Settings catalog-management access. They can create a missing material only through a matching stock receipt in Receive. They cannot edit or delete catalog entries, alter stock-type details or use admin-only catalog bulk entry.
+> Job references use title case. An order label such as Order #001234 becomes 001234. A leading panel-ID letter is capitalized.
 
-> Use the correct existing catalog item wherever possible. Do not create alternate spellings for the same material. Review downstream stock and job records before editing or removing catalog items.
+![Scheduling CNC panels](docs/sop/desktop-cnc-bulk.png)
 
-![Screenshot: Settings > Materials Catalog contains the admin add, edit, export and bulk-entry controls.](docs/sop/desktop-catalog.png)
+## Confirming a panel or sheet
 
-![Screenshot: Enter material and colour once, then add dimensions and optional reorder points for each size.](docs/sop/desktop-catalog-bulk.png)
+The confirmation lists the panel IDs affected by your action.
 
-## 8. Stocktake, corrections and admin settings
+1. <b>Complete panel</b> asks you to confirm the individual panel ID.
+2. <b>Complete sheet</b> lists every pending panel for that order and sheet. Scroll through the whole list if necessary.
+3. The sheet action also includes matching panels hidden by your search. Already completed panels and other sheets stay unchanged.
+4. Confirm only when all listed work is complete, or choose <b>Cancel</b> to leave it unchanged.
 
-### Stocktake procedure
+> The pictured example contains one pending panel. A sheet with several pending panels lists all of their IDs.
 
-1. Plan the count and pause normal stock movements. An admin takes a backup before using the Stocktake reset controls in Settings.
+![Confirming a panel or sheet](docs/sop/desktop-confirm.png)
 
-2. Follow the reset confirmation. Stocktake reset sets full-panel quantities to zero and clears offcuts; catalog entries, reasons and prior activity remain. The reset is logged.
+## 16. Shared CNC Tracker & Excel
 
-3. Count the physical warehouse by material, colour, thickness and dimensions. Users and admins enter counted full-panel quantities through Receive, and offcuts through the offcut form.
+Share a read-only view that stays up to date.
 
-4. Reconcile discrepancies and confirm all devices have synced before normal movements resume.
+1. In CNC, select <b>Copy shareable link</b>. Send it only to intended viewers.
+2. Open the link on a phone or desktop. Expand job/order groups and use search or status filters.
+3. Select <b>Excel</b> to download the connected workbook. Open it in desktop Microsoft Excel.
+4. If you trust the source, allow editing and its data connection when prompted. Keep Excel open for the one-minute refresh.
 
-### Void an incorrect movement - admins
+> The shared page and workbook are read-only. Edits in Excel do not change PanelStock. Treat the link and workbook as access to CNC information.
 
-Open Settings > Activity Log. Identify the exact entry and review its effect before using VOID where available. Confirm the action and check the resulting SOH. A void reverses the eligible stock effect while retaining the original entry and void details. If blocked by current stock or conflicts, review with the administrator; do not force a duplicate correction.
+![16. Shared CNC Tracker & Excel](docs/sop/desktop-shared.png)
 
-### Damage reasons and users - admins
+## Excel refresh & status colours
 
-Manage damage reasons in Settings. Add or remove reasons using the displayed controls; existing damage history remains the record of what occurred.
+One connected workbook can refresh without repeated downloads.
 
-Open Settings > Users. Use the current registration code for new staff. Admin controls can change that code, grant/revoke admin access, reset a PIN or remove a user. Reset PIN returns that user to the current registration code and revokes existing sessions; have them choose a new personal PIN. Never share an admin login.
+1. <b>Completed</b> rows are green and <b>Pending</b> rows are yellow across all eleven exported columns.
+2. Colours update with refreshed statuses, including newly added rows. Headers and blank rows are not coloured.
+3. Download an older workbook once again to receive the new colour rules. Routine changes then refresh without another download.
+4. If refresh stops, check Excel connection messages. Do not lower global Trust Center security settings. The workbook contains no macros.
 
-### Email reports - admins
+> Refresh runs on opening and every minute while desktop Excel is open. On mobile, use the shared browser tracker.
 
-In the email-report settings, review recipients, days, time and timezone. Enable the schedule and save it, then use the test-send control to verify delivery. Scheduled reports run on the server; users do not need to leave an app open.
-
-![Screenshot: Settings > Activity Log shows recorded stock movements. Admins can void eligible entries without erasing history.](docs/sop/desktop-activity.png)
-
-## 9. Backups, resets and sync recovery
-
-### Back up before high-impact actions - admins
-
-Use the backup controls in Settings before stocktakes, restores or major catalog changes. Keep exported backup files securely: they contain business data. Automated server snapshots are taken daily and normally retained for 14 days.
-
-### Restore a reviewed backup - admins
-
-1. Pause stock changes across devices. Review the selected backup date and make a current backup before proceeding.
-
-2. Use the available restore controls and follow the confirmation. If stock changes after the reviewed snapshot, refresh and review again rather than forcing the restore.
-
-3. A server backup restore restores stock/catalog and the saved operational collections, but preserves current activity history and records the restore. User accounts and credentials are not rolled back.
-
-4. Refresh devices after a restore. Earlier queued changes can be blocked because they were made against the old state; reconcile them before any retry.
-
-### Full reset is not routine housekeeping
-
-Only admins should use Full reset, after a backup and a deliberate review of the confirmation. It clears catalog and stock, restores default damage reasons and preserves prior activity with a reset record. It is not a way to erase audit history or remove user accounts.
-
-### Pending changes or sync conflict
-
-1. If the app says changes are saved on this device or waiting to sync, keep the device and account available and check the connection. Do not assume the update is visible to other users yet.
-
-2. If edits are blocked, read the message. Use Export pending changes when offered and keep the export for reconciliation. Do not clear browser storage, reinstall the app or discard pending work before it has been reviewed.
-
-3. Only one tab may edit the app on a device at a time. Close another editing tab if instructed. If a session expired, sign in as the owner of the queued changes.
-
-> Discarding local pending changes does not apply them to shared stock. Use that control only after the export is saved and the discrepancy has been reconciled. Contact an admin when the correct stock state is uncertain.
-
-![Screenshot: Settings > Backup & Reset. Back up and review the warning before any restore or reset.](docs/sop/desktop-backup.png)
+![Excel refresh & status colours](docs/sop/desktop-shared.png)

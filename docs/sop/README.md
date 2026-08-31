@@ -1,9 +1,7 @@
-# SOP image sources
+# SOP layout and images
 
-These images support the illustrated SOP in `../../PanelStock_SOP.pdf` and the editable `../../SOP.md`.
+Keep the original SOP visual style for future updates: US Letter pages (612 x 792 pt), Helvetica, navy #0f172a headings, teal #155e75 subheadings, a small logo at the top right, dark numbered circles and rounded grey notes. Admin-only sections use pale red banners. Mobile screenshots sit beside the numbered steps; wider desktop captures stay on the same page at readable size.
 
-- `original-*`: recovered from the prior committed SOP. Retained only as examples for relevant existing workflows. The PDF frames the activity image to exclude the obsolete backup controls below it.
-- `mobile-*` and `desktop-*`: current app screenshots taken against isolated local example data on 31 August 2026. They do not show live stock totals.
-- `lennox-logo.png`: restored original branding.
+Run `python docs/build_sop.py` from this repository to rebuild `PanelStock_SOP.pdf` and `SOP.md`. Requires ReportLab and Pillow. The builder includes the instructions and image layout; keep it and the screenshots together.
 
-Keep screenshots in future revisions. Replace changed screens with current captures, preserve their aspect ratio, and render every PDF page to verify captions, readability and page numbers. Crop regions in the PDF layout only to focus on the relevant controls; keep these source images unchanged.
+`original-*` images were recovered from the original SOP. Current `mobile-*` and `desktop-*` captures use isolated test data. Preserve source images; the PDF layout frames relevant regions where appropriate. Review all rendered pages after changes. Do not remove the images or replace the layout with a new design unless requested.
