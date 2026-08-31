@@ -14853,6 +14853,27 @@ ${xrefStart}
       ] })
     });
   }
+  function CncOrderGroups({ panels, allPanels, query, renderGroup }) {
+    const [expanded, setExpanded] = useState(() => new Map());
+    const groups = new Map();
+    for (const panel of panels) {
+      if (!groups.has(panel.orderNumber)) groups.set(panel.orderNumber, []);
+      groups.get(panel.orderNumber).push(panel);
+    }
+    const h = import_jsx_runtime.jsx;
+    return h("div", { className: "space-y-3 p-2", children: Array.from(groups, ([order, rows]) => {
+      const open = expanded.has(order) ? expanded.get(order) : Boolean(query.trim());
+      const total = allPanels.filter((p) => p.orderNumber === order);
+      const done = total.filter((p) => p.status === "completed").length;
+      return h("section", { className: "bg-white border border-slate-200 rounded-xl overflow-hidden", children: [
+        h("button", { type: "button", "aria-expanded": open, onClick: () => setExpanded((previous) => { const next = new Map(previous); next.set(order, !open); return next; }), className: "w-full flex items-center justify-between gap-3 p-4 text-left bg-slate-50 hover:bg-slate-100", children: [
+          h("span", { className: "min-w-0 break-words font-semibold text-sm text-slate-800", children: "Order " + order }),
+          h("span", { className: "shrink-0 text-xs text-slate-500", children: (total.length - done) + " pending · " + done + "/" + total.length + " complete " + (open ? "▾" : "▸") })
+        ] }),
+        open && h("div", { className: "overflow-x-auto p-2", children: renderGroup(rows) })
+      ] }, order);
+    }) });
+  }
   function CncPage({ cncPanels, isAdmin, onAddPanel, onAddPanelsBulk, onCompletePanel, onCompleteSheet, onRemovePanel }) {
     const [sheetToComplete, setSheetToComplete] = useState(null);
     const [view, setView] = useState("pending");
@@ -15055,7 +15076,7 @@ ${xrefStart}
             ] })
           ] })
         ] }) }),
-        filtered.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyState, { text: view === "pending" ? "No panels currently scheduled for the CNC." : "No completed panels yet." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", { className: "w-full text-sm", children: [
+        filtered.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyState, { text: view === "pending" ? "No panels currently scheduled for the CNC." : "No completed panels yet." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncOrderGroups, { panels: filtered, allPanels: cncPanels, query: q, renderGroup: (groupPanels) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", { className: "w-full text-sm", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { className: "bg-slate-50/60", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Order Number" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Job Reference" }),
@@ -15065,7 +15086,7 @@ ${xrefStart}
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: view === "pending" ? "" : "Completed" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "w-32" })
           ] }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: filtered.map((p, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { className: `border-t border-slate-100 ${i % 2 === 1 ? "bg-slate-50/30" : ""}`, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: groupPanels.map((p, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { className: `border-t border-slate-100 ${i % 2 === 1 ? "bg-slate-50/30" : ""}`, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3 font-medium text-slate-800", children: p.orderNumber }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3 text-slate-600", children: p.jobReference || "\u2014" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3 font-mono text-slate-500", children: p.sheetNumber }),
@@ -15084,7 +15105,7 @@ ${xrefStart}
               }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Trash2, { size: 15, className: "text-slate-400 hover:text-red-700" }) })
             ] }) })
           ] }, p.id)) })
-        ] })
+        ] }) })
       ] })
     ] });
   }

@@ -1,5 +1,12 @@
 # Security and stock reliability update
 
+## Collapsible CNC orders and mobile sharing — 31 August 2026
+
+- Both apps group CNC panels into collapsible orders with pending and completed counts. Search reveals matching panels; expansion choices survive normal refreshes.
+- The existing read-only share link now uses responsive panel cards, collapsible orders, search, status filters, Expand all/Collapse all and clearer connection warnings. Excel download and automatic updates remain available.
+- No stock, CNC records or sharing permissions are changed. Verified 32 automated checks and a phone-width browser preview.
+
+
 ## CNC whole-sheet completion — 31 August 2026
 
 - Sheet completion now uses a styled in-app confirmation dialog instead of the browser popup, with a live panel count, Cancel/Complete sheet buttons, Escape support and keyboard focus handling.
