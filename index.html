@@ -40,6 +40,16 @@
 @container (max-width:820px){.ps-catalog-grid{grid-template-columns:1fr 1fr 1fr}.ps-catalog-grid>.ps-entry-rows{grid-column:1/-1}}
 @container (max-width:620px){.ps-entry-grid{grid-template-columns:1fr 1fr}.ps-entry-rows{grid-column:1/-1}}
 @container (max-width:440px){.ps-entry-grid,.ps-catalog-grid{grid-template-columns:1fr}.ps-catalog-row input{padding:9px 6px;font-size:12px}.ps-entry-row,.ps-entry-columns{gap:8px}.ps-entry-columns{font-size:11px}}
+
+/* Place catalog guidance between shared material details and size entry. */
+.ps-catalog-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,.65fr)}
+.ps-catalog-grid>.ps-measure,.ps-catalog-grid>.ps-entry-rows{grid-column:1/-1}
+.ps-catalog-grid>.ps-measure{margin:0}
+.ps-measure{grid-template-columns:minmax(0,1fr) minmax(0,1.8fr);gap:16px}
+.ps-measure svg{max-height:220px}
+@container (max-width:620px){.ps-catalog-grid{grid-template-columns:1fr 1fr}.ps-catalog-grid>label:last-of-type{grid-column:1/-1}}
+@container (max-width:440px){.ps-catalog-grid{grid-template-columns:1fr}.ps-measure{grid-template-columns:1fr}.ps-measure svg{max-height:none}}
+@media(max-width:540px){.ps-measure{grid-template-columns:1fr;gap:10px}.ps-measure svg{max-height:none}.ps-measure h3{font-size:13px}.ps-measure p{font-size:12px}}
 </style>
 </head>
 <body>
@@ -14534,7 +14544,7 @@ ${xrefStart}
     const h = import_jsx_runtime.jsx;
     return h("aside", { className: "ps-measure" + (compact ? " ps-measure-compact" : ""), "aria-label": "Sheet dimension guide", children: [
       h("div", { children: [h("h3", { children: "Measuring your sheet" }), h("p", { children: "Width runs horizontally. Height runs vertically." }), h("p", { children: ["Example: ", h("strong", { children: "4000 width × 1575 height (mm)" })] })] }),
-      h("svg", {"viewBox": "0 0 580 195", "role": "img", "aria-label": "A sheet 4000 millimetres wide horizontally and 1575 millimetres high vertically", children: [h("rect", {"x": "30", "y": "40", "width": "340", "height": "134", "rx": "4", "fill": "#e6f1f4", "stroke": "#155e75", "strokeWidth": "2"}), h("text", {"x": "200", "y": "112", "textAnchor": "middle", "fill": "#155e75", "fontSize": "15", children: ["Sheet / panel"]}), h("path", {"d": "M30 30V12M370 30V12", "stroke": "#94a3b8"}), h("path", {"d": "M35 20H365", "stroke": "#155e75", "strokeWidth": "1.5"}), h("rect", {"x": "135", "y": "8", "width": "130", "height": "24", "fill": "#f0f7f9"}), h("text", {"x": "200", "y": "25", "textAnchor": "middle", "fill": "#155e75", "fontSize": "14", "fontWeight": "600", children: ["Width: 4000 mm"]}), h("path", {"d": "M382 40H408M382 174H408", "stroke": "#94a3b8"}), h("path", {"d": "M398 45V169", "stroke": "#155e75", "strokeWidth": "1.5"}), h("text", {"x": "417", "y": "103", "fill": "#155e75", "fontSize": "14", "fontWeight": "600", children: ["Height"]}), h("text", {"x": "417", "y": "125", "fill": "#155e75", "fontSize": "14", children: ["1575 mm"]}), h("path", {"d": "M35 20l7 -4v8z M365 20l-7 -4v8z", "fill": "#155e75"}), h("path", {"d": "M398 45l-4 7h8z M398 169l-4 -7h8z", "fill": "#155e75"})]})
+      h("svg", {"viewBox": "15 0 520 190", "role": "img", "aria-label": "A sheet 4000 millimetres wide horizontally and 1575 millimetres high vertically", children: [h("rect", {"x": "30", "y": "40", "width": "340", "height": "134", "rx": "4", "fill": "#e6f1f4", "stroke": "#155e75", "strokeWidth": "2"}), h("text", {"x": "200", "y": "112", "textAnchor": "middle", "fill": "#155e75", "fontSize": "20", children: ["Sheet / panel"]}), h("path", {"d": "M30 30V12M370 30V12", "stroke": "#94a3b8"}), h("path", {"d": "M35 20H365", "stroke": "#155e75", "strokeWidth": "1.5"}), h("rect", {"x": "107", "y": "3", "width": "186", "height": "30", "fill": "#f0f7f9"}), h("text", {"x": "200", "y": "25", "textAnchor": "middle", "fill": "#155e75", "fontSize": "20", "fontWeight": "600", children: ["Width: 4000 mm"]}), h("path", {"d": "M382 40H408M382 174H408", "stroke": "#94a3b8"}), h("path", {"d": "M398 45V169", "stroke": "#155e75", "strokeWidth": "1.5"}), h("text", {"x": "417", "y": "103", "fill": "#155e75", "fontSize": "20", "fontWeight": "600", children: ["Height"]}), h("text", {"x": "417", "y": "125", "fill": "#155e75", "fontSize": "20", children: ["1575 mm"]}), h("path", {"d": "M35 20l7 -4v8z M365 20l-7 -4v8z", "fill": "#155e75"}), h("path", {"d": "M398 45l-4 7h8z M398 169l-4 -7h8z", "fill": "#155e75"})]})
     ] });
   }
   function CncSingleForm({ form, setForm, onSave, onClose }) {
@@ -14545,7 +14555,7 @@ ${xrefStart}
   function CatalogSingleForm({ form, setForm, isEditing, onSave, onClose }) {
     const h = import_jsx_runtime.jsx;
     const field = (key, label, placeholder, type = "text") => h("label", { children: [label, h(type === "text" ? CapitalizedInput : "input", { type, step: key === "reorderPoint" ? "1" : "any", value: form[key], placeholder, onChange: value => setForm({ ...form, [key]: type === "text" ? value : value.target.value }) })] });
-    return h("div", { className: "ps-entry", children: [h("h2", { children: isEditing ? "Editing material" : "Add a material" }), h("p", { className: "ps-entry-intro", children: "Enter the material, colour and size to add it to the catalog." }), h("div", { className: "ps-entry-grid ps-catalog-grid", children: [field("material", "Material *", "e.g. Solid Aluminium"), field("color", "Colour / finish *", "e.g. White"), field("thickness", "Thickness (mm) *", "e.g. 3", "number"), h("div", { className: "ps-entry-rows ps-entry-row ps-catalog-row", children: [field("width", "Width (mm) *", "e.g. 4000", "number"), field("height", "Height (mm) *", "e.g. 1575", "number"), field("reorderPoint", "Reorder point", "0", "number")] })] }), h("p", { className: "ps-entry-note", children: "* Required. Leave reorder point blank to use 0." }), h("div", { className: "ps-entry-actions", children: [h("button", { onClick: onSave, className: "ps-entry-primary", children: isEditing ? "Save changes" : "Add to catalog" }), h("button", { onClick: onClose, className: "ps-entry-cancel", children: "Cancel" })] })] });
+    return h("div", { className: "ps-entry", children: [h("h2", { children: isEditing ? "Editing material" : "Add a material" }), h("p", { className: "ps-entry-intro", children: "Enter the material, colour and size to add it to the catalog." }), h("div", { className: "ps-entry-grid ps-catalog-grid", children: [field("material", "Material *", "e.g. Solid Aluminium"), field("color", "Colour / finish *", "e.g. White"), field("thickness", "Thickness (mm) *", "e.g. 3", "number"), h(SheetMeasureGuide, { compact: true }), h("div", { className: "ps-entry-rows ps-entry-row ps-catalog-row", children: [field("width", "Width (mm) *", "e.g. 4000", "number"), field("height", "Height (mm) *", "e.g. 1575", "number"), field("reorderPoint", "Reorder point", "0", "number")] })] }), h("p", { className: "ps-entry-note", children: "* Required. Leave reorder point blank to use 0." }), h("div", { className: "ps-entry-actions", children: [h("button", { onClick: onSave, className: "ps-entry-primary", children: isEditing ? "Save changes" : "Add to catalog" }), h("button", { onClick: onClose, className: "ps-entry-cancel", children: "Cancel" })] })] });
   }
   function ReceiveMaterialForm({ catalog, variants, onReceiveStock, onClose }) {
     const [form, setForm] = useState({ material: "", color: "", thickness: "", width: "", height: "", reorderPoint: "" });
@@ -15661,6 +15671,7 @@ function compareCncOrders(a, b) {
       h("p", { className: "ps-entry-intro", children: "Enter the material, colour and thickness once, then add each size." }),
       h("div", { className: "ps-entry-grid ps-catalog-grid", children: [
         ...[["material", "Material", "e.g. Solid Aluminium"], ["color", "Colour / finish", "e.g. White"], ["thickness", "Thickness (mm)", "e.g. 3"]].map(([key, label, placeholder]) => h("label", { children: [label + " *", h("input", { type: key === "thickness" ? "number" : "text", step: "any", min: key === "thickness" ? "0.001" : undefined, required: true, maxLength: 500, value: shared[key], placeholder, onChange: e => { setShared({ ...shared, [key]: e.target.value }); setErrors([]); } })] }, key)),
+        h(SheetMeasureGuide, { compact: true }),
         h("div", { className: "ps-entry-rows", children: [
           h("div", { className: "ps-entry-columns ps-catalog-row", children: ["Width (mm) *", "Height (mm) *", "Reorder point"].map(label => h("span", { children: label }, label)) }),
           ...lines.map((line, i) => h("div", { className: "ps-entry-row ps-catalog-row", children: [
@@ -15746,7 +15757,6 @@ function compareCncOrders(a, b) {
           ] })
         }
       ),
-      (bulkOpen || mode) && (0, import_jsx_runtime.jsx)(SheetMeasureGuide, {}),
       bulkOpen && (0, import_jsx_runtime.jsx)(CatalogBulkForm, { catalog, onSave: onAddBulk, onClose: () => setBulkOpen(false) }),
         mode && (0, import_jsx_runtime.jsx)(CatalogSingleForm, { form, setForm, isEditing, onSave: submit, onClose: cancel }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "bg-white border border-slate-300 rounded-xl overflow-hidden", children: catalog.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyState, { text: "No materials yet \u2014 add the first one above." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", { className: "w-full text-sm", children: [

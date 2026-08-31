@@ -47,7 +47,7 @@ test('shared thickness applies to all sizes, ignores empty rows, rejects invalid
 });
 test('catalog form keeps one thickness when adding and removing rows and saves all sizes together',()=>{
  let states=[],refs=[],cursor=0,refCursor=0,saves=[],closed=0;
- const render=vm.runInNewContext(source+';CatalogBulkForm',{useState:initial=>{const i=cursor++;if(!(i in states))states[i]=initial;return [states[i],v=>states[i]=typeof v==='function'?v(states[i]):v];},useRef:initial=>{const i=refCursor++;return refs[i]||(refs[i]={current:initial});},Trash2:'trash',inputCls:'',import_jsx_runtime:{jsx:(tag,props)=>({tag,...props})}});
+ const render=vm.runInNewContext(source+';CatalogBulkForm',{useState:initial=>{const i=cursor++;if(!(i in states))states[i]=initial;return [states[i],v=>states[i]=typeof v==='function'?v(states[i]):v];},useRef:initial=>{const i=refCursor++;return refs[i]||(refs[i]={current:initial});},Trash2:'trash',SheetMeasureGuide:'measure-guide',inputCls:'',import_jsx_runtime:{jsx:(tag,props)=>({tag,...props})}});
  const flatten=n=>n&&typeof n==='object'?[n,...[n.children].flat().flatMap(flatten)]:[];
  let tree,nodes;
  const draw=()=>{cursor=refCursor=0;tree=render({catalog:[],onSave:rows=>saves.push(rows),onClose:()=>closed++});nodes=flatten(tree);};
