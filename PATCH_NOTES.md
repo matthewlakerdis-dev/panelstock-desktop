@@ -1,5 +1,11 @@
 # Security and stock reliability update
 
+## CNC panel confirmation — 31 August 2026
+
+- Complete panel now opens a matching in-app confirmation showing the order, sheet and selected panel ID. Cancel or Escape leaves the panel unchanged.
+- Confirmation completes only the selected pending panel; an already completed panel is not stamped again. Whole-sheet completion is unchanged.
+
+
 ## CNC completion actions and panel preview — 31 August 2026
 
 - Stacked Complete sheet above Complete panel in both apps; renamed Mark complete to Complete panel.

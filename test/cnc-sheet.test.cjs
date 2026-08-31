@@ -85,3 +85,32 @@ test('job references are collapsible and separate the same order across differen
  assert.equal(tree.children[0].children[1].children.allPanels.length,2);
  assert.equal(tree.children[1].children[1].hidden,true);
 });
+test('single panel dialog requires confirmation and disables it when no longer pending',()=>{
+ const start=html.indexOf('  function CncSheetDialog(');
+ const source=html.slice(start,html.indexOf('  function Cnc',start+10));
+ const render=vm.runInNewContext(source+';CncSheetDialog',{useRef:()=>({current:null}),useEffect:()=>{},import_jsx_runtime:{jsx:(type,props)=>({type,...props})}});
+ let cancelled=0,confirmed=0;
+ const props={sheet:{orderNumber:'0007',sheetNumber:'1',panelId:'a'},affectedPanels:[{id:'a',panelNumber:'a73-219'}],onClose:()=>cancelled++,onConfirm:()=>confirmed++};
+ const flatten=node=>node&&typeof node==='object'?[node,...[node.children].flat().flatMap(flatten)]:[];
+ const nodes=flatten(render(props));
+ assert.ok(nodes.some(n=>n.children==='Complete CNC panel?'));
+ assert.ok(nodes.some(n=>n.children==='Order 0007'));
+ assert.deepEqual(nodes.filter(n=>n.type==='li').map(n=>n.children),['A73-219']);
+ assert.equal(confirmed,0);
+ nodes.find(n=>n.type==='button'&&n.children==='Cancel').onClick();
+ assert.equal(cancelled,1);assert.equal(confirmed,0);
+ nodes.find(n=>n.role==='dialog').onKeyDown({key:'Escape',preventDefault(){},stopPropagation(){}});
+ assert.equal(cancelled,2);assert.equal(confirmed,0);
+ nodes.find(n=>n.type==='button'&&n.children==='Complete panel').onClick();assert.equal(confirmed,1);
+ const stale=flatten(render({...props,affectedPanels:[]}));
+ assert.equal(stale.find(n=>n.type==='button'&&n.children==='Complete panel').disabled,true);
+});
+test('single completion changes only selected pending panel and ignores stale completion',()=>{
+ const source=html.slice(html.indexOf('    function completeCncPanel('),html.indexOf('    function completeCncSheet('));
+ const panels=[{id:'a',status:'pending',orderNumber:'7',sheetNumber:'1',panelNumber:'A1'},{id:'b',status:'pending',orderNumber:'7',sheetNumber:'1',panelNumber:'A2'}];
+ let current=panels,writes=0,logs=0;
+ const run=id=>vm.runInNewContext(source+';completeCncPanel('+JSON.stringify(id)+');',{cncPanels:current,username:'worker',setCncPanels:next=>current=next,persist:()=>writes++,logTxn:()=>logs++,showToast(){}});
+ run('a');assert.equal(current[0].status,'completed');assert.equal(current[1],panels[1]);assert.equal(writes,1);assert.equal(logs,1);
+ const stamp=current[0].completedAt;
+ run('a');run('missing');assert.equal(writes,1);assert.equal(logs,1);assert.equal(current[0].completedAt,stamp);
+});
