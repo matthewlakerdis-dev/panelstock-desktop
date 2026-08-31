@@ -1,6 +1,6 @@
 # Security and stock reliability update
 
-Release status: prepared for coordinated deployment; not yet live.
+Release: v2026.08.31. Both frontends and the shared backend are deployed. Stock editing remains temporarily paused pending real-user sign-in verification.
 
 This update must be released together with PanelStock mobile and the shared Cloudflare backend. The desktop layout is largely unchanged.
 
@@ -26,6 +26,6 @@ This update must be released together with PanelStock mobile and the shared Clou
 
 The coordinated code passed 19 local automated checks and both GitHub verification workflows before this documentation update. Synthetic-data browser checks covered both logins, cross-app receiving, dispatch, administrator voiding, stock reversal and corrected job totals.
 
-Cloudflare access is restored. The isolated staging backend passed 12 cloud integration tests and five additional workflow checks with synthetic data and email disabled. Cloud-backed browser smoke checks also passed for both logins, receiving, dispatch, administrator voiding, stock reversal and corrected job totals. Production migration remains pending. Do not deploy this frontend against the old backend: login is incompatible.
+Cloudflare access is restored. The isolated staging backend passed 12 cloud integration tests and five additional workflow checks with synthetic data and email disabled. Cloud-backed browser smoke checks also passed for both logins, receiving, dispatch, administrator voiding, stock reversal and corrected job totals. Production migration is complete and all 21 migrated data records match the independent export. Stock editing remains paused pending real-user sign-in verification. Do not deploy this frontend against the old backend: login is incompatible.
 
 See the [coordinated release checklist](https://github.com/matthewlakerdis-dev/panelstock/blob/fix/security-and-stock-integrity/RELEASE.md) and [mobile/backend PR #1](https://github.com/matthewlakerdis-dev/panelstock/pull/1).
