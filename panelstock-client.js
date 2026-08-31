@@ -140,8 +140,6 @@
   if(typeof module!=='undefined')module.exports={Outbox};
   if(!root.document)return;
 
-  // The bundled CNC tracker sorts its filtered rows by uploadedAt descending.
-  // Override only that CNC-panel display sort so sheets are shown 1, 2, 3, ...
   const nativeArraySort=Array.prototype.sort;
   Array.prototype.sort=function(compareFn){
     const isCncPanelArray=this.length>1&&this.every(row=>row&&typeof row==='object'&&'orderNumber' in row&&'sheetNumber' in row&&'panelNumber' in row);
@@ -156,9 +154,6 @@
     return nativeArraySort.call(this,compareFn);
   };
 
-  // CNC visual hierarchy: Job > Order > Sheet > Panel.
-  // Add a collapsible sheet heading between the order and its panels. In card
-  // layouts, keep only the panel number in bold inside each individual tile.
   const collapsedCncSheets=new Set();
   let cncEnhanceQueued=false;
   const leafElements=rootNode=>[...rootNode.querySelectorAll('div,span,p,strong')].filter(el=>el.children.length===0);
@@ -181,33 +176,23 @@
       const sheet=match[1].trim(),panel=match[2].trim();
       const orderLeaf=leafElements(card).find(el=>/^Order\s+/i.test(el.textContent.trim()));
       const order=orderLeaf?.textContent.trim()||card.dataset.panelstockOrder||'Order';
-      card.dataset.panelstockCncCard='1';
-      card.dataset.panelstockSheet=sheet;
-      card.dataset.panelstockOrder=order;
+      card.dataset.panelstockCncCard='1';card.dataset.panelstockSheet=sheet;card.dataset.panelstockOrder=order;
       if(orderLeaf){orderLeaf.textContent='Panel '+panel;orderLeaf.style.fontWeight='700';}
       meta.style.display='none';
     }
     const parents=new Set([...document.querySelectorAll('[data-panelstock-cnc-card="1"]')].map(card=>card.parentElement).filter(Boolean));
     for(const parent of parents){
       const cards=[...parent.children].filter(el=>el.dataset?.panelstockCncCard==='1');
-      const sheets=[];
-      for(const card of cards)if(!sheets.includes(card.dataset.panelstockSheet))sheets.push(card.dataset.panelstockSheet);
+      const sheets=[];for(const card of cards)if(!sheets.includes(card.dataset.panelstockSheet))sheets.push(card.dataset.panelstockSheet);
       for(const sheet of sheets){
-        const sheetCards=cards.filter(card=>card.dataset.panelstockSheet===sheet);
-        if(!sheetCards.length)continue;
-        const order=sheetCards[0].dataset.panelstockOrder||'Order';
-        const key=order+'|'+sheet;
-        const heading=document.createElement('button');
-        heading.type='button';
-        heading.dataset.panelstockSheetHeading='mobile';
-        heading.style.cssText='width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;margin:8px 0;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;color:#334155;font:700 14px system-ui;text-align:left';
+        const sheetCards=cards.filter(card=>card.dataset.panelstockSheet===sheet);if(!sheetCards.length)continue;
+        const order=sheetCards[0].dataset.panelstockOrder||'Order',key=order+'|'+sheet;
+        const heading=document.createElement('button');heading.type='button';heading.dataset.panelstockSheetHeading='mobile';heading.style.cssText='width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;margin:8px 0;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;color:#334155;font:700 14px system-ui;text-align:left';
         const label=document.createElement('span');label.textContent='Sheet '+sheet;
         const right=document.createElement('span');right.style.cssText='color:#64748b;font-weight:600';
         const update=()=>{const closed=collapsedCncSheets.has(key);right.textContent=sheetCards.length+' panel'+(sheetCards.length===1?'':'s')+(closed?' ▸':' ▾');for(const card of sheetCards)card.style.display=closed?'none':'';};
         heading.onclick=()=>{collapsedCncSheets.has(key)?collapsedCncSheets.delete(key):collapsedCncSheets.add(key);update();};
-        heading.append(label,right);
-        parent.insertBefore(heading,sheetCards[0]);
-        update();
+        heading.append(label,right);parent.insertBefore(heading,sheetCards[0]);update();
       }
     }
   };
@@ -215,15 +200,10 @@
     document.querySelectorAll('tr[data-panelstock-sheet-heading="desktop"]').forEach(el=>el.remove());
     for(const table of document.querySelectorAll('table')){
       const headers=[...table.querySelectorAll('thead th')].map(th=>th.textContent.trim().toLowerCase());
-      const sheetIndex=headers.indexOf('sheet'),panelIndex=headers.indexOf('panel');
-      if(sheetIndex<0||panelIndex<0)continue;
-      const rows=[...table.querySelectorAll('tbody > tr')].filter(row=>!row.dataset.panelstockSheetHeading);
-      let previousSheet=null;
+      const sheetIndex=headers.indexOf('sheet'),panelIndex=headers.indexOf('panel');if(sheetIndex<0||panelIndex<0)continue;
+      const rows=[...table.querySelectorAll('tbody > tr')].filter(row=>!row.dataset.panelstockSheetHeading);let previousSheet=null;
       for(const row of rows){
-        const cells=[...row.children];
-        const sheet=cells[sheetIndex]?.textContent.trim();
-        if(!sheet||sheet===previousSheet)continue;
-        previousSheet=sheet;
+        const cells=[...row.children],sheet=cells[sheetIndex]?.textContent.trim();if(!sheet||sheet===previousSheet)continue;previousSheet=sheet;
         const group=document.createElement('tr');group.dataset.panelstockSheetHeading='desktop';
         const cell=document.createElement('td');cell.colSpan=Math.max(cells.length,1);cell.style.cssText='padding:9px 16px;background:#f8fafc;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;color:#334155;font:700 13px system-ui';cell.textContent='Sheet '+sheet;
         group.appendChild(cell);row.parentElement.insertBefore(group,row);
@@ -232,7 +212,10 @@
   };
   const enhanceCncHierarchy=()=>{addMobileSheetGroups();addDesktopSheetGroups();};
   const queueCncEnhance=()=>{if(cncEnhanceQueued)return;cncEnhanceQueued=true;requestAnimationFrame(()=>{cncEnhanceQueued=false;enhanceCncHierarchy();});};
-  new MutationObserver(queueCncEnhance).observe(document.documentElement,{childList:true,subtree:true});
+  new MutationObserver(records=>{
+    const external=records.some(record=>[...record.addedNodes,...record.removedNodes].some(node=>node.nodeType===1&&!node.dataset?.panelstockSheetHeading));
+    if(external)queueCncEnhance();
+  }).observe(document.documentElement,{childList:true,subtree:true});
   queueMicrotask(queueCncEnhance);
 
   const SESSION='panelstock:session:v2';
