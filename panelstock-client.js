@@ -8,8 +8,8 @@
   const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
   const mapping=(field,value)=>field==='photos'?(value||{}):Object.fromEntries((value||[]).map(v=>[v.id,v]));
   const sortCncPanels=value=>[...(value||[])].sort((a,b)=>{
-    const left=String(a?.panelNumber??'').trim();
-    const right=String(b?.panelNumber??'').trim();
+    const left=String(a?.sheetNumber??'').trim();
+    const right=String(b?.sheetNumber??'').trim();
     if(!left||!right){
       if(left===right)return 0;
       return left?-1:1;
