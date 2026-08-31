@@ -1,5 +1,11 @@
 # Security and stock reliability update
 
+## CNC panel capitalization and order sorting — 31 August 2026
+
+- Panel IDs capitalize a leading letter on new entry/CSV upload. Existing IDs display the same way in both apps, the shared tracker and Excel without rewriting historical records; numeric IDs and leading zeros remain unchanged.
+- Orders sort highest number first within each job, including prefixed IDs such as WO-1042. Orders without a number appear after numeric orders. All 40 checks pass.
+
+
 ## Compact CNC panel views — 31 August 2026
 
 - Removed repeated job-reference and uploaded details from panel cards/rows in both apps and the shared tracker. Job headings, completion details and actions remain visible.
