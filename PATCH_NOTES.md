@@ -1,3 +1,28 @@
+# PanelStock release notes
+
+## Receiving updates and refreshed SOPs - v2026.08.31.3
+
+### Receiving stock
+- Users and admins can add a missing material directly from Receive, even when the catalog is empty.
+- Enter material details, quantity received and an optional supplier/PO reference in one popup. Receive stock creates the catalog item and stock receipt together.
+- The popup focuses on manual entry. Choose existing materials on the main Receive screen; matching materials are reused rather than duplicated.
+- Quantity validation and repeat-submit protection help prevent accidental receipts. Catalog editing, deletion and bulk management remain admin-only.
+
+### Shared CNC Excel
+- Completed rows are green and pending rows are yellow across all eleven columns, including rows added by later refreshes.
+- The workbook continues refreshing on opening and every minute while open in desktop Excel.
+- Download an older workbook once again to get the new colour rules; routine updates do not require another download.
+
+### Updated operating procedures
+- Replaced outdated instructions with separate mobile/tablet and desktop SOPs, available from Settings.
+- Covers receiving, offcuts, dispatch, damage, CNC panel/sheet confirmations, collapsible groups, sharing, in-app bulk entry, permissions, backups and sync recovery.
+- Includes editable SOP source in the repository for future maintenance.
+
+### Validation and rollout
+- All 70 automated checks pass, including authenticated user receipts and permission restrictions.
+- Both nine-page PDF guides were rendered and visually checked.
+- Refresh the app and reopen the SOP from Settings to view the updated guide.
+
 # Security and stock reliability update
 
 ## Missing-material receipts for all users — 31 August 2026
