@@ -1,5 +1,12 @@
 # PanelStock release notes
 
+## Approved SOP and repository cleanup - 31 August 2026
+
+- Replaced the SOP with the exact user-supplied PDF, shared by both apps.
+- Removed superseded SOP Markdown, PDF generators and their screenshot assets to prevent accidental regeneration of the old guides.
+- Removed the unused 512px desktop icon; the active favicon is retained.
+- Kept application code, tests, deployment configuration, release history and recovery documentation. No stock data or application behaviour changed.
+
 ## Original SOP style restored - 31 August 2026
 
 - Restored the original cover, contents, typography, colours, small corner logo, numbered steps, screenshot placement and callout styling.

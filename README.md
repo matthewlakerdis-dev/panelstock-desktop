@@ -9,3 +9,7 @@ The authoritative Worker implementation, full integration tests, and deployment/
 `panelstock-client.js` must remain identical in both repositories. Node 22+ is required for `npm test`; tests inspect the embedded scripts and job filtering without accessing production.
 
 One editing tab per app origin is allowed. Pending changes remain tied to the user who created them. Conflicts require review; no automatic overwrite is performed. Existing open sessions can queue offline changes, but login verification after a reload requires a connection. Device storage failures stop editing and offer export; unsaved work must be reconciled before discarding it.
+
+## Standard operating procedures
+
+[Open the approved SOP (PDF)](PanelStock_SOP.pdf). Both apps use the same user-supplied document. Replace this PDF in both repositories together; do not regenerate it from the retired SOP builders. The app download remains under Settings.
