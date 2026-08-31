@@ -1,5 +1,13 @@
 # Security and stock reliability update
 
+## Receive stock inside the material popup — 31 August 2026
+
+- Added required quantity received and optional supplier/PO reference to the choose-or-add material popup. Receive stock completes the whole action without returning to the main quantity form.
+- Existing stock is incremented without duplicate catalog entries. New catalog material and received stock are staged in one save, with a receipt activity record.
+- Validates positive whole quantities and stock limits; repeated submission is blocked. Existing permissions are unchanged.
+- All 67 checks pass. Browser tests confirmed both existing and new material receipts using isolated data.
+
+
 ## Receive material picker — 31 August 2026
 
 - Receive now offers an offcut-style dialog with searchable available materials, colour swatches, dimensions, SKU and stock on hand, plus manual fields.

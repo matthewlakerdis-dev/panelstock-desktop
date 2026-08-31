@@ -13904,6 +13904,27 @@ ${xrefStart}
       if (before) logTxn({ type: "catalog", desc: `Edited catalog entry ${before.sku}: now ${color} ${material} ${thickness}mm ${fmtDim(width, height)}`, qty: "" });
       showToast("Material updated");
     }
+    function receiveMaterialStock({ material: details, qty, ref }) {
+      if (!isAdmin) return "Only admins can add materials from this popup.";
+      if (!Number.isSafeInteger(qty) || qty <= 0 || qty > 10000000) return "Enter a whole quantity from 1 to 10,000,000.";
+      const prepared = prepareCatalogBulkRows(details, [details]);
+      if (prepared.errors.length) return prepared.errors.join(" ");
+      const row = prepared.rows[0];
+      const found = catalog.find(item => item.material.trim().toLowerCase() === row.material.toLowerCase() && item.color.trim().toLowerCase() === row.color.toLowerCase() && item.thickness === row.thickness && item.width === row.width && item.height === row.height);
+      const existing = found && variants.find(item => item.catalogId === found.id);
+      if (existing && existing.qty + qty > 10000000) return "This receipt would exceed the maximum stock quantity.";
+      const cat = found || { ...row, id: uid(), sku: genSku() };
+      const nextCatalog = found ? catalog : [...catalog, cat];
+      const nextVariants = existing ? variants.map(item => item.id === existing.id ? { ...item, qty: item.qty + qty } : item) : [...variants, { id: uid(), catalogId: cat.id, sku: cat.sku, color: cat.color, material: cat.material, thickness: cat.thickness, width: cat.width, height: cat.height, qty, reorderPoint: cat.reorderPoint || 0 }];
+      if (!found) setCatalog(nextCatalog);
+      setVariants(nextVariants);
+      // New catalog material and received stock are staged together, never as two stale snapshots.
+      persist(found ? { variants: nextVariants } : { catalog: nextCatalog, variants: nextVariants });
+      logTxn({ type: "receipt", desc: `${cat.color} ${cat.material} ${cat.thickness}mm ${fmtDim(cat.width, cat.height)}${found ? "" : " (new catalog material)"}`, qty, ref: String(ref || "").trim(), itemType: "variant", sku: cat.sku, color: cat.color, material: cat.material, thickness: cat.thickness, width: cat.width, height: cat.height });
+      showToast(`Received ${qty} panel(s)${found ? "" : " and added material to catalog"}`);
+      return null;
+    }
+
     function receiveStock({ catalogId, qty, ref }) {
       const cat = catalog.find((c) => c.id === catalogId);
       if (!cat) return showToast("Select a material from the catalog", "err");
@@ -14239,7 +14260,7 @@ ${xrefStart}
               onOpenDetail: setDetailItem
             }
           ),
-          tab === "receive" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReceivePage, { catalog, variants, isAdmin, onAddCatalogItem: addCatalogItem, onSubmit: receiveStock }),
+          tab === "receive" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReceivePage, { catalog, variants, isAdmin, onReceiveMaterial: receiveMaterialStock, onAddCatalogItem: addCatalogItem, onSubmit: receiveStock }),
           tab === "dispatch" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DispatchPage, { variants, offcuts, onSubmit: dispatchItem }),
           tab === "damage" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DamagePage, { variants, offcuts, reasons, onSubmit: writeOffDamage, onViewLog: () => setDamageLogOpen(true) }),
           tab === "cnc" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -14488,10 +14509,13 @@ ${xrefStart}
       action
     ] });
   }
-  function ReceiveMaterialForm({ catalog, variants, onSave, onSelectExisting, onClose }) {
+  function ReceiveMaterialForm({ catalog, variants, onReceiveStock, onClose }) {
     const [query, setQuery] = useState("");
     const [form, setForm] = useState({ material: "", color: "", thickness: "", width: "", height: "", reorderPoint: "" });
     const [errors, setErrors] = useState([]);
+    const [receiptQty, setReceiptQty] = useState("");
+    const [receiptRef, setReceiptRef] = useState("");
+    const saving = useRef(false);
     const h = import_jsx_runtime.jsx;
     const items = catalog.filter(item => `${item.color} ${item.material} ${item.thickness} ${item.width} ${item.height} ${item.sku}`.toLowerCase().includes(query.toLowerCase()));
     function pick(item) {
@@ -14503,10 +14527,12 @@ ${xrefStart}
       const prepared = prepareCatalogBulkRows(form, [form]);
       setErrors(prepared.errors);
       if (prepared.errors.length) return;
-      const row = prepared.rows[0];
-      const existing = catalog.find(item => item.material.trim().toLowerCase() === row.material.toLowerCase() && item.color.trim().toLowerCase() === row.color.toLowerCase() && item.thickness === row.thickness && item.width === row.width && item.height === row.height);
-      if (existing) onSelectExisting(existing);
-      else onSave([row]);
+      const quantity = Number(receiptQty);
+      if (!Number.isSafeInteger(quantity) || quantity <= 0 || quantity > 10000000) { setErrors(["Enter a whole quantity from 1 to 10,000,000."]); return; }
+      if (saving.current) return;
+      saving.current = true;
+      const error = onReceiveStock({ material: prepared.rows[0], qty: quantity, ref: receiptRef });
+      if (error) { saving.current = false; setErrors([error]); return; }
       onClose();
     }
     const field = (key, label, type = "text") => h("label", { className: "block text-xs font-semibold text-slate-600", children: [label, h("input", { type, value: form[key], className: inputCls + " mt-1 w-full", step: key === "reorderPoint" ? "1" : "any", placeholder: key === "color" ? "e.g. Bronze Anodised" : key === "material" ? "e.g. ACP, Solid Aluminium" : "", onChange: e => { setForm({ ...form, [key]: e.target.value }); setErrors([]); } })] }, key);
@@ -14524,13 +14550,17 @@ ${xrefStart}
       h("div", { className: "grid grid-cols-1 sm:grid-cols-3 gap-3", children: [field("color", "Colour / finish *"), field("material", "Material *"), field("thickness", "Thickness (mm) *", "number")] }),
       h("div", { className: "grid grid-cols-2 gap-3", children: [field("width", "Width (mm) *", "number"), field("height", "Height (mm) *", "number")] }),
       field("reorderPoint", "Reorder point (optional)", "number"),
-      h("p", { className: "text-xs text-slate-500", children: "Existing combinations are selected without creating duplicates. New combinations are added to the catalog. Enter the received quantity next." }),
+      h("p", { className: "text-xs text-slate-500", children: "Receive against an existing material, or create a new catalog item and receive its stock together." }),
+      h("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-3", children: [
+        h("label", { className: "block text-xs font-semibold text-slate-600", children: ["Quantity received *", h("input", { type: "number", min: 1, step: 1, value: receiptQty, className: inputCls + " mt-1 w-full", onChange: e => { setReceiptQty(e.target.value); setErrors([]); } })] }),
+        h("label", { className: "block text-xs font-semibold text-slate-600", children: ["Supplier / PO reference (optional)", h("input", { value: receiptRef, className: inputCls + " mt-1 w-full", onChange: e => setReceiptRef(e.target.value) })] })
+      ] }),
       errors.length > 0 && h("div", { role: "alert", className: "bg-red-50 text-red-800 rounded-lg p-3 text-sm", children: errors.map((error, i) => h("p", { children: error }, i)) }),
-      h("button", { type: "submit", className: "w-full bg-cyan-800 text-white rounded-lg py-3 text-sm font-semibold", children: "Use material" })
+      h("button", { type: "submit", className: "w-full bg-cyan-800 text-white rounded-lg py-3 text-sm font-semibold", children: "Receive stock" })
     ] });
   }
 
-  function ReceiveMaterialDialog({ catalog, variants, onSave, onSelectExisting, onClose }) {
+  function ReceiveMaterialDialog({ catalog, variants, onReceiveStock, onClose }) {
     const dialogRef = useRef(null);
     useEffect(() => {
       const previous = document.activeElement;
@@ -14548,12 +14578,12 @@ ${xrefStart}
     const h = import_jsx_runtime.jsx;
     return h("div", { className: "fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4", onClick: onClose, children:
       h("div", { ref: dialogRef, role: "dialog", "aria-modal": true, "aria-label": "Choose or add material", className: "bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[85vh] overflow-y-auto", onKeyDown: keyDown, onClick: event => event.stopPropagation(), children:
-        h(ReceiveMaterialForm, { catalog, variants, onSave, onSelectExisting, onClose })
+        h(ReceiveMaterialForm, { catalog, variants, onReceiveStock, onClose })
       })
     });
   }
 
-  function ReceivePage({ catalog, variants, isAdmin, onAddCatalogItem, onSubmit }) {
+  function ReceivePage({ catalog, variants, isAdmin, onReceiveMaterial, onAddCatalogItem, onSubmit }) {
     const [addingMaterial, setAddingMaterial] = useState(false);
     const [selected, setSelected] = useState(null);
     const [qty, setQty] = useState("");
@@ -14569,7 +14599,7 @@ ${xrefStart}
       setQ("");
     }
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
-      isAdmin && addingMaterial && (0, import_jsx_runtime.jsx)(ReceiveMaterialDialog, { catalog, variants, onSelectExisting: item => { setSelected({ ...item, onHand: variants.find(v => v.catalogId === item.id)?.qty || 0 }); setQ(""); }, onClose: () => setAddingMaterial(false), onSave: rows => { const created = onAddCatalogItem(rows[0]); if (created) { setSelected({ ...created, onHand: 0 }); setQ(""); } } }),
+      isAdmin && addingMaterial && (0, import_jsx_runtime.jsx)(ReceiveMaterialDialog, { catalog, variants, onReceiveStock: data => { const error = onReceiveMaterial(data); if (!error) { setSelected(null); setQty(""); setRef(""); setQ(""); } return error; }, onClose: () => setAddingMaterial(false) }),
       isAdmin && (0, import_jsx_runtime.jsx)("div", { className: "mb-4", children: (0, import_jsx_runtime.jsxs)("button", { type: "button", onClick: () => setAddingMaterial(true), className: "flex items-center gap-2 bg-cyan-800 text-white rounded-lg px-4 py-2 text-sm font-semibold", children: [(0, import_jsx_runtime.jsx)(Plus, { size: 16 }), "Add missing material"] }) }),
 
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeading, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Package, { size: 18 }), title: "Receive stock", subtitle: "Add incoming panels against an approved material." }),
