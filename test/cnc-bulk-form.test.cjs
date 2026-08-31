@@ -19,19 +19,19 @@ for (const repo of ['panelstock-desktop']) {
  });
  test(repo+': invalid or duplicate lines reject the entire batch',()=>{
   for(const [order,lines] of [
-   [{orderNumber:'Order'},[{sheetNumber:'1',panelNumber:'A'}]],
-   [{orderNumber:'7'},[{sheetNumber:'1',panelNumber:'A'},{sheetNumber:'2',panelNumber:' '}]],
-   [{orderNumber:'7'},[{sheetNumber:'1',panelNumber:'a'},{sheetNumber:'1',panelNumber:'A'}]],
-   [{orderNumber:'7'},[{sheetNumber:'',panelNumber:''}]]
+   [{orderNumber:'Order',jobReference:'Test'},[{sheetNumber:'1',panelNumber:'A'}]],
+   [{orderNumber:'7',jobReference:'Test'},[{sheetNumber:'1',panelNumber:'A'},{sheetNumber:'2',panelNumber:' '}]],
+   [{orderNumber:'7',jobReference:'Test'},[{sheetNumber:'1',panelNumber:'a'},{sheetNumber:'1',panelNumber:'A'}]],
+   [{orderNumber:'7',jobReference:'Test'},[{sheetNumber:'',panelNumber:''}]]
   ]){const r=prepare(order,lines);assert.ok(r.errors.length);assert.equal(r.rows.length,0);}
-  assert.equal(prepare({orderNumber:'7'},[{sheetNumber:'1',panelNumber:'A'},{sheetNumber:'2',panelNumber:'A'}]).rows.length,2);
+  assert.equal(prepare({orderNumber:'7',jobReference:'Test'},[{sheetNumber:'1',panelNumber:'A'},{sheetNumber:'2',panelNumber:'A'}]).rows.length,2);
  });
  test(repo+': form adds/removes rows, preserves shared details and saves once',()=>{
   const states=[],refs=[];let cursor=0,refCursor=0,saves=[],closed=0;
   const render=vm.runInNewContext(source+';CncBulkForm',{
    useState:initial=>{const i=cursor++;if(!(i in states))states[i]=initial;return [states[i],v=>states[i]=typeof v==='function'?v(states[i]):v];},
    useRef:initial=>{const i=refCursor++;return refs[i]??(refs[i]={current:initial});},
-   inputCls:'input',import_jsx_runtime:{jsx:(type,props,key)=>({tag:type,...props,key})}
+   Trash2:()=>{},inputCls:'input',import_jsx_runtime:{jsx:(type,props,key)=>({tag:type,...props,key})}
   });
   const flatten=n=>n&&typeof n==='object'?[n,...[n.children].flat().flatMap(flatten)]:[];
   let tree,nodes;
@@ -43,6 +43,8 @@ for (const repo of ['panelstock-desktop']) {
   nodes.find(n=>n['aria-label']==='Sheet number line 1').onChange({target:{value:'1'}});refresh();
   tree.onSubmit({preventDefault(){}});refresh();assert.equal(saves.length,0);assert.ok(nodes.some(n=>n.role==='alert'));
   nodes.find(n=>n['aria-label']==='Panel ID line 1').onChange({target:{value:'a1'}});refresh();
+  tree.onSubmit({preventDefault(){}});assert.equal(saves.length,0);refresh();
+  nodes.find(n=>n.tag==='input'&&n.placeholder==='e.g. Meridian Constructions').onChange({target:{value:'Test'}});refresh();
   tree.onSubmit({preventDefault(){}});assert.equal(saves.length,1);assert.equal(closed,1);assert.equal(saves[0][0].panelNumber,'A1');
  });
 }

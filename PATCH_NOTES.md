@@ -1,5 +1,24 @@
 # Security and stock reliability update
 
+## Compact CNC and catalog bulk entry — v2026.08.31.2
+
+## CNC bulk entry
+- Enter the order number and job reference once; both are required for bulk entry.
+- Compact sheet-number and panel-ID columns replace the numbered row cards. Shorter fields sit together with a red trash icon at the end of each row.
+- Add or remove rows as needed. Blank rows are ignored; incomplete rows and repeated sheet/panel pairs block the whole submission.
+- Existing order cleanup, job-reference capitalization and panel-ID capitalization are preserved.
+
+## Material catalog bulk entry
+- Replaces the CSV import with an admin-only in-app form.
+- Enter the required material and colour once, then add rows for thickness, width, height and reorder point.
+- Dimensions are in millimetres and must be positive. Reorder point is an optional nonnegative whole number and defaults to zero.
+- Incomplete sizes, invalid numbers and duplicate material/colour/size combinations in the batch or existing catalog are rejected before saving.
+- New catalog items receive unique SKUs and matching stock entries with zero quantity through the existing synchronized batch-save workflow. Existing stock quantities remain unchanged.
+
+
+- Verified with 56 automated checks and isolated browser testing.
+
+
 ## In-app CNC bulk entry — 31 August 2026
 
 - Replaced CNC spreadsheet import with an admin-only form. Enter the order and optional job reference once, then add/remove sheet-number and panel-ID lines as needed.
