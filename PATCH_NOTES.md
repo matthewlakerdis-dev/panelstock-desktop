@@ -1,5 +1,16 @@
 # PanelStock release notes
 
+## Consistent entry forms and measurement guides - 31 August 2026
+
+- Applied the approved wide layout to single and bulk CNC scheduling and material catalog entry, with stacked fields when space is limited.
+- Bulk catalog entry now sets material, colour and thickness once; each size row contains width, height and reorder point.
+- Kept add-line controls and red trash buttons, existing validation and permissions.
+- Added matching width/height diagrams to catalog entry, Add missing material and Add off-cut. The example shows 4000 mm horizontally by 1575 mm vertically.
+- Positioned the smaller diagrams beside their explanatory text in receiving and offcut dialogs.
+- Preserved the approved SOP PDF, existing inventory data and the backend API.
+
+Validation: 74 automated checks pass, including shared-thickness validation and multi-row form interaction. Local browser checks verified both apps, catalog saving with synthetic data, and diagram/form rendering.
+
 ## Approved SOP and repository cleanup - 31 August 2026
 
 - Replaced the SOP with the exact user-supplied PDF, shared by both apps.

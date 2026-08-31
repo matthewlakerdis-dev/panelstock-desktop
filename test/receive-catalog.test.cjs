@@ -35,7 +35,7 @@ test('manual popup requires quantity and prevents duplicate submission',()=>{
  const validation=html.slice(html.indexOf('  function prepareCatalogBulkRows('),html.indexOf('  function CatalogBulkForm('));
  let states=[],cursor=0,saved=[],closed=0;const saving={current:false};
  const item={id:'a',sku:'A',material:'ACP',color:'Silver',thickness:4,width:1200,height:2400};
- const render=vm.runInNewContext(validation+html.slice(start,end)+';ReceiveMaterialForm',{useRef:()=>saving,useState:init=>{const i=cursor++;if(!(i in states))states[i]=init;return [states[i],v=>states[i]=v];},inputCls:'',X:'x',swatchColour:()=>'',fmtDim:()=>'',import_jsx_runtime:{jsx:(tag,props)=>({tag,...props})}});
+ const render=vm.runInNewContext(validation+html.slice(start,end)+';ReceiveMaterialForm',{useRef:()=>saving,useState:init=>{const i=cursor++;if(!(i in states))states[i]=init;return [states[i],v=>states[i]=v];},inputCls:'',SheetMeasureGuide:'measure-guide',X:'x',swatchColour:()=>'',fmtDim:()=>'',import_jsx_runtime:{jsx:(tag,props)=>({tag,...props})}});
  const flatten=n=>n&&typeof n==='object'?[n,...[n.children].flat().flatMap(flatten)]:[];
  const draw=()=>{cursor=0;return render({catalog:[item],variants:[],onReceiveStock:data=>{saved.push(data);return null;},onClose:()=>closed++});};
  let tree=draw();assert.ok(!flatten(tree).some(n=>n.placeholder?.startsWith('Search')));states[0]={material:'ACP',color:'Silver',thickness:'4',width:'1200',height:'2400',reorderPoint:''};tree=draw();tree.onSubmit({preventDefault(){}});assert.equal(saved.length,0);
