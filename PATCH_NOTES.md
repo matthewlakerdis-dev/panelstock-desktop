@@ -1,5 +1,12 @@
 # Security and stock reliability update
 
+## CNC completion actions and panel preview — 31 August 2026
+
+- Stacked Complete sheet above Complete panel in both apps; renamed Mark complete to Complete panel.
+- Sheet confirmation now lists all affected pending panel IDs, including search-hidden panels, with a scrollable keyboard-accessible list. Its count and IDs come from the same live set. Already completed panels remain unchanged.
+- Verified the dialog and button arrangement in the browser and all 40 automated checks. No backend or inventory changes required.
+
+
 ## CNC panel capitalization and order sorting — 31 August 2026
 
 - Panel IDs capitalize a leading letter on new entry/CSV upload. Existing IDs display the same way in both apps, the shared tracker and Excel without rewriting historical records; numeric IDs and leading zeros remain unchanged.

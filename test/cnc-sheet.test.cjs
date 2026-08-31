@@ -44,17 +44,18 @@ test('sheet dialog cancels without completing and requires its confirm button',(
   let closed=0,confirmed=0;
   const context={useRef:()=>({current:null}),useEffect:()=>{},import_jsx_runtime:{jsx:(type,props)=>({type,...props})}};
   const render=vm.runInNewContext(source+';CncSheetDialog',context);
-  const tree=render({sheet:{orderNumber:'ORDER-A',sheetNumber:'1'},count:2,onClose:()=>closed++,onConfirm:()=>confirmed++});
+  const tree=render({sheet:{orderNumber:'ORDER-A',sheetNumber:'1'},affectedPanels:[{id:'a',panelNumber:'a73-219'},{id:'b',panelNumber:'B73-220'}],onClose:()=>closed++,onConfirm:()=>confirmed++});
   function flatten(node){return node && typeof node==='object'?[node,...[node.children].flat().flatMap(flatten)]:[];}
   const nodes=flatten(tree),dialog=nodes.find(n=>n.role==='dialog');
   assert.equal(dialog['aria-modal'],true);
+  assert.deepEqual(nodes.filter(n=>n.type==='li').map(n=>n.children),['A73-219','B73-220']);
   const cancel=nodes.find(n=>n.type==='button' && n.children==='Cancel');
   const confirm=nodes.find(n=>n.type==='button' && n.children==='Complete sheet');
   cancel.onClick();assert.equal(closed,1);assert.equal(confirmed,0);
   dialog.onKeyDown({key:'Escape',preventDefault(){},stopPropagation(){}});assert.equal(closed,2);assert.equal(confirmed,0);
   confirm.onClick();assert.equal(confirmed,1);
   assert.ok(nodes.some(n=>typeof n.children==='string' && n.children.includes('all 2 pending panels')));
-  const empty=flatten(render({sheet:{orderNumber:'ORDER-A',sheetNumber:'1'},count:0,onClose(){},onConfirm(){}}));
+  const empty=flatten(render({sheet:{orderNumber:'ORDER-A',sheetNumber:'1'},affectedPanels:[],onClose(){},onConfirm(){}}));
   assert.equal(empty.find(n=>n.type==='button' && n.children==='Complete sheet').disabled,true);
 });
 test('orders group exactly and retain their expansion state across refreshed data',()=>{
