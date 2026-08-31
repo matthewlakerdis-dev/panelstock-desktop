@@ -156,7 +156,7 @@
 
   const collapsedCncSheets=new Set();
   let cncEnhanceQueued=false;
-  const leafElements=rootNode=>[...rootNode.querySelectorAll('div,span,p,strong')].filter(el=>el.children.length===0);
+  const leafElements=rootNode=>[...rootNode.querySelectorAll('*')].filter(el=>el.children.length===0&&el.textContent.trim());
   const findPanelCard=meta=>{
     let node=meta.parentElement;
     while(node&&node!==document.body){
