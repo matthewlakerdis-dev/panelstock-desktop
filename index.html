@@ -13543,6 +13543,18 @@ ${xrefStart}
     });
     return L;
   }
+  // Compact router with the stepped cutting path from the approved option D.
+  function CncRouterIcon({size=24,className="",...props}) {
+    return (0, import_jsx_runtime.jsxs)("svg", { ...props, width:size, height:size, viewBox:"0 0 64 64", fill:"none", className, "aria-hidden":true, focusable:"false", children:[
+      (0, import_jsx_runtime.jsx)("path", {d:"M6 42V9L10 5H25V13H14V36L10 46Z M39 5H54L58 9V42L54 46L50 36V13H39Z",fill:"currentColor"}),
+      (0, import_jsx_runtime.jsx)("rect", {x:26,y:3,width:12,height:17,rx:1.5,fill:"#00B8E4"}),
+      (0, import_jsx_runtime.jsx)("path", {d:"M27 22H37V26H27Z M29 28H35V32H29Z",fill:"#00B8E4"}),
+      (0, import_jsx_runtime.jsx)("path", {d:"M14 35H50L60 56V60H4V56Z",fill:"currentColor"}),
+      (0, import_jsx_runtime.jsx)("path", {d:"M32 33V39",stroke:"white",strokeWidth:5,strokeLinecap:"round"}),
+      (0, import_jsx_runtime.jsx)("path", {d:"M32 33V39",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round"}),
+      (0, import_jsx_runtime.jsx)("path", {d:"M24 41V47H34V53H49",stroke:"white",strokeWidth:3.5,strokeLinecap:"round",strokeLinejoin:"round"})
+    ]});
+  }
   async function fetchAllFromWorker(cfg) {
     try { return await PanelStock.snapshot(); } catch { return null; }
   }
@@ -14229,7 +14241,7 @@ ${xrefStart}
       { key: "receive", label: "Receive", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Package, { size: 16 }) },
       { key: "dispatch", label: "Dispatch", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Truck, { size: 16 }) },
       { key: "damage", label: "Damage", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AlertTriangle, { size: 16 }) },
-      { key: "cnc", label: "CNC", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Grid3x3, { size: 16 }) },
+      { key: "cnc", label: "CNC", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncRouterIcon, { size: 20 }) },
       { key: "jobs", label: "Jobs", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Briefcase, { size: 16 }) }
     ];
     const pageLabels = { stock: "Stock", receive: "Receive", dispatch: "Dispatch", damage: "Damage", cnc: "CNC", jobs: "Jobs", settings: "Settings" };
@@ -15163,7 +15175,7 @@ function compareCncOrders(a, b) {
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         PageHeading,
         {
-          icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Grid3x3, { size: 18 }),
+          icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncRouterIcon, { size: 22 }),
           title: "CNC Tracker",
           subtitle: "Panels scheduled to be cut, and their completion status. The shareable link always reflects the latest data \u2014 no need to re-send it.",
           action: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center gap-2", children: [
