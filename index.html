@@ -14510,18 +14510,12 @@ ${xrefStart}
     ] });
   }
   function ReceiveMaterialForm({ catalog, variants, onReceiveStock, onClose }) {
-    const [query, setQuery] = useState("");
     const [form, setForm] = useState({ material: "", color: "", thickness: "", width: "", height: "", reorderPoint: "" });
     const [errors, setErrors] = useState([]);
     const [receiptQty, setReceiptQty] = useState("");
     const [receiptRef, setReceiptRef] = useState("");
     const saving = useRef(false);
     const h = import_jsx_runtime.jsx;
-    const items = catalog.filter(item => `${item.color} ${item.material} ${item.thickness} ${item.width} ${item.height} ${item.sku}`.toLowerCase().includes(query.toLowerCase()));
-    function pick(item) {
-      setForm({ material: item.material, color: item.color, thickness: String(item.thickness), width: String(item.width), height: String(item.height), reorderPoint: String(item.reorderPoint || 0) });
-      setErrors([]);
-    }
     function submit(event) {
       event.preventDefault();
       const prepared = prepareCatalogBulkRows(form, [form]);
@@ -14537,20 +14531,11 @@ ${xrefStart}
     }
     const field = (key, label, type = "text") => h("label", { className: "block text-xs font-semibold text-slate-600", children: [label, h("input", { type, value: form[key], className: inputCls + " mt-1 w-full", step: key === "reorderPoint" ? "1" : "any", placeholder: key === "color" ? "e.g. Bronze Anodised" : key === "material" ? "e.g. ACP, Solid Aluminium" : "", onChange: e => { setForm({ ...form, [key]: e.target.value }); setErrors([]); } })] }, key);
     return h("form", { onSubmit: submit, noValidate: true, className: "p-5 space-y-4", children: [
-      h("div", { className: "flex items-center justify-between", children: [h("h2", { className: "text-sm font-semibold text-slate-800", children: "Choose or add material" }), h("button", { type: "button", "aria-label": "Close", onClick: onClose, children: h(X, { size: 18 }) })] }),
-      h("div", { children: [
-        h("label", { className: "block text-xs font-semibold text-slate-600 mb-2", children: ["Choose an available material (optional — fills in the fields below)", h("input", { value: query, onChange: e => setQuery(e.target.value), className: inputCls + " mt-2 w-full", placeholder: "Search colour, material, size, SKU…" })] }),
-        h("div", { className: "border border-slate-200 rounded-lg p-1 space-y-1 overflow-y-auto", style: { maxHeight: "220px" }, children: items.length ? items.map(item => h("button", { type: "button", onClick: () => pick(item), className: "w-full flex items-center gap-3 p-2 text-left rounded-lg hover:bg-slate-50", children: [
-          h("span", { className: "w-6 h-6 rounded shrink-0", style: { backgroundColor: swatchColour(item.color) } }),
-          h("span", { className: "flex-1 min-w-0", children: [h("span", { className: "block text-sm font-semibold text-slate-700", children: item.color + " · " + item.material }), h("span", { className: "block text-xs text-slate-400", children: `${item.thickness}mm · ${fmtDim(item.width, item.height)} · ${item.sku}` })] }),
-          h("span", { className: "text-xs text-slate-600 shrink-0", children: (variants.find(v => v.catalogId === item.id)?.qty || 0) + " SOH" })
-        ] }, item.id)) : h("p", { className: "p-2 text-xs text-slate-500", children: "No matching materials. Enter the details below to add one." }) })
-      ] }),
-      h("p", { className: "text-xs font-semibold text-slate-600", children: "Not listed? Enter the details manually, or adjust a selected material’s size." }),
+      h("div", { className: "flex items-center justify-between", children: [h("h2", { className: "text-sm font-semibold text-slate-800", children: "Add missing material" }), h("button", { type: "button", "aria-label": "Close", onClick: onClose, children: h(X, { size: 18 }) })] }),
       h("div", { className: "grid grid-cols-1 sm:grid-cols-3 gap-3", children: [field("color", "Colour / finish *"), field("material", "Material *"), field("thickness", "Thickness (mm) *", "number")] }),
       h("div", { className: "grid grid-cols-2 gap-3", children: [field("width", "Width (mm) *", "number"), field("height", "Height (mm) *", "number")] }),
       field("reorderPoint", "Reorder point (optional)", "number"),
-      h("p", { className: "text-xs text-slate-500", children: "Receive against an existing material, or create a new catalog item and receive its stock together." }),
+      h("p", { className: "text-xs text-slate-500", children: "Enter the new material details and quantity to add it to the catalog and receive its stock." }),
       h("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-3", children: [
         h("label", { className: "block text-xs font-semibold text-slate-600", children: ["Quantity received *", h("input", { type: "number", min: 1, step: 1, value: receiptQty, className: inputCls + " mt-1 w-full", onChange: e => { setReceiptQty(e.target.value); setErrors([]); } })] }),
         h("label", { className: "block text-xs font-semibold text-slate-600", children: ["Supplier / PO reference (optional)", h("input", { value: receiptRef, className: inputCls + " mt-1 w-full", onChange: e => setReceiptRef(e.target.value) })] })
@@ -14577,7 +14562,7 @@ ${xrefStart}
     }
     const h = import_jsx_runtime.jsx;
     return h("div", { className: "fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4", onClick: onClose, children:
-      h("div", { ref: dialogRef, role: "dialog", "aria-modal": true, "aria-label": "Choose or add material", className: "bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[85vh] overflow-y-auto", onKeyDown: keyDown, onClick: event => event.stopPropagation(), children:
+      h("div", { ref: dialogRef, role: "dialog", "aria-modal": true, "aria-label": "Add missing material", className: "bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[85vh] overflow-y-auto", onKeyDown: keyDown, onClick: event => event.stopPropagation(), children:
         h(ReceiveMaterialForm, { catalog, variants, onReceiveStock, onClose })
       })
     });

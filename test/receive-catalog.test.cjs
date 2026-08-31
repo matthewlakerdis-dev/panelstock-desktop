@@ -30,7 +30,7 @@ test('existing popup receipt increments stock without duplicating catalog or cha
 test('invalid receipt quantities, overflow and unauthorized creation make no changes',()=>{
  for(const [qty,options] of [[0,{}],[-1,{}],[1.5,{}],[NaN,{}],[Infinity,{}],[2,{existing:true,onHand:9999999}],[1,{admin:false}]]){const r=receiptRun(qty,options);assert.ok(r.error);assert.equal(r.writes.length,0);assert.equal(r.logs.length,0);}
 });
-test('popup requires quantity, preserves receipt fields when picking and prevents duplicate submission',()=>{
+test('manual popup requires quantity and prevents duplicate submission',()=>{
  const start=html.indexOf('  function ReceiveMaterialForm('),end=html.indexOf('  function ReceiveMaterialDialog(',start);
  const validation=html.slice(html.indexOf('  function prepareCatalogBulkRows('),html.indexOf('  function CatalogBulkForm('));
  let states=[],cursor=0,saved=[],closed=0;const saving={current:false};
@@ -38,7 +38,7 @@ test('popup requires quantity, preserves receipt fields when picking and prevent
  const render=vm.runInNewContext(validation+html.slice(start,end)+';ReceiveMaterialForm',{useRef:()=>saving,useState:init=>{const i=cursor++;if(!(i in states))states[i]=init;return [states[i],v=>states[i]=v];},inputCls:'',X:'x',swatchColour:()=>'',fmtDim:()=>'',import_jsx_runtime:{jsx:(tag,props)=>({tag,...props})}});
  const flatten=n=>n&&typeof n==='object'?[n,...[n.children].flat().flatMap(flatten)]:[];
  const draw=()=>{cursor=0;return render({catalog:[item],variants:[],onReceiveStock:data=>{saved.push(data);return null;},onClose:()=>closed++});};
- let tree=draw();flatten(tree).find(n=>n.tag==='button'&&n.className?.includes('text-left')).onClick();tree=draw();tree.onSubmit({preventDefault(){}});assert.equal(saved.length,0);
+ let tree=draw();assert.ok(!flatten(tree).some(n=>n.placeholder?.startsWith('Search')));states[0]={material:'ACP',color:'Silver',thickness:'4',width:'1200',height:'2400',reorderPoint:''};tree=draw();tree.onSubmit({preventDefault(){}});assert.equal(saved.length,0);
  tree=draw();const labels=flatten(tree).filter(n=>n.tag==='label');labels.find(n=>n.children[0]==='Quantity received *').children[1].onChange({target:{value:'7'}});tree=draw();
- flatten(tree).find(n=>n.tag==='button'&&n.className?.includes('text-left')).onClick();tree=draw();tree.onSubmit({preventDefault(){}});tree.onSubmit({preventDefault(){}});assert.equal(saved.length,1);assert.equal(saved[0].qty,7);assert.equal(closed,1);
+ tree=draw();tree.onSubmit({preventDefault(){}});tree.onSubmit({preventDefault(){}});assert.equal(saved.length,1);assert.equal(saved[0].qty,7);assert.equal(closed,1);
 });

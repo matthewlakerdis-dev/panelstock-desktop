@@ -1,5 +1,11 @@
 # Security and stock reliability update
 
+## Simplified missing-material popup — 31 August 2026
+
+- Removed the existing-material search and picker from Add missing material. The popup now focuses on manual material details, quantity and supplier/PO reference.
+- Existing materials remain available on the main Receive screen. Receipt validation and duplicate protection are unchanged.
+
+
 ## Receive stock inside the material popup — 31 August 2026
 
 - Added required quantity received and optional supplier/PO reference to the choose-or-add material popup. Receive stock completes the whole action without returning to the main quantity form.
