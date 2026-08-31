@@ -20,6 +20,6 @@ test('pending change recovery keeps review, retry, export and explicit discard c
  assert.match(client,/Retry sync now/);
  assert.match(client,/Export backup/);
  assert.match(client,/Discard local changes/);
- assert.match(client,/previous-version changes must be reviewed before editing stock/);
+ assert.match(client,/Previous-version pending changes must be reviewed before editing stock\./);
  assert.match(client,/format:'panelstock-pending-backup-v1'/);
 });
