@@ -1,5 +1,12 @@
 # Security and stock reliability update
 
+## Receive material picker — 31 August 2026
+
+- Receive now offers an offcut-style dialog with searchable available materials, colour swatches, dimensions, SKU and stock on hand, plus manual fields.
+- Selecting a material prefills editable details. Existing combinations are selected without duplication; new combinations are added to the catalog and selected for receiving. Stock is only received after entering a quantity on Receive.
+- All 63 checks pass; browser testing verified prefill and reuse.
+
+
 ## Add missing materials from Receive — 31 August 2026
 
 - Admins can open a matching Add missing material dialog directly from Receive, including when the catalog is empty.

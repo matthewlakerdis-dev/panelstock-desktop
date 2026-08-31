@@ -27,3 +27,17 @@ test('Receive offers catalog creation only to admins and selects created item wi
  const dialog=draw(true).find(n=>n.tag==='dialog');assert.ok(dialog);dialog.onSave([{material:'ACP'}]);dialog.onClose();
  assert.equal(added,1);assert.equal(received,0);assert.equal(states[1].id,'new');assert.equal(states[0],false);
 });
+
+test('Receive picker fills editable details and reuses exact existing materials instead of duplicating them',()=>{
+ const start=html.indexOf('  function ReceiveMaterialForm('),end=html.indexOf('  function ReceiveMaterialDialog(',start);
+ const validation=html.slice(html.indexOf('  function prepareCatalogBulkRows('),html.indexOf('  function CatalogBulkForm('));
+ let states=[],cursor=0,chosen=[],saved=[];
+ const item={id:'a',sku:'A',material:'ACP',color:'Silver',thickness:4,width:1200,height:2400};
+ const render=vm.runInNewContext(validation+html.slice(start,end)+';ReceiveMaterialForm',{useState:init=>{const i=cursor++;if(!(i in states))states[i]=init;return [states[i],v=>states[i]=v];},inputCls:'',X:'x',swatchColour:()=>'',fmtDim:()=>'',import_jsx_runtime:{jsx:(tag,props)=>({tag,...props})}});
+ const flatten=n=>n&&typeof n==='object'?[n,...[n.children].flat().flatMap(flatten)]:[];
+ const draw=()=>{cursor=0;return render({catalog:[item],variants:[],onSave:rows=>saved.push(rows),onSelectExisting:v=>chosen.push(v),onClose(){}});};
+ let tree=draw();flatten(tree).find(n=>n.tag==='button'&&n.className?.includes('text-left')).onClick();tree=draw();assert.equal(states[1].width,'1200');
+ tree.onSubmit({preventDefault(){}});assert.equal(chosen.length,1);assert.equal(saved.length,0);
+ const labels=flatten(tree).filter(n=>n.tag==='label');const width=labels.find(n=>n.children[0]==='Width (mm) *').children[1];width.onChange({target:{value:'1500'}});tree=draw();tree.onSubmit({preventDefault(){}});assert.equal(saved.length,1);assert.equal(saved[0][0].width,1500);assert.equal(item.width,1200);
+ states=[];tree=draw();tree.onSubmit({preventDefault(){}});assert.equal(saved.length,1);assert.ok(states[2].length);
+});
