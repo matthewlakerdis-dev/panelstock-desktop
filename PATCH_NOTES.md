@@ -1,5 +1,21 @@
 # PanelStock release notes
 
+## Illustrated SOP correction - v2026.08.31.4
+
+### Illustrated SOP correction
+- Restored screenshots and Lennox branding to both operating procedures, correcting the text-only guides in v2026.08.31.3.
+- Retained relevant original mobile examples for offcuts, dispatch, damage, job history and activity corrections.
+- Added current mobile and desktop screenshots for receiving, missing-material receipts, CNC grouping and confirmations, in-app bulk entry, sharing and backup controls.
+- Kept the updated workflow and permission instructions, with captions and an Excel status-colour key.
+- Added image sources alongside the editable SOP so future updates can retain the illustrations.
+
+### Validation
+- Rendered and visually reviewed all 21 mobile pages and 24 desktop pages, including enlarged form details and page numbering.
+- Documentation-only update; inventory data, app permissions and stock behaviour are unchanged.
+
+Refresh the app, then reopen Settings > Standard Operating Procedures to load the illustrated guide.
+
+
 ## Receiving updates and refreshed SOPs - v2026.08.31.3
 
 ### Receiving stock

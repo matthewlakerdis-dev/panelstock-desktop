@@ -1,5 +1,7 @@
 # PanelStock Standard Operating Procedures - Desktop
-Version v2026.08.31.3 | Updated 31 August 2026
+Version v2026.08.31.4 | Illustrated edition | Updated 31 August 2026
+
+![Lennox Facades](docs/sop/lennox-logo.png)
 
 ## 1. Getting started and responsibilities
 
@@ -26,6 +28,8 @@ Admins manage the catalog in Settings, add catalog items without a receipt, use 
 ### Guide contents
 
 2 Receiving stock | 3 Stock and offcuts | 4 Dispatch, damage and jobs | 5 CNC scheduling and completion | 6 Shared tracker and Excel | 7 Materials catalog | 8 Stocktake and administration | 9 Backup, recovery and sync
+
+![Screenshot: Use the left sidebar for warehouse operations and Settings. The lower-left indicator shows sync status.](docs/sop/desktop-stock.png)
 
 ## 2. Receiving stock
 
@@ -55,7 +59,11 @@ Admins manage the catalog in Settings, add catalog items without a receipt, use 
 
 Fix any displayed validation errors before submitting. Quantity must be a positive whole number; negative and fractional receipts are rejected. Cancel or close the popup before saving to abandon the entry.
 
-If a receipt was entered incorrectly, do not enter a second receipt to compensate. Ask an admin to review the activity and use the appropriate correction or void process. See page 8.
+If a receipt was entered incorrectly, do not enter a second receipt to compensate. Ask an admin to review the activity and use the appropriate correction or void process. See section 8.
+
+![Screenshot: Select the existing material on the left, then enter quantity and the optional supplier/PO reference.](docs/sop/desktop-receive.png)
+
+![Screenshot: The popup collects material details and receipt quantity together. Available to users and admins.](docs/sop/desktop-missing.png)
 
 ## 3. Stock, offcuts and exports
 
@@ -81,7 +89,9 @@ If a receipt was entered incorrectly, do not enter a second receipt to compensat
 
 Use Excel or PDF on the relevant screen for stock, catalog or activity information. Ordinary exported reports are snapshots at export time; download another copy when you need a later snapshot.
 
-The CNC shared Excel workbook is different: it has a read-only refresh connection. Follow page 6 for its setup, colours and refresh behaviour. Do not expect stock exports to refresh like the CNC workbook.
+The CNC shared Excel workbook is different: it has a read-only refresh connection. Follow section 6 for its setup, colours and refresh behaviour. Do not expect stock exports to refresh like the CNC workbook.
+
+![Screenshot: Choose a source material or enter the details manually. Enter the leftover size, then scroll down to Add off-cut.](docs/sop/desktop-offcut.png)
 
 ## 4. Dispatch, damage and job history
 
@@ -91,7 +101,7 @@ The CNC shared Excel workbook is different: it has a read-only refresh connectio
 
 2. Enter the order number, optional job reference and quantity to dispatch. Verify the available SOH and the physical material.
 
-3. Select Confirm dispatch, then verify the reduced SOH and saved activity. If a usable offcut remains, add it separately using page 3.
+3. Select Confirm dispatch, then verify the reduced SOH and saved activity. If a usable offcut remains, add it separately using section 3.
 
 ### Write off damaged stock
 
@@ -107,7 +117,11 @@ The CNC shared Excel workbook is different: it has a read-only refresh connectio
 
 Use Jobs to find dispatch history by order or job reference. Use the activity controls available in Settings to review receipts, dispatches, damage and other recorded actions. Check timestamps and the recorded user when investigating a discrepancy.
 
-Activity history is retained. Admin voids are recorded against eligible entries rather than silently removing history. See page 8.
+Activity history is retained. Admin voids are recorded against eligible entries rather than silently removing history. See section 8.
+
+![Screenshot: Select the correct item, enter order and quantity, then confirm the dispatch.](docs/sop/desktop-dispatch.png)
+
+![Screenshot: Select a reason and quantity and add at least one photo before Write off stock becomes available.](docs/sop/desktop-damage.png)
 
 ## 5. CNC scheduling and completion
 
@@ -134,6 +148,12 @@ New job references use title case. An order label such as Order #001234 becomes 
 > Complete sheet includes pending panels hidden by the current search and all matching order/sheet records. Already completed panels and other sheets remain unchanged. CNC completion records progress only: it does not deduct warehouse stock.
 
 After completion, check the Completed view. Do not mark a sheet complete until every panel shown in the confirmation has actually been completed.
+
+![Screenshot: Expand the job and order. Complete sheet and Complete panel are separate actions.](docs/sop/desktop-cnc.png)
+
+![Screenshot: Enter required order and job reference once; add sheet/panel rows. Red trash icons remove a row.](docs/sop/desktop-cnc-bulk.png)
+
+![Screenshot: Check every listed panel before confirming. Other sheets and already completed panels are unchanged.](docs/sop/desktop-confirm.png)
 
 ## 6. Shared CNC tracker and live Excel
 
@@ -163,6 +183,8 @@ Identifiers such as order numbers and panel IDs remain text so leading zeros are
 
 The workbook contains the read-only sharing link. Treat both the workbook and link as access to CNC information. For mobile/browser viewing, use the shared tracker rather than relying on desktop Excel refresh.
 
+![Screenshot: The shared view is read-only. Use Excel for the connected workbook, or the browser view on a phone.](docs/sop/desktop-shared.png)
+
 ## 7. Materials catalog - administrators
 
 ### Single-item management
@@ -189,6 +211,10 @@ Regular users do not gain Settings catalog-management access. They can create a 
 
 > Use the correct existing catalog item wherever possible. Do not create alternate spellings for the same material. Review downstream stock and job records before editing or removing catalog items.
 
+![Screenshot: Settings > Materials Catalog contains the admin add, edit, export and bulk-entry controls.](docs/sop/desktop-catalog.png)
+
+![Screenshot: Enter material and colour once, then add dimensions and optional reorder points for each size.](docs/sop/desktop-catalog-bulk.png)
+
 ## 8. Stocktake, corrections and admin settings
 
 ### Stocktake procedure
@@ -214,6 +240,8 @@ Open Settings > Users. Use the current registration code for new staff. Admin co
 ### Email reports - admins
 
 In the email-report settings, review recipients, days, time and timezone. Enable the schedule and save it, then use the test-send control to verify delivery. Scheduled reports run on the server; users do not need to leave an app open.
+
+![Screenshot: Settings > Activity Log shows recorded stock movements. Admins can void eligible entries without erasing history.](docs/sop/desktop-activity.png)
 
 ## 9. Backups, resets and sync recovery
 
@@ -244,3 +272,5 @@ Only admins should use Full reset, after a backup and a deliberate review of the
 3. Only one tab may edit the app on a device at a time. Close another editing tab if instructed. If a session expired, sign in as the owner of the queued changes.
 
 > Discarding local pending changes does not apply them to shared stock. Use that control only after the export is saved and the discrepancy has been reconciled. Contact an admin when the correct stock state is uncertain.
+
+![Screenshot: Settings > Backup & Reset. Back up and review the warning before any restore or reset.](docs/sop/desktop-backup.png)
