@@ -27,8 +27,8 @@ test('popup receipt stages new catalog and received quantity together and record
 test('existing popup receipt increments stock without duplicating catalog or changing reorder point',()=>{
  const r=receiptRun(3,{existing:true});assert.equal(r.error,null);assert.equal(r.writes.length,1);assert.equal(r.writes[0].catalog,undefined);assert.equal(r.writes[0].variants.length,1);assert.equal(r.writes[0].variants[0].qty,13);assert.equal(r.writes[0].variants[0].reorderPoint,5);
 });
-test('invalid receipt quantities, overflow and unauthorized creation make no changes',()=>{
- for(const [qty,options] of [[0,{}],[-1,{}],[1.5,{}],[NaN,{}],[Infinity,{}],[2,{existing:true,onHand:9999999}],[1,{admin:false}]]){const r=receiptRun(qty,options);assert.ok(r.error);assert.equal(r.writes.length,0);assert.equal(r.logs.length,0);}
+test('invalid receipt quantities, and overflow make no changes',()=>{
+ for(const [qty,options] of [[0,{}],[-1,{}],[1.5,{}],[NaN,{}],[Infinity,{}],[2,{existing:true,onHand:9999999}]]){const r=receiptRun(qty,options);assert.ok(r.error);assert.equal(r.writes.length,0);assert.equal(r.logs.length,0);}
 });
 test('manual popup requires quantity and prevents duplicate submission',()=>{
  const start=html.indexOf('  function ReceiveMaterialForm('),end=html.indexOf('  function ReceiveMaterialDialog(',start);
@@ -42,3 +42,5 @@ test('manual popup requires quantity and prevents duplicate submission',()=>{
  tree=draw();const labels=flatten(tree).filter(n=>n.tag==='label');labels.find(n=>n.children[0]==='Quantity received *').children[1].onChange({target:{value:'7'}});tree=draw();
  tree=draw();tree.onSubmit({preventDefault(){}});tree.onSubmit({preventDefault(){}});assert.equal(saved.length,1);assert.equal(saved[0].qty,7);assert.equal(closed,1);
 });
+
+test("users can receive a new material from the popup",()=>{const r=receiptRun(2,{admin:false});assert.equal(r.error,null);assert.equal(r.writes[0].variants[0].qty,2);});

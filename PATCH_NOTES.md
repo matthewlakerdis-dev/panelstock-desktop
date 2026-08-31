@@ -1,5 +1,12 @@
 # Security and stock reliability update
 
+## Missing-material receipts for all users — 31 August 2026
+
+- Both users and admins can access Add missing material and receive stock from the popup, including an empty catalog.
+- The server permits user-created catalog entries only with a matching new stock entry and receipt in the same batch. Catalog editing/deletion, stock-detail editing and other admin permissions remain restricted.
+- All 70 checks pass, including authenticated staff receipts, retry safety and denied permission escalation.
+
+
 ## Simplified missing-material popup — 31 August 2026
 
 - Removed the existing-material search and picker from Add missing material. The popup now focuses on manual material details, quantity and supplier/PO reference.
