@@ -5,7 +5,7 @@ const vm=require('node:vm');
 const html=fs.readFileSync(require('node:path').join(__dirname,'../index.html'),'utf8');
 for(const match of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g))if(match[1].trim())new vm.Script(match[1]);
 const handler=html.slice(html.indexOf('    function completeCncSheet('),html.indexOf('    function removeCncPanel('));
-assert.ok(handler.includes('window.confirm'));
+assert.ok(!handler.includes('window.confirm'));
 function run(accept=true,panels) {
   const base={orderNumber:'ORDER-A',sheetNumber:'1',status:'pending'};
   const cncPanels=panels??[
@@ -26,7 +26,7 @@ test('complete sheet updates all pending panels in exactly that order/sheet in o
   const r=run();
   assert.equal(r.writes.length,1);
   assert.equal(r.logs.length,1);
-  assert.match(r.prompts[0],/all 2 pending panels on Order ORDER-A, Sheet 1/);
+  assert.equal(r.prompts.length,0);
   assert.equal(r.next[0].status,'completed');assert.equal(r.next[1].status,'completed');
   assert.equal(r.next[0].completedBy,'worker');assert.equal(r.next[0].completedAt,r.next[1].completedAt);
   assert.equal(r.next[2].completedBy,'earlier-worker');assert.equal(r.next[2].completedAt,'2026-01-01');
@@ -34,7 +34,26 @@ test('complete sheet updates all pending panels in exactly that order/sheet in o
   assert.match(r.logs[0].desc,/2 panels/);
   assert.deepEqual(Object.keys(r.writes[0]),['cncPanels']);
 });
-test('cancel and an already completed sheet make no changes',()=>{
-  assert.equal(run(false).writes.length,0);
+test('an already completed sheet makes no changes',()=>{
+
   const r=run(true,[]);assert.equal(r.writes.length,0);assert.equal(r.prompts.length,0);
+});
+
+test('sheet dialog cancels without completing and requires its confirm button',()=>{
+  const source=html.slice(html.indexOf('  function CncSheetDialog('),html.indexOf('  function Cnc',html.indexOf('  function CncSheetDialog(')+10));
+  let closed=0,confirmed=0;
+  const context={useRef:()=>({current:null}),useEffect:()=>{},import_jsx_runtime:{jsx:(type,props)=>({type,...props})}};
+  const render=vm.runInNewContext(source+';CncSheetDialog',context);
+  const tree=render({sheet:{orderNumber:'ORDER-A',sheetNumber:'1'},count:2,onClose:()=>closed++,onConfirm:()=>confirmed++});
+  function flatten(node){return node && typeof node==='object'?[node,...[node.children].flat().flatMap(flatten)]:[];}
+  const nodes=flatten(tree),dialog=nodes.find(n=>n.role==='dialog');
+  assert.equal(dialog['aria-modal'],true);
+  const cancel=nodes.find(n=>n.type==='button' && n.children==='Cancel');
+  const confirm=nodes.find(n=>n.type==='button' && n.children==='Complete sheet');
+  cancel.onClick();assert.equal(closed,1);assert.equal(confirmed,0);
+  dialog.onKeyDown({key:'Escape',preventDefault(){},stopPropagation(){}});assert.equal(closed,2);assert.equal(confirmed,0);
+  confirm.onClick();assert.equal(confirmed,1);
+  assert.ok(nodes.some(n=>typeof n.children==='string' && n.children.includes('all 2 pending panels')));
+  const empty=flatten(render({sheet:{orderNumber:'ORDER-A',sheetNumber:'1'},count:0,onClose(){},onConfirm(){}}));
+  assert.equal(empty.find(n=>n.type==='button' && n.children==='Complete sheet').disabled,true);
 });

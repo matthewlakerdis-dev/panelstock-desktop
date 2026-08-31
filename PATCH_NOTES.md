@@ -2,6 +2,8 @@
 
 ## CNC whole-sheet completion — 31 August 2026
 
+- Sheet completion now uses a styled in-app confirmation dialog instead of the browser popup, with a live panel count, Cancel/Complete sheet buttons, Escape support and keyboard focus handling.
+
 - Workers can select Complete sheet from a pending CNC panel in either app. Confirmation shows the order, sheet and number of pending panels affected, including panels hidden by search.
 - Only pending panels with the exact same order and sheet numbers are completed. Earlier completion details and other sheets/orders are preserved. Individual panel completion remains available.
 - Saves through the existing atomic, retry-safe sync process with a sheet activity entry. No stock is deducted. No backend permission changes are required.
