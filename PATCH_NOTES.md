@@ -1,5 +1,13 @@
 # Security and stock reliability update
 
+## In-app CNC bulk entry — 31 August 2026
+
+- Replaced CNC spreadsheet import with an admin-only form. Enter the order and optional job reference once, then add/remove sheet-number and panel-ID lines as needed.
+- Empty lines are ignored; incomplete lines and repeated sheet/panel pairs block the whole submission. Existing order cleanup and capitalization apply to every new panel.
+- Saves the batch through the existing synchronized schedule workflow. Single-panel scheduling, completion, catalog imports and Excel exports are unchanged.
+- All 50 automated checks pass; browser testing confirmed validation and a multi-panel save with isolated test data.
+
+
 ## CNC panel confirmation — 31 August 2026
 
 - Complete panel now opens a matching in-app confirmation showing the order, sheet and selected panel ID. Cancel or Escape leaves the panel unchanged.

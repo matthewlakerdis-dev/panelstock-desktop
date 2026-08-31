@@ -14923,6 +14923,79 @@ function compareCncOrders(a, b) {
       ] }, order);
     }) });
   }
+  function prepareCncBulkRows(order, lines) {
+    const shared = normalizeCncInput(order);
+    const errors = [], rows = [], seen = new Set();
+    if (!shared.orderNumber) errors.push("Enter an order number. If it includes Order, include the order's digits.");
+    if (shared.orderNumber.length > 200) errors.push("Order number must be 200 characters or fewer.");
+    lines.forEach((line, i) => {
+      const sheetNumber = String(line.sheetNumber || "").trim();
+      const panelNumber = String(line.panelNumber || "").trim();
+      if (!sheetNumber && !panelNumber) return;
+      if (!sheetNumber || !panelNumber) { errors.push(`Line ${i + 1}: enter both a sheet number and panel ID.`); return; }
+      const row = normalizeCncInput({ orderNumber: shared.orderNumber, jobReference: shared.jobReference, sheetNumber, panelNumber });
+      if (row.sheetNumber.length > 200 || row.panelNumber.length > 200) errors.push(`Line ${i + 1}: sheet number and panel ID must be 200 characters or fewer.`);
+      const key = JSON.stringify([row.sheetNumber, row.panelNumber]);
+      if (seen.has(key)) errors.push(`Line ${i + 1}: this sheet and panel ID are repeated.`);
+      seen.add(key);
+      rows.push(row);
+    });
+    if (!rows.length && !errors.length) errors.push("Add at least one sheet number and panel ID.");
+    return { rows: errors.length ? [] : rows, errors };
+  }
+  function CncBulkForm({ onSave, onClose }) {
+    const [order, setOrder] = useState({ orderNumber: "", jobReference: "" });
+    const [lines, setLines] = useState([{ id: 1, sheetNumber: "", panelNumber: "" }]);
+    const [errors, setErrors] = useState([]);
+    const nextId = useRef(2);
+    const saving = useRef(false);
+    const h = import_jsx_runtime.jsx;
+    const count = lines.filter(line => line.sheetNumber.trim() || line.panelNumber.trim()).length;
+    function updateLine(id, field, value) {
+      setLines(current => current.map(line => line.id === id ? { ...line, [field]: value } : line));
+      setErrors([]);
+    }
+    function addLine() {
+      const id = nextId.current++;
+      setLines(current => [...current, { id, sheetNumber: "", panelNumber: "" }]);
+    }
+    function submit(event) {
+      event.preventDefault();
+      if (saving.current) return;
+      const prepared = prepareCncBulkRows(order, lines);
+      setErrors(prepared.errors);
+      if (prepared.errors.length) return;
+      saving.current = true;
+      try { onSave(prepared.rows); onClose(); }
+      finally { saving.current = false; }
+    }
+    const field = (label, props) => h("label", { className: "block min-w-0 text-xs font-semibold text-slate-600", children: [label, h("input", { ...props, type: "text", className: inputCls + " mt-1 w-full", autoComplete: "off" })] });
+    return h("form", { onSubmit: submit, className: "bg-white rounded-xl border border-slate-200 p-4 mb-4 space-y-4", children: [
+      h("h2", { className: "text-sm font-semibold text-slate-800", children: "Schedule multiple panels" }),
+      h("p", { className: "text-xs text-slate-500", children: "Enter the order and job once, then add one line per panel. Completely empty lines are ignored." }),
+      h("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-3", children: [
+        field("Order number", { value: order.orderNumber, placeholder: "e.g. 001234", onChange: e => { setOrder({ ...order, orderNumber: e.target.value }); setErrors([]); } }),
+        field("Job reference (optional)", { value: order.jobReference, placeholder: "e.g. Meridian Constructions", onChange: e => setOrder({ ...order, jobReference: e.target.value }) })
+      ] }),
+      h("div", { className: "space-y-3", children: lines.map((line, i) => h("div", { className: "border border-slate-200 rounded-lg p-3", children: [
+        h("div", { className: "flex items-center justify-between mb-2", children: [
+          h("span", { className: "text-xs font-semibold text-slate-500", children: "Line " + (i + 1) }),
+          h("button", { type: "button", "aria-label": "Remove line " + (i + 1), className: "text-xs text-red-700 px-2 py-2", onClick: () => { setLines(current => current.length === 1 ? [{ ...line, sheetNumber: "", panelNumber: "" }] : current.filter(item => item.id !== line.id)); setErrors([]); }, children: "Remove" })
+        ] }),
+        h("div", { className: "grid grid-cols-2 gap-3", children: [
+          field("Sheet number", { "aria-label": "Sheet number line " + (i + 1), value: line.sheetNumber, placeholder: "e.g. 1", onChange: e => updateLine(line.id, "sheetNumber", e.target.value) }),
+          field("Panel ID", { "aria-label": "Panel ID line " + (i + 1), value: line.panelNumber, placeholder: "e.g. A73-219", onChange: e => updateLine(line.id, "panelNumber", e.target.value) })
+        ] })
+      ] }, line.id)) }),
+      h("button", { type: "button", onClick: addLine, className: "border border-cyan-800 text-cyan-800 rounded-lg px-4 py-2 text-sm font-semibold", children: "+ Add line" }),
+      errors.length > 0 && h("div", { role: "alert", className: "bg-red-50 text-red-800 rounded-lg p-3 text-sm", children: errors.map((error, i) => h("p", { children: error }, i)) }),
+      h("div", { className: "flex flex-wrap gap-3 items-center", children: [
+        h("button", { type: "submit", className: "bg-cyan-800 text-white rounded-lg px-4 py-3 text-sm font-semibold", children: count ? `Schedule ${count} panel${count === 1 ? "" : "s"}` : "Add to schedule" }),
+        h("button", { type: "button", onClick: onClose, className: "text-sm font-semibold text-slate-600 px-3 py-3", children: "Cancel" })
+      ] })
+    ] });
+  }
+
   function CncPage({ cncPanels, isAdmin, onAddPanel, onAddPanelsBulk, onCompletePanel, onCompleteSheet, onRemovePanel }) {
     const [sheetToComplete, setSheetToComplete] = useState(null);
     const [inputError, setInputError] = useState("");
@@ -14931,10 +15004,7 @@ function compareCncOrders(a, b) {
     const [addOpen, setAddOpen] = useState(false);
     const [bulkOpen, setBulkOpen] = useState(false);
     const [form, setForm] = useState({ orderNumber: "", jobReference: "", sheetNumber: "", panelNumber: "" });
-    const [bulkRows, setBulkRows] = useState([]);
-    const [bulkErrors, setBulkErrors] = useState([]);
     const [linkCopied, setLinkCopied] = useState(false);
-    const bulkFileRef = useRef(null);
     const shareableLink = `${BAKED_WORKER_URL}/cnc-tracker/view?token=${CNC_PUBLIC_TOKEN}`;
     async function copyShareableLink() {
       try {
@@ -14958,67 +15028,6 @@ function compareCncOrders(a, b) {
       setForm({ orderNumber: "", jobReference: "", sheetNumber: "", panelNumber: "" });
       setAddOpen(false);
     }
-    function downloadTemplate() {
-      const csv = "OrderNumber,JobReference,SheetNumber,PanelNumber\nWO-1042,Meridian Constructions,1,1\nWO-1042,Meridian Constructions,1,2\n";
-      const blob = new Blob([csv], { type: "text/csv" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "cnc_template.csv";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 1e3);
-    }
-    function handleBulkFile(file) {
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        const parsed = parseCSV(String(reader.result || ""));
-        if (parsed.length < 2) {
-          setBulkRows([]);
-          setBulkErrors(["The file has no data rows."]);
-          return;
-        }
-        const header = parsed[0].map((h) => h.trim().toLowerCase());
-        const idx = {
-          orderNumber: header.findIndex((h) => h === "ordernumber" || h === "order number"),
-          jobReference: header.findIndex((h) => h === "jobreference" || h === "job reference"),
-          sheetNumber: header.findIndex((h) => h === "sheetnumber" || h === "sheet number"),
-          panelNumber: header.findIndex((h) => h === "panelnumber" || h === "panel number")
-        };
-        const missing = ["orderNumber", "sheetNumber", "panelNumber"].filter((k) => idx[k] === -1);
-        if (missing.length) {
-          setBulkRows([]);
-          setBulkErrors([`Missing required column(s): ${missing.join(", ")}. Download the template below for the exact format.`]);
-          return;
-        }
-        const valid = [];
-        const errors = [];
-        parsed.slice(1).forEach((r, i) => {
-          const rowNum = i + 2;
-          const orderNumber = normalizeCncInput({orderNumber: r[idx.orderNumber]}).orderNumber;
-          const jobReference = normalizeCncInput({jobReference: idx.jobReference !== -1 ? r[idx.jobReference] : ""}).jobReference;
-          const sheetNumber = (r[idx.sheetNumber] || "").trim();
-          const panelNumber = normalizeCncInput({panelNumber: r[idx.panelNumber]}).panelNumber;
-          if (!orderNumber || !sheetNumber || !panelNumber) {
-            errors.push(`Row ${rowNum}: missing order, sheet, or panel number.`);
-            return;
-          }
-          valid.push({ orderNumber, jobReference, sheetNumber, panelNumber });
-        });
-        setBulkRows(valid);
-        setBulkErrors(errors);
-      };
-      reader.readAsText(file);
-    }
-    function confirmBulkImport() {
-      if (bulkRows.length === 0) return;
-      onAddPanelsBulk(bulkRows);
-      setBulkRows([]);
-      setBulkErrors([]);
-      setBulkOpen(false);
-    }
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
       inputError && (0, import_jsx_runtime.jsx)("p", { role: "alert", className: "text-sm text-red-700 p-3", children: inputError }),
       sheetToComplete && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncSheetDialog, { sheet: sheetToComplete, affectedPanels: cncPanels.filter((p) => p.status === "pending" && p.orderNumber === sheetToComplete.orderNumber && p.sheetNumber === sheetToComplete.sheetNumber && (!sheetToComplete.panelId || p.id === sheetToComplete.panelId)), onClose: () => setSheetToComplete(null), onConfirm: () => { if (sheetToComplete.panelId) onCompletePanel(sheetToComplete.panelId); else onCompleteSheet(sheetToComplete.orderNumber, sheetToComplete.sheetNumber); setSheetToComplete(null); } }),
@@ -15039,8 +15048,8 @@ function compareCncOrders(a, b) {
                 setBulkOpen(!bulkOpen);
                 setAddOpen(false);
               }, className: "flex items-center gap-1.5 text-sm font-medium text-slate-600 border border-slate-300 bg-white rounded-lg px-3 py-2 hover:bg-slate-50", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Upload, { size: 15 }),
-                " Bulk upload"
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Plus, { size: 15 }),
+                " Bulk entry"
               ] }),
               /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => {
                 setAddOpen(!addOpen);
@@ -15053,44 +15062,7 @@ function compareCncOrders(a, b) {
           ] })
         }
       ),
-      isAdmin && bulkOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bg-white border border-slate-300 rounded-xl p-5 mb-6", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm font-semibold text-slate-800 mb-1", children: "Bulk upload from a spreadsheet" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { className: "text-sm text-slate-500 mb-3 leading-relaxed", children: [
-          "Upload a CSV with columns: ",
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "font-mono text-xs bg-slate-100 px-1.5 py-0.5 rounded", children: "OrderNumber, JobReference, SheetNumber, PanelNumber" }),
-          " (JobReference is optional)."
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: downloadTemplate, className: "text-sm font-semibold text-cyan-800 mb-3 hover:underline", children: "Download template CSV" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { ref: bulkFileRef, type: "file", accept: ".csv,text/csv", className: "hidden", onChange: (e) => handleBulkFile(e.target.files?.[0]) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => bulkFileRef.current?.click(), className: "w-full flex items-center justify-center gap-2 border border-dashed border-slate-300 bg-slate-50 rounded-lg py-3 text-sm font-semibold text-slate-600 mb-3 hover:bg-slate-100", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FileSpreadsheet, { size: 16 }),
-          " Choose CSV file"
-        ] }),
-        bulkErrors.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "bg-red-50 border border-red-200 rounded-lg p-3 mb-3 space-y-0.5", children: bulkErrors.map((e, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm text-red-800", children: e }, i)) }),
-        bulkRows.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "text-sm font-semibold text-slate-600 mb-1.5", children: [
-            bulkRows.length,
-            " panel",
-            bulkRows.length === 1 ? "" : "s",
-            " ready to import:"
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "max-h-40 overflow-y-auto space-y-1 mb-3 border border-slate-200 rounded-lg p-2 bg-slate-50", children: bulkRows.map((r, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "text-sm text-slate-600 px-1.5 py-1", children: [
-            "Order ",
-            r.orderNumber,
-            r.jobReference ? ` \xB7 Job ${r.jobReference}` : "",
-            " \xB7 Sheet ",
-            r.sheetNumber,
-            " \xB7 Panel ",
-            r.panelNumber
-          ] }, i)) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: confirmBulkImport, className: "w-full bg-cyan-800 text-white font-semibold rounded-lg py-2.5 text-sm hover:bg-cyan-900", children: [
-            "Import ",
-            bulkRows.length,
-            " panel",
-            bulkRows.length === 1 ? "" : "s"
-          ] })
-        ] })
-      ] }),
+      isAdmin && bulkOpen && (0, import_jsx_runtime.jsx)(CncBulkForm, { onSave: onAddPanelsBulk, onClose: () => setBulkOpen(false) }),
       isAdmin && addOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bg-white border border-slate-300 rounded-xl p-5 mb-6", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "grid grid-cols-4 gap-4", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Order number", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CapitalizedInput, { value: form.orderNumber, onChange: (v) => setForm({ ...form, orderNumber: v }), placeholder: "e.g. WO-1042" }) }),
