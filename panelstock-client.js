@@ -155,6 +155,7 @@
   };
 
   const collapsedCncSheets=new Set();
+  const initializedCncSheets=new Set();
   let cncEnhanceQueued=false;
   const leafElements=rootNode=>[...rootNode.querySelectorAll('*')].filter(el=>el.children.length===0&&el.textContent.trim());
   const findPanelCard=meta=>{
@@ -177,7 +178,7 @@
       const orderLeaf=leafElements(card).find(el=>/^Order\s+/i.test(el.textContent.trim()));
       const order=orderLeaf?.textContent.trim()||card.dataset.panelstockOrder||'Order';
       card.dataset.panelstockCncCard='1';card.dataset.panelstockSheet=sheet;card.dataset.panelstockOrder=order;
-      if(orderLeaf){orderLeaf.textContent='Panel '+panel;orderLeaf.style.fontWeight='700';}
+      if(orderLeaf){orderLeaf.textContent='Panel '+panel;orderLeaf.style.fontWeight='700';orderLeaf.style.paddingLeft='12px';}
       meta.style.display='none';
     }
     const parents=new Set([...document.querySelectorAll('[data-panelstock-cnc-card="1"]')].map(card=>card.parentElement).filter(Boolean));
@@ -190,6 +191,7 @@
         const heading=document.createElement('button');heading.type='button';heading.dataset.panelstockSheetHeading='mobile';heading.style.cssText='width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;margin:8px 0;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;color:#334155;font:700 14px system-ui;text-align:left';
         const label=document.createElement('span');label.textContent='Sheet '+sheet;
         const right=document.createElement('span');right.style.cssText='color:#64748b;font-weight:600';
+        if(!initializedCncSheets.has(key)){collapsedCncSheets.add(key);initializedCncSheets.add(key);}
         const update=()=>{const closed=collapsedCncSheets.has(key);right.textContent=sheetCards.length+' panel'+(sheetCards.length===1?'':'s')+(closed?' ▸':' ▾');for(const card of sheetCards)card.style.display=closed?'none':'';};
         heading.onclick=()=>{collapsedCncSheets.has(key)?collapsedCncSheets.delete(key):collapsedCncSheets.add(key);update();};
         heading.append(label,right);parent.insertBefore(heading,sheetCards[0]);update();
