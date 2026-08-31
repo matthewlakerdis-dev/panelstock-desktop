@@ -13782,7 +13782,8 @@ ${xrefStart}
       persist({ variants: [], offcuts: [], catalog: [], reasons: DEFAULT_REASONS, transactions: [resetEntry, ...transactions] });
       showToast("All stock information has been reset");
     }
-    function addCncPanel({ orderNumber, jobReference, sheetNumber, panelNumber }) {
+    function addCncPanel(input) {
+      const { orderNumber, jobReference, sheetNumber, panelNumber } = normalizeCncInput(input);
       const entry = {
         id: uid(),
         orderNumber,
@@ -13802,6 +13803,7 @@ ${xrefStart}
       showToast("Panel added to CNC schedule");
     }
     function addCncPanelsBulk(rows) {
+      rows = rows.map(normalizeCncInput);
       const now = (/* @__PURE__ */ new Date()).toISOString();
       const newEntries = rows.map((r) => ({
         id: uid(),
@@ -14853,6 +14855,36 @@ ${xrefStart}
       ] })
     });
   }
+function normalizeCncInput(row) {
+  const rawOrder = String(row.orderNumber ?? '').trim();
+  const orderNumber = /\border(?=\b|\d)/i.test(rawOrder) ? rawOrder.replace(/\D/g, '') : rawOrder;
+  const jobReference = String(row.jobReference ?? '').trim().replace(/\s+/g, ' ').toLowerCase().replace(/(^|[\s-])\p{L}/gu, letter => letter.toUpperCase());
+  return {...row, orderNumber, jobReference};
+}
+
+  function CncJobGroups({ panels, allPanels, query, renderGroup }) {
+    const [expanded, setExpanded] = useState(() => new Map());
+    const groups = new Map();
+    const jobKey = panel => normalizeCncInput(panel).jobReference;
+    for (const panel of panels) {
+      const job = jobKey(panel);
+      if (!groups.has(job)) groups.set(job, []);
+      groups.get(job).push(panel);
+    }
+    const h = import_jsx_runtime.jsx;
+    return h("div", { className: "space-y-3 p-2", children: Array.from(groups, ([job, rows]) => {
+      const open = expanded.has(job) ? expanded.get(job) : Boolean(query.trim());
+      const total = allPanels.filter((p) => jobKey(p) === job);
+      const done = total.filter((p) => p.status === "completed").length;
+      return h("section", { className: "bg-white border border-slate-200 rounded-xl overflow-hidden", children: [
+        h("button", { type: "button", "aria-expanded": open, onClick: () => setExpanded((previous) => { const next = new Map(previous); next.set(job, !open); return next; }), className: "w-full flex flex-wrap items-center justify-between gap-2 p-4 text-left bg-slate-100 hover:bg-slate-200", children: [
+          h("span", { className: "min-w-0 break-words font-semibold text-sm text-slate-800", children: job || "No job reference" }),
+          h("span", { className: "text-xs text-slate-500", children: (total.length - done) + " pending · " + done + "/" + total.length + " complete " + (open ? "▾" : "▸") })
+        ] }),
+        h("div", { hidden: !open, children: h(CncOrderGroups, { panels: rows, allPanels: total, query, renderGroup }) })
+      ] }, job);
+    }) });
+  }
   function CncOrderGroups({ panels, allPanels, query, renderGroup }) {
     const [expanded, setExpanded] = useState(() => new Map());
     const groups = new Map();
@@ -14876,6 +14908,7 @@ ${xrefStart}
   }
   function CncPage({ cncPanels, isAdmin, onAddPanel, onAddPanelsBulk, onCompletePanel, onCompleteSheet, onRemovePanel }) {
     const [sheetToComplete, setSheetToComplete] = useState(null);
+    const [inputError, setInputError] = useState("");
     const [view, setView] = useState("pending");
     const [q, setQ] = useState("");
     const [addOpen, setAddOpen] = useState(false);
@@ -14901,7 +14934,10 @@ ${xrefStart}
     const filtered = rows.filter((p) => `${p.orderNumber} ${p.jobReference || ""} ${p.sheetNumber} ${p.panelNumber}`.toLowerCase().includes(q.toLowerCase())).sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));
     function submitAdd() {
       if (!form.orderNumber || !form.sheetNumber || !form.panelNumber) return;
-      onAddPanel(form);
+      const cleaned = normalizeCncInput(form);
+      if (!cleaned.orderNumber) { setInputError("Enter an order number containing digits after Order."); return; }
+      setInputError("");
+      onAddPanel(cleaned);
       setForm({ orderNumber: "", jobReference: "", sheetNumber: "", panelNumber: "" });
       setAddOpen(false);
     }
@@ -14944,8 +14980,8 @@ ${xrefStart}
         const errors = [];
         parsed.slice(1).forEach((r, i) => {
           const rowNum = i + 2;
-          const orderNumber = (r[idx.orderNumber] || "").trim();
-          const jobReference = idx.jobReference !== -1 ? (r[idx.jobReference] || "").trim() : "";
+          const orderNumber = normalizeCncInput({orderNumber: r[idx.orderNumber]}).orderNumber;
+          const jobReference = normalizeCncInput({jobReference: idx.jobReference !== -1 ? r[idx.jobReference] : ""}).jobReference;
           const sheetNumber = (r[idx.sheetNumber] || "").trim();
           const panelNumber = (r[idx.panelNumber] || "").trim();
           if (!orderNumber || !sheetNumber || !panelNumber) {
@@ -14967,6 +15003,7 @@ ${xrefStart}
       setBulkOpen(false);
     }
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+      inputError && (0, import_jsx_runtime.jsx)("p", { role: "alert", className: "text-sm text-red-700 p-3", children: inputError }),
       sheetToComplete && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncSheetDialog, { sheet: sheetToComplete, count: cncPanels.filter((p) => p.status === "pending" && p.orderNumber === sheetToComplete.orderNumber && p.sheetNumber === sheetToComplete.sheetNumber).length, onClose: () => setSheetToComplete(null), onConfirm: () => { onCompleteSheet(sheetToComplete.orderNumber, sheetToComplete.sheetNumber); setSheetToComplete(null); } }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         PageHeading,
@@ -15076,7 +15113,7 @@ ${xrefStart}
             ] })
           ] })
         ] }) }),
-        filtered.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyState, { text: view === "pending" ? "No panels currently scheduled for the CNC." : "No completed panels yet." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncOrderGroups, { panels: filtered, allPanels: cncPanels, query: q, renderGroup: (groupPanels) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", { className: "w-full text-sm", children: [
+        filtered.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyState, { text: view === "pending" ? "No panels currently scheduled for the CNC." : "No completed panels yet." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncJobGroups, { panels: filtered, allPanels: cncPanels, query: q, renderGroup: (groupPanels) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", { className: "w-full text-sm", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { className: "bg-slate-50/60", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Order Number" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Job Reference" }),

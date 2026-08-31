@@ -69,3 +69,18 @@ test('orders group exactly and retain their expansion state across refreshed dat
  assert.equal(tree.children[1].children[0]['aria-expanded'],false);
  tree=render({...props,query:'A',panels:rows.slice(0,2)});assert.equal(tree.children.length,1);assert.equal(tree.children[0].children[0]['aria-expanded'],true);
 });
+test('job references are collapsible and separate the same order across different jobs',()=>{
+ const start=html.indexOf('  function CncJobGroups('),end=html.indexOf('\n  function ',start+5);
+ const normStart=html.indexOf('function normalizeCncInput('),normEnd=html.indexOf('  function CncJobGroups(',normStart);
+ let state=new Map();
+ const context={useState:()=>[state,fn=>state=fn(state)],CncOrderGroups:()=>{},import_jsx_runtime:{jsx:(type,props,key)=>({type,...props,key})}};
+ const render=vm.runInNewContext(html.slice(normStart,normEnd)+html.slice(start,end)+';CncJobGroups',context);
+ const panels=[{orderNumber:'1',jobReference:'JOB a',status:'pending'},{orderNumber:'1',jobReference:'job A',status:'completed'},{orderNumber:'1',jobReference:'JOB B',status:'pending'},{orderNumber:'2',jobReference:'',status:'pending'}];
+ const props={panels,allPanels:panels,query:'',renderGroup:rows=>rows};
+ let tree=render(props);assert.equal(tree.children.length,3);assert.equal(tree.children[0].children[0].children[0].children,'Job A');
+ assert.equal(tree.children[2].children[0].children[0].children,'No job reference');
+ assert.equal(tree.children[0].children[1].hidden,true);
+ tree.children[0].children[0].onClick();tree=render(props);assert.equal(tree.children[0].children[1].hidden,false);
+ assert.equal(tree.children[0].children[1].children.allPanels.length,2);
+ assert.equal(tree.children[1].children[1].hidden,true);
+});
