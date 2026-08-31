@@ -13863,6 +13863,7 @@ ${xrefStart}
       persist({ catalog: nextCatalog, variants: nextVariants });
       logTxn({ type: "catalog", desc: `Added ${color} ${material} ${thickness}mm ${fmtDim(width, height)} to the catalog (SKU ${sku})`, qty: "" });
       showToast("Material added to catalog");
+      return nextCatalog.find(item => item.id === catalogId);
     }
     function addCatalogItemsBulk(rows) {
       const newCatalogEntries = [];
@@ -14238,7 +14239,7 @@ ${xrefStart}
               onOpenDetail: setDetailItem
             }
           ),
-          tab === "receive" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReceivePage, { catalog, variants, onSubmit: receiveStock }),
+          tab === "receive" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReceivePage, { catalog, variants, isAdmin, onAddCatalogItem: addCatalogItem, onSubmit: receiveStock }),
           tab === "dispatch" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DispatchPage, { variants, offcuts, onSubmit: dispatchItem }),
           tab === "damage" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DamagePage, { variants, offcuts, reasons, onSubmit: writeOffDamage, onViewLog: () => setDamageLogOpen(true) }),
           tab === "cnc" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -14487,12 +14488,36 @@ ${xrefStart}
       action
     ] });
   }
-  function ReceivePage({ catalog, variants, onSubmit }) {
+  function ReceiveMaterialDialog({ catalog, onSave, onClose }) {
+    const dialogRef = useRef(null);
+    useEffect(() => {
+      const previous = document.activeElement;
+      dialogRef.current?.querySelector('input')?.focus();
+      return () => previous?.focus?.();
+    }, []);
+    function keyDown(event) {
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onClose(); }
+      if (event.key !== "Tab") return;
+      const elements = [...dialogRef.current.querySelectorAll('input, button:not(:disabled)')];
+      const first = elements[0], last = elements[elements.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    }
+    const h = import_jsx_runtime.jsx;
+    return h("div", { className: "fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4", onClick: onClose, children:
+      h("div", { ref: dialogRef, role: "dialog", "aria-modal": true, "aria-label": "Add material to catalog", className: "bg-white rounded-xl shadow-xl w-full max-w-md max-h-[85vh] overflow-y-auto", onKeyDown: keyDown, onClick: event => event.stopPropagation(), children:
+        h(CatalogBulkForm, { catalog, single: true, onSave, onClose })
+      })
+    });
+  }
+
+  function ReceivePage({ catalog, variants, isAdmin, onAddCatalogItem, onSubmit }) {
+    const [addingMaterial, setAddingMaterial] = useState(false);
     const [selected, setSelected] = useState(null);
     const [qty, setQty] = useState("");
     const [ref, setRef] = useState("");
     const [q, setQ] = useState("");
-    const items = catalog.map((c) => ({ ...c, onHand: variants.find((v) => v.catalogId === c.id)?.qty ?? 0 })).filter((c) => `${c.color} ${c.material} ${c.thickness} ${c.sku}`.toLowerCase().includes(q.toLowerCase()));
+    const items = catalog.map((c) => ({ ...c, onHand: variants.find((v) => v.catalogId === c.id)?.qty ?? 0 })).filter((c) => `${c.color} ${c.material} ${c.thickness} ${c.width} ${c.height} ${c.sku}`.toLowerCase().includes(q.toLowerCase()));
     function submit() {
       if (!selected || !qty) return;
       onSubmit({ catalogId: selected.id, qty: Number(qty), ref });
@@ -14502,8 +14527,11 @@ ${xrefStart}
       setQ("");
     }
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+      isAdmin && addingMaterial && (0, import_jsx_runtime.jsx)(ReceiveMaterialDialog, { catalog, onClose: () => setAddingMaterial(false), onSave: rows => { const created = onAddCatalogItem(rows[0]); if (created) { setSelected({ ...created, onHand: 0 }); setQ(""); } } }),
+      isAdmin && (0, import_jsx_runtime.jsx)("div", { className: "mb-4", children: (0, import_jsx_runtime.jsxs)("button", { type: "button", onClick: () => setAddingMaterial(true), className: "flex items-center gap-2 bg-cyan-800 text-white rounded-lg px-4 py-2 text-sm font-semibold", children: [(0, import_jsx_runtime.jsx)(Plus, { size: 16 }), "Add missing material"] }) }),
+
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeading, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Package, { size: 18 }), title: "Receive stock", subtitle: "Add incoming panels against an approved material." }),
-      catalog.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800", children: "No materials in the catalog yet. Ask an admin to add colours/materials/sizes in Settings \u2192 Materials catalog before stock can be received." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "grid grid-cols-3 gap-6", children: [
+      catalog.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800", children: isAdmin ? "No materials in the catalog yet. Use Add missing material to create one here." : "No materials in the catalog yet. Ask an admin to add colours/materials/sizes in Settings \u2192 Materials catalog before stock can be received." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "grid grid-cols-3 gap-6", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "col-span-2 bg-white border border-slate-300 rounded-xl overflow-hidden", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "px-4 py-3 border-b border-slate-100", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "relative", children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Search, { size: 15, className: "absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" }),
@@ -15528,7 +15556,7 @@ function compareCncOrders(a, b) {
     if (!rows.length && !errors.length) errors.push("Add at least one size.");
     return { rows: errors.length ? [] : rows, errors };
   }
-  function CatalogBulkForm({ catalog, onSave, onClose }) {
+  function CatalogBulkForm({ catalog, onSave, onClose, single = false }) {
     const [shared, setShared] = useState({ material: "", color: "" });
     const [lines, setLines] = useState([{ id: 1, thickness: "", width: "", height: "", reorderPoint: "" }]);
     const [errors, setErrors] = useState([]);
@@ -15546,8 +15574,8 @@ function compareCncOrders(a, b) {
       try { onSave(prepared.rows); onClose(); } finally { saving.current = false; }
     }
     return h("form", { onSubmit: submit, noValidate: true, className: "bg-white rounded-xl border border-slate-200 p-4 mb-4 space-y-4", style: { maxWidth: "420px" }, children: [
-      h("h2", { className: "text-sm font-semibold text-slate-800", children: "Add catalog materials" }),
-      h("p", { className: "text-xs text-slate-500", children: "Enter the material and colour once, then add each size." }),
+      h("h2", { className: "text-sm font-semibold text-slate-800", children: single ? "Add material to catalog" : "Add catalog materials" }),
+      h("p", { className: "text-xs text-slate-500", children: single ? "Create the missing material, then enter its received quantity on the Receive screen." : "Enter the material and colour once, then add each size." }),
       ...[["material", "Material", "e.g. Solid Aluminium"], ["color", "Colour", "e.g. White"]].map(([key, label, placeholder]) => h("label", { className: "block text-xs font-semibold text-slate-600", children: [label + " *", h("input", { className: inputCls + " mt-1 w-full", required: true, maxLength: 500, value: shared[key], placeholder, onChange: e => { setShared({ ...shared, [key]: e.target.value }); setErrors([]); } })] }, key)),
       h("div", { children: [
         h("div", { style: { ...rowStyle, marginBottom: "6px" }, className: "text-xs text-slate-600", children: [
@@ -15555,14 +15583,14 @@ function compareCncOrders(a, b) {
         ] }),
         ...lines.map((line, i) => h("div", { style: { ...rowStyle, marginBottom: "8px" }, children: [
           ...["thickness", "width", "height", "reorderPoint"].map((key, n) => h("input", { type: "number", step: n === 3 ? "1" : "any", min: n === 3 ? 0 : "0.001", "aria-label": ["Thickness", "Width", "Height", "Reorder point"][n] + " row " + (i + 1), className: inputCls, style: { minWidth: 0, width: "100%", padding: "9px 6px", height: "38px", fontSize: "12px" }, value: line[key], placeholder: n === 3 ? "0" : "mm", onChange: e => { const value = e.target.value; setLines(current => current.map(item => item.id === line.id ? { ...item, [key]: value } : item)); setErrors([]); } }, key)),
-          h("button", { type: "button", "aria-label": "Remove size row " + (i + 1), title: "Remove size", style: { color: "#dc2626", display: "grid", placeItems: "center", width: "30px", height: "38px" }, onClick: () => { setLines(current => current.filter(item => item.id !== line.id)); setErrors([]); }, children: h(Trash2, { size: 16 }) })
+          !single && h("button", { type: "button", "aria-label": "Remove size row " + (i + 1), title: "Remove size", style: { color: "#dc2626", display: "grid", placeItems: "center", width: "30px", height: "38px" }, onClick: () => { setLines(current => current.filter(item => item.id !== line.id)); setErrors([]); }, children: h(Trash2, { size: 16 }) })
         ] }, line.id))
       ] }),
-      h("button", { type: "button", className: "border border-cyan-800 text-cyan-800 rounded-lg px-3 py-2 text-xs font-semibold", onClick: () => { const id = nextId.current++; setLines(current => [...current, { id, thickness: "", width: "", height: "", reorderPoint: "" }]); }, children: "+ Add line" }),
+      !single && h("button", { type: "button", className: "border border-cyan-800 text-cyan-800 rounded-lg px-3 py-2 text-xs font-semibold", onClick: () => { const id = nextId.current++; setLines(current => [...current, { id, thickness: "", width: "", height: "", reorderPoint: "" }]); }, children: "+ Add line" }),
       h("p", { className: "text-xs text-slate-500", children: "* Required. Leave reorder point blank to use 0." }),
       errors.length > 0 && h("div", { role: "alert", className: "bg-red-50 text-red-800 rounded-lg p-3 text-sm", children: errors.map((error, i) => h("p", { children: error }, i)) }),
       h("div", { className: "flex flex-wrap gap-3 items-center", children: [
-        h("button", { type: "submit", className: "bg-cyan-800 text-white rounded-lg px-4 py-3 text-xs font-semibold", children: count ? `Add ${count} catalog item${count === 1 ? "" : "s"}` : "Add to catalog" }),
+        h("button", { type: "submit", className: "bg-cyan-800 text-white rounded-lg px-4 py-3 text-xs font-semibold", children: single ? "Add material and select" : count ? `Add ${count} catalog item${count === 1 ? "" : "s"}` : "Add to catalog" }),
         h("button", { type: "button", onClick: onClose, className: "text-xs font-semibold text-slate-600 px-3 py-3", children: "Cancel" })
       ] })
     ] });

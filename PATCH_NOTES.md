@@ -1,5 +1,13 @@
 # Security and stock reliability update
 
+## Add missing materials from Receive — 31 August 2026
+
+- Admins can open a matching Add missing material dialog directly from Receive, including when the catalog is empty.
+- Validates required material/colour, dimensions, reorder point and duplicates using the catalog validation. The new catalog item and zero-stock entry are created together, then selected automatically.
+- Enter the delivery quantity and use Add to SOH to receive stock normally. Creating a catalog item alone does not increase stock. Worker permissions are unchanged.
+- Verified end-to-end using isolated test data; all 61 automated checks pass.
+
+
 ## Compact CNC and catalog bulk entry — v2026.08.31.2
 
 ## CNC bulk entry
