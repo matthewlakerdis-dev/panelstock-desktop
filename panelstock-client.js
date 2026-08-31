@@ -7,6 +7,20 @@
   const copy=v=>JSON.parse(JSON.stringify(v));
   const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
   const mapping=(field,value)=>field==='photos'?(value||{}):Object.fromEntries((value||[]).map(v=>[v.id,v]));
+  const sortCncPanels=value=>[...(value||[])].sort((a,b)=>{
+    const left=String(a?.panelNumber??'').trim();
+    const right=String(b?.panelNumber??'').trim();
+    if(!left||!right){
+      if(left===right)return 0;
+      return left?-1:1;
+    }
+    return left.localeCompare(right,'en',{numeric:true,sensitivity:'base'});
+  });
+  const prepareView=view=>{
+    const next=copy(view);
+    if(Array.isArray(next?.cncPanels))next.cncPanels=sortCncPanels(next.cncPanels);
+    return next;
+  };
 
   class Outbox {
     constructor(storage,send,notify=()=>{}) {
@@ -34,11 +48,12 @@
     snapshot(remote,owner) {
       if(this.pending()) {
         if(this.state.owner!==owner)throw Error('Pending changes belong to another user. Log in as '+this.state.owner+'.');
-        return copy(this.state.view);
+        return prepareView(this.state.view);
       }
-      if(this.state.owner===owner && this.state.view && remote.revision<this.state.view.revision)return copy(this.state.view);
-      this.save({owner,view:copy(remote),queue:[],draft:null,blocked:null});
-      return copy(remote);
+      if(this.state.owner===owner && this.state.view && remote.revision<this.state.view.revision)return prepareView(this.state.view);
+      const view=prepareView(remote);
+      this.save({owner,view,queue:[],draft:null,blocked:null});
+      return copy(view);
     }
 
     stage(fields,owner,rendered) {
@@ -50,7 +65,11 @@
         if(fields[field]!==undefined && !(field in next.draft.fields) && rendered?.[field]!==undefined)next.draft.before[field]=copy(rendered[field]);
       }
       for(const field of FIELDS) {
-        if(fields[field]!==undefined){next.draft.fields[field]=copy(fields[field]);next.view[field]=copy(fields[field]);}
+        if(fields[field]!==undefined){
+          const value=field==='cncPanels'?sortCncPanels(fields[field]):copy(fields[field]);
+          next.draft.fields[field]=value;
+          next.view[field]=copy(value);
+        }
       }
       this.save(next);
       if(!this.timer){
