@@ -13027,6 +13027,12 @@
     { id: "r5", label: "Delamination", code: "005" },
     { id: "r6", label: "Missing Panel", code: "007" }
   ];
+  function ensureMissingPanelReason(items) {
+    const list = items?.length ? [...items] : [...DEFAULT_REASONS];
+    if (!list.some((r) => r.code === "007" || r.label === "Missing Panel"))
+      list.push({ id: "r7", label: "Missing Panel", code: "007" });
+    return list.map((r) => r.label === "Missing Panel" ? { ...r, code: "007" } : r);
+  }
   function ensureReasonCodes(reasons) {
     let maxCode = 0;
     reasons.forEach((r) => {
@@ -13601,7 +13607,7 @@ ${xrefStart}
             const data = await PanelStock.snapshot();
             if (!active) return;
             if (data) { setVariants(data.variants || []); setOffcuts(data.offcuts || []);
-          setTransactions(data.transactions || []); setReasons(data.reasons?.length ? data.reasons : DEFAULT_REASONS);
+          setTransactions(data.transactions || []); setReasons(ensureMissingPanelReason(data.reasons));
           setCatalog(data.catalog || []); setPhotos(data.photos || {}); setCncPanels(data.cncPanels || []); setUsername(user.username); setIsAdmin(user.isAdmin); }
             if (user.isAdmin) {
               const response = await PanelStock.apiFetch(BAKED_WORKER_URL + "/config");
@@ -13624,7 +13630,7 @@ ${xrefStart}
         try {
           const data = await PanelStock.snapshot();
           if (data && active) { setVariants(data.variants || []); setOffcuts(data.offcuts || []);
-          setTransactions(data.transactions || []); setReasons(data.reasons?.length ? data.reasons : DEFAULT_REASONS);
+          setTransactions(data.transactions || []); setReasons(ensureMissingPanelReason(data.reasons));
           setCatalog(data.catalog || []); setPhotos(data.photos || {}); setCncPanels(data.cncPanels || []); }
         } catch { if (active) setSyncStatus("offline"); }
         finally { refreshing = false; }
@@ -13671,7 +13677,7 @@ ${xrefStart}
           setVariants(remote.variants || []);
           setOffcuts(remote.offcuts || []);
           setCatalog(remote.catalog || []);
-          setReasons(remote.reasons && remote.reasons.length ? remote.reasons : DEFAULT_REASONS);
+          setReasons(ensureMissingPanelReason(remote.reasons));
           setTransactions(remote.transactions || []);
           setPhotos(remote.photos || {});
           setCncPanels(remote.cncPanels || []);
