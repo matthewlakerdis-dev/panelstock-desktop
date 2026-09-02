@@ -1,0 +1,38 @@
+name: Ensure Missing Panel reason
+on:
+  push:
+    branches: [main]
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure persisted reason lists include Missing Panel
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text()
+          anchor='''  var DEFAULT_REASONS = [\n'''
+          if 'function ensureMissingPanelReason(' not in s:
+              end='''  ];\n'''
+              start=s.find(anchor)
+              if start < 0: raise SystemExit('DEFAULT_REASONS not found')
+              pos=s.find(end,start)
+              if pos < 0: raise SystemExit('DEFAULT_REASONS end not found')
+              pos += len(end)
+              helper='''  function ensureMissingPanelReason(items) {\n    const list = items?.length ? [...items] : [...DEFAULT_REASONS];\n    if (!list.some((r) => r.code === "007" || r.label === "Missing Panel"))\n      list.push({ id: "r7", label: "Missing Panel", code: "007" });\n    return list.map((r) => r.label === "Missing Panel" ? { ...r, code: "007" } : r);\n  }\n'''
+              s=s[:pos]+helper+s[pos:]
+          s=s.replace('setReasons(data.reasons?.length ? data.reasons : DEFAULT_REASONS);','setReasons(ensureMissingPanelReason(data.reasons));')
+          s=s.replace('setReasons(remote.reasons && remote.reasons.length ? remote.reasons : DEFAULT_REASONS);','setReasons(ensureMissingPanelReason(remote.reasons));')
+          p.write_text(s)
+          PY
+      - run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add index.html
+          git commit -m "Ensure Missing Panel appears in damage reasons"
+          git push
