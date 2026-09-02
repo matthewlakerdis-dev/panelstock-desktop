@@ -14415,7 +14415,8 @@ ${xrefStart}
   function StockPage({ variants, offcuts, lowStock, onAddOffcut, onExportExcel, onExportPDF, onOpenDetail }) {
     const [q, setQ] = useState("");
     const [view, setView] = useState("panels");
-    const rows = view === "panels" ? variants : offcuts;
+    const inStockVariants = variants.filter((v) => Number(v.qty) > 0);
+    const rows = view === "panels" ? inStockVariants : offcuts;
     const grouped = useMemo(() => {
       const list = rows.filter(
         (v) => `${v.color} ${v.material} ${v.thickness} ${v.width} ${v.height} ${v.sku}${v.note || ""}`.toLowerCase().includes(q.toLowerCase())
@@ -14464,7 +14465,7 @@ ${xrefStart}
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center bg-slate-100 rounded-lg p-0.5 text-sm font-medium", children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setView("panels"), className: `px-3 py-1.5 rounded-md ${view === "panels" ? "bg-white shadow-sm text-slate-900" : "text-slate-500"}`, children: [
                 "Full panels (",
-                variants.length,
+                inStockVariants.length,
                 ")"
               ] }),
               /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setView("offcuts"), className: `px-3 py-1.5 rounded-md ${view === "offcuts" ? "bg-white shadow-sm text-slate-900" : "text-slate-500"}`, children: [
