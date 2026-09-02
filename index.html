@@ -14252,7 +14252,7 @@ ${xrefStart}
       { key: "cnc", label: "CNC", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncRouterIcon, { size: 20 }) },
       { key: "jobs", label: "Jobs", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Briefcase, { size: 16 }) }
     ];
-    const pageLabels = { stock: "Stock", receive: "Receive", dispatch: "Dispatch", damage: "Damage", cnc: "CNC", jobs: "Jobs", settings: "Settings" };
+    const pageLabels = { stock: "Stock", receive: "Receive", dispatch: "Dispatch", damage: "Damage", cnc: "CNC", jobs: "Jobs", access: "User Access", settings: "Settings" };
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex h-screen bg-slate-50 text-slate-900 font-sans", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("aside", { className: "w-60 bg-slate-900 flex flex-col shrink-0", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "px-4 py-5 border-b border-white/10", children: [
@@ -14263,6 +14263,7 @@ ${xrefStart}
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-xs font-semibold text-slate-500 uppercase tracking-wide px-3 mb-1.5", children: "Operations" }),
           opsItems.map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SideNavItem, { icon: item.icon, label: item.label, active: tab === item.key, onClick: () => setTab(item.key), badge: item.key === "stock" && lowStock.length > 0 ? lowStock.length : null }, item.key)),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-xs font-semibold text-slate-500 uppercase tracking-wide px-3 mb-1.5 mt-5", children: "Settings" }),
+          isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SideNavItem, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(User, { size: 16 }), label: "User Access", active: tab === "access", onClick: () => setTab("access") }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SideNavItem, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Settings2, { size: 16 }), label: "Settings", active: tab === "settings", onClick: () => setTab("settings") })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "px-4 py-3 border-t border-white/10 space-y-2", children: [
@@ -14327,6 +14328,10 @@ ${xrefStart}
             }
           ),
           tab === "jobs" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(JobsPage, { transactions }),
+          tab === "access" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeading, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(User, { size: 18 }), title: "User Access", subtitle: "Manage users, administrators and the tasks each person can use." }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AdminPanel, { username, workerUrl: emailConfig.workerUrl, secret: emailConfig.secret, onLogTxn: logTxn })
+          ] }),
           tab === "settings" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
             SettingsPage,
             {
@@ -16060,6 +16065,8 @@ function compareCncOrders(a, b) {
   function AdminPanel({ username, workerUrl, secret, onLogTxn }) {
     const [loaded, setLoaded] = useState(false);
     const [users, setUsers] = useState([]);
+    const [tasks, setTasks] = useState([]);
+    const [accessUser, setAccessUser] = useState(null);
     const [regCode, setRegCode] = useState("");
     const [newRegCode, setNewRegCode] = useState("");
     const [status, setStatus] = useState(null);
@@ -16083,6 +16090,7 @@ function compareCncOrders(a, b) {
           return;
         }
         setUsers(result.users);
+        setTasks(result.tasks || []);
         setRegCode(result.registrationCode || "");
         setLoaded(true);
       } catch {
@@ -16150,6 +16158,24 @@ function compareCncOrders(a, b) {
         setStatus({ kind: "err", msg: "Could not reach the server." });
       }
     }
+    async function toggleTask(targetUsername, taskCode, allowed) {
+      setBusy(true);
+      setStatus(null);
+      try {
+        const result = await callWorker("/admin/set-task-access", { username, targetUsername, taskCode, allowed });
+        setBusy(false);
+        if (!result.ok) {
+          setStatus({ kind: "err", msg: result.error || "Could not update task access." });
+          return;
+        }
+        setUsers((prev) => prev.map((u) => u.username === targetUsername ? { ...u, taskAccess: result.taskAccess } : u));
+        setStatus({ kind: "ok", msg: `Updated task access for ${targetUsername}. They will log in again to use the change.` });
+        onLogTxn({ type: "user", desc: `Updated task access for ${targetUsername}`, qty: "" });
+      } catch {
+        setBusy(false);
+        setStatus({ kind: "err", msg: "Could not reach the server." });
+      }
+    }
     async function removeUser(targetUsername) {
       if (!window.confirm(`Remove ${targetUsername}? They'll need to register again from scratch to regain access.`)) return;
       setBusy(true);
@@ -16177,6 +16203,7 @@ function compareCncOrders(a, b) {
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { className: "bg-slate-50/60", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "User" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-center text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Admin" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-center text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Tasks" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide" })
           ] }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: users.map((u) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { className: "border-t border-slate-100", children: [
@@ -16185,12 +16212,30 @@ function compareCncOrders(a, b) {
               u.username === username ? " (you)" : ""
             ] }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "flex justify-center", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ToggleSwitch, { checked: u.isAdmin, disabled: busy, onChange: (next) => toggleAdmin(u.username, next) }) }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3 text-center", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setAccessUser(accessUser === u.username ? null : u.username), className: "text-xs font-semibold text-cyan-800 hover:underline", children: accessUser === u.username ? "Close" : "Manage" }) }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center justify-end gap-3", children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => resetPin(u.username), disabled: busy, className: "text-xs font-semibold text-slate-500 hover:text-cyan-800", children: "Reset PIN" }),
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => removeUser(u.username), disabled: busy, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Trash2, { size: 15, className: "text-slate-400 hover:text-red-700" }) })
             ] }) })
           ] }, u.username)) })
-        ] })
+        ] }),
+        accessUser && loaded && (() => {
+          const selectedUser = users.find((u) => u.username === accessUser);
+          if (!selectedUser) return null;
+          return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "border-t border-slate-200 bg-slate-50 p-5", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "mb-3", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "text-sm font-semibold text-slate-800", children: ["Task access for ", selectedUser.username] }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "text-xs text-slate-500 mt-1", children: selectedUser.isAdmin ? "Administrators automatically have every task." : "Choose which Factory and Site tasks this user can open and complete." })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "grid grid-cols-2 gap-2", children: tasks.map((task) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm font-medium text-slate-700", children: task.label }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-xs text-slate-400 capitalize", children: task.app + " app" })
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ToggleSwitch, { checked: !!selectedUser.taskAccess?.[task.code], disabled: busy || selectedUser.isAdmin, onChange: (next) => toggleTask(selectedUser.username, task.code, next) })
+            ] }, task.code)) })
+          ] });
+        })()
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bg-white border border-slate-300 rounded-xl p-5 h-fit", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm font-semibold text-slate-800 mb-1", children: "Registration code" }),
@@ -16260,7 +16305,6 @@ function compareCncOrders(a, b) {
       ...isAdmin ? [{ key: "catalog", label: "Materials Catalog" }] : [],
       ...isAdmin ? [{ key: "reasons", label: "Damage Reasons" }] : [],
       { key: "activity", label: "Activity Log" },
-      ...isAdmin ? [{ key: "users", label: "Users" }] : [],
       ...isAdmin ? [{ key: "email", label: "Email Reports" }] : [],
       ...isAdmin ? [{ key: "backup", label: "Backup & Reset" }] : []
     ];
@@ -16404,10 +16448,6 @@ function compareCncOrders(a, b) {
                 ) })
               ] }, t.id)) })
             ] }) })
-          ] }),
-          section === "users" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeading, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(User, { size: 18 }), title: "Manage Users", subtitle: "Grant or remove admin access, reset a forgotten PIN, or remove a user entirely." }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AdminPanel, { username, workerUrl, secret: workerSecret, onLogTxn })
           ] }),
           section === "email" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "max-w-xl mx-auto", children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeading, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Mail, { size: 18 }), title: "Email Reports", subtitle: "Scheduled reports sent automatically by the server." }),
