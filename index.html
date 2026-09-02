@@ -13025,7 +13025,7 @@
     { id: "r3", label: "Wrong Cut Size", code: "003" },
     { id: "r4", label: "Water / Moisture Damage", code: "004" },
     { id: "r5", label: "Delamination", code: "005" },
-    { id: "r6", label: "Missing Panel", code: "006" }
+    { id: "r6", label: "Missing Panel", code: "007" }
   ];
   function ensureReasonCodes(reasons) {
     let maxCode = 0;
@@ -14007,7 +14007,7 @@ ${xrefStart}
       const reason = reasonObj?.label || "Unspecified";
       const reasonCode = reasonObj?.code || "";
       const damagePhotos = photoObjs || [];
-      if (reasonCode !== "006" && damagePhotos.length === 0) return showToast("At least one photo is required", "err");
+      if (reasonCode !== "007" && damagePhotos.length === 0) return showToast("At least one photo is required", "err");
       const photoIds = damagePhotos.map(() => uid());
       const nextPhotos = { ...photos };
       damagePhotos.forEach((p, i) => {
@@ -14859,7 +14859,7 @@ ${xrefStart}
       setPhotos((prev) => prev.filter((_, i) => i !== idx));
     }
     const selectedReason = reasons.find((r) => r.id === reasonId);
-    const photoRequired = selectedReason?.code !== "006";
+    const photoRequired = selectedReason?.code !== "007";
     function submit() {
       if (!selected || !qty || !reasonId || photoRequired && photos.length === 0) return;
       onSubmit({ itemType: selected.itemType, itemId: selected.id, qty: Number(qty), reasonId, photoObjs: photos });
