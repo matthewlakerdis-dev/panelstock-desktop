@@ -1,0 +1,35 @@
+name: Renumber Missing Panel reason
+on:
+  push:
+    branches: [main]
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Change Missing Panel code to 007
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text()
+          replacements={
+            '{ id: "r6", label: "Missing Panel", code: "006" }':'{ id: "r6", label: "Missing Panel", code: "007" }',
+            'selectedReason?.code !== "006"':'selectedReason?.code !== "007"',
+            'reasonCode !== "006"':'reasonCode !== "007"',
+          }
+          for old,new in replacements.items():
+              if old not in s:
+                  raise SystemExit(f'Expected source not found: {old}')
+              s=s.replace(old,new)
+          p.write_text(s)
+          PY
+      - run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add index.html
+          git commit -m "Use 007 for Missing Panel damage reason"
+          git push
