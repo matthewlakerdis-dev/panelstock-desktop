@@ -1,0 +1,43 @@
+name: Add Missing Panel damage reason
+on:
+  push:
+    branches: [main]
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch Missing Panel damage reason
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text()
+          old='''    { id: "r5", label: "Delamination", code: "005" }\n  ];'''
+          new='''    { id: "r5", label: "Delamination", code: "005" },\n    { id: "r6", label: "Missing Panel", code: "006" }\n  ];'''
+          if old not in s:
+              raise SystemExit('DEFAULT_REASONS block not found')
+          s=s.replace(old,new,1)
+          old='''    function submit() {\n      if (!selected || !qty || !reasonId || photos.length === 0) return;\n      onSubmit({ itemType: selected.itemType, itemId: selected.id, qty: Number(qty), reasonId, photoObjs: photos });'''
+          new='''    const selectedReason = reasons.find((r) => r.id === reasonId);\n    const photoRequired = selectedReason?.code !== "006";\n    function submit() {\n      if (!selected || !qty || !reasonId || photoRequired && photos.length === 0) return;\n      onSubmit({ itemType: selected.itemType, itemId: selected.id, qty: Number(qty), reasonId, photoObjs: photos });'''
+          if old not in s:
+              raise SystemExit('Damage submit block not found')
+          s=s.replace(old,new,1)
+          s=s.replace('''    const canSubmit = selected && qty && reasonId && photos.length > 0;''','''    const canSubmit = selected && qty && reasonId && (!photoRequired || photos.length > 0);''',1)
+          s=s.replace('''              photos.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "text-xs text-neutral-400 mt-1.5", children: "At least one photo is required before this can be submitted." })''','''              photos.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "text-xs text-neutral-400 mt-1.5", children: photoRequired ? "At least one photo is required before this can be submitted." : "Photo is optional for Missing Panel." })''',1)
+          old='''    function writeOffDamage({ itemType, itemId, qty, reasonId, photoObjs }) {\n      if (!photoObjs || photoObjs.length === 0) return showToast("At least one photo is required", "err");\n      const reasonObj = reasons.find((r) => r.id === reasonId);\n      const reason = reasonObj?.label || "Unspecified";\n      const reasonCode = reasonObj?.code || "";\n      const photoIds = photoObjs.map(() => uid());\n      const nextPhotos = { ...photos };\n      photoObjs.forEach((p, i) => {'''
+          new='''    function writeOffDamage({ itemType, itemId, qty, reasonId, photoObjs }) {\n      const reasonObj = reasons.find((r) => r.id === reasonId);\n      const reason = reasonObj?.label || "Unspecified";\n      const reasonCode = reasonObj?.code || "";\n      const damagePhotos = photoObjs || [];\n      if (reasonCode !== "006" && damagePhotos.length === 0) return showToast("At least one photo is required", "err");\n      const photoIds = damagePhotos.map(() => uid());\n      const nextPhotos = { ...photos };\n      damagePhotos.forEach((p, i) => {'''
+          if old not in s:
+              raise SystemExit('writeOffDamage block not found')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+          PY
+      - run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add index.html
+          git commit -m "Add Missing Panel damage reason"
+          git push
