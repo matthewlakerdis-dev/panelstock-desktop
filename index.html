@@ -14720,12 +14720,18 @@ ${xrefStart}
       ] })
     ] });
   }
-  function ItemPicker({ variants, offcuts, selected, onSelect }) {
+  function ItemPicker({ variants, offcuts, selected, onSelect, sortLikeSoh = false }) {
     const [q, setQ] = useState("");
-    const items = [
+    const availableItems = [
       ...variants.filter((v) => v.qty > 0).map((v) => ({ ...v, itemType: "variant" })),
       ...offcuts.filter((o) => o.qty > 0).map((o) => ({ ...o, itemType: "offcut" }))
     ].filter((i) => `${i.color} ${i.material} ${i.thickness} ${i.sku}`.toLowerCase().includes(q.toLowerCase()));
+    const sortSohItems = (items) => groupByMaterialLargestFirst(items).flatMap((g) =>
+      [...g.items].sort((a, b) => a.color.localeCompare(b.color) || b.width * b.height - a.width * a.height)
+    );
+    const items = sortLikeSoh
+      ? [...sortSohItems(availableItems.filter((i) => i.itemType === "variant")), ...sortSohItems(availableItems.filter((i) => i.itemType === "offcut"))]
+      : availableItems;
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bg-white border border-slate-300 rounded-xl overflow-hidden", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "px-4 py-3 border-b border-slate-100", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "relative", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Search, { size: 15, className: "absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" }),
@@ -14869,7 +14875,7 @@ ${xrefStart}
         }
       ),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "grid grid-cols-3 gap-6", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "col-span-2", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ItemPicker, { variants, offcuts, selected, onSelect: setSelected }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "col-span-2", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ItemPicker, { variants, offcuts, selected, onSelect: setSelected, sortLikeSoh: true }) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bg-white border border-slate-300 rounded-xl p-5 h-fit sticky top-0", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SelectedItemSummary, { selected }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Reason", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { className: inputCls, value: reasonId, onChange: (e) => setReasonId(e.target.value), children: reasons.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("option", { value: r.id, children: [
