@@ -77,6 +77,9 @@ test('web manages the shared schedule',()=>{
  assert.match(html,/e\(ScheduleCalendarIcon,\{size:19,className:"text-cyan-700"\}\)/);
  assert.match(html,/className:"fixed left-1\/2 top-1\/2 z-\[70\]/);
  assert.match(html,/type==="date"\?e\(ModernDatePicker/);
+ assert.match(html,/value:filterDate,onChange:setFilterDate/);
+ assert.match(html,/value:panel\.order\[key\]\|\|"",required,disabled/);
+ assert.match(html,/label:"Expiry date",value:row\.expiryDate/);
  assert.match(html,/function ScheduleSettingsPanel/);
  assert.match(html,/BAKED_WORKER_URL\+"\/schedule\/settings"/);
  const schedule=html.slice(html.indexOf('function SchedulePage'),html.indexOf('function OrdersPage'));
