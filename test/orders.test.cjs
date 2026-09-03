@@ -15,6 +15,8 @@ test('desktop web exposes permission-aware order management',()=>{
  assert.match(html,/async function deleteProject/);
  assert.match(html,/google\.com\/maps\/search\/\?api=1&query=/);
  assert.match(html,/Open in Google Maps/);
+ assert.match(html,/Open address in Google Maps/);
+ assert.match(html,/GoogleMapsButtonIcon/);
  assert.match(html,/address/);
  assert.match(html,/projectRecords/);
  assert.match(html,/method: "DELETE"/);
