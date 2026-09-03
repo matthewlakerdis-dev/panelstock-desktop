@@ -66,6 +66,9 @@ test('web manages the shared schedule',()=>{
  assert.match(html,/viewMode==="day"&&orientation==="horizontal"\?horizontalTimeline/);
  assert.match(html,/const moveDate=direction/);
  assert.match(html,/"Today"/);
+ assert.match(html,/function openTvDisplay\(\)/);
+ assert.match(html,/\/schedule\/share/);
+ assert.match(html,/"TV display"/);
  assert.match(html,/var todayStr = \(\) => localDateStr\(\)/);
  assert.match(html,/setFilterDate\(localDateStr\(next\)\)/);
  assert.match(html,/dateHeading/);
