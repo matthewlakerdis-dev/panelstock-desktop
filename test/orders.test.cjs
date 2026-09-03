@@ -74,6 +74,8 @@ test('web manages the shared schedule',()=>{
  assert.match(html,/"Select date"/);
  assert.match(html,/children:"Cancel"/);
  assert.match(html,/children:"OK"/);
+ assert.match(html,/e\(ScheduleCalendarIcon,\{size:19,className:"text-cyan-700"\}\)/);
+ assert.match(html,/className:"fixed left-1\/2 top-1\/2 z-\[70\]/);
  assert.match(html,/type==="date"\?e\(ModernDatePicker/);
  assert.match(html,/function ScheduleSettingsPanel/);
  assert.match(html,/BAKED_WORKER_URL\+"\/schedule\/settings"/);
