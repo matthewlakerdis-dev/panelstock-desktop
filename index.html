@@ -58,6 +58,10 @@
 </div>
 <script>
   window.onerror = function (message, source, lineno, colno, err) {
+    var errorText = String(message || (err && err.message) || '');
+    if (/ResizeObserver loop (?:limit exceeded|completed with undelivered notifications)/i.test(errorText)) {
+      return true;
+    }
     var root = document.getElementById('root');
     var msg = (err && err.stack) ? err.stack : String(message);
     root.innerHTML =

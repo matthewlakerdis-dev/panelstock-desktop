@@ -9,6 +9,7 @@ test('desktop scripts parse and do not contain the shared backend credential',()
  for(const match of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g))if(match[1].trim())new vm.Script(match[1]);
  new vm.Script(fs.readFileSync(path.join(__dirname,'../panelstock-client.js'),'utf8'));
  assert.ok(!html.includes('BAKED_SHARED_SECRET'));assert.ok(!html.includes('.slice(0, 800)'));
+ assert.match(html,/ResizeObserver loop \(\?:limit exceeded\|completed with undelivered notifications\)/);
  const filter=html.match(/const dispatches = transactions.filter\(([^;]+)\);/)[1];
  const result=vm.runInNewContext(`transactions.filter(${filter})`,{transactions:[{type:'dispatch',qty:2},{type:'dispatch',qty:5,voided:true}]});
  assert.equal(result.length,1);assert.equal(result[0].qty,2);
