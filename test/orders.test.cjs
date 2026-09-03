@@ -116,4 +116,8 @@ test('new user login names use first initial and surname',()=>{
  assert.match(html,/crypto\.getRandomValues/);
  assert.match(html,/children:"Generate PIN"/);
  assert.match(html,/checked:newUser\.makeAdmin,disabled:busy,onChange:next/);
+ assert.match(html,/title:newUser\.title,location:newUser\.location,email:newUser\.email/);
+ assert.match(html,/label:"Email address \(optional\)"/);
+ assert.match(html,/if\(accessUser&&editUser\)/);
+ assert.match(html,/children:"Back to users"/);
 });
