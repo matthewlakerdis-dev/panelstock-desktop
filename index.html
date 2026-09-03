@@ -15569,7 +15569,7 @@ function compareCncOrders(a, b) {
     function changeSequenceProject(value) {
       setSequenceProject(value);
       const match = projectSequences.find((entry) => entry.project.toLocaleLowerCase() === value.trim().toLocaleLowerCase());
-      if (match) setSequenceNext(match.nextNumber);
+      setSequenceNext(match ? match.nextNumber : 1);
     }
     async function saveProjectSequence(event) {
       event.preventDefault();
@@ -15625,7 +15625,7 @@ function compareCncOrders(a, b) {
       canManage && e("form", { onSubmit: saveProjectSequence, className: "mb-4 rounded-xl border border-slate-300 bg-white p-4" },
         e("div", { className: "mb-3" }, e("h3", { className: "text-sm font-semibold text-slate-900" }, "Project order numbering"), e("p", { className: "mt-1 text-xs text-slate-500" }, "Set the next unused order number for a project. New projects start at Order 1.")),
         e("div", { className: "grid gap-3 sm:grid-cols-[minmax(0,1fr)_180px_auto] sm:items-end" },
-          e("label", { className: "text-xs font-medium text-slate-600" }, "Project", e("input", { list: "order-sequence-projects", value: sequenceProject, onChange: (event) => changeSequenceProject(event.target.value), placeholder: "Project name", className: "mt-1.5 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm" }), e("datalist", { id: "order-sequence-projects" }, projectSequences.map((entry) => e("option", { key: entry.project, value: entry.project }, `Last used: ${entry.lastUsed || "none"}`)))),
+          e("label", { className: "text-xs font-medium text-slate-600" }, "Active project", e("select", { required: true, value: sequenceProject, onChange: (event) => changeSequenceProject(event.target.value), className: "mt-1.5 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm" }, e("option", { value: "" }, "Select an active project"), projects.map((project) => e("option", { key: project.id || project.name, value: project.name }, project.name)))),
           e("label", { className: "text-xs font-medium text-slate-600" }, "Next order number", e("input", { type: "number", min: "1", max: "999999", step: "1", value: sequenceNext, onChange: (event) => setSequenceNext(event.target.value), className: "mt-1.5 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm" })),
           e("button", { type: "submit", disabled: savingSequence, className: "h-10 rounded-lg bg-cyan-800 px-4 text-sm font-semibold text-white disabled:opacity-50" }, savingSequence ? "Saving..." : "Set next number")
         )
