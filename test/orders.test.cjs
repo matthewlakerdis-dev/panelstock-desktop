@@ -58,4 +58,7 @@ test('web manages the shared schedule',()=>{
  assert.match(html,/schedule\.view/);
  assert.match(html,/schedule\.manage/);
  assert.match(html,/BAKED_WORKER_URL\+"\/schedule"/);
+ assert.match(html,/Select a person/);
+ assert.match(html,/All people/);
+ assert.match(html,/Schedule date/);
 });
