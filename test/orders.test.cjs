@@ -51,7 +51,7 @@ test('desktop dispatch uses the same material sorting as stock and damage',()=>{
 
 test('web manages the shared schedule',()=>{
  const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
- assert.match(html,/function SchedulePage\(\{ canManage \}\)/);
+ assert.match(html,/function SchedulePage\(\{ canManage,canManageCnc \}\)/);
  assert.match(html,/function ScheduleCalendarIcon/);
  assert.match(html,/New schedule entry/);
  assert.match(html,/Save schedule/);
@@ -91,6 +91,12 @@ test('administrators create users and the login screen has no self-registration 
  assert.match(html,/"Save role"/);
  assert.match(html,/children:"Custom access \(no role\)"/);
  assert.match(html,/Task access is controlled by the assigned role/);
+ assert.match(html,/name:"CNC tracker",codes:\["factory\.cnc","site\.cnc\.view","schedule\.cnc\.view","schedule\.cnc\.manage"\]/);
+ assert.match(html,/canManageCnc:can\("schedule\.cnc\.manage"\)/);
+ assert.match(html,/"Schedule type"/);
+ assert.match(html,/"CNC work"/);
+ assert.match(html,/name:"Schedule",codes:\["schedule\.view","schedule\.manage"\]/);
+ assert.match(html,/Object\.fromEntries\(codes\.map\(code=>\[code,next\]\)\)/);
  const login=html.slice(html.indexOf('function LoginScreen'),html.indexOf('function ToggleSwitch'));
  assert.doesNotMatch(login,/children: "Register"/);
 });
