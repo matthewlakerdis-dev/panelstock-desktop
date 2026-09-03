@@ -42,3 +42,9 @@ test('desktop web exposes permission-aware order management',()=>{
  assert.match(html,/\?download=1&ticket=/);
  assert.match(client,/taskAccess:result\.taskAccess\|\|\{\}/);
 });
+
+test('desktop dispatch uses the same material sorting as stock and damage',()=>{
+ const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
+ const dispatch=html.slice(html.indexOf('function DispatchPage'),html.indexOf('function DamagePage'));
+ assert.match(dispatch,/ItemPicker[^\n]+sortLikeSoh: true/);
+});

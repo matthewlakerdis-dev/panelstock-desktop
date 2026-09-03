@@ -14839,7 +14839,7 @@ ${xrefStart}
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeading, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Truck, { size: 18 }), title: "Dispatch to a job", subtitle: "Pull material from stock and send it out to a job." }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "grid grid-cols-3 gap-6", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "col-span-2", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ItemPicker, { variants, offcuts, selected, onSelect: setSelected }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "col-span-2", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ItemPicker, { variants, offcuts, selected, onSelect: setSelected, sortLikeSoh: true }) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bg-white border border-slate-300 rounded-xl p-5 h-fit sticky top-0", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SelectedItemSummary, { selected }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Order number", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, value: jobRef, onChange: (e) => setJobRef(e.target.value), placeholder: "e.g. WO-1042" }) }),
