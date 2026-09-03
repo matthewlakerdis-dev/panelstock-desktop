@@ -48,3 +48,13 @@ test('desktop dispatch uses the same material sorting as stock and damage',()=>{
  const dispatch=html.slice(html.indexOf('function DispatchPage'),html.indexOf('function DamagePage'));
  assert.match(dispatch,/ItemPicker[^\n]+sortLikeSoh: true/);
 });
+
+test('web manages the shared schedule',()=>{
+ const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
+ assert.match(html,/function SchedulePage\(\{ canManage \}\)/);
+ assert.match(html,/New schedule entry/);
+ assert.match(html,/Save schedule/);
+ assert.match(html,/schedule\.view/);
+ assert.match(html,/schedule\.manage/);
+ assert.match(html,/BAKED_WORKER_URL\+"\/schedule"/);
+});
