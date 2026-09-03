@@ -16243,6 +16243,7 @@ function compareCncOrders(a, b) {
     const [users, setUsers] = useState([]);
     const [tasks, setTasks] = useState([]);
     const [accessUser, setAccessUser] = useState(null);
+    const [editUser, setEditUser] = useState(null);
     const [regCode, setRegCode] = useState("");
     const [newRegCode, setNewRegCode] = useState("");
     const [newUser, setNewUser] = useState({ username: "", displayName: "", temporaryPin: "", makeAdmin: false });
@@ -16361,6 +16362,9 @@ function compareCncOrders(a, b) {
         setStatus({ kind: "err", msg: "Could not reach the server." });
       }
     }
+    function openUser(user){setAccessUser(user.username);setEditUser({...user});setStatus(null);}
+    async function saveUser(next=editUser){if(!next)return;setBusy(true);setStatus(null);try{const result=await callWorker("/admin/update-user",{username,targetUsername:next.username,displayName:next.displayName,title:next.title,location:next.location,active:next.active,isAdmin:next.isAdmin});setBusy(false);if(!result.ok){setStatus({kind:"err",msg:result.error||"Could not update user."});return;}setUsers(prev=>prev.map(user=>user.username===result.user.username?result.user:user));setEditUser(result.user);setStatus({kind:"ok",msg:`${result.user.displayName} was updated.`});onLogTxn({type:"user",desc:`Updated user ${result.user.username}`,qty:""});}catch{setBusy(false);setStatus({kind:"err",msg:"Could not reach the server."});}}
+    async function toggleActive(user){await saveUser({...user,active:!user.active});}
     async function removeUser(targetUsername) {
       if (!window.confirm(`Remove ${targetUsername}? They'll need to register again from scratch to regain access.`)) return;
       setBusy(true);
@@ -16386,21 +16390,20 @@ function compareCncOrders(a, b) {
         status && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: `px-5 py-3 text-sm border-b border-slate-100 ${status.kind === "err" ? "text-red-800 bg-red-50" : "text-green-800 bg-green-50"}`, children: status.msg }),
         loaded && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", { className: "w-full text-sm", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { className: "bg-slate-50/60", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "User" }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-center text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Admin" }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-center text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Tasks" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Account" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Title" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Location" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-center text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Status" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide" })
           ] }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: users.map((u) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { className: "border-t border-slate-100", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("td", { className: "px-4 py-3 font-medium text-slate-800", children: [
-              u.username,
-              u.username === username ? " (you)" : ""
-            ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "flex justify-center", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ToggleSwitch, { checked: u.isAdmin, disabled: busy, onChange: (next) => toggleAdmin(u.username, next) }) }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3 text-center", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setAccessUser(accessUser === u.username ? null : u.username), className: "text-xs font-semibold text-cyan-800 hover:underline", children: accessUser === u.username ? "Close" : "Manage" }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div",{className:"font-medium text-slate-800",children:u.displayName||u.username}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div",{className:"text-xs text-slate-400",children:`${u.username}${u.username===username?" (you)":""}`})]}) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3 text-slate-600", children:u.title||"—" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3 text-slate-600", children:u.location||"—" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3 text-center", children:/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span",{className:`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${u.active?"bg-emerald-50 text-emerald-700":"bg-slate-100 text-slate-500"}`,children:u.active?"Active":"Inactive"}) }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center justify-end gap-3", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => resetPin(u.username), disabled: busy, className: "text-xs font-semibold text-slate-500 hover:text-cyan-800", children: "Reset PIN" }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => removeUser(u.username), disabled: busy, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Trash2, { size: 15, className: "text-slate-400 hover:text-red-700" }) })
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => openUser(u), disabled: busy, className: "rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-cyan-800", children: "Edit" }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => toggleActive(u), disabled: busy||u.username===username, className:`rounded-lg border px-3 py-1.5 text-xs font-semibold ${u.active?"border-amber-300 text-amber-700":"border-emerald-300 text-emerald-700"}`, children:u.active?"Deactivate":"Activate" })
             ] }) })
           ] }, u.username)) })
         ] }),
@@ -16408,10 +16411,9 @@ function compareCncOrders(a, b) {
           const selectedUser = users.find((u) => u.username === accessUser);
           if (!selectedUser) return null;
           return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "border-t border-slate-200 bg-slate-50 p-5", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "mb-3", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "text-sm font-semibold text-slate-800", children: ["Task access for ", selectedUser.username] }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "text-xs text-slate-500 mt-1", children: selectedUser.isAdmin ? "Administrators automatically have every task." : "Choose which Factory and Site tasks this user can open and complete." })
-            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "mb-4 flex items-center justify-between", children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div",{className:"text-sm font-semibold text-slate-800",children:`User settings · ${selectedUser.username}`}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p",{className:"mt-1 text-xs text-slate-500",children:"Account details, administrator access, tasks and PIN reset."})]}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button",{onClick:()=>{setAccessUser(null);setEditUser(null);},className:"text-xs font-semibold text-slate-500",children:"Close"})] }),
+            editUser&&/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"mb-5 grid grid-cols-2 gap-3",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field,{label:"Display name",children:/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input",{className:inputCls,value:editUser.displayName||"",onChange:event=>setEditUser(value=>({...value,displayName:event.target.value}))})}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field,{label:"Title",children:/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input",{className:inputCls,value:editUser.title||"",onChange:event=>setEditUser(value=>({...value,title:event.target.value})),placeholder:"e.g. Site Supervisor"})}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field,{label:"Location",children:/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input",{className:inputCls,value:editUser.location||"",onChange:event=>setEditUser(value=>({...value,location:event.target.value})),placeholder:"e.g. Factory or Brisbane"})}),/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span",{className:"text-sm font-medium text-slate-700",children:"Administrator"}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ToggleSwitch,{checked:!!editUser.isAdmin,disabled:busy,onChange:next=>setEditUser(value=>({...value,isAdmin:next}))})]}),/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"col-span-2 flex gap-2",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button",{onClick:()=>saveUser(),disabled:busy,className:"rounded-lg bg-cyan-800 px-4 py-2 text-xs font-semibold text-white",children:"Save account"}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button",{onClick:()=>resetPin(selectedUser.username),disabled:busy,className:"rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-600",children:"Reset PIN"})]})]}),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "mb-3", children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm font-semibold text-slate-800", children: "Task access" }),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "text-xs text-slate-500 mt-1", children: selectedUser.isAdmin ? "Administrators automatically have every task." : "Choose which Factory, Site and Web tasks this user can access." })] }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "grid grid-cols-2 gap-2", children: tasks.map((task) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2", children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
                 /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm font-medium text-slate-700", children: task.label }),

@@ -79,6 +79,11 @@ test('administrators create users and the login screen has no self-registration 
  const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
  assert.match(html,/\/admin\/create-user/);
  assert.match(html,/children: "Create user"/);
+ assert.match(html,/\/admin\/update-user/);
+ assert.match(html,/children:u\.active\?"Active":"Inactive"/);
+ assert.match(html,/children:u\.active\?"Deactivate":"Activate"/);
+ assert.match(html,/placeholder:"e\.g\. Site Supervisor"/);
+ assert.match(html,/placeholder:"e\.g\. Factory or Brisbane"/);
  const login=html.slice(html.indexOf('function LoginScreen'),html.indexOf('function ToggleSwitch'));
  assert.doesNotMatch(login,/children: "Register"/);
 });
