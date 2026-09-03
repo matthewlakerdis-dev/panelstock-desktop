@@ -68,6 +68,10 @@ test('web manages the shared schedule',()=>{
  assert.match(html,/"Today"/);
  assert.match(html,/dateHeading/);
  assert.match(html,/function ScheduleTimeField/);
+ assert.match(html,/function ModernDatePicker/);
+ assert.match(html,/aria-label":"Previous month"/);
+ assert.match(html,/aria-label":"Next month"/);
+ assert.match(html,/type==="date"\?e\(ModernDatePicker/);
  assert.match(html,/function ScheduleSettingsPanel/);
  assert.match(html,/BAKED_WORKER_URL\+"\/schedule\/settings"/);
  const schedule=html.slice(html.indexOf('function SchedulePage'),html.indexOf('function OrdersPage'));
