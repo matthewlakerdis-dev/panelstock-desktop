@@ -11,6 +11,9 @@ test('desktop scripts parse and do not contain the shared backend credential',()
  assert.ok(!html.includes('BAKED_SHARED_SECRET'));assert.ok(!html.includes('.slice(0, 800)'));
  assert.match(html,/ResizeObserver loop \(\?:limit exceeded\|completed with undelivered notifications\)/);
  assert.match(html,/saveUser\(editUser,true\)/);
+ const cncPage=html.slice(html.indexOf('function CncPage('),html.indexOf('function OrdersPage('));
+ assert.match(cncPage,/children: "Complete sheet"/);
+ assert.doesNotMatch(cncPage,/children: "Complete panel"/);
  const filter=html.match(/const dispatches = transactions.filter\(([^;]+)\);/)[1];
  const result=vm.runInNewContext(`transactions.filter(${filter})`,{transactions:[{type:'dispatch',qty:2},{type:'dispatch',qty:5,voided:true}]});
  assert.equal(result.length,1);assert.equal(result[0].qty,2);
