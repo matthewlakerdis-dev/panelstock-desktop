@@ -14232,6 +14232,13 @@ ${xrefStart}
       if (o) return { ...o, itemType: "offcut" };
       return null;
     }
+    const can = (task) => isAdmin || taskAccess[task] !== false;
+    const permittedPages = [
+      ['stock','factory.stock'],['receive','factory.receive'],['dispatch','factory.dispatch'],['damage','factory.damage'],['cnc','factory.cnc'],
+      ['orders','site.orders.view'],['schedule',can('schedule.view')?'schedule.view':'schedule.cnc.view'],['jobs','factory.jobs'],
+      ...(isAdmin?[['access',null]]:[]),['settings','factory.settings']
+    ].filter(([,task])=>task===null||can(task)).map(([page])=>page);
+    useEffect(()=>{if(username&&!permittedPages.includes(tab)&&permittedPages[0])setTab(permittedPages[0]);},[username,tab,taskAccess,isAdmin]);
     if (loading) {
       return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "min-h-screen flex items-center justify-center bg-slate-50", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-slate-400 font-mono text-sm", children: "Loading stock data\u2026" }) });
     }
@@ -14246,16 +14253,15 @@ ${xrefStart}
         }
       );
     }
-    const can = (task) => isAdmin || taskAccess[task] !== false;
     const opsItems = [
-      { key: "stock", label: "Stock", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Layers, { size: 16 }) },
-      { key: "receive", label: "Receive", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Package, { size: 16 }) },
-      { key: "dispatch", label: "Dispatch", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Truck, { size: 16 }) },
-      { key: "damage", label: "Damage", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AlertTriangle, { size: 16 }) },
+      ...(can("factory.stock") ? [{ key: "stock", label: "Stock", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Layers, { size: 16 }) }] : []),
+      ...(can("factory.receive") ? [{ key: "receive", label: "Receive", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Package, { size: 16 }) }] : []),
+      ...(can("factory.dispatch") ? [{ key: "dispatch", label: "Dispatch", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Truck, { size: 16 }) }] : []),
+      ...(can("factory.damage") ? [{ key: "damage", label: "Damage", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AlertTriangle, { size: 16 }) }] : []),
       ...(can("factory.cnc") ? [{ key: "cnc", label: "CNC", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncRouterIcon, { size: 20 }) }] : []),
       ...(can("site.orders.view") ? [{ key: "orders", label: "Orders", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ClipboardList, { size: 16 }) }] : []),
       ...(can("schedule.view")||can("schedule.cnc.view") ? [{ key: "schedule", label: "Schedule", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ScheduleCalendarIcon, { size: 16 }) }] : []),
-      { key: "jobs", label: "Jobs", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Briefcase, { size: 16 }) }
+      ...(can("factory.jobs") ? [{ key: "jobs", label: "Jobs", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Briefcase, { size: 16 }) }] : [])
     ];
     const pageLabels = { stock: "Stock", receive: "Receive", dispatch: "Dispatch", damage: "Damage", cnc: "CNC", orders: "Orders", schedule: "Schedule", jobs: "Jobs", access: "User Access", settings: "Settings" };
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex h-screen bg-slate-50 text-slate-900 font-sans", children: [
@@ -14269,7 +14275,7 @@ ${xrefStart}
           opsItems.map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SideNavItem, { icon: item.icon, label: item.label, active: tab === item.key, onClick: () => setTab(item.key), badge: item.key === "stock" && lowStock.length > 0 ? lowStock.length : null }, item.key)),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-xs font-semibold text-slate-500 uppercase tracking-wide px-3 mb-1.5 mt-5", children: "Settings" }),
           isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SideNavItem, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(User, { size: 16 }), label: "User Access", active: tab === "access", onClick: () => setTab("access") }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SideNavItem, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Settings2, { size: 16 }), label: "Settings", active: tab === "settings", onClick: () => setTab("settings") })
+          can("factory.settings") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SideNavItem, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Settings2, { size: 16 }), label: "Settings", active: tab === "settings", onClick: () => setTab("settings") })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "px-4 py-3 border-t border-white/10 space-y-2", children: [
           syncStatus !== "synced" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center gap-1.5 text-xs text-amber-300", children: [
@@ -14305,7 +14311,7 @@ ${xrefStart}
           ] }) })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("main", { className: "flex-1 overflow-y-auto p-8", children: [
-          tab === "stock" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          tab === "stock" && can("factory.stock") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
             StockPage,
             {
               variants,
@@ -14317,10 +14323,10 @@ ${xrefStart}
               onOpenDetail: setDetailItem
             }
           ),
-          tab === "receive" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReceivePage, { catalog, variants, isAdmin, onReceiveMaterial: receiveMaterialStock, onAddCatalogItem: addCatalogItem, onSubmit: receiveStock }),
-          tab === "dispatch" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DispatchPage, { variants, offcuts, onSubmit: dispatchItem }),
-          tab === "damage" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DamagePage, { variants, offcuts, reasons, onSubmit: writeOffDamage, onViewLog: () => setDamageLogOpen(true) }),
-          tab === "cnc" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          tab === "receive" && can("factory.receive") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReceivePage, { catalog, variants, isAdmin, onReceiveMaterial: receiveMaterialStock, onAddCatalogItem: addCatalogItem, onSubmit: receiveStock }),
+          tab === "dispatch" && can("factory.dispatch") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DispatchPage, { variants, offcuts, onSubmit: dispatchItem }),
+          tab === "damage" && can("factory.damage") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DamagePage, { variants, offcuts, reasons, onSubmit: writeOffDamage, onViewLog: () => setDamageLogOpen(true) }),
+          tab === "cnc" && can("factory.cnc") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
             CncPage,
             {
               cncPanels,
@@ -14334,12 +14340,12 @@ ${xrefStart}
           ),
           tab === "orders" && can("site.orders.view") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(OrdersPage, { canCreate: can("site.orders.create"), canManage: can("site.orders.manage"), isAdmin }),
           tab === "schedule" && (can("schedule.view")||can("schedule.cnc.view")) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchedulePage, { canManage: can("schedule.manage"), canManageCnc:can("schedule.cnc.manage") }),
-          tab === "jobs" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(JobsPage, { transactions }),
+          tab === "jobs" && can("factory.jobs") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(JobsPage, { transactions }),
           tab === "access" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeading, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(User, { size: 18 }), title: "User Access", subtitle: "Manage users, administrators and the tasks each person can use." }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AdminPanel, { username, workerUrl: emailConfig.workerUrl, secret: emailConfig.secret, onLogTxn: logTxn })
           ] }),
-          tab === "settings" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          tab === "settings" && can("factory.settings") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
             SettingsPage,
             {
               reasons,
