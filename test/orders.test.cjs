@@ -86,6 +86,11 @@ test('administrators create users and the login screen has no self-registration 
  assert.match(html,/children:u\.active\?"Deactivate":"Activate"/);
  assert.match(html,/placeholder:"e\.g\. Site Supervisor"/);
  assert.match(html,/placeholder:"e\.g\. Factory or Brisbane"/);
+ assert.match(html,/\/admin\/roles/);
+ assert.match(html,/children:"\+ Create role"/);
+ assert.match(html,/"Save role"/);
+ assert.match(html,/children:"Custom access \(no role\)"/);
+ assert.match(html,/Task access is controlled by the assigned role/);
  const login=html.slice(html.indexOf('function LoginScreen'),html.indexOf('function ToggleSwitch'));
  assert.doesNotMatch(login,/children: "Register"/);
 });
