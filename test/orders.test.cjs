@@ -60,5 +60,7 @@ test('web manages the shared schedule',()=>{
  assert.match(html,/BAKED_WORKER_URL\+"\/schedule"/);
  assert.match(html,/Select a person/);
  assert.match(html,/All people/);
- assert.match(html,/Schedule date/);
+ assert.match(html,/Orientation/);
+ assert.match(html,/horizontalTimeline/);
+ assert.match(html,/viewMode==="day"/);
 });
