@@ -102,8 +102,11 @@ test('administrators create users and the login screen has no self-registration 
 });
 test('new user login names use first initial and surname',()=>{
  const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
- assert.match(html,/function loginNameFor\(displayName\)/);
+ assert.match(html,/function loginNameFor\(displayName,excludeUsername=""\)/);
  assert.match(html,/parts\[0\]\[0\]\+parts\[parts\.length-1\]/);
  assert.match(html,/label:"Login name"/);
  assert.match(html,/readOnly:true/);
+ assert.match(html,/function standardiseLogin\(user\)/);
+ assert.match(html,/\/admin\/rename-user/);
+ assert.match(html,/old login will work as an alias for 14 days/);
 });
