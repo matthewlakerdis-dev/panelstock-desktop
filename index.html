@@ -15719,10 +15719,6 @@ function compareCncOrders(a, b) {
           setError(result.error || "Login failed.");
           return;
         }
-        if (result.isNewUser) {
-          setError("No account with that username yet \u2014 switch to Register to create one.");
-          return;
-        }
         if (result.mustChangePin) setStep("setpin");
         else onLoggedIn(uname, result.isAdmin, rememberMe);
       } catch {
@@ -15785,12 +15781,8 @@ function compareCncOrders(a, b) {
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-slate-400 text-sm mt-1", children: "PanelStock" })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bg-white rounded-xl shadow-xl p-6", children: [
-        step === "form" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex gap-1.5 mb-4 bg-slate-100 rounded-lg p-1", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => switchMode("login"), className: `flex-1 py-2 rounded-md text-sm font-semibold ${mode === "login" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`, children: "Log in" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => switchMode("register"), className: `flex-1 py-2 rounded-md text-sm font-semibold ${mode === "register" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`, children: "Register" })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { className: "text-sm font-semibold text-slate-800 mb-4", children: step === "setpin" ? "Set a new PIN" : mode === "login" ? "Log in to PanelStock" : "Register a new user" }),
-        step === "form" && mode === "login" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { className: "text-sm font-semibold text-slate-800 mb-4", children: step === "setpin" ? "Set a new PIN" : "Log in to PanelStock" }),
+        step === "form" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Username", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, value: username, onChange: (e) => setUsernameField(e.target.value), placeholder: "e.g. Sam" }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "PIN", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, type: "password", inputMode: "numeric", value: pin, onChange: (e) => setPin(e.target.value), placeholder: "Your PIN", onKeyDown: (e) => e.key === "Enter" && handleLogin() }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "flex items-center gap-2 text-xs font-medium text-slate-600 mb-4", children: [
@@ -15799,13 +15791,6 @@ function compareCncOrders(a, b) {
           ] }),
           error && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "text-xs text-red-800 mb-3", children: error }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: handleLogin, disabled: busy, className: "w-full bg-cyan-800 disabled:opacity-50 text-white font-semibold rounded-lg py-2.5 text-sm hover:bg-cyan-900", children: busy ? "Checking\u2026" : "Log in" })
-        ] }),
-        step === "form" && mode === "register" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "text-xs text-slate-400 mb-4", children: "Ask whoever manages this app for the 6-digit registration code, then choose your own username." }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Choose a username", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, value: username, onChange: (e) => setUsernameField(e.target.value), placeholder: "e.g. Sam" }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Registration code", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, type: "password", inputMode: "numeric", value: pin, onChange: (e) => setPin(e.target.value), placeholder: "6-digit code", maxLength: 6, onKeyDown: (e) => e.key === "Enter" && handleRegister() }) }),
-          error && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "text-xs text-red-800 mb-3", children: error }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: handleRegister, disabled: busy, className: "w-full bg-cyan-800 disabled:opacity-50 text-white font-semibold rounded-lg py-2.5 text-sm hover:bg-cyan-900", children: busy ? "Checking\u2026" : "Continue" })
         ] }),
         step === "setpin" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { className: "text-xs text-slate-400 mb-4", children: [
@@ -16260,6 +16245,7 @@ function compareCncOrders(a, b) {
     const [accessUser, setAccessUser] = useState(null);
     const [regCode, setRegCode] = useState("");
     const [newRegCode, setNewRegCode] = useState("");
+    const [newUser, setNewUser] = useState({ username: "", displayName: "", temporaryPin: "", makeAdmin: false });
     const [status, setStatus] = useState(null);
     const [busy, setBusy] = useState(false);
     async function callWorker(path, body) {
@@ -16292,6 +16278,14 @@ function compareCncOrders(a, b) {
     useEffect(() => {
       loadUsers();
     }, []);
+    async function createUser(event) {
+      event.preventDefault();setBusy(true);setStatus(null);
+      try {
+        const result=await callWorker("/admin/create-user",{username,targetUsername:newUser.username,displayName:newUser.displayName,temporaryPin:newUser.temporaryPin,makeAdmin:newUser.makeAdmin});
+        setBusy(false);if(!result.ok){setStatus({kind:"err",msg:result.error||"Could not create user."});return;}
+        setUsers(prev=>[...prev,result.user].sort((a,b)=>a.username.localeCompare(b.username)));setNewUser({username:"",displayName:"",temporaryPin:"",makeAdmin:false});setStatus({kind:"ok",msg:`${result.user.displayName} was created. Give them the temporary PIN to sign in.`});onLogTxn({type:"user",desc:`Created user ${result.user.username}`,qty:""});
+      } catch {setBusy(false);setStatus({kind:"err",msg:"Could not reach the server."});}
+    }
     async function handleSetRegCode() {
       if (!/^\d{6}$/.test(newRegCode)) {
         setStatus({ kind: "err", msg: "Code must be exactly 6 digits." });
@@ -16428,10 +16422,20 @@ function compareCncOrders(a, b) {
           ] });
         })()
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bg-white border border-slate-300 rounded-xl p-5 h-fit", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm font-semibold text-slate-800 mb-1", children: "Registration code" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "space-y-4 h-fit", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", { onSubmit:createUser,className: "bg-white border border-slate-300 rounded-xl p-5", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm font-semibold text-slate-800 mb-1", children: "Create user" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "text-sm text-slate-500 mb-4", children: "New accounts can only be created here by an administrator." }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field,{label:"Display name",children:/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input",{className:inputCls,value:newUser.displayName,onChange:event=>setNewUser(value=>({...value,displayName:event.target.value})),required:true,placeholder:"e.g. Sam Jones"})}),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field,{label:"Username",children:/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input",{className:inputCls,value:newUser.username,onChange:event=>setNewUser(value=>({...value,username:event.target.value})),required:true,placeholder:"e.g. sam.jones"})}),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field,{label:"Temporary PIN",children:/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input",{className:inputCls,type:"password",inputMode:"numeric",pattern:"[0-9]{6,12}",value:newUser.temporaryPin,onChange:event=>setNewUser(value=>({...value,temporaryPin:event.target.value.replace(/\D/g,"").slice(0,12)})),required:true,placeholder:"6–12 digits"})}),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label",{className:"mb-4 flex items-center gap-2 text-sm text-slate-600",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input",{type:"checkbox",checked:newUser.makeAdmin,onChange:event=>setNewUser(value=>({...value,makeAdmin:event.target.checked}))}),"Administrator" ]}),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button",{type:"submit",disabled:busy,className:"w-full rounded-lg bg-cyan-800 py-2.5 text-sm font-semibold text-white disabled:opacity-50",children:busy?"Creating…":"Create user"})
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bg-white border border-slate-300 rounded-xl p-5", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm font-semibold text-slate-800 mb-1", children: "Default reset PIN" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { className: "text-sm text-slate-500 mb-3 leading-relaxed", children: [
-          "New staff need this 6-digit code to register. Current code: ",
+          "Used only when an administrator resets an existing user's PIN. Current PIN: ",
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "font-mono font-semibold text-slate-700", children: regCode })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex gap-2", children: [
@@ -16443,12 +16447,12 @@ function compareCncOrders(a, b) {
               maxLength: 6,
               value: newRegCode,
               onChange: (e) => setNewRegCode(e.target.value.replace(/\D/g, "").slice(0, 6)),
-              placeholder: "New 6-digit code"
+              placeholder: "New reset PIN"
             }
           ),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: handleSetRegCode, disabled: busy || newRegCode.length !== 6, className: "bg-cyan-800 disabled:opacity-40 text-white px-3 rounded-lg text-sm font-semibold hover:bg-cyan-900", children: "Save" })
         ] })
-      ] })
+      ] })] })
     ] });
   }
   function StocktakeReset({ onReset }) {

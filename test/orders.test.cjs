@@ -74,3 +74,11 @@ test('web manages the shared schedule',()=>{
  assert.doesNotMatch(schedule,/"Status"/);
  assert.ok(schedule.indexOf('"Person"')<schedule.indexOf('"Project"'));
 });
+
+test('administrators create users and the login screen has no self-registration option',()=>{
+ const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
+ assert.match(html,/\/admin\/create-user/);
+ assert.match(html,/children: "Create user"/);
+ const login=html.slice(html.indexOf('function LoginScreen'),html.indexOf('function ToggleSwitch'));
+ assert.doesNotMatch(login,/children: "Register"/);
+});
