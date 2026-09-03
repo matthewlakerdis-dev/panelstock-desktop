@@ -243,7 +243,7 @@
     if(['/login','/set-pin'].includes(absolute.pathname) && res.ok){
       const result=await res.clone().json();
       if(result.token){
-        session={token:result.token,username:result.username,isAdmin:result.isAdmin,expiresAt:result.expiresAt};
+        session={token:result.token,username:result.username,isAdmin:result.isAdmin,taskAccess:result.taskAccess||{},expiresAt:result.expiresAt};
         sessionStorage.setItem(SESSION,JSON.stringify(session));
       }
     }
