@@ -104,6 +104,8 @@ test('administrators create users and the login screen has no self-registration 
  assert.match(html,/roleIds:next\.roleIds\|\|\[\]/);
  assert.match(html,/Task access is combined from all assigned roles/);
  assert.match(html,/function EmployeeProfileFields/);
+ assert.match(html,/children:EmployeeProfileFields\(\{value:editUser\.employeeProfile/);
+ assert.doesNotMatch(html,/jsx\)\(EmployeeProfileFields,/);
  assert.match(html,/"Employment details"/);
  assert.match(html,/"Emergency contact name"/);
  assert.match(html,/"Licences \/ qualifications"/);
