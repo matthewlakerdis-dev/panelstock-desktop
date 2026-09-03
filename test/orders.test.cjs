@@ -109,4 +109,8 @@ test('new user login names use first initial and surname',()=>{
  assert.match(html,/function standardiseLogin\(user\)/);
  assert.match(html,/\/admin\/rename-user/);
  assert.match(html,/old login will work as an alias for 14 days/);
+ assert.match(html,/function generateTemporaryPin\(\)/);
+ assert.match(html,/crypto\.getRandomValues/);
+ assert.match(html,/children:"Generate PIN"/);
+ assert.match(html,/checked:newUser\.makeAdmin,disabled:busy,onChange:next/);
 });
