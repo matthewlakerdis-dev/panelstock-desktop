@@ -10,13 +10,13 @@ for (const repo of ['panelstock-desktop']) {
  const end=html.indexOf(repo==='panelstock'?'  function CncTab(':'  function CncPage(',start);
  const source=normalize+html.slice(start,end);
  const prepare=vm.runInNewContext(source+';prepareCncBulkRows');
- const stock={stockVariantId:'stock-1',stockSku:'SKU-1',sheetWidth:4000,sheetHeight:1500};
+ const stock={stockItemType:'variant',stockItemId:'stock-1',stockSku:'SKU-1',sheetWidth:4000,sheetHeight:1500};
  test(repo+': bulk entry shares and normalizes order details without changing identifiers',()=>{
   const result=prepare({...stock,orderNumber:'Order #0007',jobReference:'mERIDIAN CONSTRUCTIONS'},[{sheetNumber:' 01 ',panelNumber:'a73-219',totalPanelArea:'4.2'},{sheetNumber:'2',panelNumber:'0002',totalPanelArea:'3.1'},{sheetNumber:'',panelNumber:''}]);
   assert.equal(result.errors.length,0);assert.equal(result.rows.length,2);
   assert.deepEqual(JSON.parse(JSON.stringify(result.rows)),[
-   {orderNumber:'0007',jobReference:'Meridian Constructions',stockVariantId:'stock-1',stockSku:'SKU-1',sheetWidth:4000,sheetHeight:1500,totalPanelArea:4.2,sheetNumber:'01',panelNumber:'A73-219'},
-   {orderNumber:'0007',jobReference:'Meridian Constructions',stockVariantId:'stock-1',stockSku:'SKU-1',sheetWidth:4000,sheetHeight:1500,totalPanelArea:3.1,sheetNumber:'2',panelNumber:'0002'}]);
+   {orderNumber:'0007',jobReference:'Meridian Constructions',stockItemType:'variant',stockItemId:'stock-1',stockSku:'SKU-1',sheetWidth:4000,sheetHeight:1500,totalPanelArea:4.2,sheetNumber:'01',panelNumber:'A73-219'},
+   {orderNumber:'0007',jobReference:'Meridian Constructions',stockItemType:'variant',stockItemId:'stock-1',stockSku:'SKU-1',sheetWidth:4000,sheetHeight:1500,totalPanelArea:3.1,sheetNumber:'2',panelNumber:'0002'}]);
  });
  test(repo+': invalid or duplicate lines reject the entire batch',()=>{
   for(const [order,lines] of [
@@ -37,7 +37,7 @@ for (const repo of ['panelstock-desktop']) {
   const flatten=n=>n&&typeof n==='object'?[n,...[n.children].flat().flatMap(flatten)]:[];
   let tree,nodes;
   const variants=[{id:'stock-1',sku:'SKU-1',qty:3,color:'White',material:'ACM',thickness:4,width:4000,height:1500}];
-  const refresh=()=>{cursor=0;refCursor=0;tree=render({variants,onSave:rows=>saves.push(rows),onClose:()=>closed++});nodes=flatten(tree);};
+  const refresh=()=>{cursor=0;refCursor=0;tree=render({variants,offcuts:[],onSave:rows=>saves.push(rows),onClose:()=>closed++});nodes=flatten(tree);};
   const button=text=>nodes.find(n=>n.tag==='button'&&n.children===text);
   refresh();button('+ Add line').onClick();refresh();assert.equal(nodes.filter(n=>n.tag==='input').length,8);
   nodes.find(n=>n['aria-label']==='Remove line 2').onClick();refresh();assert.equal(nodes.filter(n=>n.tag==='input').length,5);
@@ -48,7 +48,7 @@ for (const repo of ['panelstock-desktop']) {
   nodes.find(n=>n['aria-label']==='Total panel area line 1').onChange({target:{value:'4.2'}});refresh();
   tree.onSubmit({preventDefault(){}});assert.equal(saves.length,0);refresh();
   nodes.find(n=>n.tag==='input'&&n.placeholder==='e.g. Meridian Constructions').onChange({target:{value:'Test'}});refresh();
-  nodes.find(n=>n.tag==='select').onChange({target:{value:'stock-1'}});refresh();
+  nodes.find(n=>n.tag==='select').onChange({target:{value:'variant:stock-1'}});refresh();
   tree.onSubmit({preventDefault(){}});assert.equal(saves.length,1);assert.equal(closed,1);assert.equal(saves[0][0].panelNumber,'A1');
  });
 }

@@ -14,11 +14,11 @@ function run(accept=true,panels) {
     {...base,id:'other-order',orderNumber:'ORDER-B'}, {...base,id:'other-sheet',sheetNumber:'2'},
     {...base,id:'leading-zero',sheetNumber:'01'}
   ];
-  const variants=[{id:'stock-1',sku:'SKU-1',qty:3,color:'White',material:'ACM',thickness:4,width:4000,height:1500}],transactions=[];
+  const variants=[{id:'stock-1',sku:'SKU-1',qty:3,color:'White',material:'ACM',thickness:4,width:4000,height:1500}],offcuts=[],transactions=[];
   const result={writes:[],logs:[],prompts:[],before:JSON.stringify(cncPanels)};let id=0;
   vm.runInNewContext(handler+';completeCncSheet("ORDER-A","1");',{
     cncPanels,username:'worker',window:{confirm:message=>{result.prompts.push(message);return accept;}},
-    variants,transactions,uid:()=>`new-${++id}`,fmtDim:(w,h)=>`${w} × ${h}`,setCncPanels:next=>result.next=next,setVariants:next=>result.nextVariants=next,setTransactions:next=>result.nextTransactions=next,persist:next=>result.writes.push(next),logTxn:tx=>result.logs.push(tx),showToast:()=>{}
+    variants,offcuts,transactions,uid:()=>`new-${++id}`,fmtDim:(w,h)=>`${w} × ${h}`,setCncPanels:next=>result.next=next,setVariants:next=>result.nextVariants=next,setOffcuts:next=>result.nextOffcuts=next,setTransactions:next=>result.nextTransactions=next,persist:next=>result.writes.push(next),logTxn:tx=>result.logs.push(tx),showToast:()=>{}
   });
   assert.equal(JSON.stringify(cncPanels),result.before,'original snapshot remains unchanged');
   return result;
@@ -35,7 +35,7 @@ test('complete sheet updates all pending panels in exactly that order/sheet in o
   assert.equal(r.nextVariants[0].qty,2);
   assert.equal(r.nextTransactions[0].type,'dispatch');assert.equal(r.nextTransactions[0].source,'cnc');assert.equal(r.nextTransactions[0].qty,1);
   assert.match(r.nextTransactions[1].desc,/2 panels/);
-  assert.deepEqual(Object.keys(r.writes[0]),['cncPanels','variants','transactions']);
+  assert.deepEqual(Object.keys(r.writes[0]),['cncPanels','variants','offcuts','transactions']);
 });
 test('an already completed sheet makes no changes',()=>{
 
