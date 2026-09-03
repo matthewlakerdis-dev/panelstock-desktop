@@ -89,8 +89,11 @@ test('administrators create users and the login screen has no self-registration 
  assert.match(html,/\/admin\/roles/);
  assert.match(html,/children:"\+ Create role"/);
  assert.match(html,/"Save role"/);
- assert.match(html,/children:"Custom access \(no role\)"/);
- assert.match(html,/Task access is controlled by the assigned role/);
+ assert.match(html,/function RolePicker\(\{selected,onChange,disabled=false\}\)/);
+ assert.match(html,/label:"Roles"/);
+ assert.match(html,/roleIds:newUser\.roleIds/);
+ assert.match(html,/roleIds:next\.roleIds\|\|\[\]/);
+ assert.match(html,/Task access is combined from all assigned roles/);
  assert.match(html,/name:"CNC tracker",codes:\["factory\.cnc","site\.cnc\.view","schedule\.cnc\.view","schedule\.cnc\.manage"\]/);
  assert.match(html,/canManageCnc:can\("schedule\.cnc\.manage"\)/);
  assert.match(html,/"Schedule type"/);
