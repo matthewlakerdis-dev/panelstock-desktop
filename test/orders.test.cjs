@@ -67,4 +67,10 @@ test('web manages the shared schedule',()=>{
  assert.match(html,/const moveDate=direction/);
  assert.match(html,/"Today"/);
  assert.match(html,/dateHeading/);
+ assert.match(html,/function ScheduleTimeField/);
+ assert.match(html,/function ScheduleSettingsPanel/);
+ assert.match(html,/BAKED_WORKER_URL\+"\/schedule\/settings"/);
+ const schedule=html.slice(html.indexOf('function SchedulePage'),html.indexOf('function OrdersPage'));
+ assert.doesNotMatch(schedule,/"Status"/);
+ assert.ok(schedule.indexOf('"Person"')<schedule.indexOf('"Project"'));
 });
