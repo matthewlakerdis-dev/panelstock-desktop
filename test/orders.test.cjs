@@ -71,6 +71,9 @@ test('web manages the shared schedule',()=>{
  assert.match(html,/function ModernDatePicker/);
  assert.match(html,/aria-label":"Previous month"/);
  assert.match(html,/aria-label":"Next month"/);
+ assert.match(html,/"Select date"/);
+ assert.match(html,/children:"Cancel"/);
+ assert.match(html,/children:"OK"/);
  assert.match(html,/type==="date"\?e\(ModernDatePicker/);
  assert.match(html,/function ScheduleSettingsPanel/);
  assert.match(html,/BAKED_WORKER_URL\+"\/schedule\/settings"/);
