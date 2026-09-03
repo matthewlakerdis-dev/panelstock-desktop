@@ -16291,6 +16291,14 @@ function compareCncOrders(a, b) {
     useEffect(() => {
       loadUsers();
     }, []);
+    function loginNameFor(displayName) {
+      const parts=String(displayName||"").trim().normalize("NFKD").replace(/[\u0300-\u036f]/g,"").split(/\s+/).map(part=>part.replace(/[^a-zA-Z0-9]/g,"")).filter(Boolean);
+      if(!parts.length)return "";
+      const base=(parts.length===1?parts[0]:parts[0][0]+parts[parts.length-1]).toLowerCase().slice(0,36);
+      let candidate=base,suffix=2;
+      while(users.some(user=>user.username.toLowerCase()===candidate))candidate=(base.slice(0,40-String(suffix).length)+suffix++);
+      return candidate;
+    }
     async function createUser(event) {
       event.preventDefault();setBusy(true);setStatus(null);
       try {
@@ -16423,8 +16431,8 @@ function compareCncOrders(a, b) {
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"mb-4 flex items-center justify-between",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2",{className:"text-lg font-semibold text-slate-900",children:"Create user"}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p",{className:"mt-1 text-sm text-slate-500",children:"Create a new PanelStock account and provide their temporary sign-in PIN."})]}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button",{type:"button",onClick:()=>{setCreateOpen(false);setStatus(null);},className:"rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600",children:"Back to users"})]}),
       status&&/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div",{className:`mb-4 rounded-lg px-4 py-3 text-sm ${status.kind==="err"?"text-red-800 bg-red-50":"text-green-800 bg-green-50"}`,children:status.msg}),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form",{onSubmit:createUser,className:"rounded-xl border border-slate-300 bg-white p-6",children:[
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field,{label:"Display name",children:/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input",{className:inputCls,value:newUser.displayName,onChange:event=>setNewUser(value=>({...value,displayName:event.target.value})),required:true,placeholder:"e.g. Sam Jones"})}),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field,{label:"Username",children:/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input",{className:inputCls,value:newUser.username,onChange:event=>setNewUser(value=>({...value,username:event.target.value})),required:true,placeholder:"e.g. sam.jones"})}),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field,{label:"Display name",children:/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input",{className:inputCls,value:newUser.displayName,onChange:event=>{const displayName=event.target.value;setNewUser(value=>({...value,displayName,username:loginNameFor(displayName)}));},required:true,placeholder:"e.g. Matthew Smith"})}),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field,{label:"Login name",children:/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input",{className:inputCls,value:newUser.username,readOnly:true,required:true,placeholder:"Generated from their name",title:"First initial followed by surname"})}),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field,{label:"Temporary PIN",children:/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input",{className:inputCls,type:"password",inputMode:"numeric",pattern:"[0-9]{6,12}",value:newUser.temporaryPin,onChange:event=>setNewUser(value=>({...value,temporaryPin:event.target.value.replace(/\D/g,"").slice(0,12)})),required:true,placeholder:"6–12 digits"})}),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field,{label:"Role",children:/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select",{className:inputCls,value:newUser.roleId,onChange:event=>setNewUser(value=>({...value,roleId:event.target.value})),disabled:newUser.makeAdmin,children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option",{value:"",children:"Custom access (no role)"}),...roles.map(role=>/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option",{value:role.id,children:role.name},role.id))]})}),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label",{className:"mb-5 flex items-center gap-2 text-sm text-slate-600",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input",{type:"checkbox",checked:newUser.makeAdmin,onChange:event=>setNewUser(value=>({...value,makeAdmin:event.target.checked}))}),"Administrator"]}),

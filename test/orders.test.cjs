@@ -100,3 +100,10 @@ test('administrators create users and the login screen has no self-registration 
  const login=html.slice(html.indexOf('function LoginScreen'),html.indexOf('function ToggleSwitch'));
  assert.doesNotMatch(login,/children: "Register"/);
 });
+test('new user login names use first initial and surname',()=>{
+ const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
+ assert.match(html,/function loginNameFor\(displayName\)/);
+ assert.match(html,/parts\[0\]\[0\]\+parts\[parts\.length-1\]/);
+ assert.match(html,/label:"Login name"/);
+ assert.match(html,/readOnly:true/);
+});
