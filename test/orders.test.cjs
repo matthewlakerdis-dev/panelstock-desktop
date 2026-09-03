@@ -63,4 +63,5 @@ test('web manages the shared schedule',()=>{
  assert.match(html,/Orientation/);
  assert.match(html,/horizontalTimeline/);
  assert.match(html,/viewMode==="day"/);
+ assert.match(html,/viewMode==="day"&&orientation==="horizontal"\?horizontalTimeline/);
 });
