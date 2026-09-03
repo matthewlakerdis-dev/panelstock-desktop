@@ -7,17 +7,18 @@ for(const match of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g))if(matc
 const handler=html.slice(html.indexOf('    function completeCncSheet('),html.indexOf('    function removeCncPanel('));
 assert.ok(!handler.includes('window.confirm'));
 function run(accept=true,panels) {
-  const base={orderNumber:'ORDER-A',sheetNumber:'1',status:'pending'};
+  const base={orderNumber:'ORDER-A',sheetNumber:'1',status:'pending',stockVariantId:'stock-1',stockSku:'SKU-1'};
   const cncPanels=panels??[
     {...base,id:'a',panelNumber:'1'}, {...base,id:'b',panelNumber:'2'},
     {...base,id:'done',status:'completed',completedBy:'earlier-worker',completedAt:'2026-01-01'},
     {...base,id:'other-order',orderNumber:'ORDER-B'}, {...base,id:'other-sheet',sheetNumber:'2'},
     {...base,id:'leading-zero',sheetNumber:'01'}
   ];
-  const result={writes:[],logs:[],prompts:[],before:JSON.stringify(cncPanels)};
+  const variants=[{id:'stock-1',sku:'SKU-1',qty:3,color:'White',material:'ACM',thickness:4,width:4000,height:1500}],transactions=[];
+  const result={writes:[],logs:[],prompts:[],before:JSON.stringify(cncPanels)};let id=0;
   vm.runInNewContext(handler+';completeCncSheet("ORDER-A","1");',{
     cncPanels,username:'worker',window:{confirm:message=>{result.prompts.push(message);return accept;}},
-    setCncPanels:next=>result.next=next,persist:next=>result.writes.push(next),logTxn:tx=>result.logs.push(tx),showToast:()=>{}
+    variants,transactions,uid:()=>`new-${++id}`,fmtDim:(w,h)=>`${w} × ${h}`,setCncPanels:next=>result.next=next,setVariants:next=>result.nextVariants=next,setTransactions:next=>result.nextTransactions=next,persist:next=>result.writes.push(next),logTxn:tx=>result.logs.push(tx),showToast:()=>{}
   });
   assert.equal(JSON.stringify(cncPanels),result.before,'original snapshot remains unchanged');
   return result;
@@ -25,14 +26,16 @@ function run(accept=true,panels) {
 test('complete sheet updates all pending panels in exactly that order/sheet in one batch',()=>{
   const r=run();
   assert.equal(r.writes.length,1);
-  assert.equal(r.logs.length,1);
+  assert.equal(r.logs.length,0);
   assert.equal(r.prompts.length,0);
   assert.equal(r.next[0].status,'completed');assert.equal(r.next[1].status,'completed');
   assert.equal(r.next[0].completedBy,'worker');assert.equal(r.next[0].completedAt,r.next[1].completedAt);
   assert.equal(r.next[2].completedBy,'earlier-worker');assert.equal(r.next[2].completedAt,'2026-01-01');
   for(const p of r.next.slice(3))assert.equal(p.status,'pending');
-  assert.match(r.logs[0].desc,/2 panels/);
-  assert.deepEqual(Object.keys(r.writes[0]),['cncPanels']);
+  assert.equal(r.nextVariants[0].qty,2);
+  assert.equal(r.nextTransactions[0].type,'dispatch');assert.equal(r.nextTransactions[0].source,'cnc');assert.equal(r.nextTransactions[0].qty,1);
+  assert.match(r.nextTransactions[1].desc,/2 panels/);
+  assert.deepEqual(Object.keys(r.writes[0]),['cncPanels','variants','transactions']);
 });
 test('an already completed sheet makes no changes',()=>{
 
