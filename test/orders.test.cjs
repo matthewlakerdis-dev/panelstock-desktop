@@ -92,6 +92,14 @@ test('web manages the shared schedule',()=>{
  assert.ok(schedule.indexOf('"Person"')<schedule.indexOf('"Project"'));
 });
 
+test('web users can manage their own profile photo',()=>{
+ const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
+ assert.match(html,/function ProfilePhotoPage\(\)/);
+ assert.match(html,/label: "My Profile"/);
+ assert.match(html,/tab === "profile"/);
+ assert.match(html,/profilePhoto:nextPhoto/);
+});
+
 test('administrators create users and the login screen has no self-registration option',()=>{
  const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
  assert.match(html,/\/admin\/create-user/);
