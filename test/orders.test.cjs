@@ -8,7 +8,11 @@ test('desktop web exposes permission-aware order management',()=>{
  const client=fs.readFileSync(path.join(__dirname,'../panelstock-client.js'),'utf8');
  assert.match(html,/function OrdersPage\(\{ canCreate, canManage, isAdmin \}\)/);
  assert.match(html,/Add project/);
- assert.match(html,/\/order-projects/);
+ assert.match(html,/\/projects/);
+ assert.match(html,/Project details/);
+ assert.match(html,/Project notes/);
+ assert.match(html,/address/);
+ assert.match(html,/projectRecords/);
  assert.match(html,/method: "DELETE"/);
  assert.match(html,/Delete Order/);
  assert.match(html,/changeStatus\(order, event\.target\.value\)/);

@@ -15504,9 +15504,9 @@ function compareCncOrders(a, b) {
     const [sequenceNext, setSequenceNext] = useState(1);
     const [savingSequence, setSavingSequence] = useState(false);
     const [projects, setProjects] = useState([]);
-    const [newProject, setNewProject] = useState("");
+    const [projectEditor, setProjectEditor] = useState({ id: "", name: "", address: "", notes: "" });
     const [savingProject, setSavingProject] = useState(false);
-    const blankOrder = () => ({ project: "", orderType: "Other", siteContact: "", phone: "", requestedDeliveryDate: todayStr(), requestedDeliveryTime: "", scheduledDeliveryDate: "", scheduledDeliveryTime: "", locationNotes: "", status: "submitted", items: [{ quantity: 1, description: "" }] });
+    const blankOrder = () => ({ projectId: "", project: "", orderType: "Other", siteContact: "", phone: "", requestedDeliveryDate: todayStr(), requestedDeliveryTime: "", scheduledDeliveryDate: "", scheduledDeliveryTime: "", locationNotes: "", status: "submitted", items: [{ quantity: 1, description: "" }] });
     async function loadOrders() {
       setLoadingOrders(true);
       try {
@@ -15514,7 +15514,7 @@ function compareCncOrders(a, b) {
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw Error(result.error || "Orders could not be loaded.");
         setOrders(result.orders || []);
-        setProjects(result.projects || []);
+        setProjects(result.projectRecords || (result.projects || []).map((name) => ({ id: "", name, address: "", notes: "" })));
         setProjectSequences(result.projectSequences || []);
       } catch (error) { setNotice(error.message || "Orders could not be loaded."); }
       finally { setLoadingOrders(false); }
@@ -15582,14 +15582,14 @@ function compareCncOrders(a, b) {
       } catch (error) { setNotice(error.message || "The order number could not be saved."); }
       finally { setSavingSequence(false); }
     }
-    async function addProject(event) {
-      event.preventDefault(); const project = newProject.trim(); if (!project) return;
+    async function saveProject(event) {
+      event.preventDefault(); const project = { ...projectEditor, name: projectEditor.name.trim(), address: projectEditor.address.trim(), notes: projectEditor.notes.trim() }; if (!project.name) return;
       setSavingProject(true); setNotice("");
       try {
-        const response = await PanelStock.apiFetch(BAKED_WORKER_URL + "/order-projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ project }) });
-        const result = await response.json().catch(() => ({})); if (!response.ok) throw Error(result.error || "The project could not be added.");
-        setProjects(result.projects || []); setNewProject(""); setSequenceProject(project); setSequenceNext(1); setNotice(`${project} is now available for new orders.`);
-      } catch (error) { setNotice(error.message || "The project could not be added."); }
+        const response = await PanelStock.apiFetch(BAKED_WORKER_URL + "/projects" + (project.id ? "/" + project.id : ""), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(project) });
+        const result = await response.json().catch(() => ({})); if (!response.ok) throw Error(result.error || "The project could not be saved.");
+        setProjects(result.projects || []); setProjectEditor({ id: "", name: "", address: "", notes: "" }); setSequenceProject(result.project?.name || project.name); if (!project.id) setSequenceNext(1); setNotice(`${result.project?.name || project.name} saved and available across PanelStock.`); await loadOrders();
+      } catch (error) { setNotice(error.message || "The project could not be saved."); }
       finally { setSavingProject(false); }
     }
     async function changeStatus(order, status) {
@@ -15605,11 +15605,11 @@ function compareCncOrders(a, b) {
     }
     const pill = (value, label) => e("button", { key: value, onClick: () => setFilter(value), className: `px-4 py-2 rounded-full border text-sm font-semibold ${filter === value ? "bg-slate-900 border-slate-900 text-white" : "bg-white border-slate-300 text-slate-600 hover:border-slate-500"}` }, `${label} (${counts[value]})`);
     const field = (label, key, type = "text", required = false) => e("label", { className: "block text-xs font-medium text-slate-600" }, label, e("input", { type, required, value: panel.order[key] || "", disabled: panel.mode === "view", onChange: (event) => update(key, event.target.value), className: "mt-1.5 w-full h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm disabled:bg-slate-50 disabled:text-slate-700" }));
-    const projectField = () => e("label", { className: "block text-xs font-medium text-slate-600" }, "Project", e("select", { required: true, value: panel.order.project || "", disabled: panel.mode === "view", onChange: (event) => update("project", event.target.value), className: "mt-1.5 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm disabled:bg-slate-50 disabled:text-slate-700" }, e("option", { value: "" }, "Select a project"), projects.map((project) => e("option", { key: project, value: project }, project))));
+    const projectField = () => { const selectedValue = panel.order.projectId || projects.find((project) => project.name.toLocaleLowerCase() === String(panel.order.project || "").toLocaleLowerCase())?.id || ""; return e("label", { className: "block text-xs font-medium text-slate-600" }, "Project", e("select", { required: true, value: selectedValue, disabled: panel.mode === "view", onChange: (event) => { const project = projects.find((value) => value.id === event.target.value); setPanel((current) => ({ ...current, order: { ...current.order, projectId: project?.id || "", project: project?.name || "" } })); }, className: "mt-1.5 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm disabled:bg-slate-50 disabled:text-slate-700" }, e("option", { value: "" }, "Select a project"), projects.map((project) => e("option", { key: project.id || project.name, value: project.id || project.name }, project.address ? `${project.name} — ${project.address}` : project.name)))); };
     return e("div", null,
       e(PageHeading, { icon: e(ClipboardList, { size: 18 }), title: "Orders", subtitle: "View site requests, create orders and manage delivery progress.", action: canCreate ? e("button", { onClick: () => openPanel("new"), className: "inline-flex items-center gap-2 rounded-lg bg-cyan-800 px-4 py-2.5 text-sm font-semibold text-white hover:bg-cyan-900" }, e(Plus, { size: 16 }), "New order") : null }),
       notice && e("div", { className: "mb-4 rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-900" }, notice),
-      isAdmin && e("form", { onSubmit: addProject, className: "mb-4 rounded-xl border border-slate-300 bg-white p-4" }, e("h3", { className: "text-sm font-semibold text-slate-900" }, "Add project"), e("p", { className: "mt-1 text-xs text-slate-500" }, "Added projects become available in the Web and Site app order forms."), e("div", { className: "mt-3 flex gap-3" }, e("input", { value: newProject, maxLength: 120, onChange: (event) => setNewProject(event.target.value), placeholder: "Project name", className: "h-10 min-w-0 flex-1 rounded-lg border border-slate-300 px-3 text-sm" }), e("button", { type: "submit", disabled: savingProject || !newProject.trim(), className: "rounded-lg bg-cyan-800 px-4 text-sm font-semibold text-white disabled:opacity-50" }, savingProject ? "Adding..." : "Add project"))),
+      isAdmin && e("form", { onSubmit: saveProject, className: "mb-4 rounded-xl border border-slate-300 bg-white p-4" }, e("div", { className: "flex flex-wrap items-start justify-between gap-3" }, e("div", null, e("h3", { className: "text-sm font-semibold text-slate-900" }, "Project details"), e("p", { className: "mt-1 text-xs text-slate-500" }, "Projects are shared across the App, Web and Site app.")), e("select", { value: projectEditor.id, onChange: (event) => { const project = projects.find((value) => value.id === event.target.value); setProjectEditor(project ? { id: project.id, name: project.name, address: project.address || "", notes: project.notes || "" } : { id: "", name: "", address: "", notes: "" }); }, className: "h-10 min-w-52 rounded-lg border border-slate-300 bg-white px-3 text-sm" }, e("option", { value: "" }, "+ New project"), projects.map((project) => e("option", { key: project.id, value: project.id }, project.name)))), e("div", { className: "mt-3 grid gap-3 md:grid-cols-2" }, e("label", { className: "text-xs font-medium text-slate-600" }, "Project name", e("input", { required: true, value: projectEditor.name, maxLength: 120, onChange: (event) => setProjectEditor((current) => ({ ...current, name: event.target.value })), className: "mt-1.5 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm" })), e("label", { className: "text-xs font-medium text-slate-600" }, "Address", e("input", { value: projectEditor.address, maxLength: 300, onChange: (event) => setProjectEditor((current) => ({ ...current, address: event.target.value })), className: "mt-1.5 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm" })), e("label", { className: "text-xs font-medium text-slate-600 md:col-span-2" }, "Project notes", e("textarea", { rows: 2, value: projectEditor.notes, maxLength: 1000, onChange: (event) => setProjectEditor((current) => ({ ...current, notes: event.target.value })), className: "mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" }))), e("div", { className: "mt-3 flex justify-end" }, e("button", { type: "submit", disabled: savingProject || !projectEditor.name.trim(), className: "rounded-lg bg-cyan-800 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50" }, savingProject ? "Saving..." : projectEditor.id ? "Save project" : "Add project"))),
       canManage && e("form", { onSubmit: saveProjectSequence, className: "mb-4 rounded-xl border border-slate-300 bg-white p-4" },
         e("div", { className: "mb-3" }, e("h3", { className: "text-sm font-semibold text-slate-900" }, "Project order numbering"), e("p", { className: "mt-1 text-xs text-slate-500" }, "Set the next unused order number for a project. New projects start at Order 1.")),
         e("div", { className: "grid gap-3 sm:grid-cols-[minmax(0,1fr)_180px_auto] sm:items-end" },
