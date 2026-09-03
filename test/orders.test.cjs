@@ -7,6 +7,9 @@ test('desktop web exposes permission-aware order management',()=>{
  const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
  const client=fs.readFileSync(path.join(__dirname,'../panelstock-client.js'),'utf8');
  assert.match(html,/function OrdersPage\(\{ canCreate, canManage \}\)/);
+ assert.match(html,/Project order numbering/);
+ assert.match(html,/\/order-sequences/);
+ assert.match(html,/New projects start at Order 1/);
  assert.match(html,/site\.orders\.view/);
  assert.match(html,/site\.orders\.create/);
  assert.match(html,/site\.orders\.manage/);

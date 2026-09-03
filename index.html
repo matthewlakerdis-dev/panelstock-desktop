@@ -15499,6 +15499,10 @@ function compareCncOrders(a, b) {
     const [notice, setNotice] = useState("");
     const [panel, setPanel] = useState(null);
     const [saving, setSaving] = useState(false);
+    const [projectSequences, setProjectSequences] = useState([]);
+    const [sequenceProject, setSequenceProject] = useState("");
+    const [sequenceNext, setSequenceNext] = useState(1);
+    const [savingSequence, setSavingSequence] = useState(false);
     const blankOrder = () => ({ project: "", orderType: "Other", siteContact: "", phone: "", requestedDeliveryDate: todayStr(), requestedDeliveryTime: "", scheduledDeliveryDate: "", scheduledDeliveryTime: "", locationNotes: "", status: "submitted", items: [{ quantity: 1, description: "" }] });
     async function loadOrders() {
       setLoadingOrders(true);
@@ -15507,6 +15511,7 @@ function compareCncOrders(a, b) {
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw Error(result.error || "Orders could not be loaded.");
         setOrders(result.orders || []);
+        setProjectSequences(result.projectSequences || []);
       } catch (error) { setNotice(error.message || "Orders could not be loaded."); }
       finally { setLoadingOrders(false); }
     }
@@ -15555,11 +15560,37 @@ function compareCncOrders(a, b) {
         }
       } catch (error) { if (preview && !preview.closed) preview.close(); setNotice(error.message || "The order file could not be generated."); }
     }
+    function changeSequenceProject(value) {
+      setSequenceProject(value);
+      const match = projectSequences.find((entry) => entry.project.toLocaleLowerCase() === value.trim().toLocaleLowerCase());
+      if (match) setSequenceNext(match.nextNumber);
+    }
+    async function saveProjectSequence(event) {
+      event.preventDefault();
+      const project = sequenceProject.trim(), nextNumber = Number(sequenceNext);
+      if (!project || !Number.isSafeInteger(nextNumber) || nextNumber < 1) { setNotice("Enter a project and a valid next order number."); return; }
+      setSavingSequence(true); setNotice("");
+      try {
+        const response = await PanelStock.apiFetch(BAKED_WORKER_URL + "/order-sequences", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ project, nextNumber }) });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw Error(result.error || "The order number could not be saved.");
+        setProjectSequences(result.projectSequences || []); setNotice(`The next ${project} order will be Order ${nextNumber}.`);
+      } catch (error) { setNotice(error.message || "The order number could not be saved."); }
+      finally { setSavingSequence(false); }
+    }
     const pill = (value, label) => e("button", { key: value, onClick: () => setFilter(value), className: `px-4 py-2 rounded-full border text-sm font-semibold ${filter === value ? "bg-slate-900 border-slate-900 text-white" : "bg-white border-slate-300 text-slate-600 hover:border-slate-500"}` }, `${label} (${counts[value]})`);
     const field = (label, key, type = "text", required = false) => e("label", { className: "block text-xs font-medium text-slate-600" }, label, e("input", { type, required, value: panel.order[key] || "", disabled: panel.mode === "view", onChange: (event) => update(key, event.target.value), className: "mt-1.5 w-full h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm disabled:bg-slate-50 disabled:text-slate-700" }));
     return e("div", null,
       e(PageHeading, { icon: e(ClipboardList, { size: 18 }), title: "Orders", subtitle: "View site requests, create orders and manage delivery progress.", action: canCreate ? e("button", { onClick: () => openPanel("new"), className: "inline-flex items-center gap-2 rounded-lg bg-cyan-800 px-4 py-2.5 text-sm font-semibold text-white hover:bg-cyan-900" }, e(Plus, { size: 16 }), "New order") : null }),
       notice && e("div", { className: "mb-4 rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-900" }, notice),
+      canManage && e("form", { onSubmit: saveProjectSequence, className: "mb-4 rounded-xl border border-slate-300 bg-white p-4" },
+        e("div", { className: "mb-3" }, e("h3", { className: "text-sm font-semibold text-slate-900" }, "Project order numbering"), e("p", { className: "mt-1 text-xs text-slate-500" }, "Set the next unused order number for a project. New projects start at Order 1.")),
+        e("div", { className: "grid gap-3 sm:grid-cols-[minmax(0,1fr)_180px_auto] sm:items-end" },
+          e("label", { className: "text-xs font-medium text-slate-600" }, "Project", e("input", { list: "order-sequence-projects", value: sequenceProject, onChange: (event) => changeSequenceProject(event.target.value), placeholder: "Project name", className: "mt-1.5 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm" }), e("datalist", { id: "order-sequence-projects" }, projectSequences.map((entry) => e("option", { key: entry.project, value: entry.project }, `Last used: ${entry.lastUsed || "none"}`)))),
+          e("label", { className: "text-xs font-medium text-slate-600" }, "Next order number", e("input", { type: "number", min: "1", max: "999999", step: "1", value: sequenceNext, onChange: (event) => setSequenceNext(event.target.value), className: "mt-1.5 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm" })),
+          e("button", { type: "submit", disabled: savingSequence, className: "h-10 rounded-lg bg-cyan-800 px-4 text-sm font-semibold text-white disabled:opacity-50" }, savingSequence ? "Saving..." : "Set next number")
+        )
+      ),
       e("div", { className: "mb-4 flex flex-wrap gap-2" }, pill("active", "Submitted / Ordered"), pill("completed", "Completed"), pill("cancelled", "Cancelled")),
       e("section", { className: "overflow-hidden rounded-xl border border-slate-300 bg-white" },
         loadingOrders ? e("div", { className: "p-8 text-center text-sm text-slate-500" }, "Loading orders...") : shown.length ? shown.map((order) => e("article", { key: order.id, className: "flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-5 py-4 last:border-0" },
