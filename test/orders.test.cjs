@@ -11,6 +11,8 @@ test('desktop web exposes permission-aware order management',()=>{
  assert.match(html,/\/projects/);
  assert.match(html,/Project details/);
  assert.match(html,/Project notes/);
+ assert.match(html,/Delete project/);
+ assert.match(html,/async function deleteProject/);
  assert.match(html,/address/);
  assert.match(html,/projectRecords/);
  assert.match(html,/method: "DELETE"/);
