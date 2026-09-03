@@ -78,7 +78,9 @@ test('web manages the shared schedule',()=>{
 test('administrators create users and the login screen has no self-registration option',()=>{
  const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
  assert.match(html,/\/admin\/create-user/);
- assert.match(html,/children: "Create user"/);
+ assert.match(html,/children:"\+ Create user"/);
+ assert.match(html,/children:"Back to users"/);
+ assert.match(html,/if\(createOpen\)return/);
  assert.match(html,/\/admin\/update-user/);
  assert.match(html,/children:u\.active\?"Active":"Inactive"/);
  assert.match(html,/children:u\.active\?"Deactivate":"Activate"/);

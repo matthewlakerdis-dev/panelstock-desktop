@@ -16244,6 +16244,7 @@ function compareCncOrders(a, b) {
     const [tasks, setTasks] = useState([]);
     const [accessUser, setAccessUser] = useState(null);
     const [editUser, setEditUser] = useState(null);
+    const [createOpen, setCreateOpen] = useState(false);
     const [regCode, setRegCode] = useState("");
     const [newRegCode, setNewRegCode] = useState("");
     const [newUser, setNewUser] = useState({ username: "", displayName: "", temporaryPin: "", makeAdmin: false });
@@ -16284,7 +16285,7 @@ function compareCncOrders(a, b) {
       try {
         const result=await callWorker("/admin/create-user",{username,targetUsername:newUser.username,displayName:newUser.displayName,temporaryPin:newUser.temporaryPin,makeAdmin:newUser.makeAdmin});
         setBusy(false);if(!result.ok){setStatus({kind:"err",msg:result.error||"Could not create user."});return;}
-        setUsers(prev=>[...prev,result.user].sort((a,b)=>a.username.localeCompare(b.username)));setNewUser({username:"",displayName:"",temporaryPin:"",makeAdmin:false});setStatus({kind:"ok",msg:`${result.user.displayName} was created. Give them the temporary PIN to sign in.`});onLogTxn({type:"user",desc:`Created user ${result.user.username}`,qty:""});
+        setUsers(prev=>[...prev,result.user].sort((a,b)=>a.username.localeCompare(b.username)));setNewUser({username:"",displayName:"",temporaryPin:"",makeAdmin:false});setCreateOpen(false);setStatus({kind:"ok",msg:`${result.user.displayName} was created. Give them the temporary PIN to sign in.`});onLogTxn({type:"user",desc:`Created user ${result.user.username}`,qty:""});
       } catch {setBusy(false);setStatus({kind:"err",msg:"Could not reach the server."});}
     }
     async function handleSetRegCode() {
@@ -16384,8 +16385,20 @@ function compareCncOrders(a, b) {
         setStatus({ kind: "err", msg: "Could not reach the server." });
       }
     }
+    if(createOpen)return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"max-w-2xl",children:[
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"mb-4 flex items-center justify-between",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2",{className:"text-lg font-semibold text-slate-900",children:"Create user"}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p",{className:"mt-1 text-sm text-slate-500",children:"Create a new PanelStock account and provide their temporary sign-in PIN."})]}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button",{type:"button",onClick:()=>{setCreateOpen(false);setStatus(null);},className:"rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600",children:"Back to users"})]}),
+      status&&/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div",{className:`mb-4 rounded-lg px-4 py-3 text-sm ${status.kind==="err"?"text-red-800 bg-red-50":"text-green-800 bg-green-50"}`,children:status.msg}),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form",{onSubmit:createUser,className:"rounded-xl border border-slate-300 bg-white p-6",children:[
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field,{label:"Display name",children:/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input",{className:inputCls,value:newUser.displayName,onChange:event=>setNewUser(value=>({...value,displayName:event.target.value})),required:true,placeholder:"e.g. Sam Jones"})}),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field,{label:"Username",children:/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input",{className:inputCls,value:newUser.username,onChange:event=>setNewUser(value=>({...value,username:event.target.value})),required:true,placeholder:"e.g. sam.jones"})}),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field,{label:"Temporary PIN",children:/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input",{className:inputCls,type:"password",inputMode:"numeric",pattern:"[0-9]{6,12}",value:newUser.temporaryPin,onChange:event=>setNewUser(value=>({...value,temporaryPin:event.target.value.replace(/\D/g,"").slice(0,12)})),required:true,placeholder:"6–12 digits"})}),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label",{className:"mb-5 flex items-center gap-2 text-sm text-slate-600",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input",{type:"checkbox",checked:newUser.makeAdmin,onChange:event=>setNewUser(value=>({...value,makeAdmin:event.target.checked}))}),"Administrator"]}),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"flex justify-end gap-2 border-t border-slate-100 pt-5",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button",{type:"button",onClick:()=>{setCreateOpen(false);setStatus(null);},className:"rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-600",children:"Cancel"}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button",{type:"submit",disabled:busy,className:"rounded-lg bg-cyan-800 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50",children:busy?"Creating…":"Create user"})]})
+      ]})
+    ]});
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "grid grid-cols-3 gap-6", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "col-span-2 bg-white border border-slate-300 rounded-xl overflow-hidden", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"flex items-center justify-between border-b border-slate-200 px-5 py-4",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div",{className:"text-sm font-semibold text-slate-800",children:"Accounts"}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p",{className:"mt-0.5 text-xs text-slate-500",children:"Manage who can sign in and what they can access."})]}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button",{type:"button",onClick:()=>{setCreateOpen(true);setAccessUser(null);setEditUser(null);setStatus(null);},className:"rounded-lg bg-cyan-800 px-4 py-2 text-sm font-semibold text-white",children:"+ Create user"})]}),
         busy && !loaded && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "p-5 text-sm text-slate-400", children: "Loading\u2026" }),
         status && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: `px-5 py-3 text-sm border-b border-slate-100 ${status.kind === "err" ? "text-red-800 bg-red-50" : "text-green-800 bg-green-50"}`, children: status.msg }),
         loaded && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", { className: "w-full text-sm", children: [
@@ -16425,15 +16438,6 @@ function compareCncOrders(a, b) {
         })()
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "space-y-4 h-fit", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", { onSubmit:createUser,className: "bg-white border border-slate-300 rounded-xl p-5", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm font-semibold text-slate-800 mb-1", children: "Create user" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "text-sm text-slate-500 mb-4", children: "New accounts can only be created here by an administrator." }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field,{label:"Display name",children:/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input",{className:inputCls,value:newUser.displayName,onChange:event=>setNewUser(value=>({...value,displayName:event.target.value})),required:true,placeholder:"e.g. Sam Jones"})}),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field,{label:"Username",children:/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input",{className:inputCls,value:newUser.username,onChange:event=>setNewUser(value=>({...value,username:event.target.value})),required:true,placeholder:"e.g. sam.jones"})}),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field,{label:"Temporary PIN",children:/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input",{className:inputCls,type:"password",inputMode:"numeric",pattern:"[0-9]{6,12}",value:newUser.temporaryPin,onChange:event=>setNewUser(value=>({...value,temporaryPin:event.target.value.replace(/\D/g,"").slice(0,12)})),required:true,placeholder:"6–12 digits"})}),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label",{className:"mb-4 flex items-center gap-2 text-sm text-slate-600",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input",{type:"checkbox",checked:newUser.makeAdmin,onChange:event=>setNewUser(value=>({...value,makeAdmin:event.target.checked}))}),"Administrator" ]}),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button",{type:"submit",disabled:busy,className:"w-full rounded-lg bg-cyan-800 py-2.5 text-sm font-semibold text-white disabled:opacity-50",children:busy?"Creating…":"Create user"})
-      ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bg-white border border-slate-300 rounded-xl p-5", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm font-semibold text-slate-800 mb-1", children: "Default reset PIN" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { className: "text-sm text-slate-500 mb-3 leading-relaxed", children: [
