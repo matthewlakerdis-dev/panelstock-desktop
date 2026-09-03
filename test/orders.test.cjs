@@ -15,5 +15,8 @@ test('desktop web exposes permission-aware order management',()=>{
  assert.match(html,/Save changes/);
  assert.match(html,/\/pdf-link/);
  assert.match(html,/"xlsx"/);
+ assert.match(html,/window\.open\("about:blank", "_blank"\)/);
+ assert.match(html,/Promise\.all\(\[ticket\(\), ticket\(\)\]\)/);
+ assert.match(html,/\?download=1&ticket=/);
  assert.match(client,/taskAccess:result\.taskAccess\|\|\{\}/);
 });

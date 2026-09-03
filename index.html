@@ -15533,13 +15533,27 @@ function compareCncOrders(a, b) {
     }
     async function downloadOrder(order, format) {
       setNotice("Preparing " + format.toUpperCase() + "...");
-      try {
+      const preview = format === "pdf" ? window.open("about:blank", "_blank") : null;
+      if (preview) preview.opener = null;
+      const ticket = async () => {
         const response = await PanelStock.apiFetch(BAKED_WORKER_URL + "/orders/" + order.id + "/pdf-link", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
         const result = await response.json().catch(() => ({}));
         if (!response.ok || !result.pdfToken) throw Error(result.error || "The order file could not be generated.");
-        window.location.assign(BAKED_WORKER_URL + "/orders/" + order.id + "/" + format + "?ticket=" + encodeURIComponent(result.pdfToken));
-        setNotice("");
-      } catch (error) { setNotice(error.message || "The order file could not be generated."); }
+        return result.pdfToken;
+      };
+      try {
+        if (format === "pdf") {
+          const [previewToken, downloadToken] = await Promise.all([ticket(), ticket()]);
+          const base = BAKED_WORKER_URL + "/orders/" + order.id + "/pdf";
+          if (preview) preview.location.replace(base + "?ticket=" + encodeURIComponent(previewToken));
+          const link = document.createElement("a"); link.href = base + "?download=1&ticket=" + encodeURIComponent(downloadToken); link.style.display = "none"; document.body.appendChild(link); link.click(); link.remove();
+          setNotice(preview ? "" : "The PDF downloaded, but your browser blocked the preview tab.");
+        } else {
+          const fileToken = await ticket();
+          window.location.assign(BAKED_WORKER_URL + "/orders/" + order.id + "/" + format + "?ticket=" + encodeURIComponent(fileToken));
+          setNotice("");
+        }
+      } catch (error) { if (preview && !preview.closed) preview.close(); setNotice(error.message || "The order file could not be generated."); }
     }
     const pill = (value, label) => e("button", { key: value, onClick: () => setFilter(value), className: `px-4 py-2 rounded-full border text-sm font-semibold ${filter === value ? "bg-slate-900 border-slate-900 text-white" : "bg-white border-slate-300 text-slate-600 hover:border-slate-500"}` }, `${label} (${counts[value]})`);
     const field = (label, key, type = "text", required = false) => e("label", { className: "block text-xs font-medium text-slate-600" }, label, e("input", { type, required, value: panel.order[key] || "", disabled: panel.mode === "view", onChange: (event) => update(key, event.target.value), className: "mt-1.5 w-full h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm disabled:bg-slate-50 disabled:text-slate-700" }));
