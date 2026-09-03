@@ -52,6 +52,7 @@ test('desktop dispatch uses the same material sorting as stock and damage',()=>{
 test('web manages the shared schedule',()=>{
  const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
  assert.match(html,/function SchedulePage\(\{ canManage \}\)/);
+ assert.match(html,/function ScheduleCalendarIcon/);
  assert.match(html,/New schedule entry/);
  assert.match(html,/Save schedule/);
  assert.match(html,/schedule\.view/);
