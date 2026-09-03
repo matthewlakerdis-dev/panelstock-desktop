@@ -108,6 +108,7 @@ test('administrators create users and the login screen has no self-registration 
  assert.match(html,/"Site inductions"/);
  assert.match(html,/"Private administrator notes"/);
  assert.match(html,/"Account history and security"/);
+ assert.doesNotMatch(html,/field\("Finish date","finishDate"/);
  assert.match(html,/employeeProfile:newUser\.employeeProfile/);
  assert.match(html,/employeeProfile:next\.employeeProfile/);
  assert.match(html,/name:"CNC tracker",codes:\["factory\.cnc","site\.cnc\.view","schedule\.cnc\.view","schedule\.cnc\.manage"\]/);
