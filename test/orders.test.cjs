@@ -6,7 +6,13 @@ const path=require('node:path');
 test('desktop web exposes permission-aware order management',()=>{
  const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
  const client=fs.readFileSync(path.join(__dirname,'../panelstock-client.js'),'utf8');
- assert.match(html,/function OrdersPage\(\{ canCreate, canManage \}\)/);
+ assert.match(html,/function OrdersPage\(\{ canCreate, canManage, isAdmin \}\)/);
+ assert.match(html,/Add project/);
+ assert.match(html,/\/order-projects/);
+ assert.match(html,/method: "DELETE"/);
+ assert.match(html,/Delete Order/);
+ assert.match(html,/changeStatus\(order, event\.target\.value\)/);
+ assert.match(html,/Select a project/);
  assert.match(html,/Project order numbering/);
  assert.match(html,/\/order-sequences/);
  assert.match(html,/New projects start at Order 1/);

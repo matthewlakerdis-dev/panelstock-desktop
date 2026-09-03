@@ -14330,7 +14330,7 @@ ${xrefStart}
               onRemovePanel: removeCncPanel
             }
           ),
-          tab === "orders" && can("site.orders.view") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(OrdersPage, { canCreate: can("site.orders.create"), canManage: can("site.orders.manage") }),
+          tab === "orders" && can("site.orders.view") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(OrdersPage, { canCreate: can("site.orders.create"), canManage: can("site.orders.manage"), isAdmin }),
           tab === "jobs" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(JobsPage, { transactions }),
           tab === "access" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeading, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(User, { size: 18 }), title: "User Access", subtitle: "Manage users, administrators and the tasks each person can use." }),
@@ -15491,7 +15491,7 @@ function compareCncOrders(a, b) {
       ] })
     ] });
   }
-  function OrdersPage({ canCreate, canManage }) {
+  function OrdersPage({ canCreate, canManage, isAdmin }) {
     const e = import_react.createElement;
     const [orders, setOrders] = useState([]);
     const [filter, setFilter] = useState("active");
@@ -15503,6 +15503,9 @@ function compareCncOrders(a, b) {
     const [sequenceProject, setSequenceProject] = useState("");
     const [sequenceNext, setSequenceNext] = useState(1);
     const [savingSequence, setSavingSequence] = useState(false);
+    const [projects, setProjects] = useState([]);
+    const [newProject, setNewProject] = useState("");
+    const [savingProject, setSavingProject] = useState(false);
     const blankOrder = () => ({ project: "", orderType: "Other", siteContact: "", phone: "", requestedDeliveryDate: todayStr(), requestedDeliveryTime: "", scheduledDeliveryDate: "", scheduledDeliveryTime: "", locationNotes: "", status: "submitted", items: [{ quantity: 1, description: "" }] });
     async function loadOrders() {
       setLoadingOrders(true);
@@ -15511,6 +15514,7 @@ function compareCncOrders(a, b) {
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw Error(result.error || "Orders could not be loaded.");
         setOrders(result.orders || []);
+        setProjects(result.projects || []);
         setProjectSequences(result.projectSequences || []);
       } catch (error) { setNotice(error.message || "Orders could not be loaded."); }
       finally { setLoadingOrders(false); }
@@ -15578,11 +15582,34 @@ function compareCncOrders(a, b) {
       } catch (error) { setNotice(error.message || "The order number could not be saved."); }
       finally { setSavingSequence(false); }
     }
+    async function addProject(event) {
+      event.preventDefault(); const project = newProject.trim(); if (!project) return;
+      setSavingProject(true); setNotice("");
+      try {
+        const response = await PanelStock.apiFetch(BAKED_WORKER_URL + "/order-projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ project }) });
+        const result = await response.json().catch(() => ({})); if (!response.ok) throw Error(result.error || "The project could not be added.");
+        setProjects(result.projects || []); setNewProject(""); setSequenceProject(project); setSequenceNext(1); setNotice(`${project} is now available for new orders.`);
+      } catch (error) { setNotice(error.message || "The project could not be added."); }
+      finally { setSavingProject(false); }
+    }
+    async function changeStatus(order, status) {
+      setNotice("Updating order status...");
+      try { const response = await PanelStock.apiFetch(BAKED_WORKER_URL + "/orders/" + order.id + "/status", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) }); const result = await response.json().catch(() => ({})); if (!response.ok) throw Error(result.error || "The status could not be updated."); setNotice(""); await loadOrders(); }
+      catch (error) { setNotice(error.message || "The status could not be updated."); }
+    }
+    async function deleteOrder(order) {
+      if (!window.confirm(`Delete Order ${order.orderNumber} for ${order.project}? This cannot be undone.`)) return;
+      setNotice("Deleting order...");
+      try { const response = await PanelStock.apiFetch(BAKED_WORKER_URL + "/orders/" + order.id, { method: "DELETE" }); const result = await response.json().catch(() => ({})); if (!response.ok) throw Error(result.error || "The order could not be deleted."); setNotice("Order deleted."); await loadOrders(); }
+      catch (error) { setNotice(error.message || "The order could not be deleted."); }
+    }
     const pill = (value, label) => e("button", { key: value, onClick: () => setFilter(value), className: `px-4 py-2 rounded-full border text-sm font-semibold ${filter === value ? "bg-slate-900 border-slate-900 text-white" : "bg-white border-slate-300 text-slate-600 hover:border-slate-500"}` }, `${label} (${counts[value]})`);
     const field = (label, key, type = "text", required = false) => e("label", { className: "block text-xs font-medium text-slate-600" }, label, e("input", { type, required, value: panel.order[key] || "", disabled: panel.mode === "view", onChange: (event) => update(key, event.target.value), className: "mt-1.5 w-full h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm disabled:bg-slate-50 disabled:text-slate-700" }));
+    const projectField = () => e("label", { className: "block text-xs font-medium text-slate-600" }, "Project", e("select", { required: true, value: panel.order.project || "", disabled: panel.mode === "view", onChange: (event) => update("project", event.target.value), className: "mt-1.5 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm disabled:bg-slate-50 disabled:text-slate-700" }, e("option", { value: "" }, "Select a project"), projects.map((project) => e("option", { key: project, value: project }, project))));
     return e("div", null,
       e(PageHeading, { icon: e(ClipboardList, { size: 18 }), title: "Orders", subtitle: "View site requests, create orders and manage delivery progress.", action: canCreate ? e("button", { onClick: () => openPanel("new"), className: "inline-flex items-center gap-2 rounded-lg bg-cyan-800 px-4 py-2.5 text-sm font-semibold text-white hover:bg-cyan-900" }, e(Plus, { size: 16 }), "New order") : null }),
       notice && e("div", { className: "mb-4 rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-900" }, notice),
+      isAdmin && e("form", { onSubmit: addProject, className: "mb-4 rounded-xl border border-slate-300 bg-white p-4" }, e("h3", { className: "text-sm font-semibold text-slate-900" }, "Add project"), e("p", { className: "mt-1 text-xs text-slate-500" }, "Added projects become available in the Web and Site app order forms."), e("div", { className: "mt-3 flex gap-3" }, e("input", { value: newProject, maxLength: 120, onChange: (event) => setNewProject(event.target.value), placeholder: "Project name", className: "h-10 min-w-0 flex-1 rounded-lg border border-slate-300 px-3 text-sm" }), e("button", { type: "submit", disabled: savingProject || !newProject.trim(), className: "rounded-lg bg-cyan-800 px-4 text-sm font-semibold text-white disabled:opacity-50" }, savingProject ? "Adding..." : "Add project"))),
       canManage && e("form", { onSubmit: saveProjectSequence, className: "mb-4 rounded-xl border border-slate-300 bg-white p-4" },
         e("div", { className: "mb-3" }, e("h3", { className: "text-sm font-semibold text-slate-900" }, "Project order numbering"), e("p", { className: "mt-1 text-xs text-slate-500" }, "Set the next unused order number for a project. New projects start at Order 1.")),
         e("div", { className: "grid gap-3 sm:grid-cols-[minmax(0,1fr)_180px_auto] sm:items-end" },
@@ -15595,12 +15622,12 @@ function compareCncOrders(a, b) {
       e("section", { className: "overflow-hidden rounded-xl border border-slate-300 bg-white" },
         loadingOrders ? e("div", { className: "p-8 text-center text-sm text-slate-500" }, "Loading orders...") : shown.length ? shown.map((order) => e("article", { key: order.id, className: "flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-5 py-4 last:border-0" },
           e("button", { onClick: () => openPanel("view", order), className: "min-w-0 flex-1 text-left" }, e("div", { className: "flex flex-wrap items-center gap-2" }, e("strong", { className: "text-sm text-slate-900" }, `#${order.orderNumber} · ${order.project}`), e("span", { className: "rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold capitalize text-slate-600" }, order.status)), e("div", { className: "mt-1 text-xs text-slate-500" }, `${order.items?.length || 0} item${order.items?.length === 1 ? "" : "s"} · Requested by ${order.requestedBy || "Unknown"} · ${new Date(order.createdAt).toLocaleString("en-AU")}`)),
-          e("div", { className: "flex items-center gap-2" }, e("button", { onClick: () => downloadOrder(order, "pdf"), className: "rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50" }, "PDF"), e("button", { onClick: () => downloadOrder(order, "xlsx"), className: "rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50" }, "Excel"), canManage && e("button", { onClick: () => openPanel("edit", order), className: "inline-flex items-center gap-1.5 rounded-lg border border-cyan-700 px-3 py-2 text-xs font-semibold text-cyan-800 hover:bg-cyan-50" }, e(Pencil, { size: 13 }), "Edit"))
+          e("div", { className: "flex flex-wrap items-center gap-2" }, canManage && e("select", { value: order.status, onChange: (event) => changeStatus(order, event.target.value), className: "h-9 rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold capitalize text-slate-700", "aria-label": `Status for Order ${order.orderNumber}` }, ["submitted", "ordered", "completed", "cancelled"].map((status) => e("option", { key: status, value: status }, status[0].toUpperCase() + status.slice(1)))), e("button", { onClick: () => downloadOrder(order, "pdf"), className: "rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50" }, "PDF"), e("button", { onClick: () => downloadOrder(order, "xlsx"), className: "rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50" }, "Excel"), canManage && e("button", { onClick: () => openPanel("edit", order), className: "inline-flex items-center gap-1.5 rounded-lg border border-cyan-700 px-3 py-2 text-xs font-semibold text-cyan-800 hover:bg-cyan-50" }, e(Pencil, { size: 13 }), "Edit"), isAdmin && e("button", { onClick: () => deleteOrder(order), className: "grid h-9 w-9 place-items-center rounded-lg border border-red-300 text-red-700 hover:bg-red-50", title: "Delete order", "aria-label": `Delete Order ${order.orderNumber}` }, e(Trash2, { size: 15 })))
         )) : e("div", { className: "p-8 text-center text-sm text-slate-500" }, "No orders in this group.")),
       panel && e("div", { className: "fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-6", onMouseDown: (event) => { if (event.target === event.currentTarget) setPanel(null); } }, e("form", { onSubmit: saveOrder, className: "max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-xl bg-white shadow-2xl" },
         e("div", { className: "sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4" }, e("div", null, e("h2", { className: "text-base font-semibold text-slate-900" }, panel.mode === "new" ? "New order" : panel.mode === "edit" ? `Edit order #${panel.order.orderNumber}` : `Order #${panel.order.orderNumber}`), e("p", { className: "mt-0.5 text-xs text-slate-500" }, panel.mode === "view" ? "Order details" : "Required fields are marked by the browser.")), e("button", { type: "button", onClick: () => setPanel(null), className: "rounded-lg p-2 text-slate-500 hover:bg-slate-100" }, e(X, { size: 18 }))),
         e("div", { className: "space-y-5 p-6" },
-          e("div", { className: "grid grid-cols-1 gap-4 md:grid-cols-2" }, field("Project", "project", "text", true), field("Order type", "orderType"), field("Site contact", "siteContact", "text", true), field("Phone", "phone", "tel", true), field("Requested delivery date", "requestedDeliveryDate", "date", true), field("Requested delivery time", "requestedDeliveryTime", "time"), canManage && field("Scheduled delivery date", "scheduledDeliveryDate", "date"), canManage && field("Scheduled delivery time", "scheduledDeliveryTime", "time"), canManage && e("label", { className: "block text-xs font-medium text-slate-600" }, "Status", e("select", { disabled: panel.mode === "view", value: panel.order.status || "submitted", onChange: (event) => update("status", event.target.value), className: "mt-1.5 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm disabled:bg-slate-50" }, ["submitted", "ordered", "completed", "cancelled"].map((status) => e("option", { key: status, value: status }, status[0].toUpperCase() + status.slice(1))))), e("label", { className: "block text-xs font-medium text-slate-600 md:col-span-2" }, "Location / notes", e("textarea", { rows: 3, disabled: panel.mode === "view", value: panel.order.locationNotes || "", onChange: (event) => update("locationNotes", event.target.value), className: "mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-50" }))),
+          e("div", { className: "grid grid-cols-1 gap-4 md:grid-cols-2" }, projectField(), field("Order type", "orderType"), field("Site contact", "siteContact", "text", true), field("Phone", "phone", "tel", true), field("Requested delivery date", "requestedDeliveryDate", "date", true), field("Requested delivery time", "requestedDeliveryTime", "time"), canManage && field("Scheduled delivery date", "scheduledDeliveryDate", "date"), canManage && field("Scheduled delivery time", "scheduledDeliveryTime", "time"), canManage && e("label", { className: "block text-xs font-medium text-slate-600" }, "Status", e("select", { disabled: panel.mode === "view", value: panel.order.status || "submitted", onChange: (event) => update("status", event.target.value), className: "mt-1.5 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm disabled:bg-slate-50" }, ["submitted", "ordered", "completed", "cancelled"].map((status) => e("option", { key: status, value: status }, status[0].toUpperCase() + status.slice(1))))), e("label", { className: "block text-xs font-medium text-slate-600 md:col-span-2" }, "Location / notes", e("textarea", { rows: 3, disabled: panel.mode === "view", value: panel.order.locationNotes || "", onChange: (event) => update("locationNotes", event.target.value), className: "mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-50" }))),
           e("div", null, e("div", { className: "mb-2 flex items-center justify-between" }, e("h3", { className: "text-sm font-semibold text-slate-800" }, "Order items"), panel.mode !== "view" && e("button", { type: "button", onClick: () => update("items", [...panel.order.items, { quantity: 1, description: "" }]), className: "text-xs font-semibold text-cyan-800" }, "+ Add item")), panel.order.items.map((item, index) => e("div", { key: index, className: "mb-2 grid grid-cols-[100px_1fr_36px] gap-2" }, e("input", { type: "number", min: "1", step: "1", disabled: panel.mode === "view", value: item.quantity, onChange: (event) => updateItem(index, "quantity", event.target.value), className: "h-10 rounded-lg border border-slate-300 px-3 text-sm disabled:bg-slate-50", "aria-label": "Quantity" }), e("input", { type: "text", disabled: panel.mode === "view", value: item.description, onChange: (event) => updateItem(index, "description", event.target.value), placeholder: "Description", className: "h-10 rounded-lg border border-slate-300 px-3 text-sm disabled:bg-slate-50" }), panel.mode !== "view" ? e("button", { type: "button", disabled: panel.order.items.length === 1, onClick: () => update("items", panel.order.items.filter((_, itemIndex) => itemIndex !== index)), className: "grid h-10 place-items-center text-red-700 disabled:text-slate-300" }, e(Trash2, { size: 15 })) : e("span"))))
         ),
         e("div", { className: "sticky bottom-0 flex justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4" }, e("button", { type: "button", onClick: () => setPanel(null), className: "rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-600" }, "Close"), panel.mode !== "view" && e("button", { type: "submit", disabled: saving, className: "rounded-lg bg-cyan-800 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50" }, saving ? "Saving..." : panel.mode === "new" ? "Create order" : "Save changes"))
