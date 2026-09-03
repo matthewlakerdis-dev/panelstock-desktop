@@ -94,6 +94,15 @@ test('administrators create users and the login screen has no self-registration 
  assert.match(html,/roleIds:newUser\.roleIds/);
  assert.match(html,/roleIds:next\.roleIds\|\|\[\]/);
  assert.match(html,/Task access is combined from all assigned roles/);
+ assert.match(html,/function EmployeeProfileFields/);
+ assert.match(html,/"Employment details"/);
+ assert.match(html,/"Emergency contact name"/);
+ assert.match(html,/"Licences \/ qualifications"/);
+ assert.match(html,/"Site inductions"/);
+ assert.match(html,/"Private administrator notes"/);
+ assert.match(html,/"Account history and security"/);
+ assert.match(html,/employeeProfile:newUser\.employeeProfile/);
+ assert.match(html,/employeeProfile:next\.employeeProfile/);
  assert.match(html,/name:"CNC tracker",codes:\["factory\.cnc","site\.cnc\.view","schedule\.cnc\.view","schedule\.cnc\.manage"\]/);
  assert.match(html,/canManageCnc:can\("schedule\.cnc\.manage"\)/);
  assert.match(html,/"Schedule type"/);
