@@ -13046,7 +13046,13 @@
   }
   var uid = () => Math.random().toString(36).slice(2, 10);
   var genSku = () => "AL-" + Math.random().toString(36).slice(2, 8).toUpperCase();
-  var todayStr = () => (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+  function localDateStr(date = /* @__PURE__ */ new Date()) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+  var todayStr = () => localDateStr();
   var fmtDim = (w, h) => `${w} \xD7 ${h}`;
   function fmtBackupTimestamp(iso) {
     const d = new Date(iso);
@@ -15517,7 +15523,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
     const e=import_react.createElement,[entries,setEntries]=useState([]),[projects,setProjects]=useState([]),[people,setPeople]=useState([]),[scheduleSettings,setScheduleSettings]=useState({startHour:6,endHour:18}),[filterDate,setFilterDate]=useState(todayStr()),[filterPerson,setFilterPerson]=useState("all"),[viewMode,setViewMode]=useState("day"),[orientation,setOrientation]=useState("horizontal"),[loading,setLoading]=useState(true),[notice,setNotice]=useState(""),[editor,setEditor]=useState(null),[saving,setSaving]=useState(false);
     const blank=()=>({projectId:"",title:"",date:filterDate||todayStr(),startTime:`${String(scheduleSettings.startHour??6).padStart(2,"0")}:00`,endTime:`${String(Math.min(23,(scheduleSettings.startHour??6)+1)).padStart(2,"0")}:00`,assignedUsername:"",assignedTo:"",status:"planned",scheduleType:canManage?"general":"cnc",notes:""});
     const canEditEntry=entry=>(entry.scheduleType||"general")==="cnc"?canManageCnc:canManage;
-    const moveDate=direction=>{const next=new Date((filterDate||todayStr())+"T00:00:00");if(viewMode==="month")next.setMonth(next.getMonth()+direction);else next.setDate(next.getDate()+direction*(viewMode==="week"?7:1));setFilterDate(next.toISOString().slice(0,10));};
+    const moveDate=direction=>{const next=new Date((filterDate||todayStr())+"T00:00:00");if(viewMode==="month")next.setMonth(next.getMonth()+direction);else next.setDate(next.getDate()+direction*(viewMode==="week"?7:1));setFilterDate(localDateStr(next));};
     async function load(){setLoading(true);try{const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/schedule"),result=await response.json().catch(()=>({}));if(!response.ok)throw Error(result.error||"Schedule could not be loaded.");setEntries(result.entries||[]);setProjects(result.projects||[]);setPeople(result.people||[]);setScheduleSettings(result.settings||{startHour:6,endHour:18});}catch(error){setNotice(error.message||"Schedule could not be loaded.");}finally{setLoading(false);}}
     useEffect(()=>{void load();},[]);
     const update=(key,value)=>setEditor(current=>({...current,[key]:value}));
