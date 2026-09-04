@@ -14317,11 +14317,11 @@ ${xrefStart}
             " Synced"
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center justify-between gap-3", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center gap-3 min-w-0", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex flex-1 items-center gap-3 min-w-0", children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "w-12 h-12 rounded-full bg-cyan-800 text-white flex items-center justify-center text-base font-semibold shrink-0 overflow-hidden ring-2 ring-white/15", children: ownProfile?.profilePhoto?/* @__PURE__ */ (0, import_jsx_runtime.jsx)("img",{src:ownProfile.profilePhoto,alt:"",className:"h-full w-full object-cover"}):(ownProfile?.displayName||username||"?").slice(0,2).toUpperCase() }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "text-base font-medium text-slate-100 truncate", children: [
-                ownProfile?.displayName||username,
-                isAdmin ? " \xB7 Admin" : ""
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "min-w-0 flex-1", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-base font-semibold leading-tight text-slate-100 break-words", children: ownProfile?.displayName||username }),
+                isAdmin&&/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "mt-1 text-xs font-medium text-slate-400", children: "Admin" })
               ] })
             ] }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: logOut, title: "Log out", className: "text-slate-400 hover:text-white shrink-0 p-2", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LogOut, { size: 20 }) })
