@@ -14,6 +14,9 @@ test('desktop scripts parse and do not contain the shared backend credential',()
  const cncPage=html.slice(html.indexOf('function CncPage('),html.indexOf('function OrdersPage('));
  assert.match(cncPage,/children: "Complete sheet"/);
  assert.match(html,/function CncDimensionBackfill/);
+ assert.match(html,/fixed inset-0 z-50 flex flex-col bg-white/);
+ assert.match(html,/children:"Adjust current photo"|"Adjust current photo"/);
+ assert.match(html,/boxShadow:"0 0 0 9999px rgba\(0,0,0,\.5\)"/);
  assert.match(html,/function CncDimensionBackfill\([^)]*\) \{\s*const h = import_react\.createElement;/);
  const backfill=html.slice(html.indexOf('function CncDimensionBackfill'),html.indexOf('function CncPage'));
  assert.match(backfill,/key: group\.key/);
