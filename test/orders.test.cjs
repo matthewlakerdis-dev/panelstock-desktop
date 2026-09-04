@@ -107,12 +107,15 @@ test('web manages the shared schedule',()=>{
 
 test('web users can manage their own email address and profile photo',()=>{
  const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
- assert.match(html,/function ProfilePhotoPage\(\)/);
+ assert.match(html,/function ProfilePhotoPage\(\{onProfileChange\}\)/);
  assert.match(html,/label:\s*"My Profile"/);
  assert.match(html,/tab === "profile"/);
  assert.match(html,/profilePhoto:adjustedPhoto/);
  assert.match(html,/onClick:saveEmail/);
  assert.match(html,/"Email address"/);
+ assert.match(html,/ownProfile\?\.profilePhoto/);
+ assert.match(html,/onProfileChange:setOwnProfile/);
+ assert.match(html,/w-12 h-12 rounded-full/);
  assert.match(html,/accept:"image\/\*"/);
  assert.match(html,/canvas\.toDataURL\("image\/jpeg",quality\)/);
  assert.match(html,/const cropPhoto=/);
