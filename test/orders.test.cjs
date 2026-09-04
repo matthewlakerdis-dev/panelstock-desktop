@@ -114,6 +114,9 @@ test('administrators create users and the login screen has no self-registration 
  assert.match(html,/\/admin\/update-user/);
  assert.match(html,/children:u\.active\?"Active":"Inactive"/);
  assert.match(html,/children:u\.active\?"Deactivate":"Activate"/);
+ assert.match(html,/children:\s*"Temporary PIN"/);
+ assert.match(html,/temporaryPins\[u\.username\]/);
+ assert.match(html,/!u\.mustChangePin\s*\?\s*"Used"\s*:\s*shownPins\[u\.username\]\s*\?\s*"Hide"\s*:\s*"Show"/);
  assert.match(html,/placeholder:"e\.g\. Site Supervisor"/);
  assert.match(html,/placeholder:"e\.g\. Factory or Brisbane"/);
  assert.match(html,/\/admin\/roles/);

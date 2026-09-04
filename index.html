@@ -16357,6 +16357,8 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
     const [regCode, setRegCode] = useState("");
     const [newRegCode, setNewRegCode] = useState("");
     const [newUser, setNewUser] = useState(emptyNewUser);
+    const [temporaryPins,setTemporaryPins]=useState({});
+    const [shownPins,setShownPins]=useState({});
     const [status, setStatus] = useState(null);
     const [busy, setBusy] = useState(false);
     function closeCreateUser(){setNewUser(emptyNewUser());setCreateOpen(false);setStatus(null);}
@@ -16405,7 +16407,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
       try {
         const result=await callWorker("/admin/create-user",{username,targetUsername:newUser.username,displayName:newUser.displayName,title:newUser.title,location:newUser.location,email:newUser.email,phone:newUser.phone,employeeProfile:newUser.employeeProfile,temporaryPin:newUser.temporaryPin,makeAdmin:newUser.makeAdmin,roleIds:newUser.roleIds});
         setBusy(false);if(!result.ok){setStatus({kind:"err",msg:result.error||"Could not create user."});return;}
-        setUsers(prev=>[...prev,result.user].sort((a,b)=>a.username.localeCompare(b.username)));setNewUser(emptyNewUser());setCreateOpen(false);setStatus({kind:"ok",msg:`${result.user.displayName} was created. Give them the temporary PIN to sign in.`});onLogTxn({type:"user",desc:`Created user ${result.user.username}`,qty:""});
+        setUsers(prev=>[...prev,result.user].sort((a,b)=>a.username.localeCompare(b.username)));setTemporaryPins(value=>({...value,[result.user.username]:newUser.temporaryPin}));setShownPins(value=>({...value,[result.user.username]:false}));setNewUser(emptyNewUser());setCreateOpen(false);setStatus({kind:"ok",msg:`${result.user.displayName} was created. Give them the temporary PIN to sign in.`});onLogTxn({type:"user",desc:`Created user ${result.user.username}`,qty:""});
       } catch {setBusy(false);setStatus({kind:"err",msg:"Could not reach the server."});}
     }
     async function handleSetRegCode() {
@@ -16575,6 +16577,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Location" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Role" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-center text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Status" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Temporary PIN" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide" })
           ] }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: users.map((u) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { className: "border-t border-slate-100", children: [
@@ -16583,6 +16586,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3 text-slate-600", children:u.location||"—" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3 text-slate-600", children:u.isAdmin?"Administrator":(u.roleIds||[]).map(id=>roles.find(role=>role.id===id)?.name).filter(Boolean).join(", ")||"Custom access" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3 text-center", children:/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span",{className:`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${u.active?"bg-emerald-50 text-emerald-700":"bg-slate-100 text-slate-500"}`,children:u.active?"Active":"Inactive"}) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"flex min-w-[190px] items-center gap-2",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input",{type:shownPins[u.username]?"text":"password",readOnly:true,disabled:!u.mustChangePin||!temporaryPins[u.username],value:u.mustChangePin?(temporaryPins[u.username]||"Temporary PIN unavailable"):"User PIN set",className:"min-w-0 w-32 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button",{type:"button",disabled:!u.mustChangePin||!temporaryPins[u.username],onClick:()=>setShownPins(value=>({...value,[u.username]:!value[u.username]})),className:"rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-cyan-800 disabled:bg-slate-100 disabled:text-slate-400",children:!u.mustChangePin?"Used":shownPins[u.username]?"Hide":"Show"})]}) }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center justify-end gap-3", children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => openUser(u), disabled: busy, className: "rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-cyan-800", children: "Edit" }),
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => toggleActive(u), disabled: busy||u.username===username, className:`rounded-lg border px-3 py-1.5 text-xs font-semibold ${u.active?"border-amber-300 text-amber-700":"border-emerald-300 text-emerald-700"}`, children:u.active?"Deactivate":"Activate" })
