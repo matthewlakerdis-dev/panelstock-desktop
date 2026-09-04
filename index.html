@@ -13580,6 +13580,7 @@ ${xrefStart}
     try { return await PanelStock.snapshot(); } catch { return null; }
   }
 
+  const catalogKey = item => `${String(item.color || "").trim().toLowerCase()}|${String(item.material || "").trim().toLowerCase()}|${Number(item.thickness)}`;
   function App() {
     const [tab, setTab] = useState("stock");
     const [loading, setLoading] = useState(true);
@@ -13937,7 +13938,6 @@ ${xrefStart}
       if (panel) logTxn({ type: "cnc", desc: `Removed CNC schedule entry: Order ${panel.orderNumber} \xB7 Sheet ${panel.sheetNumber} \xB7 Panel ${panel.panelNumber}`, qty: "" });
       showToast("Removed from CNC schedule");
     }
-    const catalogKey = item => `${String(item.color || "").trim().toLowerCase()}|${String(item.material || "").trim().toLowerCase()}|${Number(item.thickness)}`;
     function addCatalogItem({ color, material, thickness }) {
       if (catalog.some(item => catalogKey(item) === catalogKey({ color, material, thickness }))) return showToast("This material is already in the catalog", "err");
       const catalogId = uid();
