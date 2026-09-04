@@ -105,12 +105,14 @@ test('web manages the shared schedule',()=>{
  assert.ok(schedule.indexOf('"Person"')<schedule.indexOf('"Project"'));
 });
 
-test('web users can manage their own profile photo',()=>{
+test('web users can manage their own email address and profile photo',()=>{
  const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
  assert.match(html,/function ProfilePhotoPage\(\)/);
  assert.match(html,/label:\s*"My Profile"/);
  assert.match(html,/tab === "profile"/);
  assert.match(html,/profilePhoto:adjustedPhoto/);
+ assert.match(html,/onClick:saveEmail/);
+ assert.match(html,/"Email address"/);
  assert.match(html,/accept:"image\/\*"/);
  assert.match(html,/canvas\.toDataURL\("image\/jpeg",quality\)/);
  assert.match(html,/const cropPhoto=/);
@@ -183,8 +185,9 @@ test('administrators create users and the login screen has no self-registration 
  assert.match(html,/function EmployeeProfileFields/);
  assert.match(html,/children:EmployeeProfileFields\(\{value:editUser\.employeeProfile/);
  assert.doesNotMatch(html,/jsx\)\(EmployeeProfileFields,/);
- assert.match(html,/"Employment details"/);
- assert.match(html,/"Emergency contact name"/);
+ assert.doesNotMatch(html,/"Employment details"/);
+ assert.doesNotMatch(html,/"Contact and emergency details"/);
+ assert.doesNotMatch(html,/"Emergency contact name"/);
  assert.match(html,/"Licences \/ qualifications"/);
  assert.match(html,/"Site inductions"/);
  assert.match(html,/"Private administrator notes"/);
