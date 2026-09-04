@@ -293,7 +293,7 @@
     const button=document.createElement('button');
     button.type='button';
     button.textContent=text;
-    button.style.cssText='padding:11px 16px;margin:4px;border-radius:8px;border:1px solid '+(primary?'#9a3412':'#cbd5e1')+';background:'+(primary?'#9a3412':'#fff')+';color:'+(primary?'#fff':'#334155')+';font:600 14px system-ui;cursor:pointer';
+    button.style.cssText='min-height:42px;padding:10px 16px;border-radius:8px;border:1px solid '+(primary?'#155e75':'#cbd5e1')+';background:'+(primary?'#155e75':'#fff')+';color:'+(primary?'#fff':'#334155')+';font:600 14px system-ui;cursor:pointer';
     button.onclick=onClick;
     return button;
   }
@@ -319,10 +319,10 @@
 
   function appendReview(el,legacy) {
     const details=document.createElement('details');
-    details.style.cssText='margin:18px 0;background:#fff;border:1px solid #fed7aa;border-radius:10px;padding:12px 14px;color:#334155';
+    details.style.cssText='margin:18px 0;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;color:#334155';
     const summary=document.createElement('summary');
     summary.textContent='Review pending changes';
-    summary.style.cssText='cursor:pointer;font-weight:700;color:#9a3412';
+    summary.style.cssText='cursor:pointer;font-weight:700;color:#155e75';
     details.appendChild(summary);
 
     const info=pendingSummary();
@@ -385,18 +385,29 @@
       return;
     }
 
-    el.style.cssText='position:fixed;inset:0;z-index:999999;background:rgba(15,23,42,.46);padding:24px;font:16px system-ui;overflow:auto;color:#334155;display:flex;align-items:flex-start;justify-content:center';
+    el.style.cssText='position:fixed;inset:0;z-index:999999;background:rgba(15,23,42,.52);padding:clamp(12px,3vw,28px);font:16px system-ui;overflow:auto;color:#334155;display:flex;align-items:flex-start;justify-content:center';
     const card=document.createElement('section');
-    card.style.cssText='width:min(760px,100%);margin:4vh auto;background:#fff7ed;border:1px solid #fdba74;border-radius:16px;padding:28px;box-shadow:0 24px 70px rgba(15,23,42,.25)';
+    card.style.cssText='width:min(680px,100%);margin:clamp(8px,4vh,44px) auto;background:#fff;border:1px solid #cbd5e1;border-radius:12px;padding:clamp(18px,4vw,28px);box-shadow:0 24px 70px rgba(15,23,42,.25)';
     el.appendChild(card);
 
+    const titleRow=document.createElement('div');
+    titleRow.style.cssText='display:flex;align-items:flex-start;gap:12px;margin-bottom:20px';
+    const icon=document.createElement('div');
+    icon.style.cssText='width:42px;height:42px;flex:0 0 42px;display:grid;place-items:center;border-radius:9px;background:#0f172a;color:#fff;font:800 22px system-ui';
+    icon.textContent='!';
+    titleRow.appendChild(icon);
+    const titleText=document.createElement('div');
+    titleText.style.cssText='min-width:0';
+    titleRow.appendChild(titleText);
+    card.appendChild(titleRow);
+
     const heading=document.createElement('h2');
-    heading.style.cssText='margin:0 0 8px;color:#7c2d12;font-size:24px';
+    heading.style.cssText='margin:0 0 4px;color:#0f172a;font-size:20px;line-height:1.25';
     heading.textContent=lockDenied?'PanelStock is open in another tab':'Unsynced changes are saved on this device';
-    card.appendChild(heading);
+    titleText.appendChild(heading);
 
     const p=document.createElement('p');
-    p.style.cssText='margin:0 0 14px;line-height:1.55;color:#7c2d12';
+    p.style.cssText='margin:0;line-height:1.5;color:#64748b;font-size:14px';
     p.textContent=lockDenied
       ?'Only one PanelStock tab may edit stock at a time. Close the other tab and reload this one.'
       :legacy
@@ -404,13 +415,13 @@
         :ownerMismatch
           ?'These pending changes belong to '+outbox.state.owner+'. Log in as that user to retry the sync, or export them for review.'
           :message||'PanelStock could not safely apply one or more saved changes. Nothing has been discarded.';
-    card.appendChild(p);
+    titleText.appendChild(p);
 
     if(lockDenied)return;
 
     const info=pendingSummary();
     const statusBox=document.createElement('div');
-    statusBox.style.cssText='background:#fff;border:1px solid #fed7aa;border-radius:10px;padding:12px 14px;margin:12px 0;color:#475569;font-size:14px';
+    statusBox.style.cssText='background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;margin:12px 0;color:#475569;font-size:14px';
     statusBox.textContent=legacy
       ?'Recovery status: previous-version changes detected'
       :`Recovery status: ${info.changes} saved change${info.changes===1?'':'s'}${info.blocked?' — server review required':' — waiting to sync'}`;
@@ -419,7 +430,7 @@
     appendReview(card,legacy);
 
     const actions=document.createElement('div');
-    actions.style.cssText='display:flex;flex-wrap:wrap;gap:4px;margin-top:12px';
+    actions.style.cssText='display:flex;flex-wrap:wrap;gap:8px;margin-top:16px';
 
     if(!legacy && !ownerMismatch && session) {
       actions.appendChild(makeButton('Retry sync now',async event=>{
