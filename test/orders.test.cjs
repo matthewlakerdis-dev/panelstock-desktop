@@ -102,8 +102,9 @@ test('web users can manage their own profile photo',()=>{
  assert.match(html,/canvas\.toDataURL\("image\/jpeg",quality\)/);
  assert.match(html,/const cropPhoto=/);
  assert.match(html,/"Adjust photo"/);
- assert.match(html,/"Move left or right"/);
- assert.match(html,/"Move up or down"/);
+ assert.match(html,/onPointerDown:pointerDown/);
+ assert.match(html,/onWheel:event/);
+ assert.match(html,/"Drag to reposition\. Pinch or scroll to zoom\."/);
  assert.match(html,/children:\"View Roles\"/);
  assert.doesNotMatch(html,/Profile photo must be under 1 MB/);
 });
