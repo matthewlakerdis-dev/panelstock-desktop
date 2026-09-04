@@ -32,7 +32,7 @@ for (const repo of ['panelstock-desktop']) {
   const render=vm.runInNewContext(source+';CncBulkForm',{
    useState:initial=>{const i=cursor++;if(!(i in states))states[i]=initial;return [states[i],v=>states[i]=typeof v==='function'?v(states[i]):v];},
    useRef:initial=>{const i=refCursor++;return refs[i]??(refs[i]={current:initial});},
-   Trash2:()=>{},inputCls:'input',import_jsx_runtime:{jsx:(type,props,key)=>({tag:type,...props,key})}
+   Trash2:()=>{},CncStockPicker:props=>({tag:'picker',...props}),inputCls:'input',import_jsx_runtime:{jsx:(type,props,key)=>({tag:type,...props,key})}
   });
   const flatten=n=>n&&typeof n==='object'?[n,...[n.children].flat().flatMap(flatten)]:[];
   let tree,nodes;
@@ -48,7 +48,7 @@ for (const repo of ['panelstock-desktop']) {
   nodes.find(n=>n['aria-label']==='Total panel area line 1').onChange({target:{value:'4.2'}});refresh();
   tree.onSubmit({preventDefault(){}});assert.equal(saves.length,0);refresh();
   nodes.find(n=>n.tag==='input'&&n.placeholder==='e.g. Meridian Constructions').onChange({target:{value:'Test'}});refresh();
-  nodes.find(n=>n.tag==='select').onChange({target:{value:'variant:stock-1'}});refresh();
+  nodes.find(n=>typeof n.tag==='function'&&n.onSelect).onSelect(variants[0]);refresh();
   tree.onSubmit({preventDefault(){}});assert.equal(saves.length,1);assert.equal(closed,1);assert.equal(saves[0][0].panelNumber,'A1');
  });
 }
