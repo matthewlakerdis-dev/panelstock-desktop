@@ -113,6 +113,7 @@ test('web users can manage their own profile photo',()=>{
  assert.match(html,/const cropPhoto=/);
  assert.match(html,/"Adjust photo"/);
  assert.match(html,/onPointerDown:pointerDown/);
+ assert.match(html,/image\.style\.transformOrigin/);
  assert.match(html,/onWheel:event/);
  assert.match(html,/"Drag to reposition · Pinch or scroll to zoom"/);
  assert.match(html,/children:\"View Roles\"/);
