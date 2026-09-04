@@ -13939,6 +13939,17 @@ ${xrefStart}
       if (panel) logTxn({ type: "cnc", desc: `Removed CNC schedule entry: Order ${panel.orderNumber} \xB7 Sheet ${panel.sheetNumber} \xB7 Panel ${panel.panelNumber}`, qty: "" });
       showToast("Removed from CNC schedule");
     }
+    function backfillCncDimensions(ids, enteredLength, enteredWidth) {
+      const selected = new Set(ids), length = Math.max(Number(enteredLength), Number(enteredWidth)), width = Math.min(Number(enteredLength), Number(enteredWidth));
+      if (!Number.isFinite(length) || !Number.isFinite(width) || length <= 0 || width <= 0) return showToast("Enter a valid length and width", "err");
+      const next = cncPanels.map((panel) => selected.has(panel.id) && panel.status === "completed" ? { ...panel, sheetWidth: length, sheetHeight: width } : panel);
+      const changed = next.filter((panel, index) => panel !== cncPanels[index]).length;
+      if (!changed) return showToast("No historical sheets were updated", "err");
+      const now = new Date().toISOString(), activity = [{ id: uid(), timestamp: now, user: username || "Unknown", type: "cnc", desc: `Added historical CNC dimensions: ${length} × ${width} mm · ${changed} panel${changed === 1 ? "" : "s"}`, qty: "" }, ...transactions];
+      setCncPanels(next); setTransactions(activity);
+      persist({ cncPanels: next, transactions: activity });
+      showToast("Historical sheet dimensions saved");
+    }
     function addCatalogItem({ color, material, thickness }) {
       if (catalog.some(item => catalogKey(item) === catalogKey({ color, material, thickness }))) return showToast("This material is already in the catalogue", "err");
       const catalogId = uid();
@@ -14376,7 +14387,8 @@ ${xrefStart}
               onAddPanelsBulk: addCncPanelsBulk,
               onCompletePanel: completeCncPanel,
               onCompleteSheet: completeCncSheet,
-              onRemovePanel: removeCncPanel
+              onRemovePanel: removeCncPanel,
+              onBackfillDimensions: backfillCncDimensions
             }
           ),
           tab === "orders" && can("site.orders.view") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(OrdersPage, { canCreate: can("site.orders.create"), canManage: can("site.orders.manage"), isAdmin }),
@@ -15263,13 +15275,41 @@ function compareCncOrders(a, b) {
       h("div", { className: "ps-entry-actions", children: [h("button", { type: "submit", className: "ps-entry-primary", children: count ? `Schedule ${count} panel${count === 1 ? "" : "s"}` : "Add to schedule" }), h("button", { type: "button", onClick: onClose, className: "ps-entry-cancel", children: "Cancel" })] })
     ] });
   }
-  function CncPage({ cncPanels, variants, offcuts, isAdmin, onAddPanel, onAddPanelsBulk, onCompletePanel, onCompleteSheet, onRemovePanel }) {
+  function CncDimensionBackfill({ panels, onSave, onClose }) {
+    const groups = [...panels.reduce((map, panel) => {
+      if (panel.status !== "completed" || Number(panel.sheetWidth) > 0 && Number(panel.sheetHeight) > 0) return map;
+      const key = JSON.stringify([panel.jobReference || "", panel.orderNumber || "", panel.sheetNumber || ""]), current = map.get(key) || { key, ids: [], jobReference: panel.jobReference || "", orderNumber: panel.orderNumber || "", sheetNumber: panel.sheetNumber || "", panelIds: [], panelArea: 0, completedAt: panel.completedAt || "" };
+      current.ids.push(panel.id); if (panel.panelNumber) current.panelIds.push(panel.panelNumber); current.panelArea += Number(panel.totalPanelArea) || 0;
+      map.set(key, current); return map;
+    }, new Map()).values()].sort((a, b) => String(a.completedAt).localeCompare(String(b.completedAt)));
+    const [values, setValues] = useState({});
+    const update = (key, field, value) => setValues(current => ({ ...current, [key]: { ...(current[key] || {}), [field]: value } }));
+    return h("div", { children: [
+      h(PageHeading, { icon: h(CncRouterIcon, { size: 22 }), title: "Historical CNC dimensions", subtitle: "Add dimensions to completed sheets that are missing them. Original completion dates and users are preserved." }),
+      groups.length === 0 ? h(EmptyState, { text: "All completed CNC sheets have dimensions." }) : h("div", { className: "space-y-3 max-w-3xl", children: groups.map(group => {
+        const entry = values[group.key] || {}, length = Math.max(Number(entry.length) || 0, Number(entry.width) || 0), width = Math.min(Number(entry.length) || 0, Number(entry.width) || 0), area = length * width / 1000000, waste = area > 0 ? Math.max(0, (area - group.panelArea) / area * 100) : null;
+        return h("div", { className: "bg-white rounded-xl border border-slate-300 p-5", children: [
+          h("div", { className: "font-semibold text-slate-800", children: `${group.jobReference || "No project"} · Order ${group.orderNumber} · Sheet ${group.sheetNumber}` }),
+          h("div", { className: "mt-1 text-sm text-slate-500", children: `Panels ${group.panelIds.join(", ") || "—"} · ${group.panelArea.toFixed(2)} m² panel area` }),
+          h("div", { className: "grid grid-cols-2 gap-4 mt-4", children: [
+            h("label", { className: "text-xs font-semibold text-slate-600", children: ["Length (mm)", h("input", { type: "number", min: "1", step: "1", className: inputCls + " mt-1", value: entry.length || "", onChange: event => update(group.key, "length", event.target.value) })] }),
+            h("label", { className: "text-xs font-semibold text-slate-600", children: ["Width (mm)", h("input", { type: "number", min: "1", step: "1", className: inputCls + " mt-1", value: entry.width || "", onChange: event => update(group.key, "width", event.target.value) })] })
+          ] }),
+          area > 0 && h("div", { className: "mt-2 text-sm text-slate-500", children: `Sheet area ${area.toFixed(2)} m² · Waste ${waste.toFixed(0)}%` }),
+          h("button", { type: "button", disabled: !area, className: "mt-4 bg-cyan-800 disabled:opacity-40 text-white text-sm font-semibold px-4 py-2 rounded-lg", onClick: () => onSave(group.ids, length, width), children: "Save dimensions" })
+        ] }, group.key);
+      }) }),
+      h("button", { type: "button", onClick: onClose, className: "mt-4 text-sm font-semibold text-cyan-800", children: "Back to CNC tracker" })
+    ] });
+  }
+  function CncPage({ cncPanels, variants, offcuts, isAdmin, onAddPanel, onAddPanelsBulk, onCompletePanel, onCompleteSheet, onRemovePanel, onBackfillDimensions }) {
     const [sheetToComplete, setSheetToComplete] = useState(null);
     const [inputError, setInputError] = useState("");
     const [view, setView] = useState("pending");
     const [q, setQ] = useState("");
     const [addOpen, setAddOpen] = useState(false);
     const [bulkOpen, setBulkOpen] = useState(false);
+    const [backfillOpen, setBackfillOpen] = useState(false);
     const [form, setForm] = useState({ orderNumber: "", jobReference: "", sheetNumber: "", panelNumber: "",stockItemType:"",stockItemId:"",stockSku:"",sheetWidth:"",sheetHeight:"",totalPanelArea:"" });
     const [linkCopied, setLinkCopied] = useState(false);
     const shareableLink = `https://cnc.panelstockhq.com/cnc-tracker/view?token=${encodeURIComponent(CNC_PUBLIC_TOKEN)}`;
@@ -15298,6 +15338,7 @@ function compareCncOrders(a, b) {
     }
     if (isAdmin && bulkOpen) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeading, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncRouterIcon, { size: 22 }), title: "Bulk CNC scheduling", subtitle: "Schedule multiple panels against a selected material." }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncBulkForm, { variants, offcuts, onSave: onAddPanelsBulk, onClose: () => setBulkOpen(false) })] });
     if (isAdmin && addOpen) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [inputError && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { role: "alert", className: "text-sm text-red-700 p-3", children: inputError }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeading, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncRouterIcon, { size: 22 }), title: "Schedule a CNC panel", subtitle: "Add one panel against a selected material." }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncSingleForm, { variants, offcuts, form, setForm, onSave: submitAdd, onClose: () => setAddOpen(false) })] });
+    if (isAdmin && backfillOpen) return h(CncDimensionBackfill, { panels: cncPanels, onSave: onBackfillDimensions, onClose: () => setBackfillOpen(false) });
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
       inputError && (0, import_jsx_runtime.jsx)("p", { role: "alert", className: "text-sm text-red-700 p-3", children: inputError }),
       sheetToComplete && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncSheetDialog, { sheet: sheetToComplete, affectedPanels: cncPanels.filter((p) => p.status === "pending" && p.orderNumber === sheetToComplete.orderNumber && p.sheetNumber === sheetToComplete.sheetNumber && (!sheetToComplete.panelId || p.id === sheetToComplete.panelId)), onClose: () => setSheetToComplete(null), onConfirm: () => { if (sheetToComplete.panelId) onCompletePanel(sheetToComplete.panelId); else onCompleteSheet(sheetToComplete.orderNumber, sheetToComplete.sheetNumber); setSheetToComplete(null); } }),
@@ -15326,6 +15367,7 @@ function compareCncOrders(a, b) {
         }
       ),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex flex-wrap items-center gap-2 mb-3", children: [
+        isAdmin && completed.some(panel => !(Number(panel.sheetWidth) > 0 && Number(panel.sheetHeight) > 0)) && h("button", { type: "button", onClick: () => { setBackfillOpen(true); setAddOpen(false); setBulkOpen(false); }, className: "flex items-center gap-1.5 text-sm font-medium text-amber-900 border border-amber-300 bg-amber-50 rounded-lg px-3 py-2 hover:bg-amber-100", children: `Add historical dimensions (${new Set(completed.filter(panel => !(Number(panel.sheetWidth) > 0 && Number(panel.sheetHeight) > 0)).map(panel => JSON.stringify([panel.jobReference || "", panel.orderNumber || "", panel.sheetNumber || ""]))).size})` }),
         CNC_PUBLIC_TOKEN && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", { href: excelLink, className: "flex items-center gap-1.5 text-sm font-medium text-slate-600 border border-slate-300 bg-white rounded-lg px-3 py-2 hover:bg-slate-50", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FileSpreadsheet, { size: 15 }),
           " Excel"

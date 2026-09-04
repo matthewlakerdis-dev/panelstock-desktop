@@ -13,6 +13,9 @@ test('desktop scripts parse and do not contain the shared backend credential',()
  assert.match(html,/saveUser\(editUser,true\)/);
  const cncPage=html.slice(html.indexOf('function CncPage('),html.indexOf('function OrdersPage('));
  assert.match(cncPage,/children: "Complete sheet"/);
+ assert.match(html,/function CncDimensionBackfill/);
+ assert.match(cncPage,/Add historical dimensions/);
+ assert.match(html,/Original completion dates and users are preserved/);
  assert.doesNotMatch(cncPage,/children: "Complete panel"/);
  const filter=html.match(/const dispatches = transactions.filter\(([^;]+)\);/)[1];
  const result=vm.runInNewContext(`transactions.filter(${filter})`,{transactions:[{type:'dispatch',qty:2},{type:'dispatch',qty:5,voided:true}]});
