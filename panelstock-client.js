@@ -365,8 +365,20 @@
 
     if(!blocked){
       if(outbox.pending()){
-        el.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:#fff7ed;color:#7c2d12;padding:8px;text-align:center;font:14px system-ui;pointer-events:none';
-        el.textContent=status==='syncing'?'Saving pending stock changes…':'Changes saved on this device — waiting to sync';
+        el.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:#fff7ed;color:#7c2d12;padding:8px;text-align:center;font:14px system-ui;pointer-events:auto;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap';
+        const text=document.createElement('span');
+        text.textContent=status==='syncing'?'Saving pending stock changes…':message||'Changes saved on this device — waiting to sync';
+        el.appendChild(text);
+        if(status!=='syncing'&&session){
+          el.appendChild(makeButton('Retry sync now',async event=>{
+            const button=event.currentTarget;
+            button.disabled=true;button.textContent='Retrying…';message='';
+            outbox.clearBlocked();
+            const ok=await outbox.flush(session.username);
+            if(ok&&!outbox.pending()){button.textContent='Synced — reloading…';setTimeout(()=>location.reload(),350);}
+            else renderNotice();
+          },true));
+        }
       } else {
         el.style.display='none';
       }
