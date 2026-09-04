@@ -55,6 +55,8 @@ test('web manages the shared schedule',()=>{
  assert.match(html,/function ScheduleCalendarIcon/);
  assert.match(html,/New schedule entry/);
  assert.match(html,/Save schedule/);
+ assert.match(html,/startTime:\x60\$\{String\(scheduleSettings\.startHour\?\?6\)/);
+ assert.match(html,/endTime:\x60\$\{String\(scheduleSettings\.endHour\?\?18\)/);
  assert.match(html,/value:"delivery"},"Delivery"/);
  assert.match(html,/"Delivery schedule"/);
  assert.match(html,/"bg-orange-600"/);
