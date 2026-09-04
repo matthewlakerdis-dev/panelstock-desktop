@@ -15,6 +15,9 @@ test('desktop scripts parse and do not contain the shared backend credential',()
  assert.match(cncPage,/children: "Complete sheet"/);
  assert.match(html,/function CncDimensionBackfill/);
  assert.match(html,/function CncDimensionBackfill\([^)]*\) \{\s*const h = import_react\.createElement;/);
+ const backfill=html.slice(html.indexOf('function CncDimensionBackfill'),html.indexOf('function CncPage'));
+ assert.match(backfill,/key: group\.key/);
+ assert.doesNotMatch(backfill,/\}, group\.key\)/);
  assert.match(cncPage,/const h = import_react\.createElement;/);
  assert.match(cncPage,/Add historical dimensions/);
  assert.match(html,/Original completion dates and users are preserved/);
