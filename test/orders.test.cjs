@@ -108,6 +108,8 @@ test('administrators create users and the login screen has no self-registration 
  assert.match(html,/\/admin\/create-user/);
  assert.match(html,/children:"\+ Create user"/);
  assert.match(html,/children:"Back to users"/);
+ assert.match(html,/function closeCreateUser\(\)\{setNewUser\(emptyNewUser\(\)\);setCreateOpen\(false\);setStatus\(null\);\}/);
+ assert.match(html,/onClick:closeCreateUser/);
  assert.match(html,/if\(createOpen\)return/);
  assert.match(html,/\/admin\/update-user/);
  assert.match(html,/children:u\.active\?"Active":"Inactive"/);
