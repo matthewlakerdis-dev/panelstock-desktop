@@ -107,6 +107,8 @@ test('web manages the shared schedule',()=>{
  const schedule=html.slice(html.indexOf('function SchedulePage'),html.indexOf('function OrdersPage'));
  assert.doesNotMatch(schedule,/"Status"/);
  assert.ok(schedule.indexOf('"Person"')<schedule.indexOf('"Project"'));
+ assert.match(schedule,/grid-cols-\[1fr_auto_1fr\]/);
+ assert.match(schedule,/className:"text-center text-xl font-bold text-slate-900"/);
 });
 
 test('web users can manage their own email address and profile photo',()=>{
