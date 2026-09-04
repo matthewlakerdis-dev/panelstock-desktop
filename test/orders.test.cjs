@@ -29,6 +29,10 @@ test('desktop web exposes permission-aware order management',()=>{
  assert.match(html,/Project order numbering/);
  assert.match(html,/Select an active project/);
  assert.match(html,/"Active project"/);
+ assert.match(html,/"Deactivate project"/);
+ assert.match(html,/"Reactivate project"/);
+ assert.match(html,/const activeProjects = projects\.filter/);
+ assert.match(html,/setProjectActive\(projectEditor\.active===false\)/);
  assert.doesNotMatch(html,/order-sequence-projects/);
  assert.match(html,/\/order-sequences/);
  assert.match(html,/New projects start at Order 1/);
