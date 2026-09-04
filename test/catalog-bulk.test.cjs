@@ -6,15 +6,14 @@ const html=fs.readFileSync(require('node:path').join(__dirname,'../index.html'),
 const source=html.slice(html.indexOf('  function prepareCatalogBulkRows('),html.indexOf('  function CatalogAdmin('));
 const prepare=vm.runInNewContext(source+';prepareCatalogBulkRows');
 const shared={material:' Solid Aluminium ',color:' White '};
-const line={thickness:'3',width:'1200',height:'2400',reorderPoint:''};
-test('catalog bulk entry converts dimensions, trims shared fields and defaults reorder to zero',()=>{
- const result=prepare(shared,[line,{...line,width:'1500',reorderPoint:'10'},{}]);
+const line={thickness:'3',width:'1200',height:'2400'};
+test('catalog bulk entry converts dimensions and trims shared fields',()=>{
+ const result=prepare(shared,[line,{...line,width:'1500'},{}]);
  assert.equal(result.errors.length,0);assert.equal(result.rows.length,2);
- assert.deepEqual(JSON.parse(JSON.stringify(result.rows[0])),{material:'Solid Aluminium',color:'White',thickness:3,width:2400,height:1200,reorderPoint:0});
- assert.equal(result.rows[1].reorderPoint,10);
+ assert.deepEqual(JSON.parse(JSON.stringify(result.rows[0])),{material:'Solid Aluminium',color:'White',thickness:3,width:2400,height:1200});
 });
-test('catalog bulk rejects incomplete dimensions, invalid reorder points and duplicates without partial rows',()=>{
- for(const bad of [{...line,width:''},{...line,height:'-1'},{...line,thickness:'Infinity'},{...line,reorderPoint:'1.5'},{...line,reorderPoint:'-1'}]){
+test('catalog bulk rejects incomplete dimensions and duplicates without partial rows',()=>{
+ for(const bad of [{...line,width:''},{...line,height:'-1'},{...line,thickness:'Infinity'}]){
   const result=prepare(shared,[line,bad]);assert.equal(result.rows.length,0);assert.ok(result.errors.length);
  }
  assert.ok(prepare({material:' ',color:'White'},[line]).errors.length);
@@ -35,7 +34,7 @@ test('catalog batch creates material definitions without creating sized stock ro
 
 test('shared thickness applies to all sizes, ignores empty rows, rejects invalid thickness and catches duplicates',()=>{
  const sharedDetails={...shared,thickness:'4'};
- const sizes=[{width:'4000',height:'1575',reorderPoint:''},{width:'3000',height:'1500',reorderPoint:'5'},{}];
+ const sizes=[{width:'4000',height:'1575'},{width:'3000',height:'1500'},{}];
  const result=prepare(sharedDetails,sizes);
  assert.equal(result.errors.length,0);assert.equal(result.rows.length,2);
  assert.deepEqual(Array.from(result.rows,r=>r.thickness),[4,4]);
