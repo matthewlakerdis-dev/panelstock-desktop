@@ -98,6 +98,9 @@ test('web users can manage their own profile photo',()=>{
  assert.match(html,/label: "My Profile"/);
  assert.match(html,/tab === "profile"/);
  assert.match(html,/profilePhoto:nextPhoto/);
+ assert.match(html,/accept:"image\/\*"/);
+ assert.match(html,/canvas\.toDataURL\("image\/jpeg",quality\)/);
+ assert.doesNotMatch(html,/Profile photo must be under 1 MB/);
 });
 
 test('administrators create users and the login screen has no self-registration option',()=>{
