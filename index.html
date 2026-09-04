@@ -13998,26 +13998,6 @@ ${xrefStart}
       logTxn({ type: "catalog", desc: `Edited material: now ${color} ${material} ${thickness}mm`, qty: "" });
       showToast("Material updated");
     }
-    function receiveMaterialStock({ material: details, qty, ref }) {
-      if (!Number.isSafeInteger(qty) || qty <= 0 || qty > 10000000) return "Enter a whole quantity from 1 to 10,000,000.";
-      const prepared = prepareCatalogBulkRows(details, [details]);
-      if (prepared.errors.length) return prepared.errors.join(" ");
-      const row = prepared.rows[0];
-      const found = catalog.find(item => item.material.trim().toLowerCase() === row.material.toLowerCase() && item.color.trim().toLowerCase() === row.color.toLowerCase() && item.thickness === row.thickness && Math.max(item.width,item.height) === row.width && Math.min(item.width,item.height) === row.height);
-      const existing = found && variants.find(item => item.catalogId === found.id);
-      if (existing && existing.qty + qty > 10000000) return "This receipt would exceed the maximum stock quantity.";
-      const cat = found || { ...row, id: uid(), sku: genSku() };
-      const nextCatalog = found ? catalog : [...catalog, cat];
-      const nextVariants = existing ? variants.map(item => item.id === existing.id ? { ...item, qty: item.qty + qty } : item) : [...variants, { id: uid(), catalogId: cat.id, sku: cat.sku, color: cat.color, material: cat.material, thickness: cat.thickness, width: cat.width, height: cat.height, qty }];
-      if (!found) setCatalog(nextCatalog);
-      setVariants(nextVariants);
-      // New catalog material and received stock are staged together, never as two stale snapshots.
-      persist(found ? { variants: nextVariants } : { catalog: nextCatalog, variants: nextVariants });
-      logTxn({ type: "receipt", desc: `${cat.color} ${cat.material} ${cat.thickness}mm ${fmtDim(cat.width, cat.height)}${found ? "" : " (new catalogue material)"}`, qty, ref: String(ref || "").trim(), itemType: "variant", sku: cat.sku, color: cat.color, material: cat.material, thickness: cat.thickness, width: cat.width, height: cat.height });
-      showToast(`Received ${qty} panel(s)${found ? "" : " and added material to catalogue"}`);
-      return null;
-    }
-
     function receiveStock({ catalogId, width, height, qty, ref }) {
       const cat = catalog.find((c) => c.id === catalogId);
       if (!cat) return showToast("Select a material from the catalogue", "err");
@@ -14369,7 +14349,7 @@ ${xrefStart}
               onOpenDetail: setDetailItem
             }
           ),
-          tab === "receive" && can("factory.receive") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReceivePage, { catalog, variants, isAdmin, onReceiveMaterial: receiveMaterialStock, onAddCatalogItem: addCatalogItem, onSubmit: receiveStock }),
+          tab === "receive" && can("factory.receive") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReceivePage, { catalog, variants, onSubmit: receiveStock }),
           tab === "dispatch" && can("factory.dispatch") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DispatchPage, { variants, offcuts, onSubmit: dispatchItem }),
           tab === "transfer" && can("factory.transfer") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TransferPage, { variants, onSubmit: transferStock }),
           tab === "damage" && can("factory.damage") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DamagePage, { variants, offcuts, reasons, onSubmit: writeOffDamage, onViewLog: () => setDamageLogOpen(true) }),
@@ -14664,67 +14644,7 @@ ${xrefStart}
     const field = (key, label, placeholder, type = "text") => h("label", { children: [label, h(type === "text" ? CapitalizedInput : "input", { type, step: "any", value: form[key], placeholder, onChange: value => setForm({ ...form, [key]: type === "text" ? value : value.target.value }) })] });
     return h("div", { className: "ps-entry", children: [h("h2", { children: isEditing ? "Editing material" : "Add a material" }), h("p", { className: "ps-entry-intro", children: "Catalogue materials are defined by colour, material and thickness. Sheet sizes are entered when stock is received." }), h("div", { className: "ps-entry-grid ps-catalog-grid", children: [field("material", "Material *", "e.g. Solid Aluminium"), field("color", "Colour / finish *", "e.g. White"), field("thickness", "Thickness (mm) *", "e.g. 3", "number")] }), h("p", { className: "ps-entry-note", children: "* Required" }), h("div", { className: "ps-entry-actions", children: [h("button", { onClick: onSave, className: "ps-entry-primary", children: isEditing ? "Save changes" : "Add to catalogue" }), h("button", { onClick: onClose, className: "ps-entry-cancel", children: "Cancel" })] })] });
   }
-  function ReceiveMaterialForm({ catalog, variants, onReceiveStock, onClose }) {
-    const [form, setForm] = useState({ material: "", color: "", thickness: "", width: "", height: "" });
-    const [errors, setErrors] = useState([]);
-    const [receiptQty, setReceiptQty] = useState("");
-    const [receiptRef, setReceiptRef] = useState("");
-    const saving = useRef(false);
-    const h = import_jsx_runtime.jsx;
-    function submit(event) {
-      event.preventDefault();
-      const prepared = prepareCatalogBulkRows(form, [form]);
-      setErrors(prepared.errors);
-      if (prepared.errors.length) return;
-      const quantity = Number(receiptQty);
-      if (!Number.isSafeInteger(quantity) || quantity <= 0 || quantity > 10000000) { setErrors(["Enter a whole quantity from 1 to 10,000,000."]); return; }
-      if (saving.current) return;
-      saving.current = true;
-      const error = onReceiveStock({ material: prepared.rows[0], qty: quantity, ref: receiptRef });
-      if (error) { saving.current = false; setErrors([error]); return; }
-      onClose();
-    }
-    const field = (key, label, type = "text") => h("label", { className: "block text-xs font-semibold text-slate-600", children: [label, h("input", { type, value: form[key], className: inputCls + " mt-1 w-full", step: "any", placeholder: key === "color" ? "e.g. Bronze Anodised" : key === "material" ? "e.g. ACP, Solid Aluminium" : "", onChange: e => { setForm({ ...form, [key]: e.target.value }); setErrors([]); } })] }, key);
-    return h("form", { onSubmit: submit, noValidate: true, className: "p-5 space-y-4", children: [
-      h("div", { className: "flex items-center justify-between", children: [h("h2", { className: "text-sm font-semibold text-slate-800", children: "Add missing material" }), h("button", { type: "button", "aria-label": "Close", onClick: onClose, children: h(X, { size: 18 }) })] }),
-      h("div", { className: "grid grid-cols-1 sm:grid-cols-3 gap-3", children: [field("color", "Colour / finish *"), field("material", "Material *"), field("thickness", "Thickness (mm) *", "number")] }),
-      h(SheetMeasureGuide, { compact: true }),
-      h("div", { className: "grid grid-cols-2 gap-3", children: [field("width", "Length (mm) *", "number"), field("height", "Width (mm) *", "number")] }),
-      h("p", { className: "text-xs text-slate-500", children: "Enter the new material details and quantity to add it to the catalogue and receive its stock." }),
-      h("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-3", children: [
-        h("label", { className: "block text-xs font-semibold text-slate-600", children: ["Quantity received *", h("input", { type: "number", min: 1, step: 1, value: receiptQty, className: inputCls + " mt-1 w-full", onChange: e => { setReceiptQty(e.target.value); setErrors([]); } })] }),
-        h("label", { className: "block text-xs font-semibold text-slate-600", children: ["Supplier / PO reference (optional)", h("input", { value: receiptRef, className: inputCls + " mt-1 w-full", onChange: e => setReceiptRef(e.target.value) })] })
-      ] }),
-      errors.length > 0 && h("div", { role: "alert", className: "bg-red-50 text-red-800 rounded-lg p-3 text-sm", children: errors.map((error, i) => h("p", { children: error }, i)) }),
-      h("button", { type: "submit", className: "w-full bg-cyan-800 text-white rounded-lg py-3 text-sm font-semibold", children: "Receive stock" })
-    ] });
-  }
-
-  function ReceiveMaterialDialog({ catalog, variants, onReceiveStock, onClose }) {
-    const dialogRef = useRef(null);
-    useEffect(() => {
-      const previous = document.activeElement;
-      dialogRef.current?.querySelector('input')?.focus();
-      return () => previous?.focus?.();
-    }, []);
-    function keyDown(event) {
-      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onClose(); }
-      if (event.key !== "Tab") return;
-      const elements = [...dialogRef.current.querySelectorAll('input, button:not(:disabled)')];
-      const first = elements[0], last = elements[elements.length - 1];
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
-    }
-    const h = import_jsx_runtime.jsx;
-    return h("div", { className: "fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4", onClick: onClose, children:
-      h("div", { ref: dialogRef, role: "dialog", "aria-modal": true, "aria-label": "Add missing material", className: "bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[85vh] overflow-y-auto", onKeyDown: keyDown, onClick: event => event.stopPropagation(), children:
-        h(ReceiveMaterialForm, { catalog, variants, onReceiveStock, onClose })
-      })
-    });
-  }
-
-  function ReceivePage({ catalog, variants, isAdmin, onReceiveMaterial, onAddCatalogItem, onSubmit }) {
-    const [addingMaterial, setAddingMaterial] = useState(false);
+  function ReceivePage({ catalog, variants, onSubmit }) {
     const [selected, setSelected] = useState(null);
     const [qty, setQty] = useState("");
     const [ref, setRef] = useState("");
@@ -14742,9 +14662,7 @@ ${xrefStart}
       setQ("");
     }
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
-      addingMaterial && (0, import_jsx_runtime.jsx)(ReceiveMaterialDialog, { catalog, variants, onReceiveStock: data => { const error = onReceiveMaterial(data); if (!error) { setSelected(null); setQty(""); setRef(""); setQ(""); } return error; }, onClose: () => setAddingMaterial(false) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeading, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Package, { size: 18 }), title: "Receive stock", subtitle: "Add incoming panels against an approved material." }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "mb-4", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { type: "button", onClick: () => setAddingMaterial(true), className: "inline-flex items-center gap-2 rounded-lg bg-cyan-800 px-4 py-2.5 text-sm font-semibold text-white hover:bg-cyan-900", children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Plus, { size: 16 }), "Add missing material"] }) }),
       catalog.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800", children: "No materials are available. Ask an administrator to add one in Settings." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "grid grid-cols-1 gap-6", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bg-white border border-slate-300 rounded-xl overflow-hidden", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "px-4 py-3 border-b border-slate-100", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "relative", children: [
