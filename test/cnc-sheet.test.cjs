@@ -34,6 +34,8 @@ test('complete sheet updates all pending panels in exactly that order/sheet in o
   for(const p of r.next.slice(3))assert.equal(p.status,'pending');
   assert.equal(r.nextVariants[0].qty,2);
   assert.equal(r.nextTransactions[0].type,'dispatch');assert.equal(r.nextTransactions[0].source,'cnc');assert.equal(r.nextTransactions[0].qty,1);
+  assert.equal(r.nextTransactions[0].orderNumber,'ORDER-A');assert.deepEqual(Array.from(r.nextTransactions[0].panelIds),['1','2']);
+  assert.match(r.nextTransactions[0].desc,/Order ORDER-A · Panel IDs 1, 2/);
   assert.match(r.nextTransactions[1].desc,/2 panels/);
   assert.deepEqual(Object.keys(r.writes[0]),['cncPanels','variants','offcuts','transactions']);
 });
