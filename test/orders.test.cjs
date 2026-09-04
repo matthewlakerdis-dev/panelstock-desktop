@@ -113,6 +113,21 @@ test('web users can manage their own profile photo',()=>{
  assert.doesNotMatch(html,/Profile photo must be under 1 MB/);
 });
 
+test('web navigation uses exclusive parent sections and standalone CNC and profile links',()=>{
+ const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
+ const navigation=html.slice(html.indexOf('const navGroups = ['),html.indexOf('const pageLabels ='));
+ assert.match(navigation,/label:"SOH"/);
+ assert.match(html,/label:"CNC",active:navSelection==="cnc"/);
+ assert.match(navigation,/label:"User Access"/);
+ assert.match(navigation,/label:"Material Catalogue"/);
+ assert.doesNotMatch(navigation,/label:"Roles"/);
+ assert.doesNotMatch(navigation,/label:"Schedule Settings"/);
+ assert.doesNotMatch(navigation,/label:"Other Settings"/);
+ assert.match(html,/open:openNavGroup===group\.key/);
+ assert.match(html,/setOpenNavGroup\(current=>current===group\.key\?null:group\.key\)/);
+ assert.match(html,/label:"My Profile",active:navSelection==="profile"/);
+});
+
 test('administrators create users and the login screen has no self-registration option',()=>{
  const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
  assert.match(html,/\/admin\/create-user/);

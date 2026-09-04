@@ -13585,6 +13585,7 @@ ${xrefStart}
     const [tab, setTab] = useState("stock");
     const [navSelection, setNavSelection] = useState("stock");
     const [settingsSection, setSettingsSection] = useState("general");
+    const [openNavGroup, setOpenNavGroup] = useState("stockGroup");
     const [loading, setLoading] = useState(true);
     const [variants, setVariants] = useState([]);
     const [offcuts, setOffcuts] = useState([]);
@@ -14301,10 +14302,9 @@ ${xrefStart}
     }
     const navigate=(key,target=key,section=null)=>{setNavSelection(key);if(section)setSettingsSection(section);setTab(target);};
     const navGroups = [
-      {key:"stockGroup",label:"Stock",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Layers,{size:16}),items:[...(can("factory.stock")?[{key:"stock",label:"Stock on Hand",target:"stock"}]:[]),...(can("factory.receive")?[{key:"receive",label:"Receive",target:"receive"}]:[]),...(can("factory.dispatch")?[{key:"dispatch",label:"Dispatch",target:"dispatch"}]:[]),...(can("factory.damage")?[{key:"damage",label:"Damage",target:"damage"}]:[]),...(can("factory.transfer")?[{key:"transfer",label:"Convert",target:"transfer"}]:[])]},
-      {key:"cncGroup",label:"CNC",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(CncRouterIcon,{size:18}),items:[...(can("factory.cnc")?[{key:"cnc",label:"CNC Tracker",target:"cnc"},{key:"cncSchedule",label:"CNC Scheduling",target:"cnc"},...(CNC_PUBLIC_TOKEN?[{key:"cncExcel",label:"Excel Tracker",href:`https://cnc.panelstockhq.com/cnc-tracker?token=${encodeURIComponent(CNC_PUBLIC_TOKEN)}`}]:[])]:[])]},
+      {key:"stockGroup",label:"Stock",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Layers,{size:16}),items:[...(can("factory.stock")?[{key:"stock",label:"SOH",target:"stock"}]:[]),...(can("factory.receive")?[{key:"receive",label:"Receive",target:"receive"}]:[]),...(can("factory.dispatch")?[{key:"dispatch",label:"Dispatch",target:"dispatch"}]:[]),...(can("factory.damage")?[{key:"damage",label:"Damage",target:"damage"}]:[]),...(can("factory.transfer")?[{key:"transfer",label:"Convert",target:"transfer"}]:[])]},
       {key:"workGroup",label:"Work",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Briefcase,{size:16}),items:[...(can("factory.jobs")?[{key:"jobs",label:"Jobs",target:"jobs"}]:[]),...(can("schedule.view")||can("schedule.cnc.view")?[{key:"schedule",label:"Schedule",target:"schedule"}]:[]),...(can("site.orders.view")?[{key:"orders",label:"Site Orders",target:"orders"}]:[])]},
-      {key:"adminGroup",label:"Administration",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Settings2,{size:16}),items:[...(isAdmin?[{key:"access",label:"Users",target:"access"},{key:"roles",label:"Roles",target:"access"}]:[]),...(can("factory.settings")?[{key:"materials",label:"Materials",target:"settings",section:"catalog"},...(isAdmin?[{key:"scheduleSettings",label:"Schedule Settings",target:"settings",section:"schedule"}]:[]),{key:"settings",label:"Other Settings",target:"settings",section:"general"}]:[]),{key:"profile",label:"My Profile",target:"profile"}]}
+      {key:"adminGroup",label:"Administration",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Settings2,{size:16}),items:[...(isAdmin?[{key:"access",label:"User Access",target:"access"}]:[]),...(can("factory.settings")?[{key:"materials",label:"Material Catalogue",target:"settings",section:"catalog"},{key:"settings",label:"Settings",target:"settings",section:"general"}]:[])]}
     ].filter(group=>group.items.length);
     const pageLabels = { stock: "Stock", receive: "Receive", dispatch: "Dispatch", transfer:"Convert", damage: "Damage", cnc: "CNC", orders: "Orders", schedule: "Schedule", jobs: "Jobs", access: "User Access", profile:"My Profile", settings: "Settings" };
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex h-screen bg-slate-50 text-slate-900 font-sans", children: [
@@ -14313,7 +14313,12 @@ ${xrefStart}
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-white font-semibold text-sm tracking-wide", children: "LENNOX FACADES" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-slate-400 text-xs mt-0.5", children: "PanelStock" })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("nav", { className: "flex-1 px-3 py-4 space-y-1 overflow-y-auto", children: navGroups.map(group=>/* @__PURE__ */ (0,import_jsx_runtime.jsx)(SideNavGroup,{...group,activeKey:navSelection,onSelect:item=>item.href?window.open(item.href,"_blank","noopener"):navigate(item.key,item.target,item.section)},group.key)) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("nav", { className: "flex-1 px-3 py-4 space-y-1 overflow-y-auto", children: [
+          navGroups.filter(group=>group.key==="stockGroup").map(group=>/* @__PURE__ */ (0,import_jsx_runtime.jsx)(SideNavGroup,{...group,open:openNavGroup===group.key,onToggle:()=>setOpenNavGroup(current=>current===group.key?null:group.key),activeKey:navSelection,onSelect:item=>navigate(item.key,item.target,item.section)},group.key)),
+          can("factory.cnc")&&/* @__PURE__ */ (0,import_jsx_runtime.jsx)(SideNavItem,{icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(CncRouterIcon,{size:18}),label:"CNC",active:navSelection==="cnc",onClick:()=>{setOpenNavGroup(null);navigate("cnc");}}),
+          navGroups.filter(group=>group.key!=="stockGroup").map(group=>/* @__PURE__ */ (0,import_jsx_runtime.jsx)(SideNavGroup,{...group,open:openNavGroup===group.key,onToggle:()=>setOpenNavGroup(current=>current===group.key?null:group.key),activeKey:navSelection,onSelect:item=>navigate(item.key,item.target,item.section)},group.key)),
+          /* @__PURE__ */ (0,import_jsx_runtime.jsx)(SideNavItem,{icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(User,{size:16}),label:"My Profile",active:navSelection==="profile",onClick:()=>{setOpenNavGroup(null);navigate("profile");}})
+        ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "px-4 py-3 border-t border-white/10 space-y-2", children: [
           syncStatus !== "synced" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center gap-1.5 text-xs text-amber-300", children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AlertOctagon, { size: 12 }),
@@ -14449,10 +14454,9 @@ ${xrefStart}
       )
     ] });
   }
-  function SideNavGroup({label,icon,items,activeKey,onSelect}) {
-    const active=items.some(item=>item.key===activeKey),[open,setOpen]=useState(active);
-    useEffect(()=>{if(active)setOpen(true);},[active]);
-    return /* @__PURE__ */ (0,import_jsx_runtime.jsxs)("div",{children:[/* @__PURE__ */ (0,import_jsx_runtime.jsxs)("button",{type:"button",onClick:()=>setOpen(value=>!value),"aria-expanded":open,className:`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-semibold ${active?"text-white":"text-slate-300 hover:bg-white/5 hover:text-white"}`,children:[icon,/* @__PURE__ */ (0,import_jsx_runtime.jsx)("span",{className:"flex-1 text-left",children:label}),/* @__PURE__ */ (0,import_jsx_runtime.jsx)(ChevronRight,{size:15,className:`transition-transform ${open?"rotate-90":""}`})]}),open&&/* @__PURE__ */ (0,import_jsx_runtime.jsx)("div",{className:"ml-5 space-y-0.5 border-l border-white/10 pl-2",children:items.map(item=>/* @__PURE__ */ (0,import_jsx_runtime.jsx)(SideNavItem,{label:item.label,active:item.key===activeKey,onClick:()=>onSelect(item)},item.key))})]});
+  function SideNavGroup({label,icon,items,activeKey,onSelect,open,onToggle}) {
+    const active=items.some(item=>item.key===activeKey);
+    return /* @__PURE__ */ (0,import_jsx_runtime.jsxs)("div",{children:[/* @__PURE__ */ (0,import_jsx_runtime.jsxs)("button",{type:"button",onClick:onToggle,"aria-expanded":open,className:`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-semibold ${active?"text-white":"text-slate-300 hover:bg-white/5 hover:text-white"}`,children:[icon,/* @__PURE__ */ (0,import_jsx_runtime.jsx)("span",{className:"flex-1 text-left",children:label}),/* @__PURE__ */ (0,import_jsx_runtime.jsx)(ChevronRight,{size:15,className:`transition-transform ${open?"rotate-90":""}`})]}),open&&/* @__PURE__ */ (0,import_jsx_runtime.jsx)("div",{className:"ml-5 space-y-0.5 border-l border-white/10 pl-2",children:items.map(item=>/* @__PURE__ */ (0,import_jsx_runtime.jsx)(SideNavItem,{label:item.label,active:item.key===activeKey,onClick:()=>onSelect(item)},item.key))})]});
   }
   function SideNavItem({ icon, label, active, onClick, badge }) {
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
