@@ -13583,6 +13583,8 @@ ${xrefStart}
   const catalogKey = item => `${String(item.color || "").trim().toLowerCase()}|${String(item.material || "").trim().toLowerCase()}|${Number(item.thickness)}`;
   function App() {
     const [tab, setTab] = useState("stock");
+    const [navSelection, setNavSelection] = useState("stock");
+    const [settingsSection, setSettingsSection] = useState("general");
     const [loading, setLoading] = useState(true);
     const [variants, setVariants] = useState([]);
     const [offcuts, setOffcuts] = useState([]);
@@ -14297,17 +14299,13 @@ ${xrefStart}
         }
       );
     }
-    const opsItems = [
-      ...(can("factory.stock") ? [{ key: "stock", label: "Stock", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Layers, { size: 16 }) }] : []),
-      ...(can("factory.receive") ? [{ key: "receive", label: "Receive", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Package, { size: 16 }) }] : []),
-      ...(can("factory.dispatch") ? [{ key: "dispatch", label: "Dispatch", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Truck, { size: 16 }) }] : []),
-      ...(can("factory.transfer") ? [{ key: "transfer", label: "Convert", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Scissors, { size: 16 }) }] : []),
-      ...(can("factory.damage") ? [{ key: "damage", label: "Damage", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AlertTriangle, { size: 16 }) }] : []),
-      ...(can("factory.cnc") ? [{ key: "cnc", label: "CNC", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncRouterIcon, { size: 20 }) }] : []),
-      ...(can("site.orders.view") ? [{ key: "orders", label: "Orders", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ClipboardList, { size: 16 }) }] : []),
-      ...(can("schedule.view")||can("schedule.cnc.view") ? [{ key: "schedule", label: "Schedule", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ScheduleCalendarIcon, { size: 16 }) }] : []),
-      ...(can("factory.jobs") ? [{ key: "jobs", label: "Jobs", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Briefcase, { size: 16 }) }] : [])
-    ];
+    const navigate=(key,target=key,section=null)=>{setNavSelection(key);if(section)setSettingsSection(section);setTab(target);};
+    const navGroups = [
+      {key:"stockGroup",label:"Stock",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Layers,{size:16}),items:[...(can("factory.stock")?[{key:"stock",label:"Stock on Hand",target:"stock"}]:[]),...(can("factory.receive")?[{key:"receive",label:"Receive",target:"receive"}]:[]),...(can("factory.dispatch")?[{key:"dispatch",label:"Dispatch",target:"dispatch"}]:[]),...(can("factory.damage")?[{key:"damage",label:"Damage",target:"damage"}]:[]),...(can("factory.transfer")?[{key:"transfer",label:"Convert",target:"transfer"}]:[])]},
+      {key:"cncGroup",label:"CNC",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(CncRouterIcon,{size:18}),items:[...(can("factory.cnc")?[{key:"cnc",label:"CNC Tracker",target:"cnc"},{key:"cncSchedule",label:"CNC Scheduling",target:"cnc"},...(CNC_PUBLIC_TOKEN?[{key:"cncExcel",label:"Excel Tracker",href:`https://cnc.panelstockhq.com/cnc-tracker?token=${encodeURIComponent(CNC_PUBLIC_TOKEN)}`}]:[])]:[])]},
+      {key:"workGroup",label:"Work",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Briefcase,{size:16}),items:[...(can("factory.jobs")?[{key:"jobs",label:"Jobs",target:"jobs"}]:[]),...(can("schedule.view")||can("schedule.cnc.view")?[{key:"schedule",label:"Schedule",target:"schedule"}]:[]),...(can("site.orders.view")?[{key:"orders",label:"Site Orders",target:"orders"}]:[])]},
+      {key:"adminGroup",label:"Administration",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Settings2,{size:16}),items:[...(isAdmin?[{key:"access",label:"Users",target:"access"},{key:"roles",label:"Roles",target:"access"}]:[]),...(can("factory.settings")?[{key:"materials",label:"Materials",target:"settings",section:"catalog"},...(isAdmin?[{key:"scheduleSettings",label:"Schedule Settings",target:"settings",section:"schedule"}]:[]),{key:"settings",label:"Other Settings",target:"settings",section:"general"}]:[]),{key:"profile",label:"My Profile",target:"profile"}]}
+    ].filter(group=>group.items.length);
     const pageLabels = { stock: "Stock", receive: "Receive", dispatch: "Dispatch", transfer:"Convert", damage: "Damage", cnc: "CNC", orders: "Orders", schedule: "Schedule", jobs: "Jobs", access: "User Access", profile:"My Profile", settings: "Settings" };
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex h-screen bg-slate-50 text-slate-900 font-sans", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("aside", { className: "w-60 bg-slate-900 flex flex-col shrink-0", children: [
@@ -14315,14 +14313,7 @@ ${xrefStart}
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-white font-semibold text-sm tracking-wide", children: "LENNOX FACADES" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-slate-400 text-xs mt-0.5", children: "PanelStock" })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("nav", { className: "flex-1 px-3 py-4 space-y-0.5 overflow-y-auto", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-xs font-semibold text-slate-500 uppercase tracking-wide px-3 mb-1.5", children: "Operations" }),
-          opsItems.map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SideNavItem, { icon: item.icon, label: item.label, active: tab === item.key, onClick: () => setTab(item.key) }, item.key)),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-xs font-semibold text-slate-500 uppercase tracking-wide px-3 mb-1.5 mt-5", children: "Settings" }),
-          isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SideNavItem, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(User, { size: 16 }), label: "User Access", active: tab === "access", onClick: () => setTab("access") }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SideNavItem, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(User, { size: 16 }), label: "My Profile", active: tab === "profile", onClick: () => setTab("profile") }),
-          can("factory.settings") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SideNavItem, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Settings2, { size: 16 }), label: "Settings", active: tab === "settings", onClick: () => setTab("settings") })
-        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("nav", { className: "flex-1 px-3 py-4 space-y-1 overflow-y-auto", children: navGroups.map(group=>/* @__PURE__ */ (0,import_jsx_runtime.jsx)(SideNavGroup,{...group,activeKey:navSelection,onSelect:item=>item.href?window.open(item.href,"_blank","noopener"):navigate(item.key,item.target,item.section)},group.key)) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "px-4 py-3 border-t border-white/10 space-y-2", children: [
           syncStatus !== "synced" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center gap-1.5 text-xs text-amber-300", children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AlertOctagon, { size: 12 }),
@@ -14424,7 +14415,8 @@ ${xrefStart}
               onAddCatalogItemsBulk: addCatalogItemsBulk,
               onLogTxn: logTxn,
               onResetAllSOH: resetAllSOH,
-              onResetAllInformation: resetAllInformation
+              onResetAllInformation: resetAllInformation,
+              initialSection: settingsSection
             }
           )
         ] })
@@ -14457,6 +14449,11 @@ ${xrefStart}
       )
     ] });
   }
+  function SideNavGroup({label,icon,items,activeKey,onSelect}) {
+    const active=items.some(item=>item.key===activeKey),[open,setOpen]=useState(active);
+    useEffect(()=>{if(active)setOpen(true);},[active]);
+    return /* @__PURE__ */ (0,import_jsx_runtime.jsxs)("div",{children:[/* @__PURE__ */ (0,import_jsx_runtime.jsxs)("button",{type:"button",onClick:()=>setOpen(value=>!value),"aria-expanded":open,className:`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-semibold ${active?"text-white":"text-slate-300 hover:bg-white/5 hover:text-white"}`,children:[icon,/* @__PURE__ */ (0,import_jsx_runtime.jsx)("span",{className:"flex-1 text-left",children:label}),/* @__PURE__ */ (0,import_jsx_runtime.jsx)(ChevronRight,{size:15,className:`transition-transform ${open?"rotate-90":""}`})]}),open&&/* @__PURE__ */ (0,import_jsx_runtime.jsx)("div",{className:"ml-5 space-y-0.5 border-l border-white/10 pl-2",children:items.map(item=>/* @__PURE__ */ (0,import_jsx_runtime.jsx)(SideNavItem,{label:item.label,active:item.key===activeKey,onClick:()=>onSelect(item)},item.key))})]});
+  }
   function SideNavItem({ icon, label, active, onClick, badge }) {
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
       "button",
@@ -14465,7 +14462,7 @@ ${xrefStart}
         className: `w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors relative ${active ? "bg-white/10 text-white" : "text-slate-400 hover:text-white hover:bg-white/5"}`,
         children: [
           active && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "absolute left-0 top-1.5 bottom-1.5 w-0.5 bg-cyan-400 rounded-full" }),
-          icon,
+          icon || /* @__PURE__ */ (0,import_jsx_runtime.jsx)("span",{className:"h-1.5 w-1.5 rounded-full border border-current"}),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "flex-1 text-left", children: label }),
           badge != null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "text-xs font-semibold bg-amber-400 text-amber-950 rounded-full px-1.5 py-0.5", children: badge })
         ]
@@ -16612,9 +16609,10 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
     if(loading)return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div",{className:"py-12 text-center text-sm text-slate-500",children:"Loading schedule settings..."});
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"max-w-xl mx-auto space-y-4",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"rounded-xl border border-slate-300 bg-white p-5",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2",{className:"text-sm font-semibold text-slate-800",children:"Working hours"}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p",{className:"mt-1 text-sm text-slate-500",children:"Choose the first and last hour shown on the daily schedule."}),/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"mt-4 grid grid-cols-2 gap-4",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label",{className:"text-xs font-medium text-slate-600",children:["Start of day",/* @__PURE__ */ (0, import_jsx_runtime.jsx)("select",{value:settings.startHour,onChange:event=>setSettings(current=>({...current,startHour:Number(event.target.value)})),className:"mt-1.5 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm",children:Array.from({length:23},(_,hour)=>/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option",{value:hour,children:hourLabel(hour)},hour))})]}),/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label",{className:"text-xs font-medium text-slate-600",children:["End of day",/* @__PURE__ */ (0, import_jsx_runtime.jsx)("select",{value:settings.endHour,onChange:event=>setSettings(current=>({...current,endHour:Number(event.target.value)})),className:"mt-1.5 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm",children:Array.from({length:23},(_,index)=>index+1).map(hour=>/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option",{value:hour,children:hourLabel(hour)},hour))})]})]})]}),/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"rounded-xl border border-slate-300 bg-white p-5",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2",{className:"text-sm font-semibold text-slate-800",children:"People shown in the schedule"}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p",{className:"mt-1 text-sm text-slate-500",children:"Hidden people are removed from schedule rows and assignment choices. Existing entries are preserved."}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div",{className:"mt-4 divide-y divide-slate-100",children:people.map(person=>/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label",{className:"flex items-center gap-3 py-3 text-sm text-slate-700",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input",{type:"checkbox",checked:settings.visibleUsernames.includes(person.username),onChange:()=>toggle(person.username),className:"h-4 w-4 accent-cyan-700"}),person.displayName]},person.username))})]}),notice&&/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p",{className:"text-sm text-cyan-800",children:notice}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button",{type:"button",onClick:save,disabled:saving,className:"w-full rounded-lg bg-cyan-800 py-2.5 text-sm font-semibold text-white disabled:opacity-50",children:saving?"Saving...":"Save schedule settings"})]});
   }
-  function SettingsPage({ reasons, onAddReason, onRemoveReason, onExportExcel, onExportPDF, onExportActivityExcel, onExportActivityPDF, onExportCatalogExcel, onExportCatalogPDF, emailConfig, onSaveEmailConfig, onSendReportNow, onPushLocalData, onOpenDamageLog, transactions, onVoidTransaction, username, isAdmin, catalog, onAddCatalogItem, onRemoveCatalogItem, onEditCatalogItem, onAddCatalogItemsBulk, onLogTxn, onResetAllSOH, onResetAllInformation, workerUrl, workerSecret }) {
+  function SettingsPage({ reasons, onAddReason, onRemoveReason, onExportExcel, onExportPDF, onExportActivityExcel, onExportActivityPDF, onExportCatalogExcel, onExportCatalogPDF, emailConfig, onSaveEmailConfig, onSendReportNow, onPushLocalData, onOpenDamageLog, transactions, onVoidTransaction, username, isAdmin, catalog, onAddCatalogItem, onRemoveCatalogItem, onEditCatalogItem, onAddCatalogItemsBulk, onLogTxn, onResetAllSOH, onResetAllInformation, workerUrl, workerSecret, initialSection="general" }) {
     const [newReason, setNewReason] = useState("");
-    const [section, setSection] = useState("general");
+    const [section, setSection] = useState(initialSection);
+    useEffect(()=>setSection(initialSection),[initialSection]);
     const sections = [
       { key: "general", label: "General" },
       ...isAdmin ? [{ key: "schedule", label: "Schedule" }] : [],
