@@ -10,7 +10,7 @@ const line={thickness:'3',width:'1200',height:'2400',reorderPoint:''};
 test('catalog bulk entry converts dimensions, trims shared fields and defaults reorder to zero',()=>{
  const result=prepare(shared,[line,{...line,width:'1500',reorderPoint:'10'},{}]);
  assert.equal(result.errors.length,0);assert.equal(result.rows.length,2);
- assert.deepEqual(JSON.parse(JSON.stringify(result.rows[0])),{material:'Solid Aluminium',color:'White',thickness:3,width:1200,height:2400,reorderPoint:0});
+ assert.deepEqual(JSON.parse(JSON.stringify(result.rows[0])),{material:'Solid Aluminium',color:'White',thickness:3,width:2400,height:1200,reorderPoint:0});
  assert.equal(result.rows[1].reorderPoint,10);
 });
 test('catalog bulk rejects incomplete dimensions, invalid reorder points and duplicates without partial rows',()=>{
@@ -54,9 +54,9 @@ test('catalog form keeps one thickness when adding and removing rows and saves a
  const input=(placeholder,value)=>{nodes.find(n=>n.tag==='input'&&n.placeholder===placeholder).onChange({target:{value}});draw();};
  const size=(label,value)=>{nodes.find(n=>n['aria-label']===label).onChange({target:{value}});draw();};
  draw();input('e.g. Solid Aluminium','Aluminium');input('e.g. White','White');input('e.g. 3','3');
- size('Width row 1','4000');size('Height row 1','1575');
+ size('Length row 1','4000');size('Width row 1','1575');
  nodes.find(n=>n.children==='+ Add line').onClick();draw();
- size('Width row 2','3000');size('Height row 2','1500');
+ size('Length row 2','3000');size('Width row 2','1500');
  input('e.g. 3','4');assert.equal(nodes.filter(n=>n.tag==='input'&&n.placeholder==='e.g. 3').length,1);
  nodes.find(n=>n.children==='+ Add line').onClick();draw();nodes.find(n=>n['aria-label']==='Remove size row 3').onClick();draw();
  tree.onSubmit({preventDefault(){}});

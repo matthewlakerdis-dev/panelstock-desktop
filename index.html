@@ -13060,7 +13060,7 @@
     return `${year}-${month}-${day}`;
   }
   var todayStr = () => localDateStr();
-  var fmtDim = (w, h) => `${w} \xD7 ${h}`;
+  var fmtDim = (w, h) => `${Math.max(Number(w),Number(h))} \xD7 ${Math.min(Number(w),Number(h))}`;
   function fmtBackupTimestamp(iso) {
     const d = new Date(iso);
     return d.toLocaleString(void 0, { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
@@ -13938,6 +13938,7 @@ ${xrefStart}
       showToast("Removed from CNC schedule");
     }
     function addCatalogItem({ color, material, thickness, width, height, reorderPoint }) {
+      [width,height]=[Math.max(Number(width),Number(height)),Math.min(Number(width),Number(height))];
       const catalogId = uid();
       const sku = genSku();
       const nextCatalog = [...catalog, { id: catalogId, sku, color, material, thickness, width, height, reorderPoint: reorderPoint || 0 }];
@@ -13975,6 +13976,7 @@ ${xrefStart}
       showToast("Removed from catalog");
     }
     function editCatalogItem(id, { color, material, thickness, width, height, reorderPoint }) {
+      [width,height]=[Math.max(Number(width),Number(height)),Math.min(Number(width),Number(height))];
       const before = catalog.find((c) => c.id === id);
       const nextCatalog = catalog.map(
         (c) => c.id === id ? { ...c, color, material, thickness, width, height, reorderPoint: reorderPoint || 0 } : c
@@ -13993,7 +13995,7 @@ ${xrefStart}
       const prepared = prepareCatalogBulkRows(details, [details]);
       if (prepared.errors.length) return prepared.errors.join(" ");
       const row = prepared.rows[0];
-      const found = catalog.find(item => item.material.trim().toLowerCase() === row.material.toLowerCase() && item.color.trim().toLowerCase() === row.color.toLowerCase() && item.thickness === row.thickness && item.width === row.width && item.height === row.height);
+      const found = catalog.find(item => item.material.trim().toLowerCase() === row.material.toLowerCase() && item.color.trim().toLowerCase() === row.color.toLowerCase() && item.thickness === row.thickness && Math.max(item.width,item.height) === row.width && Math.min(item.width,item.height) === row.height);
       const existing = found && variants.find(item => item.catalogId === found.id);
       if (existing && existing.qty + qty > 10000000) return "This receipt would exceed the maximum stock quantity.";
       const cat = found || { ...row, id: uid(), sku: genSku() };
@@ -14081,6 +14083,7 @@ ${xrefStart}
       showToast(`Written off (${reason})`);
     }
     function addOffcut({ color, material, thickness, width, height, qty, note }) {
+      [width,height]=[Math.max(Number(width),Number(height)),Math.min(Number(width),Number(height))];
       const sku = genSku();
       const next = [...offcuts, { id: uid(), sku, color, material, thickness, width, height, qty, note: note || "" }];
       setOffcuts(next);
@@ -14096,6 +14099,7 @@ ${xrefStart}
       showToast("Reorder point updated");
     }
     function editOffcut(offcutId, { width, height, qty, note }) {
+      [width,height]=[Math.max(Number(width),Number(height)),Math.min(Number(width),Number(height))];
       if (!isAdmin) return showToast("Admin access required to correct offcuts", "err");
       const before = offcuts.find((o) => o.id === offcutId);
       const next = offcuts.map((o) => o.id === offcutId ? { ...o, width, height, qty, note: note || "" } : o);
@@ -14141,8 +14145,8 @@ ${xrefStart}
           Colour: v.color,
           Material: v.material,
           "Thickness (mm)": v.thickness,
-          "Width (mm)": v.width,
-          "Height (mm)": v.height,
+          "Length (mm)": Math.max(v.width,v.height),
+          "Width (mm)": Math.min(v.width,v.height),
           "Qty (SOH)": v.qty,
           "Reorder point": v.reorderPoint || 0
         })),
@@ -14152,8 +14156,8 @@ ${xrefStart}
           Colour: o.color,
           Material: o.material,
           "Thickness (mm)": o.thickness,
-          "Width (mm)": o.width,
-          "Height (mm)": o.height,
+          "Length (mm)": Math.max(o.width,o.height),
+          "Width (mm)": Math.min(o.width,o.height),
           "Qty (SOH)": o.qty,
           Note: o.note
         }))
@@ -14194,8 +14198,8 @@ ${xrefStart}
         Colour: c.color,
         Material: c.material,
         "Thickness (mm)": c.thickness,
-        "Width (mm)": c.width,
-        "Height (mm)": c.height,
+        "Length (mm)": Math.max(c.width,c.height),
+        "Width (mm)": Math.min(c.width,c.height),
         "Reorder point": c.reorderPoint || 0
       }));
       const csv = rowsToCSV(rows);
@@ -14636,8 +14640,8 @@ ${xrefStart}
   function SheetMeasureGuide({ compact = false }) {
     const h = import_jsx_runtime.jsx;
     return h("aside", { className: "ps-measure" + (compact ? " ps-measure-compact" : ""), "aria-label": "Sheet dimension guide", children: [
-      h("div", { children: [h("h3", { children: "Measuring your sheet" }), h("p", { children: "Width runs horizontally. Height runs vertically." }), h("p", { children: ["Example: ", h("strong", { children: "4000 width × 1575 height (mm)" })] })] }),
-      h("svg", {"viewBox": "15 0 520 190", "role": "img", "aria-label": "A sheet 4000 millimetres wide horizontally and 1575 millimetres high vertically", children: [h("rect", {"x": "30", "y": "40", "width": "340", "height": "134", "rx": "4", "fill": "#e6f1f4", "stroke": "#155e75", "strokeWidth": "2"}), h("text", {"x": "200", "y": "112", "textAnchor": "middle", "fill": "#155e75", "fontSize": "20", children: ["Sheet / panel"]}), h("path", {"d": "M30 30V12M370 30V12", "stroke": "#94a3b8"}), h("path", {"d": "M35 20H365", "stroke": "#155e75", "strokeWidth": "1.5"}), h("rect", {"x": "107", "y": "3", "width": "186", "height": "30", "fill": "#f0f7f9"}), h("text", {"x": "200", "y": "25", "textAnchor": "middle", "fill": "#155e75", "fontSize": "20", "fontWeight": "600", children: ["Width: 4000 mm"]}), h("path", {"d": "M382 40H408M382 174H408", "stroke": "#94a3b8"}), h("path", {"d": "M398 45V169", "stroke": "#155e75", "strokeWidth": "1.5"}), h("text", {"x": "417", "y": "103", "fill": "#155e75", "fontSize": "20", "fontWeight": "600", children: ["Height"]}), h("text", {"x": "417", "y": "125", "fill": "#155e75", "fontSize": "20", children: ["1575 mm"]}), h("path", {"d": "M35 20l7 -4v8z M365 20l-7 -4v8z", "fill": "#155e75"}), h("path", {"d": "M398 45l-4 7h8z M398 169l-4 -7h8z", "fill": "#155e75"})]})
+      h("div", { children: [h("h3", { children: "Measuring your sheet" }), h("p", { children: "Length is always the longer side. Width is the shorter side." }), h("p", { children: ["Example: ", h("strong", { children: "4000 length × 1575 width (mm)" })] })] }),
+      h("svg", {"viewBox": "15 0 520 190", "role": "img", "aria-label": "A sheet 4000 millimetres long and 1575 millimetres wide", children: [h("rect", {"x": "30", "y": "40", "width": "340", "height": "134", "rx": "4", "fill": "#e6f1f4", "stroke": "#155e75", "strokeWidth": "2"}), h("text", {"x": "200", "y": "112", "textAnchor": "middle", "fill": "#155e75", "fontSize": "20", children: ["Sheet / panel"]}), h("path", {"d": "M30 30V12M370 30V12", "stroke": "#94a3b8"}), h("path", {"d": "M35 20H365", "stroke": "#155e75", "strokeWidth": "1.5"}), h("rect", {"x": "107", "y": "3", "width": "186", "height": "30", "fill": "#f0f7f9"}), h("text", {"x": "200", "y": "25", "textAnchor": "middle", "fill": "#155e75", "fontSize": "20", "fontWeight": "600", children: ["Length: 4000 mm"]}), h("path", {"d": "M382 40H408M382 174H408", "stroke": "#94a3b8"}), h("path", {"d": "M398 45V169", "stroke": "#155e75", "strokeWidth": "1.5"}), h("text", {"x": "417", "y": "103", "fill": "#155e75", "fontSize": "20", "fontWeight": "600", children: ["Width"]}), h("text", {"x": "417", "y": "125", "fill": "#155e75", "fontSize": "20", children: ["1575 mm"]}), h("path", {"d": "M35 20l7 -4v8z M365 20l-7 -4v8z", "fill": "#155e75"}), h("path", {"d": "M398 45l-4 7h8z M398 169l-4 -7h8z", "fill": "#155e75"})]})
     ] });
   }
   function CncSingleForm({ form, setForm, onSave, onClose, variants, offcuts }) {
@@ -14649,7 +14653,7 @@ ${xrefStart}
   function CatalogSingleForm({ form, setForm, isEditing, onSave, onClose }) {
     const h = import_jsx_runtime.jsx;
     const field = (key, label, placeholder, type = "text") => h("label", { children: [label, h(type === "text" ? CapitalizedInput : "input", { type, step: key === "reorderPoint" ? "1" : "any", value: form[key], placeholder, onChange: value => setForm({ ...form, [key]: type === "text" ? value : value.target.value }) })] });
-    return h("div", { className: "ps-entry", children: [h("h2", { children: isEditing ? "Editing material" : "Add a material" }), h("p", { className: "ps-entry-intro", children: "Enter the material, colour and size to add it to the catalog." }), h("div", { className: "ps-entry-grid ps-catalog-grid", children: [field("material", "Material *", "e.g. Solid Aluminium"), field("color", "Colour / finish *", "e.g. White"), field("thickness", "Thickness (mm) *", "e.g. 3", "number"), h(SheetMeasureGuide, { compact: true }), h("div", { className: "ps-entry-rows ps-entry-row ps-catalog-row", children: [field("width", "Width (mm) *", "e.g. 4000", "number"), field("height", "Height (mm) *", "e.g. 1575", "number"), field("reorderPoint", "Reorder point", "0", "number")] })] }), h("p", { className: "ps-entry-note", children: "* Required. Leave reorder point blank to use 0." }), h("div", { className: "ps-entry-actions", children: [h("button", { onClick: onSave, className: "ps-entry-primary", children: isEditing ? "Save changes" : "Add to catalog" }), h("button", { onClick: onClose, className: "ps-entry-cancel", children: "Cancel" })] })] });
+    return h("div", { className: "ps-entry", children: [h("h2", { children: isEditing ? "Editing material" : "Add a material" }), h("p", { className: "ps-entry-intro", children: "Enter the material, colour and size to add it to the catalog." }), h("div", { className: "ps-entry-grid ps-catalog-grid", children: [field("material", "Material *", "e.g. Solid Aluminium"), field("color", "Colour / finish *", "e.g. White"), field("thickness", "Thickness (mm) *", "e.g. 3", "number"), h(SheetMeasureGuide, { compact: true }), h("div", { className: "ps-entry-rows ps-entry-row ps-catalog-row", children: [field("width", "Length (mm) *", "e.g. 4000", "number"), field("height", "Width (mm) *", "e.g. 1575", "number"), field("reorderPoint", "Reorder point", "0", "number")] })] }), h("p", { className: "ps-entry-note", children: "* Required. Leave reorder point blank to use 0." }), h("div", { className: "ps-entry-actions", children: [h("button", { onClick: onSave, className: "ps-entry-primary", children: isEditing ? "Save changes" : "Add to catalog" }), h("button", { onClick: onClose, className: "ps-entry-cancel", children: "Cancel" })] })] });
   }
   function ReceiveMaterialForm({ catalog, variants, onReceiveStock, onClose }) {
     const [form, setForm] = useState({ material: "", color: "", thickness: "", width: "", height: "", reorderPoint: "" });
@@ -14676,7 +14680,7 @@ ${xrefStart}
       h("div", { className: "flex items-center justify-between", children: [h("h2", { className: "text-sm font-semibold text-slate-800", children: "Add missing material" }), h("button", { type: "button", "aria-label": "Close", onClick: onClose, children: h(X, { size: 18 }) })] }),
       h("div", { className: "grid grid-cols-1 sm:grid-cols-3 gap-3", children: [field("color", "Colour / finish *"), field("material", "Material *"), field("thickness", "Thickness (mm) *", "number")] }),
       h(SheetMeasureGuide, { compact: true }),
-      h("div", { className: "grid grid-cols-2 gap-3", children: [field("width", "Width (mm) *", "number"), field("height", "Height (mm) *", "number")] }),
+      h("div", { className: "grid grid-cols-2 gap-3", children: [field("width", "Length (mm) *", "number"), field("height", "Width (mm) *", "number")] }),
       field("reorderPoint", "Reorder point (optional)", "number"),
       h("p", { className: "text-xs text-slate-500", children: "Enter the new material details and quantity to add it to the catalog and receive its stock." }),
       h("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-3", children: [
@@ -15473,8 +15477,8 @@ function compareCncOrders(a, b) {
       (0, import_jsx_runtime.jsx)(SheetMeasureGuide, { compact: true }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-xs font-semibold text-slate-600 mb-1 mt-1", children: "Off-cut size" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "grid grid-cols-2 gap-3", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Width (mm)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, type: "number", value: form.width, onChange: set("width") }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Height (mm)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, type: "number", value: form.height, onChange: set("height") }) })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Length (mm)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, type: "number", value: form.width, onChange: set("width") }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Width (mm)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, type: "number", value: form.height, onChange: set("height") }) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "grid grid-cols-2 gap-3", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Quantity", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, type: "number", value: form.qty, onChange: set("qty") }) }),
@@ -15929,8 +15933,8 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
       item.itemType === "offcut" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "border border-slate-200 rounded-xl p-3 mb-1", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-xs font-semibold text-slate-600 mb-2", children: "Fix a mistake \u2014 edit this off-cut's size, quantity, or note" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "grid grid-cols-2 gap-3", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Width (mm)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, type: "number", value: editForm.width, onChange: setEdit("width") }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Height (mm)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, type: "number", value: editForm.height, onChange: setEdit("height") }) })
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Length (mm)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, type: "number", value: editForm.width, onChange: setEdit("width") }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Width (mm)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, type: "number", value: editForm.height, onChange: setEdit("height") }) })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Quantity", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, type: "number", value: editForm.qty, onChange: setEdit("qty") }) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Note (optional)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CapitalizedInput, { value: editForm.note, onChange: (v) => setEditForm({ ...editForm, note: v }), placeholder: "e.g. leftover from WO-1042" }) }),
@@ -15949,12 +15953,12 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
     if (sharedThickness && (!Number.isFinite(Number(shared.thickness)) || Number(shared.thickness) <= 0 || Number(shared.thickness) > 1000000)) errors.push("Enter a positive thickness up to 1,000,000 mm.");
     if (!material || !color) errors.push("Enter a material and colour.");
     if (material.length > 500 || color.length > 500) errors.push("Material and colour must be 500 characters or fewer.");
-    const keyFor = row => JSON.stringify([row.material.trim().toLowerCase(), row.color.trim().toLowerCase(), Number(row.thickness), Number(row.width), Number(row.height)]);
+    const keyFor = row => JSON.stringify([row.material.trim().toLowerCase(), row.color.trim().toLowerCase(), Number(row.thickness), Math.max(Number(row.width),Number(row.height)), Math.min(Number(row.width),Number(row.height))]);
     const existing = new Set(catalog.map(keyFor));
     lines.forEach((line, i) => {
       if (!(sharedThickness ? [line.width, line.height, line.reorderPoint] : [line.thickness, line.width, line.height, line.reorderPoint]).some(value => String(value ?? "").trim())) return;
-      const thickness = Number(sharedThickness ? shared.thickness : line.thickness), width = Number(line.width), height = Number(line.height), reorderPoint = Number(line.reorderPoint || 0);
-      if (![thickness, width, height].every(value => Number.isFinite(value) && value > 0 && value <= 1000000)) { errors.push(`Row ${i + 1}: enter positive thickness, width and height, up to 1,000,000 mm.`); return; }
+      const thickness = Number(sharedThickness ? shared.thickness : line.thickness), first = Number(line.width), second = Number(line.height), width = Math.max(first,second), height = Math.min(first,second), reorderPoint = Number(line.reorderPoint || 0);
+      if (![thickness, width, height].every(value => Number.isFinite(value) && value > 0 && value <= 1000000)) { errors.push(`Row ${i + 1}: enter positive thickness, length and width, up to 1,000,000 mm.`); return; }
       if (!Number.isSafeInteger(reorderPoint) || reorderPoint < 0 || reorderPoint > 10000000) { errors.push(`Row ${i + 1}: reorder point must be a whole number from 0 to 10,000,000.`); return; }
       const row = { material, color, thickness, width, height, reorderPoint }, key = keyFor(row);
       if (seen.has(key) || existing.has(key)) errors.push(`Row ${i + 1}: this material, colour and size already exist in the catalog or this batch.`);
@@ -15986,9 +15990,9 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
         ...[["material", "Material", "e.g. Solid Aluminium"], ["color", "Colour / finish", "e.g. White"], ["thickness", "Thickness (mm)", "e.g. 3"]].map(([key, label, placeholder]) => h("label", { children: [label + " *", h("input", { type: key === "thickness" ? "number" : "text", step: "any", min: key === "thickness" ? "0.001" : undefined, required: true, maxLength: 500, value: shared[key], placeholder, onChange: e => { setShared({ ...shared, [key]: e.target.value }); setErrors([]); } })] }, key)),
         h(SheetMeasureGuide, { compact: true }),
         h("div", { className: "ps-entry-rows", children: [
-          h("div", { className: "ps-entry-columns ps-catalog-row", children: ["Width (mm) *", "Height (mm) *", "Reorder point"].map(label => h("span", { children: label }, label)) }),
+          h("div", { className: "ps-entry-columns ps-catalog-row", children: ["Length (mm) *", "Width (mm) *", "Reorder point"].map(label => h("span", { children: label }, label)) }),
           ...lines.map((line, i) => h("div", { className: "ps-entry-row ps-catalog-row", children: [
-            ...["width", "height", "reorderPoint"].map((key, n) => h("input", { type: "number", step: n === 2 ? "1" : "any", min: n === 2 ? 0 : "0.001", "aria-label": ["Width", "Height", "Reorder point"][n] + " row " + (i + 1), value: line[key], placeholder: ["e.g. 4000", "e.g. 1575", "0"][n], onChange: e => { const value = e.target.value; setLines(current => current.map(item => item.id === line.id ? { ...item, [key]: value } : item)); setErrors([]); } }, key)),
+            ...["width", "height", "reorderPoint"].map((key, n) => h("input", { type: "number", step: n === 2 ? "1" : "any", min: n === 2 ? 0 : "0.001", "aria-label": ["Length", "Width", "Reorder point"][n] + " row " + (i + 1), value: line[key], placeholder: ["e.g. 4000", "e.g. 1575", "0"][n], onChange: e => { const value = e.target.value; setLines(current => current.map(item => item.id === line.id ? { ...item, [key]: value } : item)); setErrors([]); } }, key)),
             !single && h("button", { type: "button", "aria-label": "Remove size row " + (i + 1), className: "ps-entry-trash", onClick: () => { setLines(current => current.filter(item => item.id !== line.id)); setErrors([]); }, children: h(Trash2, { size: 16 }) })
           ] }, line.id)),
           !single && h("button", { type: "button", className: "ps-entry-add", onClick: () => { const id = nextId.current++; setLines(current => [...current, { id, width: "", height: "", reorderPoint: "" }]); }, children: "+ Add line" })
