@@ -125,7 +125,8 @@ test('web navigation uses exclusive parent sections and standalone CNC and profi
  assert.match(navigation,/label:"SOH"/);
  assert.match(html,/label:"CNC",active:navSelection==="cnc"/);
  assert.match(navigation,/label:"User Access"/);
- assert.match(navigation,/label:"Material Catalogue"/);
+ assert.doesNotMatch(navigation,/label:"Material Catalogue"/);
+ assert.match(html,/key: "catalog", label: "Material Catalogue"/);
  assert.doesNotMatch(navigation,/label:"Roles"/);
  assert.doesNotMatch(navigation,/label:"Schedule Settings"/);
  assert.doesNotMatch(navigation,/label:"Other Settings"/);

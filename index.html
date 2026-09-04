@@ -13842,7 +13842,7 @@ ${xrefStart}
         timestamp: (/* @__PURE__ */ new Date()).toISOString(),
         user: username || "Unknown",
         type: "reset",
-        desc: `FULL RESET \u2014 cleared catalog (${catalogCount} materials), ${panelTypes} panel type(s), ${offcutCount} off-cut(s), damage reasons restored to default, and preserved ${activityCount} prior activity entries`,
+        desc: `FULL RESET \u2014 cleared catalogue (${catalogCount} materials), ${panelTypes} panel type(s), ${offcutCount} off-cut(s), damage reasons restored to default, and preserved ${activityCount} prior activity entries`,
         qty: 0
       };
       setTransactions([resetEntry, ...transactions]);
@@ -13940,14 +13940,14 @@ ${xrefStart}
       showToast("Removed from CNC schedule");
     }
     function addCatalogItem({ color, material, thickness }) {
-      if (catalog.some(item => catalogKey(item) === catalogKey({ color, material, thickness }))) return showToast("This material is already in the catalog", "err");
+      if (catalog.some(item => catalogKey(item) === catalogKey({ color, material, thickness }))) return showToast("This material is already in the catalogue", "err");
       const catalogId = uid();
       const sku = genSku();
       const nextCatalog = [...catalog, { id: catalogId, sku, color, material, thickness, width: 0, height: 0 }];
       setCatalog(nextCatalog);
       persist({ catalog: nextCatalog });
-      logTxn({ type: "catalog", desc: `Added ${color} ${material} ${thickness}mm to the catalog`, qty: "" });
-      showToast("Material added to catalog");
+      logTxn({ type: "catalog", desc: `Added ${color} ${material} ${thickness}mm to the catalogue`, qty: "" });
+      showToast("Material added to catalogue");
       return nextCatalog.find(item => item.id === catalogId);
     }
     function addCatalogItemsBulk(rows) {
@@ -13960,7 +13960,7 @@ ${xrefStart}
       const nextCatalog = [...catalog, ...newCatalogEntries];
       setCatalog(nextCatalog);
       persist({ catalog: nextCatalog });
-      logTxn({ type: "catalog", desc: `Bulk added ${rows.length} material${rows.length === 1 ? "" : "s"} to the catalog`, qty: "" });
+      logTxn({ type: "catalog", desc: `Bulk added ${rows.length} material${rows.length === 1 ? "" : "s"} to the catalogue`, qty: "" });
       showToast(`${rows.length} material${rows.length === 1 ? "" : "s"} added`);
     }
     function removeCatalogItem(id) {
@@ -13971,8 +13971,8 @@ ${xrefStart}
       const next = catalog.filter((c) => !matchingIds.has(c.id));
       setCatalog(next);
       persist({ catalog: next });
-      if (removed) logTxn({ type: "catalog", desc: `Removed ${removed.color} ${removed.material} ${removed.thickness}mm ${fmtDim(removed.width, removed.height)} from the catalog (SKU ${removed.sku})`, qty: "" });
-      showToast("Removed from catalog");
+      if (removed) logTxn({ type: "catalog", desc: `Removed ${removed.color} ${removed.material} ${removed.thickness}mm ${fmtDim(removed.width, removed.height)} from the catalogue (SKU ${removed.sku})`, qty: "" });
+      showToast("Removed from catalogue");
     }
     function editCatalogItem(id, { color, material, thickness }) {
       const before = catalog.find((c) => c.id === id);
@@ -14005,14 +14005,14 @@ ${xrefStart}
       setVariants(nextVariants);
       // New catalog material and received stock are staged together, never as two stale snapshots.
       persist(found ? { variants: nextVariants } : { catalog: nextCatalog, variants: nextVariants });
-      logTxn({ type: "receipt", desc: `${cat.color} ${cat.material} ${cat.thickness}mm ${fmtDim(cat.width, cat.height)}${found ? "" : " (new catalog material)"}`, qty, ref: String(ref || "").trim(), itemType: "variant", sku: cat.sku, color: cat.color, material: cat.material, thickness: cat.thickness, width: cat.width, height: cat.height });
-      showToast(`Received ${qty} panel(s)${found ? "" : " and added material to catalog"}`);
+      logTxn({ type: "receipt", desc: `${cat.color} ${cat.material} ${cat.thickness}mm ${fmtDim(cat.width, cat.height)}${found ? "" : " (new catalogue material)"}`, qty, ref: String(ref || "").trim(), itemType: "variant", sku: cat.sku, color: cat.color, material: cat.material, thickness: cat.thickness, width: cat.width, height: cat.height });
+      showToast(`Received ${qty} panel(s)${found ? "" : " and added material to catalogue"}`);
       return null;
     }
 
     function receiveStock({ catalogId, width, height, qty, ref }) {
       const cat = catalog.find((c) => c.id === catalogId);
-      if (!cat) return showToast("Select a material from the catalog", "err");
+      if (!cat) return showToast("Select a material from the catalogue", "err");
       [width,height]=[Math.max(Number(width),Number(height)),Math.min(Number(width),Number(height))];
       if (![width,height].every(value=>Number.isFinite(value)&&value>0)) return showToast("Enter the sheet length and width", "err");
       const existing = variants.find((v) => catalogKey(v) === catalogKey(cat) && Math.max(v.width,v.height) === width && Math.min(v.width,v.height) === height);
@@ -14203,18 +14203,18 @@ ${xrefStart}
         "Thickness (mm)": c.thickness
       }));
       const csv = rowsToCSV(rows);
-      prepareExport(new Blob([csv], { type: "text/csv" }), `Catalog_${todayStr()}.csv`);
+      prepareExport(new Blob([csv], { type: "text/csv" }), `Catalogue_${todayStr()}.csv`);
     }
     function exportCatalogPDF() {
       const L = [];
-      L.push({ text: "PanelStock \u2014 Materials Catalog", size: 18 });
+      L.push({ text: "PanelStock \u2014 Material Catalogue", size: 18 });
       L.push({ text: `Generated ${(/* @__PURE__ */ new Date()).toLocaleString()} \xB7 ${catalog.length} materials`, size: 10 });
       L.push({ text: "", size: 10 });
       L.push({ text: pad("SKU", 18) + pad("Colour", 26) + pad("Material", 20) + "Thickness", size: 11 });
       catalog.forEach((c, idx) => {
         L.push({ text: pad(c.sku, 18) + pad(c.color, 26) + pad(c.material, 20) + c.thickness + "mm", size: 11, shaded: idx % 2 === 1 });
       });
-      prepareExport(buildPdfBlob(L), `Catalog_${todayStr()}.pdf`);
+      prepareExport(buildPdfBlob(L), `Catalogue_${todayStr()}.pdf`);
     }
     function exportDamageReportPDF(damageTxns) {
       const blocks = [];
@@ -14301,7 +14301,7 @@ ${xrefStart}
     const navGroups = [
       {key:"stockGroup",label:"Stock",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Layers,{size:16}),items:[...(can("factory.stock")?[{key:"stock",label:"SOH",target:"stock",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Layers,{size:16})}]:[]),...(can("factory.receive")?[{key:"receive",label:"Receive",target:"receive",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Package,{size:16})}]:[]),...(can("factory.dispatch")?[{key:"dispatch",label:"Dispatch",target:"dispatch",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Truck,{size:16})}]:[]),...(can("factory.damage")?[{key:"damage",label:"Damage",target:"damage",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(AlertTriangle,{size:16})}]:[]),...(can("factory.transfer")?[{key:"transfer",label:"Convert",target:"transfer",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Scissors,{size:16})}]:[])]},
       {key:"workGroup",label:"Work",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Briefcase,{size:16}),items:[...(can("factory.jobs")?[{key:"jobs",label:"Jobs",target:"jobs",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Briefcase,{size:16})}]:[]),...(can("schedule.view")||can("schedule.cnc.view")?[{key:"schedule",label:"Schedule",target:"schedule",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(ScheduleCalendarIcon,{size:16})}]:[]),...(can("site.orders.view")?[{key:"orders",label:"Site Orders",target:"orders",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(ClipboardList,{size:16})}]:[])]},
-      {key:"adminGroup",label:"Administration",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Settings2,{size:16}),items:[...(isAdmin?[{key:"access",label:"User Access",target:"access",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(User,{size:16})}]:[]),...(can("factory.settings")?[{key:"materials",label:"Material Catalogue",target:"settings",section:"catalog",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Layers,{size:16})},{key:"settings",label:"Settings",target:"settings",section:"general",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Settings2,{size:16})}]:[])]}
+      {key:"adminGroup",label:"Administration",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Settings2,{size:16}),items:[...(isAdmin?[{key:"access",label:"User Access",target:"access",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(User,{size:16})}]:[]),...(can("factory.settings")?[{key:"settings",label:"Settings",target:"settings",section:"general",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Settings2,{size:16})}]:[])]}
     ].filter(group=>group.items.length);
     const pageLabels = { stock: "Stock", receive: "Receive", dispatch: "Dispatch", transfer:"Convert", damage: "Damage", cnc: "CNC", orders: "Orders", schedule: "Schedule", jobs: "Jobs", access: "User Access", profile:"My Profile", settings: "Settings" };
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex h-screen bg-slate-50 text-slate-900 font-sans", children: [
@@ -14651,7 +14651,7 @@ ${xrefStart}
   function CatalogSingleForm({ form, setForm, isEditing, onSave, onClose }) {
     const h = import_jsx_runtime.jsx;
     const field = (key, label, placeholder, type = "text") => h("label", { children: [label, h(type === "text" ? CapitalizedInput : "input", { type, step: "any", value: form[key], placeholder, onChange: value => setForm({ ...form, [key]: type === "text" ? value : value.target.value }) })] });
-    return h("div", { className: "ps-entry", children: [h("h2", { children: isEditing ? "Editing material" : "Add a material" }), h("p", { className: "ps-entry-intro", children: "Catalogue materials are defined by colour, material and thickness. Sheet sizes are entered when stock is received." }), h("div", { className: "ps-entry-grid ps-catalog-grid", children: [field("material", "Material *", "e.g. Solid Aluminium"), field("color", "Colour / finish *", "e.g. White"), field("thickness", "Thickness (mm) *", "e.g. 3", "number")] }), h("p", { className: "ps-entry-note", children: "* Required" }), h("div", { className: "ps-entry-actions", children: [h("button", { onClick: onSave, className: "ps-entry-primary", children: isEditing ? "Save changes" : "Add to catalog" }), h("button", { onClick: onClose, className: "ps-entry-cancel", children: "Cancel" })] })] });
+    return h("div", { className: "ps-entry", children: [h("h2", { children: isEditing ? "Editing material" : "Add a material" }), h("p", { className: "ps-entry-intro", children: "Catalogue materials are defined by colour, material and thickness. Sheet sizes are entered when stock is received." }), h("div", { className: "ps-entry-grid ps-catalog-grid", children: [field("material", "Material *", "e.g. Solid Aluminium"), field("color", "Colour / finish *", "e.g. White"), field("thickness", "Thickness (mm) *", "e.g. 3", "number")] }), h("p", { className: "ps-entry-note", children: "* Required" }), h("div", { className: "ps-entry-actions", children: [h("button", { onClick: onSave, className: "ps-entry-primary", children: isEditing ? "Save changes" : "Add to catalogue" }), h("button", { onClick: onClose, className: "ps-entry-cancel", children: "Cancel" })] })] });
   }
   function ReceiveMaterialForm({ catalog, variants, onReceiveStock, onClose }) {
     const [form, setForm] = useState({ material: "", color: "", thickness: "", width: "", height: "" });
@@ -14679,7 +14679,7 @@ ${xrefStart}
       h("div", { className: "grid grid-cols-1 sm:grid-cols-3 gap-3", children: [field("color", "Colour / finish *"), field("material", "Material *"), field("thickness", "Thickness (mm) *", "number")] }),
       h(SheetMeasureGuide, { compact: true }),
       h("div", { className: "grid grid-cols-2 gap-3", children: [field("width", "Length (mm) *", "number"), field("height", "Width (mm) *", "number")] }),
-      h("p", { className: "text-xs text-slate-500", children: "Enter the new material details and quantity to add it to the catalog and receive its stock." }),
+      h("p", { className: "text-xs text-slate-500", children: "Enter the new material details and quantity to add it to the catalogue and receive its stock." }),
       h("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-3", children: [
         h("label", { className: "block text-xs font-semibold text-slate-600", children: ["Quantity received *", h("input", { type: "number", min: 1, step: 1, value: receiptQty, className: inputCls + " mt-1 w-full", onChange: e => { setReceiptQty(e.target.value); setErrors([]); } })] }),
         h("label", { className: "block text-xs font-semibold text-slate-600", children: ["Supplier / PO reference (optional)", h("input", { value: receiptRef, className: inputCls + " mt-1 w-full", onChange: e => setReceiptRef(e.target.value) })] })
@@ -15428,7 +15428,7 @@ function compareCncOrders(a, b) {
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-xs font-semibold text-slate-600 mb-1", children: "Cut from which material? (optional \u2014 picking one fills in the fields below)" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls + " mb-2", placeholder: "Search colour, material, size, SKU\u2026", value: q, onChange: (e) => setQ(e.target.value) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "overflow-y-auto space-y-1.5 border border-slate-300 rounded-lg p-1.5 bg-white mb-4", style: { maxHeight: "26vh" }, children: [
-        available.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm text-slate-400 p-2", children: "No materials in the catalog yet." }),
+        available.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm text-slate-400 p-2", children: "No materials in the catalogue yet." }),
         available.map((v) => {
           const isSel = selected?.id === v.id;
           return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
@@ -15965,7 +15965,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
       const thickness = Number(sharedThickness ? shared.thickness : line.thickness), first = Number(line.width), second = Number(line.height), width = Math.max(first,second), height = Math.min(first,second);
       if (![thickness, width, height].every(value => Number.isFinite(value) && value > 0 && value <= 1000000)) { errors.push(`Row ${i + 1}: enter positive thickness, length and width, up to 1,000,000 mm.`); return; }
       const row = { material, color, thickness, width, height }, key = keyFor(row);
-      if (seen.has(key) || existing.has(key)) errors.push(`Row ${i + 1}: this material, colour and size already exist in the catalog or this batch.`);
+      if (seen.has(key) || existing.has(key)) errors.push(`Row ${i + 1}: this material, colour and size already exist in the catalogue or this batch.`);
       seen.add(key); rows.push(row);
     });
     if (!rows.length && !errors.length) errors.push("Add at least one size.");
@@ -15988,7 +15988,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
       try { onSave(prepared.rows); onClose(); } finally { saving.current = false; }
     }
     return h("form", { onSubmit: submit, noValidate: true, className: "ps-entry", children: [
-      h("h2", { children: single ? "Add material to catalog" : "Add multiple materials" }),
+      h("h2", { children: single ? "Add material to catalogue" : "Add multiple materials" }),
       h("p", { className: "ps-entry-intro", children: "Enter the material, colour and thickness once, then add each size." }),
       h("div", { className: "ps-entry-grid ps-catalog-grid", children: [
         ...[["material", "Material", "e.g. Solid Aluminium"], ["color", "Colour / finish", "e.g. White"], ["thickness", "Thickness (mm)", "e.g. 3"]].map(([key, label, placeholder]) => h("label", { children: [label + " *", h("input", { type: key === "thickness" ? "number" : "text", step: "any", min: key === "thickness" ? "0.001" : undefined, required: true, maxLength: 500, value: shared[key], placeholder, onChange: e => { setShared({ ...shared, [key]: e.target.value }); setErrors([]); } })] }, key)),
@@ -16004,7 +16004,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
       ] }),
       h("p", { className: "ps-entry-note", children: "* Required." }),
       errors.length > 0 && h("div", { role: "alert", className: "ps-entry-errors", children: errors.map((error, i) => h("p", { children: error }, i)) }),
-      h("div", { className: "ps-entry-actions", children: [h("button", { type: "submit", className: "ps-entry-primary", children: single ? "Add material and select" : count ? `Add ${count} catalog item${count === 1 ? "" : "s"}` : "Add to catalog" }), h("button", { type: "button", onClick: onClose, className: "ps-entry-cancel", children: "Cancel" })] })
+      h("div", { className: "ps-entry-actions", children: [h("button", { type: "submit", className: "ps-entry-primary", children: single ? "Add material and select" : count ? `Add ${count} catalogue item${count === 1 ? "" : "s"}` : "Add to catalogue" }), h("button", { type: "button", onClick: onClose, className: "ps-entry-cancel", children: "Cancel" })] })
     ] });
   }
   function CatalogAdmin({ catalog, onAdd, onRemove, onEdit, onAddBulk, onExportExcel, onExportPDF }) {
@@ -16048,7 +16048,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
         PageHeading,
         {
           icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Layers, { size: 18 }),
-          title: "Materials Catalog",
+          title: "Material Catalogue",
           subtitle: "Every approved colour, material and thickness. Sheet sizes are managed when stock is received.",
           action: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center gap-2", children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: onExportExcel, className: "flex items-center gap-1.5 text-sm font-medium text-slate-600 border border-slate-300 bg-white rounded-lg px-3 py-2 hover:bg-slate-50", children: [
@@ -16154,7 +16154,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
     async function handleRestore(timestamp) {
       if (PanelStock.pending) { setStatus({ kind: "err", msg: "Synchronize or resolve pending changes before restoring a backup." }); return; }
       const label = fmtBackupTimestamp(timestamp);
-      if (!window.confirm(`Restore the backup from ${label}? This replaces current stock and catalog with that snapshot. Activity history is preserved and a recovery backup is taken first.`)) return;
+      if (!window.confirm(`Restore the backup from ${label}? This replaces current stock and catalogue with that snapshot. Activity history is preserved and a recovery backup is taken first.`)) return;
       setBusy(true);
       setStatus(null);
       try {
@@ -16574,7 +16574,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
     }
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bg-white rounded-xl border-2 border-red-200 p-5", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm font-semibold text-slate-800 mb-1", children: "Stocktake reset" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "text-sm text-slate-500 mb-4 leading-relaxed", children: "Sets every panel's SOH to zero and clears all off-cuts, ready for a fresh physical count. Your materials catalog, damage reasons, and activity history are untouched \u2014 this reset itself is logged in Recent activity. This cannot be undone." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "text-sm text-slate-500 mb-4 leading-relaxed", children: "Sets every panel's SOH to zero and clears all off-cuts, ready for a fresh physical count. Your material catalogue, damage reasons, and activity history are untouched \u2014 this reset itself is logged in Recent activity. This cannot be undone." }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Type RESET to confirm", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, value: confirmText, onChange: (e) => setConfirmText(e.target.value), placeholder: "RESET" }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: handleReset, disabled: !canReset, className: "w-full bg-red-800 disabled:opacity-40 text-white font-semibold rounded-lg py-2.5 text-sm hover:bg-red-900", children: "Reset all SOH for stocktake" })
     ] });
@@ -16593,7 +16593,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm font-semibold text-red-800", children: "Full reset \u2014 all information" })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { className: "text-sm text-slate-500 mb-4 leading-relaxed", children: [
-        "Wipes the entire materials catalog, all SOH and off-cuts, damage reasons (restored to default), while preserving the activity history. Registered users, admin status, and PINs are ",
+        "Wipes the entire material catalogue, all SOH and off-cuts, damage reasons (restored to default), while preserving the activity history. Registered users, admin status, and PINs are ",
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "font-semibold text-slate-700", children: "not" }),
         " affected \u2014 nobody needs to log in again. This cannot be undone."
       ] }),
@@ -16617,7 +16617,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
     const sections = [
       { key: "general", label: "General" },
       ...isAdmin ? [{ key: "schedule", label: "Schedule" }] : [],
-      ...isAdmin ? [{ key: "catalog", label: "Materials Catalog" }] : [],
+      ...isAdmin ? [{ key: "catalog", label: "Material Catalogue" }] : [],
       ...isAdmin ? [{ key: "reasons", label: "Damage Reasons" }] : [],
       { key: "activity", label: "Activity Log" },
       ...isAdmin ? [{ key: "email", label: "Email Reports" }] : [],
@@ -16639,7 +16639,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
           section === "general" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "space-y-4 max-w-xl mx-auto", children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bg-white border border-slate-300 rounded-xl p-5", children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm font-semibold text-slate-800 mb-1", children: "Standard Operating Procedures" }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "text-sm text-slate-500 mb-3 leading-relaxed", children: "Illustrated step-by-step guide to stock, CNC, catalog and admin workflows." }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "text-sm text-slate-500 mb-3 leading-relaxed", children: "Illustrated step-by-step guide to stock, CNC, catalogue and admin workflows." }),
               /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
                 "a",
                 {
@@ -16735,7 +16735,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
               ] }) }),
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: transactions.slice(0, 100).map((t, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { className: `border-t border-slate-100 align-top ${i % 2 === 1 ? "bg-slate-50/50" : ""} ${t.voided ? "opacity-50" : ""}`, children: [
                 /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-2 py-1.5 text-slate-400 font-mono text-xs whitespace-normal break-words", children: fmtDDMMYY(t.timestamp) }),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-2 py-1.5 whitespace-normal break-words", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: `font-semibold uppercase text-xs px-1.5 py-0.5 rounded inline-block ${t.type === "receipt" ? "bg-green-50 text-green-800" : t.type === "dispatch" ? "bg-slate-100 text-cyan-800" : t.type === "damage" ? "bg-red-50 text-red-800" : t.type === "reset" ? "bg-purple-100 text-purple-800" : t.type === "catalog" ? "bg-indigo-50 text-indigo-800" : t.type === "user" ? "bg-blue-50 text-blue-800" : t.type === "backup" ? "bg-teal-50 text-teal-800" : t.type === "cnc" ? "bg-orange-50 text-orange-800" : "bg-stone-100 text-amber-800"}`, children: t.type }) }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-2 py-1.5 whitespace-normal break-words", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: `font-semibold uppercase text-xs px-1.5 py-0.5 rounded inline-block ${t.type === "receipt" ? "bg-green-50 text-green-800" : t.type === "dispatch" ? "bg-slate-100 text-cyan-800" : t.type === "damage" ? "bg-red-50 text-red-800" : t.type === "reset" ? "bg-purple-100 text-purple-800" : t.type === "catalog" ? "bg-indigo-50 text-indigo-800" : t.type === "user" ? "bg-blue-50 text-blue-800" : t.type === "backup" ? "bg-teal-50 text-teal-800" : t.type === "cnc" ? "bg-orange-50 text-orange-800" : "bg-stone-100 text-amber-800"}`, children: t.type === "catalog" ? "catalogue" : t.type }) }),
                 /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("td", { className: "px-2 py-1.5 text-slate-600 whitespace-normal break-words", children: [
                   /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: t.voided ? "line-through" : "", children: [
                     t.desc,
