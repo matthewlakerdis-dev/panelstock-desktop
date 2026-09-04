@@ -25,6 +25,9 @@ test('desktop scripts parse and do not contain the shared backend credential',()
  assert.match(cncPage,/Add historical dimensions/);
  assert.match(html,/Original completion dates and users are preserved/);
  assert.match(html,/function SupportCenter\(\{isAdmin=false\}\)/);
+ assert.match(html,/function SupportHeadsetIcon/);
+ assert.match(html,/SupportHeadsetIcon,\{size:16\}/);
+ assert.match(html,/e\(SupportHeadsetIcon,\{size:26\}\)/);
  assert.match(html,/function SupportCenter\(\{isAdmin=false\}\) \{\s*const e=import_react\.createElement;/);
  assert.match(html,/label:"Support"/);
  assert.match(html,/tab === "support"/);
