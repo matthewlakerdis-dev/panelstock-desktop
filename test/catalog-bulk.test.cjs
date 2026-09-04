@@ -22,14 +22,14 @@ test('catalog bulk rejects incomplete dimensions, invalid reorder points and dup
  assert.ok(prepare(shared,[line,{...line,width:'01200'}]).errors.length);
  assert.ok(prepare(shared,[line],[{material:'solid aluminium',color:'white',thickness:3,width:1200,height:2400}]).errors.length);
 });
-test('catalog batch creates linked catalog and zero-stock entries in one save without changing existing stock',()=>{
+test('catalog batch creates material definitions without creating sized stock rows',()=>{
  const start=html.indexOf('    function addCatalogItemsBulk('),end=html.indexOf('    function removeCatalogItem(',start);
  const catalog=[{id:'old'}],variants=[{id:'stock',qty:27}];let saved=[],logs=[],id=0;
  const rows=prepare(shared,[line,{...line,width:'1500'}]).rows;
  vm.runInNewContext(html.slice(start,end)+';addCatalogItemsBulk(rows);',{rows,catalog,variants,uid:()=>String(++id),genSku:()=> 'SKU'+(++id),setCatalog(){},setVariants(){},persist:next=>saved.push(next),logTxn:tx=>logs.push(tx),showToast(){}});
- assert.equal(saved.length,1);assert.equal(logs.length,1);assert.equal(saved[0].variants[0],variants[0]);
- assert.equal(saved[0].catalog.length,3);assert.equal(saved[0].variants.length,3);
- for(let i=1;i<=2;i++){const c=saved[0].catalog[i],v=saved[0].variants[i];assert.equal(v.catalogId,c.id);assert.equal(v.sku,c.sku);assert.equal(v.qty,0);}
+ assert.equal(saved.length,1);assert.equal(logs.length,1);assert.equal(saved[0].variants,undefined);
+ assert.equal(saved[0].catalog.length,3);
+ for(let i=1;i<=2;i++){const c=saved[0].catalog[i];assert.equal(c.width,0);assert.equal(c.height,0);}
  assert.notEqual(saved[0].catalog[1].sku,saved[0].catalog[2].sku);
 });
 

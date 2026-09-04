@@ -13937,57 +13937,56 @@ ${xrefStart}
       if (panel) logTxn({ type: "cnc", desc: `Removed CNC schedule entry: Order ${panel.orderNumber} \xB7 Sheet ${panel.sheetNumber} \xB7 Panel ${panel.panelNumber}`, qty: "" });
       showToast("Removed from CNC schedule");
     }
-    function addCatalogItem({ color, material, thickness, width, height, reorderPoint }) {
-      [width,height]=[Math.max(Number(width),Number(height)),Math.min(Number(width),Number(height))];
+    const catalogKey = item => `${String(item.color || "").trim().toLowerCase()}|${String(item.material || "").trim().toLowerCase()}|${Number(item.thickness)}`;
+    function addCatalogItem({ color, material, thickness }) {
+      if (catalog.some(item => catalogKey(item) === catalogKey({ color, material, thickness }))) return showToast("This material is already in the catalog", "err");
       const catalogId = uid();
       const sku = genSku();
-      const nextCatalog = [...catalog, { id: catalogId, sku, color, material, thickness, width, height, reorderPoint: reorderPoint || 0 }];
+      const nextCatalog = [...catalog, { id: catalogId, sku, color, material, thickness, width: 0, height: 0, reorderPoint: 0 }];
       setCatalog(nextCatalog);
-      const nextVariants = [...variants, { id: uid(), catalogId, sku, color, material, thickness, width, height, qty: 0, reorderPoint: reorderPoint || 0 }];
-      setVariants(nextVariants);
-      persist({ catalog: nextCatalog, variants: nextVariants });
-      logTxn({ type: "catalog", desc: `Added ${color} ${material} ${thickness}mm ${fmtDim(width, height)} to the catalog (SKU ${sku})`, qty: "" });
+      persist({ catalog: nextCatalog });
+      logTxn({ type: "catalog", desc: `Added ${color} ${material} ${thickness}mm to the catalog`, qty: "" });
       showToast("Material added to catalog");
       return nextCatalog.find(item => item.id === catalogId);
     }
     function addCatalogItemsBulk(rows) {
       const newCatalogEntries = [];
-      const newVariantEntries = [];
-      rows.forEach(({ color, material, thickness, width, height, reorderPoint }) => {
+      rows.forEach(({ color, material, thickness }) => {
         const catalogId = uid();
         const sku = genSku();
-        newCatalogEntries.push({ id: catalogId, sku, color, material, thickness, width, height, reorderPoint: reorderPoint || 0 });
-        newVariantEntries.push({ id: uid(), catalogId, sku, color, material, thickness, width, height, qty: 0, reorderPoint: reorderPoint || 0 });
+        newCatalogEntries.push({ id: catalogId, sku, color, material, thickness, width: 0, height: 0, reorderPoint: 0 });
       });
       const nextCatalog = [...catalog, ...newCatalogEntries];
-      const nextVariants = [...variants, ...newVariantEntries];
       setCatalog(nextCatalog);
-      setVariants(nextVariants);
-      persist({ catalog: nextCatalog, variants: nextVariants });
+      persist({ catalog: nextCatalog });
       logTxn({ type: "catalog", desc: `Bulk added ${rows.length} material${rows.length === 1 ? "" : "s"} to the catalog`, qty: "" });
       showToast(`${rows.length} material${rows.length === 1 ? "" : "s"} added`);
     }
     function removeCatalogItem(id) {
       const removed = catalog.find((c) => c.id === id);
-      const next = catalog.filter((c) => c.id !== id);
+      if (!removed) return;
+      const matchingIds = new Set(catalog.filter(c => catalogKey(c) === catalogKey(removed)).map(c => c.id));
+      if (variants.some(v => matchingIds.has(v.catalogId))) return showToast("This material has stock sizes and cannot be removed", "err");
+      const next = catalog.filter((c) => !matchingIds.has(c.id));
       setCatalog(next);
       persist({ catalog: next });
       if (removed) logTxn({ type: "catalog", desc: `Removed ${removed.color} ${removed.material} ${removed.thickness}mm ${fmtDim(removed.width, removed.height)} from the catalog (SKU ${removed.sku})`, qty: "" });
       showToast("Removed from catalog");
     }
-    function editCatalogItem(id, { color, material, thickness, width, height, reorderPoint }) {
-      [width,height]=[Math.max(Number(width),Number(height)),Math.min(Number(width),Number(height))];
+    function editCatalogItem(id, { color, material, thickness }) {
       const before = catalog.find((c) => c.id === id);
+      if (!before) return;
+      const oldKey = catalogKey(before);
       const nextCatalog = catalog.map(
-        (c) => c.id === id ? { ...c, color, material, thickness, width, height, reorderPoint: reorderPoint || 0 } : c
+        (c) => catalogKey(c) === oldKey ? { ...c, color, material, thickness } : c
       );
       setCatalog(nextCatalog);
       const nextVariants = variants.map(
-        (v) => v.catalogId === id ? { ...v, color, material, thickness, width, height, reorderPoint: reorderPoint || 0 } : v
+        (v) => catalogKey(v) === oldKey ? { ...v, color, material, thickness } : v
       );
       setVariants(nextVariants);
       persist({ catalog: nextCatalog, variants: nextVariants });
-      if (before) logTxn({ type: "catalog", desc: `Edited catalog entry ${before.sku}: now ${color} ${material} ${thickness}mm ${fmtDim(width, height)}`, qty: "" });
+      logTxn({ type: "catalog", desc: `Edited material: now ${color} ${material} ${thickness}mm`, qty: "" });
       showToast("Material updated");
     }
     function receiveMaterialStock({ material: details, qty, ref }) {
@@ -14010,19 +14009,22 @@ ${xrefStart}
       return null;
     }
 
-    function receiveStock({ catalogId, qty, ref }) {
+    function receiveStock({ catalogId, width, height, reorderPoint, qty, ref }) {
       const cat = catalog.find((c) => c.id === catalogId);
       if (!cat) return showToast("Select a material from the catalog", "err");
-      const existing = variants.find((v) => v.catalogId === catalogId);
+      [width,height]=[Math.max(Number(width),Number(height)),Math.min(Number(width),Number(height))];
+      if (![width,height].every(value=>Number.isFinite(value)&&value>0)) return showToast("Enter the sheet length and width", "err");
+      const existing = variants.find((v) => catalogKey(v) === catalogKey(cat) && Math.max(v.width,v.height) === width && Math.min(v.width,v.height) === height);
       let next;
       if (existing) {
-        next = variants.map((v) => v.id === existing.id ? { ...v, qty: v.qty + qty } : v);
+        next = variants.map((v) => v.id === existing.id ? { ...v, qty: v.qty + qty, reorderPoint: Number(reorderPoint) || v.reorderPoint || 0 } : v);
       } else {
-        next = [...variants, { id: uid(), catalogId, sku: cat.sku, color: cat.color, material: cat.material, thickness: cat.thickness, width: cat.width, height: cat.height, qty, reorderPoint: cat.reorderPoint || 0 }];
+        next = [...variants, { id: uid(), catalogId, sku: genSku(), color: cat.color, material: cat.material, thickness: cat.thickness, width, height, qty, reorderPoint: Number(reorderPoint) || 0 }];
       }
       setVariants(next);
       persist({ variants: next });
-      logTxn({ type: "receipt", desc: `${cat.color} ${cat.material} ${cat.thickness}mm ${fmtDim(cat.width, cat.height)}`, qty, ref: ref || "", itemType: "variant", sku: cat.sku, color: cat.color, material: cat.material, thickness: cat.thickness, width: cat.width, height: cat.height });
+      const received = next.find(v => catalogKey(v) === catalogKey(cat) && Math.max(v.width,v.height) === width && Math.min(v.width,v.height) === height);
+      logTxn({ type: "receipt", desc: `${cat.color} ${cat.material} ${cat.thickness}mm ${fmtDim(width, height)}`, qty, ref: ref || "", itemType: "variant", sku: received.sku, color: cat.color, material: cat.material, thickness: cat.thickness, width, height });
       showToast(`Received ${qty} panel(s)`);
     }
     function dispatchItem({ itemType, itemId, qty, jobRef, customer }) {
@@ -14202,14 +14204,10 @@ ${xrefStart}
       prepareExport(buildPdfBlob(lines), `Activity_${todayStr()}.pdf`);
     }
     function exportCatalogExcel() {
-      const rows = catalog.map((c) => ({
-        SKU: c.sku,
+      const rows = [...new Map(catalog.map(c => [catalogKey(c), c])).values()].map((c) => ({
         Colour: c.color,
         Material: c.material,
-        "Thickness (mm)": c.thickness,
-        "Length (mm)": Math.max(c.width,c.height),
-        "Width (mm)": Math.min(c.width,c.height),
-        "Reorder point": c.reorderPoint || 0
+        "Thickness (mm)": c.thickness
       }));
       const csv = rowsToCSV(rows);
       prepareExport(new Blob([csv], { type: "text/csv" }), `Catalog_${todayStr()}.csv`);
@@ -14674,7 +14672,7 @@ ${xrefStart}
   function CatalogSingleForm({ form, setForm, isEditing, onSave, onClose }) {
     const h = import_jsx_runtime.jsx;
     const field = (key, label, placeholder, type = "text") => h("label", { children: [label, h(type === "text" ? CapitalizedInput : "input", { type, step: key === "reorderPoint" ? "1" : "any", value: form[key], placeholder, onChange: value => setForm({ ...form, [key]: type === "text" ? value : value.target.value }) })] });
-    return h("div", { className: "ps-entry", children: [h("h2", { children: isEditing ? "Editing material" : "Add a material" }), h("p", { className: "ps-entry-intro", children: "Enter the material, colour and size to add it to the catalog." }), h("div", { className: "ps-entry-grid ps-catalog-grid", children: [field("material", "Material *", "e.g. Solid Aluminium"), field("color", "Colour / finish *", "e.g. White"), field("thickness", "Thickness (mm) *", "e.g. 3", "number"), h(SheetMeasureGuide, { compact: true }), h("div", { className: "ps-entry-rows ps-entry-row ps-catalog-row", children: [field("width", "Length (mm) *", "e.g. 4000", "number"), field("height", "Width (mm) *", "e.g. 1575", "number"), field("reorderPoint", "Reorder point", "0", "number")] })] }), h("p", { className: "ps-entry-note", children: "* Required. Leave reorder point blank to use 0." }), h("div", { className: "ps-entry-actions", children: [h("button", { onClick: onSave, className: "ps-entry-primary", children: isEditing ? "Save changes" : "Add to catalog" }), h("button", { onClick: onClose, className: "ps-entry-cancel", children: "Cancel" })] })] });
+    return h("div", { className: "ps-entry", children: [h("h2", { children: isEditing ? "Editing material" : "Add a material" }), h("p", { className: "ps-entry-intro", children: "Catalogue materials are defined by colour, material and thickness. Sheet sizes are entered when stock is received." }), h("div", { className: "ps-entry-grid ps-catalog-grid", children: [field("material", "Material *", "e.g. Solid Aluminium"), field("color", "Colour / finish *", "e.g. White"), field("thickness", "Thickness (mm) *", "e.g. 3", "number")] }), h("p", { className: "ps-entry-note", children: "* Required" }), h("div", { className: "ps-entry-actions", children: [h("button", { onClick: onSave, className: "ps-entry-primary", children: isEditing ? "Save changes" : "Add to catalog" }), h("button", { onClick: onClose, className: "ps-entry-cancel", children: "Cancel" })] })] });
   }
   function ReceiveMaterialForm({ catalog, variants, onReceiveStock, onClose }) {
     const [form, setForm] = useState({ material: "", color: "", thickness: "", width: "", height: "", reorderPoint: "" });
@@ -14741,14 +14739,18 @@ ${xrefStart}
     const [selected, setSelected] = useState(null);
     const [qty, setQty] = useState("");
     const [ref, setRef] = useState("");
+    const [width, setWidth] = useState("");
+    const [height, setHeight] = useState("");
+    const [reorderPoint, setReorderPoint] = useState("");
     const [q, setQ] = useState("");
-    const items = catalog.map((c) => ({ ...c, onHand: variants.find((v) => v.catalogId === c.id)?.qty ?? 0 })).filter((c) => `${c.color} ${c.material} ${c.thickness} ${c.width} ${c.height} ${c.sku}`.toLowerCase().includes(q.toLowerCase()));
+    const items = [...new Map(catalog.map(c => [catalogKey(c), c])).values()].filter((c) => `${c.color} ${c.material} ${c.thickness}`.toLowerCase().includes(q.toLowerCase()));
     function submit() {
-      if (!selected || !qty) return;
-      onSubmit({ catalogId: selected.id, qty: Number(qty), ref });
+      if (!selected || !qty || !width || !height) return;
+      onSubmit({ catalogId: selected.id, width, height, reorderPoint, qty: Number(qty), ref });
       setSelected(null);
       setQty("");
       setRef("");
+      setWidth(""); setHeight(""); setReorderPoint("");
       setQ("");
     }
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
@@ -14787,14 +14789,11 @@ ${xrefStart}
                     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "text-xs font-mono text-slate-400", children: [
                       c.thickness,
                       "mm \xB7 ",
-                      fmtDim(c.width, c.height),
-                      " \xB7 ",
-                      c.sku
+                      "catalogue material"
                     ] })
                   ] }),
                   /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "text-sm font-mono font-semibold text-slate-500", children: [
-                    c.onHand,
-                    " SOH"
+                    ""
                   ] }),
                   isSel && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Check, { size: 16, className: "text-cyan-800" })
                 ]
@@ -14814,14 +14813,16 @@ ${xrefStart}
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "text-xs font-mono text-slate-400", children: [
               selected.thickness,
               "mm \xB7 ",
-              fmtDim(selected.width, selected.height),
-              " \xB7 ",
-              selected.sku
+              "catalogue material"
             ] })
           ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm text-slate-400 mb-4 pb-4 border-b border-slate-100", children: "Select a material from the list" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SheetMeasureGuide, { compact: true }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Length (mm)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, type: "number", value: width, onChange: e => setWidth(e.target.value) }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Width (mm)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, type: "number", value: height, onChange: e => setHeight(e.target.value) }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Reorder point for this size", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, type: "number", value: reorderPoint, onChange: e => setReorderPoint(e.target.value) }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Supplier / PO reference (optional)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CapitalizedInput, { value: ref, onChange: setRef }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Quantity received", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, type: "number", value: qty, onChange: (e) => setQty(e.target.value) }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: submit, disabled: !selected || !qty, className: "w-full bg-cyan-800 disabled:opacity-40 text-white font-semibold rounded-lg py-2.5 text-sm hover:bg-cyan-900", children: "Add to SOH" })
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: submit, disabled: !selected || !qty || !width || !height, className: "w-full bg-cyan-800 disabled:opacity-40 text-white font-semibold rounded-lg py-2.5 text-sm hover:bg-cyan-900", children: "Add to SOH" })
         ] })
       ] })
     ] });
@@ -16035,11 +16036,11 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
   }
   function CatalogAdmin({ catalog, onAdd, onRemove, onEdit, onAddBulk, onExportExcel, onExportPDF }) {
     const [mode, setMode] = useState(null);
-    const [form, setForm] = useState({ color: "", material: "", thickness: "", width: "", height: "", reorderPoint: "" });
+    const [form, setForm] = useState({ color: "", material: "", thickness: "" });
     const [bulkOpen, setBulkOpen] = useState(false);
     const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
     function startAdd() {
-      setForm({ color: "", material: "", thickness: "", width: "", height: "", reorderPoint: "" });
+      setForm({ color: "", material: "", thickness: "" });
       setMode("add");
       setBulkOpen(false);
     }
@@ -16047,10 +16048,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
       setForm({
         color: c.color,
         material: c.material,
-        thickness: String(c.thickness),
-        width: String(c.width),
-        height: String(c.height),
-        reorderPoint: String(c.reorderPoint || "")
+        thickness: String(c.thickness)
       });
       setMode({ type: "edit", id: c.id });
       setBulkOpen(false);
@@ -16059,28 +16057,26 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
       setMode(null);
     }
     function submit() {
-      if (!form.color || !form.material || !form.thickness || !form.width || !form.height) return;
+      if (!form.color || !form.material || !form.thickness) return;
       const payload = {
         color: form.color,
         material: form.material,
-        thickness: Number(form.thickness),
-        width: Number(form.width),
-        height: Number(form.height),
-        reorderPoint: Number(form.reorderPoint) || 0
+        thickness: Number(form.thickness)
       };
       if (mode === "add") onAdd(payload);
       else if (mode?.type === "edit") onEdit(mode.id, payload);
       setMode(null);
     }
     const isEditing = mode?.type === "edit";
-    const grouped = groupByMaterialLargestFirst(catalog);
+    const uniqueCatalog = [...new Map(catalog.map(c => [catalogKey(c), c])).values()];
+    const grouped = groupByMaterialLargestFirst(uniqueCatalog);
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         PageHeading,
         {
           icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Layers, { size: 18 }),
           title: "Materials Catalog",
-          subtitle: "Every colour, material, thickness and size combination your team stocks \u2014 Receive can only pull from this list.",
+          subtitle: "Every approved colour, material and thickness. Sheet sizes are managed when stock is received.",
           action: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center gap-2", children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: onExportExcel, className: "flex items-center gap-1.5 text-sm font-medium text-slate-600 border border-slate-300 bg-white rounded-lg px-3 py-2 hover:bg-slate-50", children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FileSpreadsheet, { size: 15 }),
@@ -16091,12 +16087,9 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
               " PDF"
             ] }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => {
-              setBulkOpen(!bulkOpen);
+              setBulkOpen(false);
               setMode(null);
-            }, className: "flex items-center gap-1.5 text-sm font-medium text-slate-600 border border-slate-300 bg-white rounded-lg px-3 py-2 hover:bg-slate-50", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Upload, { size: 15 }),
-              " Bulk entry"
-            ] }),
+            }, className: "hidden", children: "Bulk entry" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => mode ? cancel() : startAdd(), className: "flex items-center gap-1.5 text-sm font-medium text-white bg-cyan-800 rounded-lg px-3 py-2 hover:bg-cyan-900", children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Plus, { size: 15 }),
               " Add material"
@@ -16112,13 +16105,10 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Colour" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Material" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Thickness" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Size (mm)" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "SKU" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Reorder at" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "w-20" })
         ] }) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: grouped.map(({ material, items }) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_react.default.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tr", { className: "bg-slate-50/40", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { colSpan: 8, className: "px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400", children: material }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tr", { className: "bg-slate-50/40", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { colSpan: 5, className: "px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400", children: material }) }),
           items.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { className: "border-t border-slate-100 hover:bg-slate-50/80", children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "pl-4", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "w-4 h-4 rounded", style: { backgroundColor: swatchColour(c.color) } }) }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3 font-medium text-slate-800", children: c.color }),
@@ -16127,9 +16117,6 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
               c.thickness,
               "mm"
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3 font-mono text-slate-500", children: fmtDim(c.width, c.height) }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3 font-mono text-slate-400", children: c.sku }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3 text-right font-mono text-slate-500", children: c.reorderPoint || "\u2014" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center justify-end gap-2", children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => startEdit(c), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Pencil, { size: 15, className: "text-slate-400 hover:text-cyan-800" }) }),
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => onRemove(c.id), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Trash2, { size: 15, className: "text-slate-400 hover:text-red-700" }) })

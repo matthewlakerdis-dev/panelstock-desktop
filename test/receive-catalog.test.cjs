@@ -3,13 +3,13 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 const html=fs.readFileSync(require('node:path').join(__dirname,'../index.html'),'utf8');
-test('catalog creation returns the new selectable item with zero stock and one linked save',()=>{
+test('catalog creation returns one material definition without creating a sized stock row',()=>{
  const start=html.indexOf('    function addCatalogItem('),end=html.indexOf('    function addCatalogItemsBulk(',start);
  const writes=[];let id=0;
  const item=vm.runInNewContext(html.slice(start,end)+';addCatalogItem({color:"Silver",material:"ACP",thickness:4,width:1200,height:2400,reorderPoint:5});',{
-  uid:()=>String(++id),genSku:()=> 'TEST-NEW',catalog:[],variants:[],setCatalog(){},setVariants(){},persist:v=>writes.push(v),logTxn(){},showToast(){},fmtDim:()=>''
+  uid:()=>String(++id),genSku:()=> 'TEST-NEW',catalog:[],catalogKey:item=>`${item.color}|${item.material}|${item.thickness}`,setCatalog(){},persist:v=>writes.push(v),logTxn(){},showToast(){}
  });
- assert.equal(writes.length,1);assert.equal(item.id,writes[0].catalog[0].id);assert.equal(writes[0].variants[0].catalogId,item.id);assert.equal(writes[0].variants[0].qty,0);
+ assert.equal(writes.length,1);assert.equal(item.id,writes[0].catalog[0].id);assert.equal(writes[0].variants,undefined);assert.equal(item.width,0);assert.equal(item.height,0);
 });
 
 function receiptRun(qty,{admin=true,existing=false,onHand=10}={}) {
