@@ -71,7 +71,7 @@ test('web manages the shared schedule',()=>{
  assert.match(html,/"TV display"/);
  assert.match(html,/"TV display address"/);
  assert.match(html,/navigator\.clipboard\.writeText\(tvAddress\)/);
- assert.match(html,/https:\/\/tv\.panelstockhq\.com\//);
+ assert.match(html,/https:\/\/cnc\.panelstockhq\.com\/tv\//);
  assert.match(html,/viewBox:"0 0 24 24",width:18,height:18/);
  assert.match(html,/var todayStr = \(\) => localDateStr\(\)/);
  assert.match(html,/setFilterDate\(localDateStr\(next\)\)/);
@@ -91,6 +91,7 @@ test('web manages the shared schedule',()=>{
  assert.match(html,/label:"Expiry date",value:row\.expiryDate/);
  assert.match(html,/function ScheduleSettingsPanel/);
  assert.match(html,/BAKED_WORKER_URL\+"\/schedule\/settings"/);
+ assert.match(html,/https:\/\/cnc\.panelstockhq\.com\/tv\//);
  const schedule=html.slice(html.indexOf('function SchedulePage'),html.indexOf('function OrdersPage'));
  assert.doesNotMatch(schedule,/"Status"/);
  assert.ok(schedule.indexOf('"Person"')<schedule.indexOf('"Project"'));
