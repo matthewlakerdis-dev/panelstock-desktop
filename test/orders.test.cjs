@@ -126,6 +126,10 @@ test('web navigation uses exclusive parent sections and standalone CNC and profi
  assert.match(html,/open:openNavGroup===group\.key/);
  assert.match(html,/setOpenNavGroup\(current=>current===group\.key\?null:group\.key\)/);
  assert.match(html,/label:"My Profile",active:navSelection==="profile"/);
+ assert.match(navigation,/label:"Receive"[^}]+icon:/);
+ assert.match(navigation,/label:"Schedule"[^}]+icon:/);
+ assert.match(navigation,/label:"User Access"[^}]+icon:/);
+ assert.match(html,/SideNavItem,\{icon:item\.icon,label:item\.label/);
 });
 
 test('administrators create users and the login screen has no self-registration option',()=>{
