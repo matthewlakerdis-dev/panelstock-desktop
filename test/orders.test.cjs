@@ -69,6 +69,9 @@ test('web manages the shared schedule',()=>{
  assert.match(html,/function openTvDisplay\(\)/);
  assert.match(html,/\/schedule\/share/);
  assert.match(html,/"TV display"/);
+ assert.match(html,/"TV display address"/);
+ assert.match(html,/navigator\.clipboard\.writeText\(tvAddress\)/);
+ assert.match(html,/viewBox:"0 0 24 24",width:18,height:18/);
  assert.match(html,/var todayStr = \(\) => localDateStr\(\)/);
  assert.match(html,/setFilterDate\(localDateStr\(next\)\)/);
  assert.match(html,/dateHeading/);
