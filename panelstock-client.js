@@ -30,6 +30,7 @@
       this.running=null;
       this.timer=false;
       this.state=JSON.parse(storage.getItem(OUTBOX_KEY)||'null')||{owner:null,view:null,queue:[],draft:null,blocked:null};
+      if(this.state.blocked==='Dimensions must be positive numbers')this.state.blocked=null;
     }
 
     save(next) {
