@@ -55,6 +55,9 @@ test('web manages the shared schedule',()=>{
  assert.match(html,/function ScheduleCalendarIcon/);
  assert.match(html,/New schedule entry/);
  assert.match(html,/Save schedule/);
+ assert.match(html,/value:"delivery"},"Delivery"/);
+ assert.match(html,/"Delivery schedule"/);
+ assert.match(html,/"bg-orange-600"/);
  assert.match(html,/schedule\.view/);
  assert.match(html,/schedule\.manage/);
  assert.match(html,/BAKED_WORKER_URL\+"\/schedule"/);
