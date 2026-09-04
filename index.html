@@ -14041,6 +14041,16 @@ ${xrefStart}
       }
       showToast(`Dispatched ${qty} for job ${jobRef || "\u2014"}`);
     }
+    function transferStock({ sourceId, sourceQty, outputs }) {
+      const source=variants.find(item=>item.id===sourceId);sourceQty=Number(sourceQty);
+      if(!source||!Number.isSafeInteger(sourceQty)||sourceQty<1||sourceQty>source.qty)return showToast("Select available source sheets", "err");
+      const prepared=outputs.map(output=>({id:output.id,qty:Number(output.qty)})).filter(output=>Number.isSafeInteger(output.qty)&&output.qty>0),targets=prepared.map(output=>variants.find(item=>item.id===output.id));
+      if(!prepared.length||targets.some(item=>!item)||new Set(prepared.map(output=>output.id)).size!==prepared.length)return showToast("Choose at least one valid output size", "err");
+      if(targets.some(item=>item.id===source.id||item.color!==source.color||item.material!==source.material||item.thickness!==source.thickness))return showToast("Output sheets must match the source material, colour and thickness", "err");
+      if(prepared.reduce((sum,output,index)=>sum+targets[index].width*targets[index].height*output.qty,0)>source.width*source.height*sourceQty)return showToast("Output sheet area exceeds the source sheets", "err");
+      const quantities=new Map(prepared.map(output=>[output.id,output.qty])),next=variants.map(item=>item.id===source.id?{...item,qty:item.qty-sourceQty}:quantities.has(item.id)?{...item,qty:item.qty+quantities.get(item.id)}:item),now=new Date().toISOString(),activity={id:uid(),timestamp:now,user:username||"Unknown",type:"transfer",desc:`Converted ${sourceQty} × ${fmtDim(source.width,source.height)} into ${prepared.map((output,index)=>`${output.qty} × ${fmtDim(targets[index].width,targets[index].height)}`).join(", ")}`,qty:sourceQty,itemType:"variant",sku:source.sku,sourceSku:source.sku,outputs:prepared.map((output,index)=>({sku:targets[index].sku,qty:output.qty}))};
+      const nextTransactions=[activity,...transactions];setVariants(next);setTransactions(nextTransactions);persist({variants:next,transactions:nextTransactions});showToast("Sheet sizes converted");
+    }
     function writeOffDamage({ itemType, itemId, qty, reasonId, photoObjs }) {
       const reasonObj = reasons.find((r) => r.id === reasonId);
       const reason = reasonObj?.label || "Unspecified";
@@ -14265,7 +14275,7 @@ ${xrefStart}
     }
     const can = (task) => isAdmin || taskAccess[task] !== false;
     const permittedPages = [
-      ['stock','factory.stock'],['receive','factory.receive'],['dispatch','factory.dispatch'],['damage','factory.damage'],['cnc','factory.cnc'],
+      ['stock','factory.stock'],['receive','factory.receive'],['dispatch','factory.dispatch'],['transfer','factory.transfer'],['damage','factory.damage'],['cnc','factory.cnc'],
       ['orders','site.orders.view'],['schedule',can('schedule.view')?'schedule.view':'schedule.cnc.view'],['jobs','factory.jobs'],
       ...(isAdmin?[['access',null]]:[]),['profile',null],['settings','factory.settings']
     ].filter(([,task])=>task===null||can(task)).map(([page])=>page);
@@ -14288,13 +14298,14 @@ ${xrefStart}
       ...(can("factory.stock") ? [{ key: "stock", label: "Stock", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Layers, { size: 16 }) }] : []),
       ...(can("factory.receive") ? [{ key: "receive", label: "Receive", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Package, { size: 16 }) }] : []),
       ...(can("factory.dispatch") ? [{ key: "dispatch", label: "Dispatch", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Truck, { size: 16 }) }] : []),
+      ...(can("factory.transfer") ? [{ key: "transfer", label: "Convert", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Scissors, { size: 16 }) }] : []),
       ...(can("factory.damage") ? [{ key: "damage", label: "Damage", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AlertTriangle, { size: 16 }) }] : []),
       ...(can("factory.cnc") ? [{ key: "cnc", label: "CNC", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncRouterIcon, { size: 20 }) }] : []),
       ...(can("site.orders.view") ? [{ key: "orders", label: "Orders", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ClipboardList, { size: 16 }) }] : []),
       ...(can("schedule.view")||can("schedule.cnc.view") ? [{ key: "schedule", label: "Schedule", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ScheduleCalendarIcon, { size: 16 }) }] : []),
       ...(can("factory.jobs") ? [{ key: "jobs", label: "Jobs", icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Briefcase, { size: 16 }) }] : [])
     ];
-    const pageLabels = { stock: "Stock", receive: "Receive", dispatch: "Dispatch", damage: "Damage", cnc: "CNC", orders: "Orders", schedule: "Schedule", jobs: "Jobs", access: "User Access", profile:"My Profile", settings: "Settings" };
+    const pageLabels = { stock: "Stock", receive: "Receive", dispatch: "Dispatch", transfer:"Convert", damage: "Damage", cnc: "CNC", orders: "Orders", schedule: "Schedule", jobs: "Jobs", access: "User Access", profile:"My Profile", settings: "Settings" };
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex h-screen bg-slate-50 text-slate-900 font-sans", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("aside", { className: "w-60 bg-slate-900 flex flex-col shrink-0", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "px-4 py-5 border-b border-white/10", children: [
@@ -14357,6 +14368,7 @@ ${xrefStart}
           ),
           tab === "receive" && can("factory.receive") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReceivePage, { catalog, variants, isAdmin, onReceiveMaterial: receiveMaterialStock, onAddCatalogItem: addCatalogItem, onSubmit: receiveStock }),
           tab === "dispatch" && can("factory.dispatch") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DispatchPage, { variants, offcuts, onSubmit: dispatchItem }),
+          tab === "transfer" && can("factory.transfer") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TransferPage, { variants, onSubmit: transferStock }),
           tab === "damage" && can("factory.damage") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DamagePage, { variants, offcuts, reasons, onSubmit: writeOffDamage, onViewLog: () => setDamageLogOpen(true) }),
           tab === "cnc" && can("factory.cnc") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
             CncPage,
@@ -14874,6 +14886,11 @@ ${xrefStart}
         selected.sku
       ] })
     ] });
+  }
+  function TransferPage({variants,onSubmit}) {
+    const [sourceId,setSourceId]=useState(""),[sourceQty,setSourceQty]=useState("1"),[outputs,setOutputs]=useState([{id:"",qty:"1"}]),source=variants.find(item=>item.id===sourceId),matches=source?variants.filter(item=>item.id!==source.id&&item.color===source.color&&item.material===source.material&&item.thickness===source.thickness):[];
+    const update=(index,key,value)=>setOutputs(outputs.map((output,i)=>i===index?{...output,[key]:value}:output));
+    return /* @__PURE__ */ (0,import_jsx_runtime.jsxs)("div",{className:"max-w-4xl",children:[/* @__PURE__ */ (0,import_jsx_runtime.jsx)(PageHeading,{icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Scissors,{size:18}),title:"Convert sheet sizes",subtitle:"Cut larger full sheets into smaller stocked sizes."}),/* @__PURE__ */ (0,import_jsx_runtime.jsxs)("section",{className:"rounded-xl border border-slate-300 bg-white p-6 space-y-4",children:[/* @__PURE__ */ (0,import_jsx_runtime.jsxs)("div",{className:"grid grid-cols-2 gap-4",children:[/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Field,{label:"Source sheet",children:/* @__PURE__ */ (0,import_jsx_runtime.jsxs)("select",{className:inputCls,value:sourceId,onChange:event=>{setSourceId(event.target.value);setOutputs([{id:"",qty:"1"}]);},children:[/* @__PURE__ */ (0,import_jsx_runtime.jsx)("option",{value:"",children:"Select a larger sheet"}),...variants.filter(item=>item.qty>0).sort((a,b)=>b.width*b.height-a.width*a.height).map(item=>/* @__PURE__ */ (0,import_jsx_runtime.jsx)("option",{value:item.id,children:`${item.color} · ${item.material} ${item.thickness}mm · ${fmtDim(item.width,item.height)} · ${item.qty} SOH`},item.id))]})}),/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Field,{label:"Source quantity",children:/* @__PURE__ */ (0,import_jsx_runtime.jsx)("input",{className:inputCls,type:"number",min:1,max:source?.qty||1,value:sourceQty,onChange:event=>setSourceQty(event.target.value)})})]}),source&&outputs.map((output,index)=>/* @__PURE__ */ (0,import_jsx_runtime.jsxs)("div",{className:"grid grid-cols-[1fr_120px_44px] gap-3 items-end",children:[/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Field,{label:`Output size ${index+1}`,children:/* @__PURE__ */ (0,import_jsx_runtime.jsxs)("select",{className:inputCls,value:output.id,onChange:event=>update(index,"id",event.target.value),children:[/* @__PURE__ */ (0,import_jsx_runtime.jsx)("option",{value:"",children:"Select size"}),...matches.map(item=>/* @__PURE__ */ (0,import_jsx_runtime.jsx)("option",{value:item.id,children:`${fmtDim(item.width,item.height)} · ${item.qty} SOH`},item.id))]})}),/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Field,{label:"Quantity",children:/* @__PURE__ */ (0,import_jsx_runtime.jsx)("input",{className:inputCls,type:"number",min:1,value:output.qty,onChange:event=>update(index,"qty",event.target.value)})}),/* @__PURE__ */ (0,import_jsx_runtime.jsx)("button",{type:"button",onClick:()=>setOutputs(outputs.filter((_,i)=>i!==index)),disabled:outputs.length===1,className:"h-11 rounded-lg border border-slate-300 disabled:opacity-30",children:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(X,{size:16,className:"mx-auto"})})]},index)),source&&/* @__PURE__ */ (0,import_jsx_runtime.jsx)("button",{type:"button",onClick:()=>setOutputs([...outputs,{id:"",qty:"1"}]),className:"w-full rounded-lg border border-dashed border-cyan-700 py-2.5 text-sm font-semibold text-cyan-800",children:"+ Add another output size"}),/* @__PURE__ */ (0,import_jsx_runtime.jsx)("button",{type:"button",onClick:()=>onSubmit({sourceId,sourceQty,outputs}),disabled:!source||outputs.some(output=>!output.id||Number(output.qty)<1),className:"rounded-lg bg-cyan-800 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-40",children:"Convert stock"})]})]});
   }
   function DispatchPage({ variants, offcuts, onSubmit }) {
     const [selected, setSelected] = useState(null);
@@ -16451,7 +16468,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
     async function saveRole(event){event.preventDefault();if(!editRole)return;setBusy(true);setStatus(null);try{const path=editRole.id?`/admin/roles/${editRole.id}`:"/admin/roles";const result=await callWorker(path,{username,name:editRole.name,taskAccess:editRole.taskAccess});setBusy(false);if(!result.ok){setStatus({kind:"err",msg:result.error||"Could not save role."});return;}setRoles(prev=>editRole.id?prev.map(role=>role.id===result.role.id?result.role:role):[...prev,result.role].sort((a,b)=>a.name.localeCompare(b.name)));if(editRole.id)setUsers(prev=>prev.map(user=>user.roleId===result.role.id?{...user,taskAccess:result.role.taskAccess}:user));setRoleOpen(false);setEditRole(null);setStatus({kind:"ok",msg:`${result.role.name} role was saved.`});onLogTxn({type:"user",desc:`Saved role ${result.role.name}`,qty:""});}catch{setBusy(false);setStatus({kind:"err",msg:"Could not reach the server."});}}
     async function deleteRole(role){if(!window.confirm(`Delete the ${role.name} role?`))return;setBusy(true);setStatus(null);try{const result=await callWorker(`/admin/roles/${role.id}`,{username,delete:true});setBusy(false);if(!result.ok){setStatus({kind:"err",msg:result.error||"Could not delete role."});return;}setRoles(prev=>prev.filter(value=>value.id!==role.id));setStatus({kind:"ok",msg:`${role.name} role was deleted.`});}catch{setBusy(false);setStatus({kind:"err",msg:"Could not reach the server."});}}
     const taskGroups=[
-      {name:"Stock operations",codes:["factory.stock","factory.receive","factory.dispatch","factory.damage"]},
+      {name:"Stock operations",codes:["factory.stock","factory.receive","factory.dispatch","factory.transfer","factory.damage"]},
       {name:"CNC tracker",codes:["factory.cnc","site.cnc.view","schedule.cnc.view","schedule.cnc.manage"]},
       {name:"Jobs",codes:["factory.jobs"]},
       {name:"Schedule",codes:["schedule.view","schedule.manage"]},
