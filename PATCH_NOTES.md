@@ -5,7 +5,7 @@
 - Applied the approved wide layout to single and bulk CNC scheduling and material catalog entry, with stacked fields when space is limited.
 - Bulk catalog entry now sets material, colour and thickness once; each size row contains width, height and reorder point.
 - Kept add-line controls and red trash buttons, existing validation and permissions.
-- Added matching width/height diagrams to catalog entry, Add missing material and Add off-cut. The example shows 4000 mm horizontally by 1575 mm vertically.
+- Added matching length/width diagrams to catalog entry, Add missing material and Add off-cut. The example shows a 4000 mm length by 1575 mm width.
 - Positioned the smaller diagrams beside their explanatory text in receiving and offcut dialogs.
 - Preserved the approved SOP PDF, existing inventory data and the backend API.
 
