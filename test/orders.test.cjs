@@ -113,6 +113,8 @@ test('web users can manage their own email address and profile photo',()=>{
  assert.match(html,/profilePhoto:adjustedPhoto/);
  assert.match(html,/onClick:saveEmail/);
  assert.match(html,/"Email address"/);
+ assert.match(html,/"Account information"/);
+ assert.match(html,/"Profile photo"/);
  assert.match(html,/ownProfile\?\.profilePhoto/);
  assert.match(html,/onProfileChange:setOwnProfile/);
  assert.match(html,/w-12 h-12 rounded-full/);
