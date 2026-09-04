@@ -15310,6 +15310,8 @@ function compareCncOrders(a, b) {
       setForm({ orderNumber: "", jobReference: "", sheetNumber: "", panelNumber: "",stockItemType:"",stockItemId:"",stockSku:"",sheetWidth:"",sheetHeight:"",totalPanelArea:"" });
       setAddOpen(false);
     }
+    if (isAdmin && bulkOpen) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeading, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncRouterIcon, { size: 22 }), title: "Bulk CNC scheduling", subtitle: "Schedule multiple panels against a selected material." }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncBulkForm, { variants, offcuts, onSave: onAddPanelsBulk, onClose: () => setBulkOpen(false) })] });
+    if (isAdmin && addOpen) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [inputError && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { role: "alert", className: "text-sm text-red-700 p-3", children: inputError }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeading, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncRouterIcon, { size: 22 }), title: "Schedule a CNC panel", subtitle: "Add one panel against a selected material." }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncSingleForm, { variants, offcuts, form, setForm, onSave: submitAdd, onClose: () => setAddOpen(false) })] });
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
       inputError && (0, import_jsx_runtime.jsx)("p", { role: "alert", className: "text-sm text-red-700 p-3", children: inputError }),
       sheetToComplete && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncSheetDialog, { sheet: sheetToComplete, affectedPanels: cncPanels.filter((p) => p.status === "pending" && p.orderNumber === sheetToComplete.orderNumber && p.sheetNumber === sheetToComplete.sheetNumber && (!sheetToComplete.panelId || p.id === sheetToComplete.panelId)), onClose: () => setSheetToComplete(null), onConfirm: () => { if (sheetToComplete.panelId) onCompletePanel(sheetToComplete.panelId); else onCompleteSheet(sheetToComplete.orderNumber, sheetToComplete.sheetNumber); setSheetToComplete(null); } }),
@@ -15337,8 +15339,6 @@ function compareCncOrders(a, b) {
           ] })
         }
       ),
-      isAdmin && bulkOpen && (0, import_jsx_runtime.jsx)(CncBulkForm, { variants,offcuts,onSave: onAddPanelsBulk, onClose: () => setBulkOpen(false) }),
-      isAdmin && addOpen && (0, import_jsx_runtime.jsx)(CncSingleForm, { variants,offcuts, form, setForm, onSave: submitAdd, onClose: () => setAddOpen(false) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex flex-wrap items-center gap-2 mb-3", children: [
         CNC_PUBLIC_TOKEN && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", { href: excelLink, className: "flex items-center gap-1.5 text-sm font-medium text-slate-600 border border-slate-300 bg-white rounded-lg px-3 py-2 hover:bg-slate-50", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FileSpreadsheet, { size: 15 }),
