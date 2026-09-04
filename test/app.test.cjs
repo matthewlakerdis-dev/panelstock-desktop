@@ -19,6 +19,11 @@ test('desktop scripts parse and do not contain the shared backend credential',()
  assert.equal(result.length,1);assert.equal(result[0].qty,2);
 });
 
+test('desktop loads Cloudflare analytics only once',()=>{
+  const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
+  assert.equal((html.match(/static\.cloudflareinsights\.com\/beacon\.min\.js/g)||[]).length,1);
+});
+
 test('pending change recovery keeps review, retry, export and explicit discard controls',()=>{
  const client=fs.readFileSync(path.join(__dirname,'../panelstock-client.js'),'utf8');
  assert.match(client,/Review pending changes/);
