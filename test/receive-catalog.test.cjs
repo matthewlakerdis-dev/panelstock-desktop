@@ -44,3 +44,10 @@ test('manual popup requires quantity and prevents duplicate submission',()=>{
 });
 
 test("users can receive a new material from the popup",()=>{const r=receiptRun(2,{admin:false});assert.equal(r.error,null);assert.equal(r.writes[0].variants[0].qty,2);});
+
+test('receive page can open the missing-material dialog',()=>{
+ const start=html.indexOf('  function ReceivePage('),end=html.indexOf('  function DispatchPage(',start);
+ const receivePage=html.slice(start,end);
+ assert.match(receivePage,/onClick: \(\) => setAddingMaterial\(true\)/);
+ assert.match(receivePage,/"Add missing material"/);
+});
