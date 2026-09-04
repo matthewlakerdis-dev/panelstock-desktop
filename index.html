@@ -16354,8 +16354,6 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
     const [createOpen, setCreateOpen] = useState(false);
     const [roleOpen, setRoleOpen] = useState(false);
     const [editRole, setEditRole] = useState(null);
-    const [regCode, setRegCode] = useState("");
-    const [newRegCode, setNewRegCode] = useState("");
     const [newUser, setNewUser] = useState(emptyNewUser);
     const [temporaryPins,setTemporaryPins]=useState({});
     const [shownPins,setShownPins]=useState({});
@@ -16383,7 +16381,6 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
         setUsers(result.users);
         setTasks(result.tasks || []);
         setRoles(result.roles || []);
-        setRegCode(result.registrationCode || "");
         setLoaded(true);
       } catch {
         setBusy(false);
@@ -16410,29 +16407,6 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
         setUsers(prev=>[...prev,result.user].sort((a,b)=>a.username.localeCompare(b.username)));setTemporaryPins(value=>({...value,[result.user.username]:newUser.temporaryPin}));setShownPins(value=>({...value,[result.user.username]:false}));setNewUser(emptyNewUser());setCreateOpen(false);setStatus({kind:"ok",msg:`${result.user.displayName} was created. Give them the temporary PIN to sign in.`});onLogTxn({type:"user",desc:`Created user ${result.user.username}`,qty:""});
       } catch {setBusy(false);setStatus({kind:"err",msg:"Could not reach the server."});}
     }
-    async function handleSetRegCode() {
-      if (!/^\d{6}$/.test(newRegCode)) {
-        setStatus({ kind: "err", msg: "Code must be exactly 6 digits." });
-        return;
-      }
-      setBusy(true);
-      setStatus(null);
-      try {
-        const result = await callWorker("/admin/set-registration-code", { username, newCode: newRegCode });
-        setBusy(false);
-        if (!result.ok) {
-          setStatus({ kind: "err", msg: result.error || "Could not update code." });
-          return;
-        }
-        setRegCode(newRegCode);
-        setNewRegCode("");
-        setStatus({ kind: "ok", msg: "Registration code updated." });
-        onLogTxn({ type: "user", desc: "Changed the registration code", qty: "" });
-      } catch {
-        setBusy(false);
-        setStatus({ kind: "err", msg: "Could not reach the server." });
-      }
-    }
     async function toggleAdmin(targetUsername, makeAdmin) {
       setBusy(true);
       setStatus(null);
@@ -16451,16 +16425,18 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
       }
     }
     async function resetPin(targetUsername) {
+      const values=new Uint32Array(1);crypto.getRandomValues(values);const temporaryPin=String(values[0]%1000000).padStart(6,"0");
       setBusy(true);
       setStatus(null);
       try {
-        const result = await callWorker("/admin/reset-pin", { username, targetUsername });
+        const result = await callWorker("/admin/reset-pin", { username, targetUsername, temporaryPin });
         setBusy(false);
         if (!result.ok) {
           setStatus({ kind: "err", msg: result.error || "Could not reset PIN." });
           return;
         }
-        setStatus({ kind: "ok", msg: `${targetUsername}'s PIN was reset \u2014 they'll set a new one next time they log in with the default PIN.` });
+        setUsers(current=>current.map(user=>user.username===targetUsername?{...user,mustChangePin:true}:user));setTemporaryPins(value=>({...value,[targetUsername]:temporaryPin}));setShownPins(value=>({...value,[targetUsername]:false}));
+        setStatus({ kind: "ok", msg: `${targetUsername}'s unique temporary PIN was created. Return to users to reveal it.` });
         onLogTxn({ type: "user", desc: `Reset PIN for ${targetUsername}`, qty: "" });
       } catch {
         setBusy(false);
@@ -16580,7 +16556,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Temporary PIN" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide" })
           ] }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: users.map((u) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { className: "border-t border-slate-100", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: [...users].sort((a,b)=>Number(a.active===false)-Number(b.active===false)||(a.displayName||a.username).localeCompare(b.displayName||b.username)).map((u) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { className: "border-t border-slate-100", children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div",{className:"font-medium text-slate-800",children:u.displayName||u.username}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div",{className:"text-xs text-slate-400",children:`${u.username}${u.username===username?" (you)":""}`})]}) }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3 text-slate-600", children:u.title||"—" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3 text-slate-600", children:u.location||"—" }),
@@ -16606,27 +16582,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "space-y-4 h-fit", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"rounded-xl border border-slate-300 bg-white p-5",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"mb-3 flex items-center justify-between",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div",{className:"text-sm font-semibold text-slate-800",children:"Roles"}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p",{className:"mt-1 text-xs text-slate-500",children:"Reusable task access for user accounts."})]}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button",{onClick:()=>openRole(),className:"rounded-lg bg-cyan-800 px-3 py-2 text-xs font-semibold text-white",children:"+ Create role"})]}),roles.length?/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div",{className:"space-y-2",children:roles.map(role=>/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div",{className:"text-sm font-medium text-slate-700",children:role.name}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div",{className:"text-xs text-slate-400",children:`${users.filter(user=>(user.roleIds||[]).includes(role.id)).length} users`})]}),/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"flex gap-2",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button",{onClick:()=>openRole(role),className:"text-xs font-semibold text-cyan-800",children:"Edit"}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button",{onClick:()=>deleteRole(role),className:"text-xs font-semibold text-red-700",children:"Delete"})]})]},role.id))}):/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p",{className:"text-sm text-slate-400",children:"No roles have been created yet."})]}),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bg-white border border-slate-300 rounded-xl p-5", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm font-semibold text-slate-800 mb-1", children: "Default reset PIN" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { className: "text-sm text-slate-500 mb-3 leading-relaxed", children: [
-          "Used only when an administrator resets an existing user's PIN. Current PIN: ",
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "font-mono font-semibold text-slate-700", children: regCode })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex gap-2", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-            "input",
-            {
-              className: inputCls,
-              inputMode: "numeric",
-              maxLength: 6,
-              value: newRegCode,
-              onChange: (e) => setNewRegCode(e.target.value.replace(/\D/g, "").slice(0, 6)),
-              placeholder: "New reset PIN"
-            }
-          ),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: handleSetRegCode, disabled: busy || newRegCode.length !== 6, className: "bg-cyan-800 disabled:opacity-40 text-white px-3 rounded-lg text-sm font-semibold hover:bg-cyan-900", children: "Save" })
-        ] })
-      ] })] })
+      ] })
     ] });
   }
   function StocktakeReset({ onReset }) {
