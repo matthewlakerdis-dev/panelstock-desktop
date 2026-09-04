@@ -97,9 +97,14 @@ test('web users can manage their own profile photo',()=>{
  assert.match(html,/function ProfilePhotoPage\(\)/);
  assert.match(html,/label: "My Profile"/);
  assert.match(html,/tab === "profile"/);
- assert.match(html,/profilePhoto:nextPhoto/);
+ assert.match(html,/profilePhoto:adjustedPhoto/);
  assert.match(html,/accept:"image\/\*"/);
  assert.match(html,/canvas\.toDataURL\("image\/jpeg",quality\)/);
+ assert.match(html,/const cropPhoto=/);
+ assert.match(html,/"Adjust photo"/);
+ assert.match(html,/"Move left or right"/);
+ assert.match(html,/"Move up or down"/);
+ assert.match(html,/children:\"View Roles\"/);
  assert.doesNotMatch(html,/Profile photo must be under 1 MB/);
 });
 
