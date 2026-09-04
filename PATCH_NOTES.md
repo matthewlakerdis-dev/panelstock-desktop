@@ -1,5 +1,13 @@
 # PanelStock release notes
 
+## Missing-material workflow removed - 5 September 2026
+
+- Removed the Add missing material buttons, dialogs and handlers from the app and web Receive screens.
+- New catalogue materials must now be created by an administrator in Material Catalogue.
+- Staff may still receive a new sheet dimension under an approved catalogue material, and Convert may still create its required output sizes.
+- The production Worker rejects staff catalogue creation while preserving ordinary receiving and conversion validation.
+
+
 ## Consistent entry forms and measurement guides - 31 August 2026
 
 - Applied the approved wide layout to single and bulk CNC scheduling and material catalog entry, with stacked fields when space is limited.
