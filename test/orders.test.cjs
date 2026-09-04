@@ -136,6 +136,7 @@ test('web users can manage their own email address and profile photo',()=>{
 
 test('web navigation uses exclusive parent sections and standalone CNC and profile links',()=>{
  const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
+ assert.doesNotMatch(html,/syncStatus === "synced"/);
  const navigation=html.slice(html.indexOf('const navGroups = ['),html.indexOf('const pageLabels ='));
  assert.match(navigation,/label:"SOH"/);
  assert.match(html,/label:"CNC",active:navSelection==="cnc"/);
