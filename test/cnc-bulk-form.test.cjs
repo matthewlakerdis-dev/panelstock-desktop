@@ -5,6 +5,7 @@ const vm=require('node:vm');
 
 for (const repo of ['panelstock-desktop']) {
  const html=fs.readFileSync(require('node:path').join(__dirname,'../index.html'),'utf8');
+ test(repo+': shared CNC picker keeps search text clear of its icon',()=>assert.match(html,/placeholder:"Search colour, material, size, SKU…",style:\{paddingLeft:"2\.5rem"\}/));
  const normalize=html.slice(html.indexOf('function normalizeCncInput('),html.indexOf('function compareCncOrders('));
  const start=html.indexOf('  function prepareCncBulkRows(');
  const end=html.indexOf(repo==='panelstock'?'  function CncTab(':'  function CncPage(',start);
