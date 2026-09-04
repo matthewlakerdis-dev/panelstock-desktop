@@ -15276,6 +15276,7 @@ function compareCncOrders(a, b) {
     ] });
   }
   function CncDimensionBackfill({ panels, onSave, onClose }) {
+    const h = import_react.createElement;
     const groups = [...panels.reduce((map, panel) => {
       if (panel.status !== "completed" || Number(panel.sheetWidth) > 0 && Number(panel.sheetHeight) > 0) return map;
       const key = JSON.stringify([panel.jobReference || "", panel.orderNumber || "", panel.sheetNumber || ""]), current = map.get(key) || { key, ids: [], jobReference: panel.jobReference || "", orderNumber: panel.orderNumber || "", sheetNumber: panel.sheetNumber || "", panelIds: [], panelArea: 0, completedAt: panel.completedAt || "" };
@@ -15303,6 +15304,7 @@ function compareCncOrders(a, b) {
     ] });
   }
   function CncPage({ cncPanels, variants, offcuts, isAdmin, onAddPanel, onAddPanelsBulk, onCompletePanel, onCompleteSheet, onRemovePanel, onBackfillDimensions }) {
+    const h = import_react.createElement;
     const [sheetToComplete, setSheetToComplete] = useState(null);
     const [inputError, setInputError] = useState("");
     const [view, setView] = useState("pending");
