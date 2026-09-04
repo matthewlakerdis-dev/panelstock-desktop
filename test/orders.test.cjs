@@ -6,10 +6,13 @@ const path=require('node:path');
 test('desktop web exposes permission-aware order management',()=>{
  const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
  const client=fs.readFileSync(path.join(__dirname,'../panelstock-client.js'),'utf8');
- assert.match(html,/function OrdersPage\(\{ canCreate, canManage, isAdmin \}\)/);
+ assert.match(html,/function OrdersPage\(\{ canCreate, canManage, isAdmin, projectsOnly = false \}\)/);
  assert.match(html,/Add project/);
  assert.match(html,/\/projects/);
  assert.match(html,/Project details/);
+ assert.match(html,/projectsOnly && isAdmin && e\("form"/);
+ assert.match(html,/projectsOnly && canManage && e\("form"/);
+ assert.match(html,/!projectsOnly && e\("div", \{ className: "mb-4 flex flex-wrap gap-2"/);
  assert.match(html,/Project notes/);
  assert.match(html,/Delete project/);
  assert.match(html,/async function deleteProject/);
@@ -128,6 +131,9 @@ test('web navigation uses exclusive parent sections and standalone CNC and profi
  assert.match(navigation,/label:"SOH"/);
  assert.match(html,/label:"CNC",active:navSelection==="cnc"/);
  assert.match(navigation,/label:"User Access"/);
+ assert.match(navigation,/label:"Projects",target:"projects"/);
+ assert.match(html,/tab === "projects"/);
+ assert.match(html,/projects:"Projects"/);
  assert.doesNotMatch(navigation,/label:"Material Catalogue"/);
  assert.match(html,/key: "catalog", label: "Material Catalogue"/);
  assert.doesNotMatch(navigation,/label:"Roles"/);
