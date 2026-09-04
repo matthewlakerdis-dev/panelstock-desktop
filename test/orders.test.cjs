@@ -119,7 +119,10 @@ test('administrators create users and the login screen has no self-registration 
  assert.match(html,/targetUsername, temporaryPin/);
  assert.match(html,/children:\s*"Temporary PIN"/);
  assert.match(html,/temporaryPins\[u\.username\]/);
- assert.match(html,/!u\.mustChangePin\s*\?\s*"Used"\s*:\s*shownPins\[u\.username\]\s*\?\s*"Hide"\s*:\s*"Show"/);
+ assert.match(html,/children:"View Roles"/);
+ assert.match(html,/if\(rolesOpen\)return/);
+ assert.match(html,/"aria-label":!u\.mustChangePin\?"Temporary PIN used":shownPins\[u\.username\]\?"Hide temporary PIN":"Show temporary PIN"/);
+ assert.match(html,/sessionStorage\.setItem\("panelstock-admin-temporary-pins"/);
  assert.match(html,/placeholder:"e\.g\. Site Supervisor"/);
  assert.match(html,/placeholder:"e\.g\. Factory or Brisbane"/);
  assert.match(html,/\/admin\/roles/);
