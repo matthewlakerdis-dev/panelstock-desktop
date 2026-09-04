@@ -14290,7 +14290,7 @@ ${xrefStart}
     const can = (task) => isAdmin || taskAccess[task] !== false;
     const permittedPages = [
       ['stock','factory.stock'],['receive','factory.receive'],['dispatch','factory.dispatch'],['transfer','factory.transfer'],['damage','factory.damage'],['cnc','factory.cnc'],
-      ['orders','site.orders.view'],['schedule',can('schedule.view')?'schedule.view':'schedule.cnc.view'],['jobs','factory.jobs'],
+      ...(isAdmin||can('site.orders.manage')?[['projects',null]]:[]),['orders','site.orders.view'],['schedule',can('schedule.view')?'schedule.view':'schedule.cnc.view'],['jobs','factory.jobs'],
       ...(isAdmin?[['access',null]]:[]),['profile',null],['settings','factory.settings']
     ].filter(([,task])=>task===null||can(task)).map(([page])=>page);
     useEffect(()=>{if(username&&!permittedPages.includes(tab)&&permittedPages[0])setTab(permittedPages[0]);},[username,tab,taskAccess,isAdmin]);

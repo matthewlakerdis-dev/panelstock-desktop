@@ -134,6 +134,7 @@ test('web navigation uses exclusive parent sections and standalone CNC and profi
  assert.match(navigation,/label:"Projects",target:"projects"/);
  assert.match(html,/tab === "projects"/);
  assert.match(html,/projects:"Projects"/);
+ assert.match(html,/isAdmin\|\|can\('site\.orders\.manage'\)\?\[\['projects',null\]\]/);
  assert.doesNotMatch(navigation,/label:"Material Catalogue"/);
  assert.match(html,/key: "catalog", label: "Material Catalogue"/);
  assert.doesNotMatch(navigation,/label:"Roles"/);
