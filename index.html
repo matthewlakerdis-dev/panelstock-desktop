@@ -15275,6 +15275,7 @@ function compareCncOrders(a, b) {
     const [form, setForm] = useState({ orderNumber: "", jobReference: "", sheetNumber: "", panelNumber: "",stockItemType:"",stockItemId:"",stockSku:"",sheetWidth:"",sheetHeight:"",totalPanelArea:"" });
     const [linkCopied, setLinkCopied] = useState(false);
     const shareableLink = `https://cnc.panelstockhq.com/cnc-tracker/view?token=${encodeURIComponent(CNC_PUBLIC_TOKEN)}`;
+    const excelLink = `https://cnc.panelstockhq.com/cnc-tracker?token=${encodeURIComponent(CNC_PUBLIC_TOKEN)}`;
     async function copyShareableLink() {
       try {
         await navigator.clipboard.writeText(shareableLink);
@@ -15307,6 +15308,10 @@ function compareCncOrders(a, b) {
           title: "CNC Tracker",
           subtitle: "Panels scheduled to be cut, and their completion status. The shareable link always reflects the latest data \u2014 no need to re-send it.",
           action: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center gap-2", children: [
+            CNC_PUBLIC_TOKEN && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", { href: excelLink, className: "flex items-center gap-1.5 text-sm font-medium text-slate-600 border border-slate-300 bg-white rounded-lg px-3 py-2 hover:bg-slate-50", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FileSpreadsheet, { size: 15 }),
+              " Excel tracker"
+            ] }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: copyShareableLink, className: "flex items-center gap-1.5 text-sm font-medium text-slate-600 border border-slate-300 bg-white rounded-lg px-3 py-2 hover:bg-slate-50", children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LinkIcon, { size: 15 }),
               " ",
