@@ -14595,6 +14595,7 @@ ${xrefStart}
     return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { ref, className: className || inputCls, value, onChange: handleChange, ...props });
   }
   function SupportCenter({isAdmin=false}) {
+    const e=import_react.createElement;
     const [tickets,setTickets]=useState([]),[selectedId,setSelectedId]=useState(null),[busy,setBusy]=useState(false),[notice,setNotice]=useState(""),[photo,setPhoto]=useState(""),[replyPhoto,setReplyPhoto]=useState("");
     const load=async()=>{try{const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/support"),result=await response.json();if(!response.ok)throw Error(result.error||"Support tickets could not be loaded.");setTickets(result.tickets||[]);}catch(error){setNotice(error.message||"Support tickets could not be loaded.");}};
     useEffect(()=>{load();},[]);
