@@ -13856,8 +13856,35 @@ ${xrefStart}
       persist({ variants: [], offcuts: [], catalog: [], reasons: DEFAULT_REASONS, transactions: [resetEntry, ...transactions] });
       showToast("All stock information has been reset");
     }
+    function validateCncSchedule(rows) {
+      const existingSheets=new Map();
+      for(const panel of cncPanels){
+        if(panel.status==="completed")continue;
+        const sheetKey=JSON.stringify([panel.jobReference||"",panel.orderNumber||"",panel.sheetNumber||""]);
+        existingSheets.set(sheetKey,`${panel.stockItemType||"variant"}:${panel.stockItemId||panel.stockVariantId||""}`);
+      }
+      const requestedSheets=new Map();
+      for(const row of rows){
+        const sheetKey=JSON.stringify([row.jobReference||"",row.orderNumber||"",row.sheetNumber||""]),stockKey=`${row.stockItemType||"variant"}:${row.stockItemId||row.stockVariantId||""}`;
+        if(existingSheets.has(sheetKey)){
+          if(existingSheets.get(sheetKey)!==stockKey)return "This CNC sheet is already scheduled against a different stock item.";
+          continue;
+        }
+        if(requestedSheets.has(sheetKey)&&requestedSheets.get(sheetKey)!==stockKey)return "Panels on the same CNC sheet must use the same stock item.";
+        requestedSheets.set(sheetKey,stockKey);
+      }
+      const reserved=cncReservedSheets(cncPanels),needed=new Map();
+      for(const stockKey of requestedSheets.values())needed.set(stockKey,(needed.get(stockKey)||0)+1);
+      for(const [stockKey,count] of needed){
+        const [type,id]=stockKey.split(":"),stock=(type==="offcut"?offcuts:variants).find(item=>String(item.id)===id),available=Math.max(0,Number(stock?.qty||0)-(reserved.get(stockKey)||0));
+        if(count>available)return `${stock?.color||"Selected stock"} ${stock?.material||""} only has ${available} unreserved sheet${available===1?"":"s"} available for CNC.`;
+      }
+      return "";
+    }
     function addCncPanel(input) {
       const { orderNumber, jobReference, sheetNumber, panelNumber, stockItemType, stockItemId, stockSku, sheetWidth, sheetHeight, totalPanelArea, pendingOffcut, pdfPage } = normalizeCncInput(input);
+      const validationError=validateCncSchedule([{orderNumber,jobReference,sheetNumber,stockItemType,stockItemId}]);
+      if(validationError){showToast(validationError,"err");return false;}
       const entry = {
         id: uid(),
         orderNumber,
@@ -13883,9 +13910,12 @@ ${xrefStart}
       persist({ cncPanels: next });
       logTxn({ type: "cnc", desc: `Scheduled panel for CNC: Order ${orderNumber}${jobReference ? ` \xB7 Job ${jobReference}` : ""} \xB7 Sheet ${sheetNumber} \xB7 Panel ${panelNumber}`, qty: "" });
       showToast("Panel added to CNC schedule");
+      return true;
     }
     function addCncPanelsBulk(rows) {
       rows = rows.map(normalizeCncInput);
+      const validationError=validateCncSchedule(rows);
+      if(validationError){showToast(validationError,"err");return false;}
       const now = (/* @__PURE__ */ new Date()).toISOString();
       const newEntries = rows.map((r) => ({
         id: uid(),
@@ -13912,6 +13942,7 @@ ${xrefStart}
       persist({ cncPanels: next });
       logTxn({ type: "cnc", desc: `Bulk scheduled ${rows.length} panel${rows.length === 1 ? "" : "s"} for CNC`, qty: "" });
       showToast(`${rows.length} panel${rows.length === 1 ? "" : "s"} added to CNC schedule`);
+      return true;
     }
     function completeCncPanel(id) {
       const panel = cncPanels.find((p) => p.id === id);
@@ -14361,6 +14392,8 @@ ${xrefStart}
             {
               variants,
               offcuts,
+              cncPanels,
+              isAdmin,
               onAddOffcut: () => setModal({ type: "offcut" }),
               onExportExcel: exportExcel,
               onExportPDF: exportSOHPDF,
@@ -14483,7 +14516,19 @@ ${xrefStart}
   function Toast({ toast }) {
     return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: `fixed bottom-6 right-6 px-4 py-2.5 rounded-lg text-sm font-medium shadow-lg z-30 ${toast.kind === "err" ? "bg-red-800 text-white" : "bg-slate-900 text-white"}`, children: toast.msg });
   }
-  function StockPage({ variants, offcuts, onAddOffcut, onExportExcel, onExportPDF, onOpenDetail }) {
+  function cncReservedSheets(cncPanels) {
+    const seen=new Set(),counts=new Map();
+    for(const panel of cncPanels||[]){
+      if(panel.status==="completed"||!panel.stockItemType||!panel.stockItemId)continue;
+      const sheetKey=JSON.stringify([panel.jobReference||"",panel.orderNumber||"",panel.sheetNumber||"",panel.stockItemType,panel.stockItemId]);
+      if(seen.has(sheetKey))continue;
+      seen.add(sheetKey);
+      const stockKey=`${panel.stockItemType}:${panel.stockItemId}`;
+      counts.set(stockKey,(counts.get(stockKey)||0)+1);
+    }
+    return counts;
+  }
+  function StockPage({ variants, offcuts, cncPanels, isAdmin, onAddOffcut, onExportExcel, onExportPDF, onOpenDetail }) {
     const [q, setQ] = useState("");
     const [view, setView] = useState("panels");
     const inStockVariants = variants.filter((v) => Number(v.qty) > 0);
@@ -14499,6 +14544,7 @@ ${xrefStart}
     }, [rows, q]);
     const totalFiltered = grouped.reduce((s, g) => s + g.items.length, 0);
     const totalSOH = variants.reduce((s, v) => s + v.qty, 0);
+    const reserved=useMemo(()=>cncReservedSheets(cncPanels),[cncPanels]);
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "flex items-start justify-between mb-6", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { className: "text-xl font-semibold text-slate-900 tracking-tight", children: "Stock on Hand" }),
@@ -14581,7 +14627,8 @@ ${xrefStart}
                 /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3 font-mono text-slate-400", children: v.sku }),
                 view === "offcuts" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3 text-slate-400", children: v.note || "\u2014" }),
                 /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("td", { className: "px-4 py-3 text-right", children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "font-mono font-semibold text-slate-800", children: v.qty })
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "font-mono font-semibold text-slate-800", children: v.qty }),
+                  isAdmin&&(reserved.get(`${view==="panels"?"variant":"offcut"}:${v.id}`)||0)>0&&/* @__PURE__ */ (0,import_jsx_runtime.jsx)("div",{className:"mt-1 text-xs font-semibold text-amber-700",children:`${reserved.get(`${view==="panels"?"variant":"offcut"}:${v.id}`)} reserved for CNC · ${Math.max(0,Number(v.qty)-reserved.get(`${view==="panels"?"variant":"offcut"}:${v.id}`))} available`})
                 ] })
               ] }, v.id);
             })
@@ -14683,12 +14730,13 @@ ${xrefStart}
       h("svg", {"viewBox": "15 0 520 190", "role": "img", "aria-label": "A sheet 4000 millimetres long and 1575 millimetres wide", children: [h("rect", {"x": "30", "y": "40", "width": "340", "height": "134", "rx": "4", "fill": "#e6f1f4", "stroke": "#155e75", "strokeWidth": "2"}), h("text", {"x": "200", "y": "112", "textAnchor": "middle", "fill": "#155e75", "fontSize": "20", children: ["Sheet / panel"]}), h("path", {"d": "M30 30V12M370 30V12", "stroke": "#94a3b8"}), h("path", {"d": "M35 20H365", "stroke": "#155e75", "strokeWidth": "1.5"}), h("rect", {"x": "107", "y": "3", "width": "186", "height": "30", "fill": "#f0f7f9"}), h("text", {"x": "200", "y": "25", "textAnchor": "middle", "fill": "#155e75", "fontSize": "20", "fontWeight": "600", children: ["Length: 4000 mm"]}), h("path", {"d": "M382 40H408M382 174H408", "stroke": "#94a3b8"}), h("path", {"d": "M398 45V169", "stroke": "#155e75", "strokeWidth": "1.5"}), h("text", {"x": "417", "y": "103", "fill": "#155e75", "fontSize": "20", "fontWeight": "600", children: ["Width"]}), h("text", {"x": "417", "y": "125", "fill": "#155e75", "fontSize": "20", children: ["1575 mm"]}), h("path", {"d": "M35 20l7 -4v8z M365 20l-7 -4v8z", "fill": "#155e75"}), h("path", {"d": "M398 45l-4 7h8z M398 169l-4 -7h8z", "fill": "#155e75"})]})
     ] });
   }
-  function CncStockPicker({variants,offcuts,selected,onSelect}) {
+  function CncStockPicker({variants,offcuts,cncPanels,selected,onSelect}) {
     const h=import_jsx_runtime.jsx,[query,setQuery]=useState("");
+    const reserved=cncReservedSheets(cncPanels);
     const sortSohItems=items=>groupByMaterialLargestFirst(items).flatMap(group=>[...group.items].sort((a,b)=>a.color.localeCompare(b.color)||b.width*b.height-a.width*a.height)),choices=[...sortSohItems(variants.filter(item=>item.qty>0).map(item=>({...item,itemType:"variant",kind:"Full panel"}))),...sortSohItems(offcuts.filter(item=>item.qty>0).map(item=>({...item,itemType:"offcut",kind:"Off-cut"})))].filter(item=>`${item.color} ${item.material} ${item.thickness} ${item.width} ${item.height} ${item.sku} ${item.kind}`.toLowerCase().includes(query.toLowerCase()));
-    return h("div",{className:"col-span-full overflow-hidden rounded-xl border border-slate-300 bg-white",children:[h("div",{className:"border-b border-slate-100 p-4",children:[h("label",{className:"mb-2 block text-xs font-semibold text-slate-600",children:"Select material / stock sheet *"}),h("div",{className:"relative",children:[h(Search,{size:16,className:"absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"}),h("input",{value:query,onChange:event=>setQuery(event.target.value),placeholder:"Search colour, material, size, SKU…",style:{paddingLeft:"2.5rem"},className:"w-full rounded-lg border border-slate-300 bg-slate-50 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-cyan-800 focus:bg-white"})]})]}),h("div",{className:"max-h-80 overflow-y-auto divide-y divide-slate-100",children:choices.length?choices.map(item=>{const key=`${item.itemType}:${item.id}`,active=key===selected;return h("button",{type:"button",onClick:()=>onSelect(item),className:`w-full flex items-center gap-3 px-4 py-3 text-left ${active?"bg-cyan-50":"hover:bg-slate-50"}`,children:[h("div",{className:"h-7 w-7 shrink-0 rounded",style:{backgroundColor:swatchColour(item.color)}}),h("div",{className:"min-w-0 flex-1",children:[h("div",{className:"text-sm font-medium text-slate-800",children:`${item.color} · ${item.material}`}),h("div",{className:"text-xs text-slate-400",children:`${item.kind} · ${item.thickness}mm · ${fmtDim(item.width,item.height)} · ${item.sku||"No SKU"}`})]}),h("span",{className:"text-sm font-semibold text-slate-500",children:`${item.qty} SOH`}),active&&h(Check,{size:17,className:"text-cyan-800"})]},key);}):h("p",{className:"p-5 text-center text-sm text-slate-500",children:"No in-stock material matches your search."})})]});
+    return h("div",{className:"col-span-full overflow-hidden rounded-xl border border-slate-300 bg-white",children:[h("div",{className:"border-b border-slate-100 p-4",children:[h("label",{className:"mb-2 block text-xs font-semibold text-slate-600",children:"Select material / stock sheet *"}),h("div",{className:"relative",children:[h(Search,{size:16,className:"absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"}),h("input",{value:query,onChange:event=>setQuery(event.target.value),placeholder:"Search colour, material, size, SKU…",style:{paddingLeft:"2.5rem"},className:"w-full rounded-lg border border-slate-300 bg-slate-50 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-cyan-800 focus:bg-white"})]})]}),h("div",{className:"max-h-80 overflow-y-auto divide-y divide-slate-100",children:choices.length?choices.map(item=>{const key=`${item.itemType}:${item.id}`,active=key===selected,count=reserved.get(key)||0,available=Math.max(0,Number(item.qty)-count);return h("button",{type:"button",onClick:()=>onSelect(item),className:`w-full flex items-center gap-3 px-4 py-3 text-left ${active?"bg-cyan-50":"hover:bg-slate-50"}`,children:[h("div",{className:"h-7 w-7 shrink-0 rounded",style:{backgroundColor:swatchColour(item.color)}}),h("div",{className:"min-w-0 flex-1",children:[h("div",{className:"text-sm font-medium text-slate-800",children:`${item.color} · ${item.material}`}),h("div",{className:"text-xs text-slate-400",children:`${item.kind} · ${item.thickness}mm · ${fmtDim(item.width,item.height)} · ${item.sku||"No SKU"}`}),count>0&&h("div",{className:"mt-1 text-xs font-semibold text-amber-700",children:`${count} reserved for CNC · ${available} available`})]}),h("span",{className:"text-sm font-semibold text-slate-500",children:`${item.qty} SOH`}),active&&h(Check,{size:17,className:"text-cyan-800"})]},key);}):h("p",{className:"p-5 text-center text-sm text-slate-500",children:"No in-stock material matches your search."})})]});
   }
-  function CncSingleForm({ form, setForm, onSave, onClose, variants, offcuts }) {
+  function CncSingleForm({ form, setForm, onSave, onClose, variants, offcuts, cncPanels }) {
     const h = import_jsx_runtime.jsx;
     const field = (key, label, placeholder) => h("label", { children: [label, h(key === "orderNumber" || key === "jobReference" ? CapitalizedInput : "input", { value: form[key], placeholder, onChange: value => setForm({ ...form, [key]: key === "orderNumber" || key === "jobReference" ? value : value.target.value }) })] });
     const fmtDim=(a,b)=>`${Math.max(Number(a),Number(b))} × ${Math.min(Number(a),Number(b))}`,chooseStock=stock=>setForm({...form,stockItemType:stock?.itemType||"",stockItemId:stock?.id||"",stockSku:stock?.sku||"",sheetWidth:stock?.width||"",sheetHeight:stock?.height||""});
@@ -15199,7 +15247,7 @@ function compareCncOrders(a, b) {
     if (!rows.length && !errors.length) errors.push("Add at least one sheet number and panel ID.");
     return { rows: errors.length ? [] : rows, errors };
   }
-  function CncBulkForm({ onSave, onClose, variants, offcuts }) {
+  function CncBulkForm({ onSave, onClose, variants, offcuts, cncPanels }) {
     const [order, setOrder] = useState({ orderNumber: "", jobReference: "",stockItemType:"",stockItemId:"",stockSku:"",sheetWidth:"",sheetHeight:"" });
     const [lines, setLines] = useState([{ id: 1, sheetNumber: "", panelNumber: "",totalPanelArea:"" }]);
     const [errors, setErrors] = useState([]);
@@ -15224,7 +15272,7 @@ function compareCncOrders(a, b) {
       setErrors(prepared.errors);
       if (prepared.errors.length) return;
       saving.current = true;
-      try { onSave(prepared.rows); onClose(); }
+      try { if(onSave(prepared.rows)===false)return; onClose(); }
       finally { saving.current = false; }
     }
     const field = (label, props) => h("label", { className: "block min-w-0 text-xs font-semibold text-slate-600", children: [label, h("input", { ...props, type: "text", className: inputCls + " mt-1 w-full", autoComplete: "off" })] });
@@ -15250,12 +15298,12 @@ function compareCncOrders(a, b) {
       h("div", { className: "ps-entry-actions", children: [h("button", { type: "submit", className: "ps-entry-primary", children: count ? `Schedule ${count} panel${count === 1 ? "" : "s"}` : "Add to schedule" }), h("button", { type: "button", onClick: onClose, className: "ps-entry-cancel", children: "Cancel" })] })
     ] });
   }
-  function CncPdfImport({ variants, offcuts, onSave, onClose }) {
+  function CncPdfImport({ variants, offcuts, cncPanels, onSave, onClose }) {
     const h=import_react.createElement,[pages,setPages]=useState([]),[busy,setBusy]=useState(false),[error,setError]=useState(""),[fileName,setFileName]=useState("");
     const choices=[...variants,...offcuts].filter(item=>item.qty>0);
     const update=(index,patch)=>setPages(current=>current.map((page,i)=>i===index?{...page,...patch}:page));
     async function analyse(event){const file=event.target.files?.[0];if(!file)return;setFileName(file.name);if(file.type!=="application/pdf"||file.size>8*1024*1024){setError("Choose a PDF under 8 MB.");return;}setBusy(true);setError("");try{const pdf=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file);}),response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/cnc-pdf/analyse",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pdf})}),result=await response.json();if(!response.ok)throw Error(result.error||"The CNC PDF could not be analysed.");setPages((result.pages||[]).map(page=>{const stock=choices.find(item=>Number(item.width)===Number(page.sheetWidth)&&Number(item.height)===Number(page.sheetHeight)&&String(page.material||"").toLowerCase().includes(String(item.material||"").toLowerCase()));return {...page,jobReference:projectTitleCase(page.project),panelNumbers:(page.panelIds||[]).join(", "),stockItemType:stock?.id?(offcuts.some(value=>value.id===stock.id)?"offcut":"variant"):"",stockItemId:stock?.id||"",stockSku:stock?.sku||"",offcutLength:page.proposedOffcut?.length||"",offcutWidth:page.proposedOffcut?.width||""};}));}catch(reason){setError(reason.message||"The CNC PDF could not be analysed.");}finally{setBusy(false);}}
-    function submit(){const rows=[];for(const page of pages){const ids=String(page.panelNumbers||"").split(",").map(value=>value.trim()).filter(Boolean);if(!page.orderNumber||!page.sheetNumber||!page.stockItemId||!ids.length||!(Number(page.panelArea)>0)){setError("Review every page and select its stock sheet, panel IDs and panel area.");return;}for(let copy=0;copy<Number(page.quantity||1);copy++)for(const panelNumber of ids)rows.push(normalizeCncInput({orderNumber:page.orderNumber,jobReference:page.jobReference,sheetNumber:copy?`${page.sheetNumber}.${copy+1}`:page.sheetNumber,panelNumber,stockItemType:page.stockItemType,stockItemId:page.stockItemId,stockSku:page.stockSku,sheetWidth:Number(page.sheetWidth),sheetHeight:Number(page.sheetHeight),totalPanelArea:Number(page.panelArea),pdfPage:page.page,pendingOffcut:Number(page.offcutLength)>0&&Number(page.offcutWidth)>0?{length:Number(page.offcutLength),width:Number(page.offcutWidth),status:"pending",source:"cnc-pdf"}:null}));}onSave(rows);onClose();}
+    function submit(){const rows=[];for(const page of pages){const ids=String(page.panelNumbers||"").split(",").map(value=>value.trim()).filter(Boolean);if(!page.orderNumber||!page.sheetNumber||!page.stockItemId||!ids.length||!(Number(page.panelArea)>0)){setError("Review every page and select its stock sheet, panel IDs and panel area.");return;}for(let copy=0;copy<Number(page.quantity||1);copy++)for(const panelNumber of ids)rows.push(normalizeCncInput({orderNumber:page.orderNumber,jobReference:page.jobReference,sheetNumber:copy?`${page.sheetNumber}.${copy+1}`:page.sheetNumber,panelNumber,stockItemType:page.stockItemType,stockItemId:page.stockItemId,stockSku:page.stockSku,sheetWidth:Number(page.sheetWidth),sheetHeight:Number(page.sheetHeight),totalPanelArea:Number(page.panelArea),pdfPage:page.page,pendingOffcut:Number(page.offcutLength)>0&&Number(page.offcutWidth)>0?{length:Number(page.offcutLength),width:Number(page.offcutWidth),status:"pending",source:"cnc-pdf"}:null}));}if(onSave(rows)===false)return;onClose();}
     return h("div",null,[h(PageHeading,{icon:h(Upload,{size:22}),title:"Import CNC program PDF",subtitle:"Upload one complete order PDF, review every detected sheet, then add it to the CNC schedule."}),h("div",{className:"rounded-xl border border-slate-300 bg-white p-5"},[h("div",{className:"flex flex-wrap items-center gap-3"},[h("label",{className:"inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"},[h(Upload,{size:16}),busy?"Analysing…":fileName?"Choose another PDF":"Choose PDF",h("input",{type:"file",accept:"application/pdf",onChange:analyse,disabled:busy,className:"sr-only"})]),fileName&&h("span",{className:"min-w-0 truncate text-sm text-slate-500"},fileName)]),busy&&h("p",{className:"mt-3 text-sm text-slate-500"},"Analysing every page…"),error&&h("p",{role:"alert",className:"mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700"},error)]),pages.map((page,index)=>h("section",{key:page.page,className:"mt-4 rounded-xl border border-slate-300 bg-white p-5 space-y-4"},[h("div",{className:"flex justify-between gap-3"},[h("strong",null,`PDF page ${page.page}`),h("span",{className:"text-sm text-slate-500"},page.warnings?.length?page.warnings.join(" · "):"All fields detected")]),h("div",{className:"grid grid-cols-2 gap-3"},[h(Field,{label:"Project",children:h("input",{className:inputCls,value:page.jobReference,onChange:event=>update(index,{jobReference:event.target.value})})}),h(Field,{label:"Order number",children:h("input",{className:inputCls,value:page.orderNumber,onChange:event=>update(index,{orderNumber:event.target.value})})}),h(Field,{label:"Sheet number",children:h("input",{className:inputCls,value:page.sheetNumber,onChange:event=>update(index,{sheetNumber:event.target.value})})}),h(Field,{label:"Panel IDs (comma separated)",children:h("input",{className:inputCls,value:page.panelNumbers,onChange:event=>update(index,{panelNumbers:event.target.value})})}),h(Field,{label:"Panel area (m²)",children:h("input",{type:"number",step:"0.01",className:inputCls,value:page.panelArea,onChange:event=>update(index,{panelArea:event.target.value})})}),h("div",null,h(CncStockPicker,{variants,offcuts,selected:page.stockItemType&&page.stockItemId?`${page.stockItemType}:${page.stockItemId}`:"",onSelect:stock=>update(index,{stockItemType:stock?.itemType||"",stockItemId:stock?.id||"",stockSku:stock?.sku||"",sheetWidth:stock?.width||page.sheetWidth,sheetHeight:stock?.height||page.sheetHeight})}))]),h("div",{className:"rounded-lg bg-cyan-50 border border-cyan-200 p-3"},[h("p",{className:"text-sm font-semibold text-cyan-900"},"Proposed off-cut (confirm when completing the sheet)"),h("div",{className:"mt-2 grid grid-cols-2 gap-3"},[h("input",{type:"number",className:inputCls,"aria-label":"Off-cut length",value:page.offcutLength,onChange:event=>update(index,{offcutLength:event.target.value})}),h("input",{type:"number",className:inputCls,"aria-label":"Off-cut width",value:page.offcutWidth,onChange:event=>update(index,{offcutWidth:event.target.value})})])])])),h("div",{className:"ps-entry-actions"},[pages.length>0&&h("button",{type:"button",onClick:submit,className:"ps-entry-primary"},"Add reviewed sheets to schedule"),h("button",{type:"button",onClick:onClose,className:"ps-entry-cancel"},"Cancel")])]);
   }
   function CncDimensionBackfill({ panels, onSave, onClose }) {
@@ -15324,7 +15372,7 @@ function compareCncOrders(a, b) {
       const cleaned = normalizeCncInput(form);
       if (!cleaned.orderNumber) { setInputError("Enter an order number containing digits after Order."); return; }
       setInputError("");
-      onAddPanel(cleaned);
+      if(onAddPanel(cleaned)===false)return;
       setForm({ orderNumber: "", jobReference: "", sheetNumber: "", panelNumber: "",stockItemType:"",stockItemId:"",stockSku:"",sheetWidth:"",sheetHeight:"",totalPanelArea:"" });
       setAddOpen(false);
     }
