@@ -106,3 +106,10 @@ test('confirmation actions use the PanelStock styled dialog',()=>{
  assert.doesNotMatch(html,/window\.(?:confirm|prompt|alert)\s*\(/);assert.doesNotMatch(client,/(?:window\.)?(?:confirm|prompt|alert)\s*\(/);assert.doesNotMatch(client,/beforeunload/);
  assert.match(client,/role','dialog'/);assert.match(client,/confirm:styledConfirm/);assert.match(client,/showCopy:showCopyDialog/);assert.match(html,/PanelStock\.confirm\(/);assert.match(html,/PanelStock\.showCopy\(/);
 });
+
+test('administrators have a read-only filtered Audit Centre',()=>{
+ const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8'),audit=html.slice(html.indexOf('function AuditCenter('),html.indexOf('function SettingsPage('));
+ assert.match(html,/label:"Audit Centre"/);assert.match(html,/tab === "audit" && isAdmin/);assert.match(audit,/This screen is read-only/);
+ for(const label of ['Search','Action type','User','Status','From date','To date'])assert.match(audit,new RegExp(`"${label}"`));
+ assert.match(audit,/item\.voided/);assert.match(audit,/Clear filters/);
+});
