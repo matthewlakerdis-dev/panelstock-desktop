@@ -36,6 +36,9 @@ test('desktop scripts parse and do not contain the shared backend credential',()
  assert.match(html,/notificationCount>99\?"99\+":notificationCount/);
  assert.match(html,/Bell,\{size:31\}/);
  assert.match(html,/fill:"currentColor"/);
+ assert.match(html,/function PushNotificationControl\(\)/);
+ assert.match(html,/navigator\.serviceWorker\.register\('\/push-sw\.js'/);
+ assert.match(fs.readFileSync(path.join(__dirname,'../push-sw.js'),'utf8'),/showNotification/);
  assert.match(html,/tab === "notifications"/);
  assert.match(html,/\/notifications\/read/);
  assert.doesNotMatch(cncPage,/children: "Complete panel"/);
