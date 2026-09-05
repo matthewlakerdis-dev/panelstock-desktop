@@ -13952,15 +13952,19 @@ ${xrefStart}
       showToast("Removed from CNC schedule");
     }
     function backfillCncDimensions(ids, enteredLength, enteredWidth) {
-      const selected = new Set(ids), length = Math.max(Number(enteredLength), Number(enteredWidth)), width = Math.min(Number(enteredLength), Number(enteredWidth));
-      if (!Number.isFinite(length) || !Number.isFinite(width) || length <= 0 || width <= 0) return showToast("Enter a valid length and width", "err");
-      const next = cncPanels.map((panel) => selected.has(panel.id) && panel.status === "completed" ? { ...panel, sheetWidth: length, sheetHeight: width } : panel);
+      const requested = Array.isArray(ids) && ids.length && Array.isArray(ids[0]?.ids) ? ids : [{ ids, length: enteredLength, width: enteredWidth }], updates = new Map();
+      for (const item of requested) {
+        const length = Math.max(Number(item.length), Number(item.width)), width = Math.min(Number(item.length), Number(item.width));
+        if (!Array.isArray(item.ids) || !Number.isFinite(length) || !Number.isFinite(width) || length <= 0 || width <= 0) return showToast("Enter a valid length and width", "err");
+        item.ids.forEach(id => updates.set(id, { length, width }));
+      }
+      const next = cncPanels.map((panel) => { const dimensions = updates.get(panel.id); return dimensions && panel.status === "completed" ? { ...panel, sheetWidth: dimensions.length, sheetHeight: dimensions.width } : panel; });
       const changed = next.filter((panel, index) => panel !== cncPanels[index]).length;
       if (!changed) return showToast("No historical sheets were updated", "err");
-      const now = new Date().toISOString(), activity = [{ id: uid(), timestamp: now, user: username || "Unknown", type: "cnc", desc: `Added historical CNC dimensions: ${length} × ${width} mm · ${changed} panel${changed === 1 ? "" : "s"}`, qty: "" }, ...transactions];
+      const now = new Date().toISOString(), activity = [{ id: uid(), timestamp: now, user: username || "Unknown", type: "cnc", desc: `Added historical CNC dimensions to ${requested.length} sheet${requested.length === 1 ? "" : "s"} · ${changed} panel${changed === 1 ? "" : "s"}`, qty: "" }, ...transactions];
       setCncPanels(next); setTransactions(activity);
       persist({ cncPanels: next, transactions: activity });
-      showToast("Historical sheet dimensions saved");
+      showToast(`${requested.length} historical sheet${requested.length === 1 ? "" : "s"} updated`);
     }
     function addCatalogItem({ color, material, thickness }) {
       if (catalog.some(item => catalogKey(item) === catalogKey({ color, material, thickness }))) return showToast("This material is already in the catalogue", "err");
@@ -15256,6 +15260,7 @@ function compareCncOrders(a, b) {
   }
   function CncDimensionBackfill({ panels, onSave, onClose }) {
     const h = import_react.createElement;
+    const [busy,setBusy]=useState(false), [error,setError]=useState(""), [fileName,setFileName]=useState(""), [importSummary,setImportSummary]=useState(null);
     const groups = [...panels.reduce((map, panel) => {
       if (panel.status !== "completed" || Number(panel.sheetWidth) > 0 && Number(panel.sheetHeight) > 0) return map;
       const key = JSON.stringify([panel.jobReference || "", panel.orderNumber || "", panel.sheetNumber || ""]), current = map.get(key) || { key, ids: [], jobReference: panel.jobReference || "", orderNumber: panel.orderNumber || "", sheetNumber: panel.sheetNumber || "", panelIds: [], panelArea: 0, completedAt: panel.completedAt || "" };
@@ -15264,8 +15269,12 @@ function compareCncOrders(a, b) {
     }, new Map()).values()].sort((a, b) => String(a.completedAt).localeCompare(String(b.completedAt)));
     const [values, setValues] = useState({});
     const update = (key, field, value) => setValues(current => ({ ...current, [key]: { ...(current[key] || {}), [field]: value } }));
+    const matchPart=value=>String(value??"").trim().toLowerCase().replace(/^order\s*/i,"").replace(/^sheet\s*/i,"").replace(/^0+(?=\d)/,"");
+    async function analyse(event){const file=event.target.files?.[0];if(!file)return;setFileName(file.name);setImportSummary(null);if(file.type!=="application/pdf"||file.size>8*1024*1024){setError("Choose a PDF under 8 MB.");return;}setBusy(true);setError("");try{const pdf=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file);}),response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/cnc-pdf/analyse",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pdf})}),result=await response.json();if(!response.ok)throw Error(result.error||"The CNC PDF could not be analysed.");const matched=new Map(),unmatched=[];(result.pages||[]).forEach(page=>{const group=groups.find(item=>matchPart(item.orderNumber)===matchPart(page.orderNumber)&&matchPart(item.sheetNumber)===matchPart(page.sheetNumber));const length=Math.max(Number(page.sheetWidth),Number(page.sheetHeight)),width=Math.min(Number(page.sheetWidth),Number(page.sheetHeight));if(group&&length>0&&width>0)matched.set(group.key,{length:String(length),width:String(width)});else unmatched.push(`Order ${page.orderNumber||"—"} · Sheet ${page.sheetNumber||"—"}`);});setValues(current=>({...current,...Object.fromEntries(matched)}));setImportSummary({matched:matched.size,total:(result.pages||[]).length,unmatched});if(!matched.size)setError("No PDF sheets matched the historical order and sheet numbers.");}catch(reason){setError(reason.message||"The CNC PDF could not be analysed.");}finally{setBusy(false);event.target.value="";}}
+    const imported=groups.map(group=>{const entry=values[group.key]||{},length=Math.max(Number(entry.length)||0,Number(entry.width)||0),width=Math.min(Number(entry.length)||0,Number(entry.width)||0);return length>0&&width>0?{ids:group.ids,length,width}:null;}).filter(Boolean);
     return h("div", { children: [
       h(PageHeading, { icon: h(CncRouterIcon, { size: 22 }), title: "Historical CNC dimensions", subtitle: "Add dimensions to completed sheets that are missing them. Original completion dates and users are preserved." }),
+      groups.length > 0 && h("div",{className:"mb-4 max-w-3xl rounded-xl border border-slate-300 bg-white p-5"},[h("div",{className:"flex flex-wrap items-center gap-3"},[h("label",{className:"inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"},[h(Upload,{size:16}),busy?"Analysing…":fileName?"Choose another PDF":"Import full-order PDF",h("input",{type:"file",accept:"application/pdf",onChange:analyse,disabled:busy,className:"sr-only"})]),fileName&&h("span",{className:"min-w-0 truncate text-sm text-slate-500"},fileName)]),busy&&h("p",{className:"mt-3 text-sm text-slate-500"},"Matching every PDF page to historical sheets…"),error&&h("p",{role:"alert",className:"mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700"},error),importSummary&&h("div",{className:"mt-3 rounded-lg bg-cyan-50 p-3 text-sm text-cyan-900"},[h("strong",null,`${importSummary.matched} of ${importSummary.total} PDF sheets matched.`),importSummary.unmatched.length>0&&h("p",{className:"mt-1"},`Not matched: ${importSummary.unmatched.join(", ")}`)]),imported.length>0&&h("button",{type:"button",onClick:()=>onSave(imported),className:"ps-entry-primary mt-4"},`Save all ${imported.length} filled sheet${imported.length===1?"":"s"}`)]),
       groups.length === 0 ? h(EmptyState, { text: "All completed CNC sheets have dimensions." }) : h("div", { className: "space-y-3 max-w-3xl", children: groups.map(group => {
         const entry = values[group.key] || {}, length = Math.max(Number(entry.length) || 0, Number(entry.width) || 0), width = Math.min(Number(entry.length) || 0, Number(entry.width) || 0), area = length * width / 1000000, waste = area > 0 ? Math.max(0, (area - group.panelArea) / area * 100) : null;
         return h("div", { key: group.key, className: "bg-white rounded-xl border border-slate-300 p-5", children: [
