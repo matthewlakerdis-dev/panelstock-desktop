@@ -16,10 +16,11 @@ test('desktop scripts parse and do not contain the shared backend credential',()
  assert.match(html,/\/admin\/unlock-user/);
  assert.match(html,/children:"Unlock account"/);
  assert.match(html,/Number\(u\.lockedUntil\)>Date\.now\(\)\?"Locked"/);
- assert.match(html,/children:\["Temporary PIN"/);
- assert.match(html,/value:temporaryPins\[selectedUser\.username\]\|\|"No temporary PIN created"/);
- assert.match(html,/onClick:\(\)=>resetPin\(selectedUser\.username,true\)/);
- assert.match(html,/\.ps-edit-user>section:first-of-type>div:last-child>button:nth-child\(2\)\{display:none\}/);
+ assert.match(html,/tempPin=temporaryPins\[selectedUser\.username\]\|\|""/);
+ assert.match(html,/type:tempPinShown\?"text":"password"/);
+ assert.match(html,/children:tempPinShown\?"Hide":"Show"/);
+ assert.match(html,/onClick:\(\)=>resetPin\(selectedUser\.username,false\)/);
+ assert.match(html,/lg:grid-cols-\[minmax\(0,1fr\)_minmax\(380px,520px\)\]/);
  assert.match(html,/status\?\.kind!=="ok"[\s\S]*setTimeout\(\(\)=>setStatus\(null\),2600\)/);
  assert.match(html,/fixed bottom-6 right-6 z-50/);
  assert.match(html,/ResizeObserver loop \(\?:limit exceeded\|completed with undelivered notifications\)/);
