@@ -22,6 +22,49 @@
     return next;
   };
 
+  function styledConfirm({title='Confirm action',message,confirmLabel='Confirm',danger=true}={}){
+    return new Promise(resolve=>{
+      const document=root.document;
+      if(!document){resolve(false);return;}
+      const overlay=document.createElement('div');
+      overlay.setAttribute('role','presentation');
+      overlay.style.cssText='position:fixed;inset:0;z-index:10000;display:grid;place-items:center;padding:24px;background:rgba(15,23,42,.55)';
+      const dialog=document.createElement('div');
+      dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');dialog.setAttribute('aria-labelledby','panelstock-confirm-title');dialog.setAttribute('aria-describedby','panelstock-confirm-message');
+      dialog.style.cssText='width:100%;max-width:480px;overflow:hidden;border-radius:12px;background:#fff;box-shadow:0 24px 60px rgba(15,23,42,.28);font-family:inherit';
+      const header=document.createElement('div');header.style.cssText='padding:20px 24px;border-bottom:1px solid #e2e8f0';
+      const heading=document.createElement('h2');heading.id='panelstock-confirm-title';heading.textContent=title;heading.style.cssText='margin:0;color:#0f172a;font-size:18px;font-weight:700';header.appendChild(heading);
+      const body=document.createElement('div');body.style.cssText='padding:22px 24px';
+      const text=document.createElement('p');text.id='panelstock-confirm-message';text.textContent=message||'';text.style.cssText='margin:0;white-space:pre-line;color:#475569;font-size:15px;line-height:1.55';body.appendChild(text);
+      const footer=document.createElement('div');footer.style.cssText='display:flex;justify-content:flex-end;gap:12px;padding:16px 24px;border-top:1px solid #e2e8f0;background:#f8fafc';
+      const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Cancel';cancel.style.cssText='min-height:42px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;padding:10px 18px;color:#475569;font:600 14px inherit;cursor:pointer';
+      const confirm=document.createElement('button');confirm.type='button';confirm.textContent=confirmLabel;confirm.style.cssText=`min-height:42px;border:0;border-radius:8px;background:${danger?'#b91c1c':'#0e7490'};padding:10px 18px;color:#fff;font:600 14px inherit;cursor:pointer`;
+      footer.append(cancel,confirm);dialog.append(header,body,footer);overlay.appendChild(dialog);document.body.appendChild(overlay);
+      const finish=value=>{document.removeEventListener('keydown',onKey);overlay.remove();resolve(value);};
+      const onKey=event=>{if(event.key==='Escape')finish(false);};
+      cancel.onclick=()=>finish(false);confirm.onclick=()=>finish(true);overlay.onclick=event=>{if(event.target===overlay)finish(false);};document.addEventListener('keydown',onKey);cancel.focus();
+    });
+  }
+
+  function showCopyDialog({title='Copy',message='Select and copy this value.',value='' }={}){
+    return new Promise(resolve=>{
+      const document=root.document;
+      if(!document){resolve();return;}
+      const overlay=document.createElement('div');overlay.style.cssText='position:fixed;inset:0;z-index:10000;display:grid;place-items:center;padding:24px;background:rgba(15,23,42,.55)';
+      const dialog=document.createElement('div');dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');dialog.setAttribute('aria-label',title);dialog.style.cssText='width:100%;max-width:560px;overflow:hidden;border-radius:12px;background:#fff;box-shadow:0 24px 60px rgba(15,23,42,.28);font-family:inherit';
+      const header=document.createElement('div');header.style.cssText='padding:20px 24px;border-bottom:1px solid #e2e8f0';
+      const heading=document.createElement('h2');heading.textContent=title;heading.style.cssText='margin:0;color:#0f172a;font-size:18px;font-weight:700';header.appendChild(heading);
+      const body=document.createElement('div');body.style.cssText='padding:22px 24px';
+      const text=document.createElement('p');text.textContent=message;text.style.cssText='margin:0 0 14px;color:#475569;font-size:15px;line-height:1.55';
+      const input=document.createElement('input');input.readOnly=true;input.value=value;input.style.cssText='box-sizing:border-box;width:100%;min-height:44px;border:1px solid #cbd5e1;border-radius:8px;background:#f8fafc;padding:10px 12px;color:#334155;font:14px inherit';body.append(text,input);
+      const footer=document.createElement('div');footer.style.cssText='display:flex;justify-content:flex-end;gap:12px;padding:16px 24px;border-top:1px solid #e2e8f0;background:#f8fafc';
+      const select=document.createElement('button');select.type='button';select.textContent='Select text';select.style.cssText='min-height:42px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;padding:10px 18px;color:#475569;font:600 14px inherit;cursor:pointer';
+      const close=document.createElement('button');close.type='button';close.textContent='Done';close.style.cssText='min-height:42px;border:0;border-radius:8px;background:#0e7490;padding:10px 18px;color:#fff;font:600 14px inherit;cursor:pointer';footer.append(select,close);dialog.append(header,body,footer);overlay.appendChild(dialog);document.body.appendChild(overlay);
+      const finish=()=>{document.removeEventListener('keydown',onKey);overlay.remove();resolve();};const onKey=event=>{if(event.key==='Escape')finish();};
+      select.onclick=()=>{input.focus();input.select();};close.onclick=finish;overlay.onclick=event=>{if(event.target===overlay)finish();};document.addEventListener('keydown',onKey);input.focus();input.select();
+    });
+  }
+
   class IndexedOutboxStorage {
     constructor(fallback,notify=()=>{}){this.fallback=fallback;this.notify=notify;this.value=null;this.db=null;this.writes=Promise.resolve();}
     async ready(){
@@ -494,11 +537,11 @@
       event.currentTarget.textContent='Backup exported';
     }));
 
-    actions.appendChild(makeButton('Discard local changes',()=>{
+    actions.appendChild(makeButton('Discard local changes',async()=>{
       const warning=legacy
         ?'These previous-version changes will NOT be applied to shared stock. Export a backup first if they may still be needed. Discard them now?'
         :'These unsynced changes will NOT be applied to shared stock. Export a backup first if they may still be needed. Discard them now?';
-      if(!confirm(warning))return;
+      if(!await styledConfirm({title:'Discard local changes?',message:warning,confirmLabel:'Discard changes'}))return;
       localStorage.removeItem(LEGACY_KEY);
       void durableStorage.removeItem(OUTBOX_KEY).then(()=>location.reload());
     }));
@@ -529,6 +572,8 @@
   }
 
   root.PanelStock={
+    confirm:styledConfirm,
+    showCopy:showCopyDialog,
     apiFetch,
     outbox,
     async init(url){
@@ -581,8 +626,5 @@
 
   root.addEventListener('online',()=>{void root.PanelStock.flush();});
   root.addEventListener('online',()=>{void startLive();});
-  root.addEventListener('beforeunload',event=>{
-    if(root.PanelStock.pending){event.preventDefault();event.returnValue='';}
-  });
   void outboxReady.then(renderNotice);
 })(typeof window==='undefined'?globalThis:window);

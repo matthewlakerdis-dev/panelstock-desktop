@@ -15378,7 +15378,7 @@ function compareCncOrders(a, b) {
         setLinkCopied(true);
         setTimeout(() => setLinkCopied(false), 2500);
       } catch {
-        window.prompt("Copy this link:", shareableLink);
+        await PanelStock.showCopy({title:"Copy CNC tracker link",message:"Automatic copying is unavailable. Select and copy this link:",value:shareableLink});
       }
     }
     const pending = cncPanels.filter((p) => p.status !== "completed");
@@ -15474,8 +15474,8 @@ function compareCncOrders(a, b) {
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center gap-2 pl-2", children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "font-bold text-slate-800", children: ["Panel ", normalizeCncInput(p).panelNumber] }),
               p.sheetWidth&&p.sheetHeight&&/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span",{className:"text-xs text-slate-500",children:`${p.sheetWidth} × ${p.sheetHeight} mm${p.totalPanelArea?` · ${p.totalPanelArea} m² panels`:""}`}),
-              isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", "aria-label": "Remove panel " + normalizeCncInput(p).panelNumber, className: "shrink-0 p-1", onClick: () => {
-                if (window.confirm("Remove this panel from the CNC schedule? This cannot be undone.")) onRemovePanel(p.id);
+              isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", "aria-label": "Remove panel " + normalizeCncInput(p).panelNumber, className: "shrink-0 p-1", onClick: async () => {
+                if (await PanelStock.confirm({title:"Remove scheduled panel?",message:"Remove this panel from the CNC schedule? This cannot be undone.",confirmLabel:"Remove panel"})) onRemovePanel(p.id);
               }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Trash2, { size: 15, className: "text-slate-400 hover:text-red-700" }) })
             ] }) }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3 text-slate-400 text-xs", children: view === "completed" && p.completedAt && `${p.completedBy} \xB7 ${new Date(p.completedAt).toLocaleString()}` }),
@@ -15702,9 +15702,9 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
     useEffect(()=>{void load();},[]);
     const update=(key,value)=>setEditor(current=>({...current,[key]:value}));
     async function save(event){event.preventDefault();setSaving(true);setNotice("");try{const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/schedule"+(editor.id?"/"+editor.id:""),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(editor)}),result=await response.json().catch(()=>({}));if(!response.ok)throw Error(result.error||"Schedule entry could not be saved.");setEntries(result.entries||[]);setEditor(null);setNotice("Schedule saved.");}catch(error){setNotice(error.message||"Schedule entry could not be saved.");}finally{setSaving(false);}}
-    async function remove(entry){if(!window.confirm(`Delete ${entry.title} from the schedule?`))return;try{const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/schedule/"+entry.id,{method:"DELETE"}),result=await response.json().catch(()=>({}));if(!response.ok)throw Error(result.error||"Schedule entry could not be deleted.");setEntries(result.entries||[]);setNotice("Schedule entry deleted.");}catch(error){setNotice(error.message||"Schedule entry could not be deleted.");}}
+    async function remove(entry){if(!await PanelStock.confirm({title:"Delete schedule entry?",message:`Delete ${entry.title} from the schedule?`,confirmLabel:"Delete entry"}))return;try{const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/schedule/"+entry.id,{method:"DELETE"}),result=await response.json().catch(()=>({}));if(!response.ok)throw Error(result.error||"Schedule entry could not be deleted.");setEntries(result.entries||[]);setNotice("Schedule entry deleted.");}catch(error){setNotice(error.message||"Schedule entry could not be deleted.");}}
     async function openTvDisplay(){try{const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/schedule/share"),result=await response.json().catch(()=>({}));if(!response.ok||(!result.code&&!result.token))throw Error(result.error||"TV address could not be created.");setTvAddress(result.code?"https://cnc.panelstockhq.com/tv/"+encodeURIComponent(result.code):BAKED_WORKER_URL+"/schedule-display/view?token="+encodeURIComponent(result.token));setTvCopied(false);}catch(error){setNotice(error.message||"TV address could not be created.");}}
-    async function copyTvAddress(){try{await navigator.clipboard.writeText(tvAddress);setTvCopied(true);}catch{window.prompt("Copy this TV address:",tvAddress);}}
+    async function copyTvAddress(){try{await navigator.clipboard.writeText(tvAddress);setTvCopied(true);}catch{await PanelStock.showCopy({title:"Copy TV display address",message:"Automatic copying is unavailable. Select and copy this address:",value:tvAddress});}}
     const field=(label,key,type="text")=>type==="date"?e(ModernDatePicker,{label,value:editor[key]||"",required:true,onChange:value=>update(key,value)}):e("label",{className:"text-xs font-medium text-slate-600"},label,e("input",{type,value:editor[key]||"",required:["title","date"].includes(key),onChange:event=>update(key,event.target.value),className:"mt-1.5 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm"}));
     const anchor=new Date((filterDate||todayStr())+"T00:00:00"),weekStart=new Date(anchor);weekStart.setDate(anchor.getDate()-((anchor.getDay()+6)%7));const weekEnd=new Date(weekStart);weekEnd.setDate(weekStart.getDate()+7),dateHeading=anchor.toLocaleDateString("en-AU",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
     const visibleEntries=entries.filter(entry=>{const date=new Date(entry.date+"T00:00:00"),dateMatches=viewMode==="day"?entry.date===filterDate:viewMode==="week"?date>=weekStart&&date<weekEnd:date.getFullYear()===anchor.getFullYear()&&date.getMonth()===anchor.getMonth(),personVisible=people.some(person=>person.username===entry.assignedUsername);return dateMatches&&personVisible&&(filterPerson==="all"||entry.assignedUsername===filterPerson);});
@@ -15825,7 +15825,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
       finally { setSavingProject(false); }
     }
     async function setProjectActive(active) {
-      if (!projectEditor.id || (!active && !window.confirm(`Deactivate ${projectEditor.name}? It will be removed from new orders and scheduling, but its history will be kept.`))) return;
+      if (!projectEditor.id || (!active && !await PanelStock.confirm({title:"Deactivate project?",message:`Deactivate ${projectEditor.name}? It will be removed from new orders and scheduling, but its history will be kept.`,confirmLabel:"Deactivate"}))) return;
       setSavingProject(true); setNotice("");
       try {
         const response = await PanelStock.apiFetch(BAKED_WORKER_URL + "/projects/" + projectEditor.id, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...projectEditor, active }) });
@@ -15835,7 +15835,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
       finally { setSavingProject(false); }
     }
     async function deleteProject() {
-      if (!projectEditor.id || !window.confirm(`Delete ${projectEditor.name}? Projects with existing orders cannot be deleted.`)) return;
+      if (!projectEditor.id || !await PanelStock.confirm({title:"Delete project?",message:`Delete ${projectEditor.name}? Projects with existing orders cannot be deleted.`,confirmLabel:"Delete project"})) return;
       setSavingProject(true); setNotice("");
       try {
         const response = await PanelStock.apiFetch(BAKED_WORKER_URL + "/projects/" + projectEditor.id, { method: "DELETE" });
@@ -15850,7 +15850,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
       catch (error) { setNotice(error.message || "The status could not be updated."); }
     }
     async function deleteOrder(order) {
-      if (!window.confirm(`Delete Order ${order.orderNumber} for ${order.project}? This cannot be undone.`)) return;
+      if (!await PanelStock.confirm({title:"Delete order?",message:`Delete Order ${order.orderNumber} for ${order.project}? This cannot be undone.`,confirmLabel:"Delete order"})) return;
       setNotice("Deleting order...");
       try { const response = await PanelStock.apiFetch(BAKED_WORKER_URL + "/orders/" + order.id, { method: "DELETE" }); const result = await response.json().catch(() => ({})); if (!response.ok) throw Error(result.error || "The order could not be deleted."); setNotice("Order deleted."); await loadOrders(); }
       catch (error) { setNotice(error.message || "The order could not be deleted."); }
@@ -16266,7 +16266,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
     async function handleRestore(timestamp) {
       if (PanelStock.pending) { setStatus({ kind: "err", msg: "Synchronize or resolve pending changes before restoring a backup." }); return; }
       const label = fmtBackupTimestamp(timestamp);
-      if (!window.confirm(`Restore the backup from ${label}? This replaces current stock and catalogue with that snapshot. Activity history is preserved and a recovery backup is taken first.`)) return;
+      if (!await PanelStock.confirm({title:"Restore backup?",message:`Restore the backup from ${label}? This replaces current stock and catalogue with that snapshot. Activity history is preserved and a recovery backup is taken first.`,confirmLabel:"Restore backup"})) return;
       setBusy(true);
       setStatus(null);
       try {
@@ -16550,11 +16550,11 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
     }
     function openUser(user){setAccessUser(user.username);setEditUser({...user});setStatus(null);}
     async function saveUser(next=editUser,closeAfterSave=false){if(!next)return;setBusy(true);setStatus(null);try{const result=await callWorker("/admin/update-user",{username,targetUsername:next.username,displayName:next.displayName,title:next.title,location:next.location,email:next.email||"",phone:next.phone||"",employeeProfile:next.employeeProfile||emptyEmployeeProfile(),active:next.active,isAdmin:next.isAdmin,roleIds:next.roleIds||[]});setBusy(false);if(!result.ok){setStatus({kind:"err",msg:result.error||"Could not update user."});return;}const merged={...next,...result.user};setUsers(prev=>prev.map(user=>user.username===result.user.username?merged:user));if(closeAfterSave){setAccessUser(null);setEditUser(null);}else setEditUser(merged);setStatus({kind:"ok",msg:`${result.user.displayName} was updated.`});onLogTxn({type:"user",desc:`Updated user ${result.user.username}`,qty:""});}catch{setBusy(false);setStatus({kind:"err",msg:"Could not reach the server."});}}
-    async function standardiseLogin(user){const next=loginNameFor(user.displayName,user.username);if(!next||next===user.username)return;if(!window.confirm(`Change ${user.displayName}'s login from ${user.username} to ${next}?\n\nOnly continue after they have synced all pending work. They will be signed out, and their old login will work as an alias for 14 days.`))return;setBusy(true);setStatus(null);try{const result=await callWorker("/admin/rename-user",{username,targetUsername:user.username,newUsername:next,confirmedSynced:true});setBusy(false);if(!result.ok){setStatus({kind:"err",msg:result.error||"Could not change the login name."});return;}setUsers(prev=>prev.map(value=>value.username===user.username?result.user:value).sort((a,b)=>a.username.localeCompare(b.username)));setAccessUser(result.user.username);setEditUser(result.user);setStatus({kind:"ok",msg:`Login changed to ${result.user.username}. The old login remains available for 14 days.`});onLogTxn({type:"user",desc:`Changed login ${user.username} to ${result.user.username}`,qty:""});if(user.username===username)setTimeout(()=>location.reload(),1200);}catch{setBusy(false);setStatus({kind:"err",msg:"Could not reach the server."});}}
+    async function standardiseLogin(user){const next=loginNameFor(user.displayName,user.username);if(!next||next===user.username)return;if(!await PanelStock.confirm({title:"Change login name?",message:`Change ${user.displayName}'s login from ${user.username} to ${next}?\n\nOnly continue after they have synced all pending work. They will be signed out, and their old login will work as an alias for 14 days.`,confirmLabel:"Change login"}))return;setBusy(true);setStatus(null);try{const result=await callWorker("/admin/rename-user",{username,targetUsername:user.username,newUsername:next,confirmedSynced:true});setBusy(false);if(!result.ok){setStatus({kind:"err",msg:result.error||"Could not change the login name."});return;}setUsers(prev=>prev.map(value=>value.username===user.username?result.user:value).sort((a,b)=>a.username.localeCompare(b.username)));setAccessUser(result.user.username);setEditUser(result.user);setStatus({kind:"ok",msg:`Login changed to ${result.user.username}. The old login remains available for 14 days.`});onLogTxn({type:"user",desc:`Changed login ${user.username} to ${result.user.username}`,qty:""});if(user.username===username)setTimeout(()=>location.reload(),1200);}catch{setBusy(false);setStatus({kind:"err",msg:"Could not reach the server."});}}
     async function toggleActive(user){await saveUser({...user,active:!user.active});}
     function openRole(role=null){setEditRole(role?{...role,taskAccess:{...role.taskAccess}}:{id:null,name:"",taskAccess:Object.fromEntries(tasks.map(task=>[task.code,false]))});setRolesOpen(true);setRoleOpen(true);setStatus(null);}
     async function saveRole(event){event.preventDefault();if(!editRole)return;setBusy(true);setStatus(null);try{const path=editRole.id?`/admin/roles/${editRole.id}`:"/admin/roles";const result=await callWorker(path,{username,name:editRole.name,taskAccess:editRole.taskAccess});setBusy(false);if(!result.ok){setStatus({kind:"err",msg:result.error||"Could not save role."});return;}setRoles(prev=>editRole.id?prev.map(role=>role.id===result.role.id?result.role:role):[...prev,result.role].sort((a,b)=>a.name.localeCompare(b.name)));if(editRole.id)setUsers(prev=>prev.map(user=>user.roleId===result.role.id?{...user,taskAccess:result.role.taskAccess}:user));setRoleOpen(false);setEditRole(null);setStatus({kind:"ok",msg:`${result.role.name} role was saved.`});onLogTxn({type:"user",desc:`Saved role ${result.role.name}`,qty:""});}catch{setBusy(false);setStatus({kind:"err",msg:"Could not reach the server."});}}
-    async function deleteRole(role){if(!window.confirm(`Delete the ${role.name} role?`))return;setBusy(true);setStatus(null);try{const result=await callWorker(`/admin/roles/${role.id}`,{username,delete:true});setBusy(false);if(!result.ok){setStatus({kind:"err",msg:result.error||"Could not delete role."});return;}setRoles(prev=>prev.filter(value=>value.id!==role.id));setStatus({kind:"ok",msg:`${role.name} role was deleted.`});}catch{setBusy(false);setStatus({kind:"err",msg:"Could not reach the server."});}}
+    async function deleteRole(role){if(!await PanelStock.confirm({title:"Delete role?",message:`Delete the ${role.name} role?`,confirmLabel:"Delete role"}))return;setBusy(true);setStatus(null);try{const result=await callWorker(`/admin/roles/${role.id}`,{username,delete:true});setBusy(false);if(!result.ok){setStatus({kind:"err",msg:result.error||"Could not delete role."});return;}setRoles(prev=>prev.filter(value=>value.id!==role.id));setStatus({kind:"ok",msg:`${role.name} role was deleted.`});}catch{setBusy(false);setStatus({kind:"err",msg:"Could not reach the server."});}}
     const taskGroups=[
       {name:"Stock operations",codes:["factory.stock","factory.receive","factory.dispatch","factory.transfer","factory.damage"]},
       {name:"CNC tracker",codes:["factory.cnc","site.cnc.view","schedule.cnc.view","schedule.cnc.manage"]},
@@ -16575,7 +16575,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
       return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"grid grid-cols-2 gap-4",children:[section("Qualifications and access"),credentialRows("licenses","Licences / qualifications"),credentialRows("inductions","Site inductions",true),section("Profile photo and administrator notes"),/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Field,{label:"Profile photo",children:[value.profilePhoto?/* @__PURE__ */ (0, import_jsx_runtime.jsx)("img",{src:value.profilePhoto,alt:"Profile",className:"mb-2 h-20 w-20 rounded-full border border-slate-200 object-cover"}):/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p",{className:"text-xs text-slate-400",children:"No profile photo uploaded."}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p",{className:"mt-2 text-xs text-slate-500",children:"The user manages their own photo in My Profile."})]}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field,{label:"Private administrator notes",children:/* @__PURE__ */ (0, import_jsx_runtime.jsx)("textarea",{className:inputCls,rows:4,value:value.notes||"",onChange:event=>update("notes",event.target.value),placeholder:"Only administrators can view these notes"})})]});
     }
     async function removeUser(targetUsername) {
-      if (!window.confirm(`Remove ${targetUsername}? They'll need to register again from scratch to regain access.`)) return;
+      if (!await PanelStock.confirm({title:"Remove user?",message:`Remove ${targetUsername}? They'll need to register again from scratch to regain access.`,confirmLabel:"Remove user"})) return;
       setBusy(true);
       setStatus(null);
       try {
@@ -16868,8 +16868,8 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
                 isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-2 py-1.5 text-right", children: !t.voided && (t.type === "receipt" || t.type === "dispatch" || t.type === "damage") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
                   "button",
                   {
-                    onClick: () => {
-                      if (window.confirm("Void this entry? This reverses its effect on SOH and cannot be undone.")) onVoidTransaction(t.id);
+                    onClick: async () => {
+                      if (await PanelStock.confirm({title:"Void activity entry?",message:"Void this entry? This reverses its effect on SOH and cannot be undone.",confirmLabel:"Void entry"})) onVoidTransaction(t.id);
                     },
                     className: "text-xs font-semibold text-red-700 hover:underline",
                     children: "Void"

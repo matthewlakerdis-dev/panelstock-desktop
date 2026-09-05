@@ -100,3 +100,9 @@ test('the web interface and last verified session can reopen offline',()=>{
  assert.match(client,/const view=outbox\.snapshot[\s\S]*await durableStorage\.flushWrites\(\)[\s\S]*return view/);
  assert.match(worker,/panelstock-shell-v1/);assert.match(worker,/request\.mode==='navigate'/);assert.match(worker,/caches\.match\(isNavigation\?'\.\/index\.html'/);assert.doesNotMatch(worker,/panelstock-reports/);
 });
+
+test('confirmation actions use the PanelStock styled dialog',()=>{
+ const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8'),client=fs.readFileSync(path.join(__dirname,'../panelstock-client.js'),'utf8');
+ assert.doesNotMatch(html,/window\.(?:confirm|prompt|alert)\s*\(/);assert.doesNotMatch(client,/(?:window\.)?(?:confirm|prompt|alert)\s*\(/);assert.doesNotMatch(client,/beforeunload/);
+ assert.match(client,/role','dialog'/);assert.match(client,/confirm:styledConfirm/);assert.match(client,/showCopy:showCopyDialog/);assert.match(html,/PanelStock\.confirm\(/);assert.match(html,/PanelStock\.showCopy\(/);
+});
