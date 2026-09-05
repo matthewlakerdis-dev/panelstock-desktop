@@ -7,6 +7,7 @@ for (const repo of ['panelstock-desktop']) {
  const html=fs.readFileSync(require('node:path').join(__dirname,'../index.html'),'utf8');
  test(repo+': shared CNC picker keeps search text clear of its icon',()=>assert.match(html,/placeholder:"Search colour, material, size, SKU…",style:\{paddingLeft:"2\.5rem"\}/));
  test(repo+': shared CNC picker follows SOH material sorting',()=>assert.match(html,/function CncStockPicker[\s\S]+?sortSohItems=items=>groupByMaterialLargestFirst/));
+ test(repo+': shared CNC picker uses the compact reservation badge',()=>{const picker=html.slice(html.indexOf('function CncStockPicker'),html.indexOf('function CncSingleForm'));assert.match(picker,/children:`\$\{count\} CNC`/);assert.doesNotMatch(picker,/reserved for CNC/);});
  const normalize=html.slice(html.indexOf('function normalizeCncInput('),html.indexOf('function compareCncOrders('));
  const start=html.indexOf('  function prepareCncBulkRows(');
  const end=html.indexOf(repo==='panelstock'?'  function CncTab(':'  function CncPage(',start);
@@ -39,9 +40,10 @@ for (const repo of ['panelstock-desktop']) {
   const flatten=n=>n&&typeof n==='object'?[n,...[n.children].flat().flatMap(flatten)]:[];
   let tree,nodes;
   const variants=[{id:'stock-1',sku:'SKU-1',qty:3,color:'White',material:'ACM',thickness:4,width:4000,height:1500}];
-  const refresh=()=>{cursor=0;refCursor=0;tree=render({variants,offcuts:[],onSave:rows=>saves.push(rows),onClose:()=>closed++});nodes=flatten(tree);};
+  const cncPanels=[{id:'cnc-1',status:'pending',stockItemType:'variant',stockItemId:'stock-1'}];
+  const refresh=()=>{cursor=0;refCursor=0;tree=render({variants,offcuts:[],cncPanels,onSave:rows=>saves.push(rows),onClose:()=>closed++});nodes=flatten(tree);};
   const button=text=>nodes.find(n=>n.tag==='button'&&n.children===text);
-  refresh();button('+ Add line').onClick();refresh();assert.equal(nodes.filter(n=>n.tag==='input').length,8);
+  refresh();assert.equal(nodes.find(n=>typeof n.tag==='function'&&n.onSelect).cncPanels,cncPanels);button('+ Add line').onClick();refresh();assert.equal(nodes.filter(n=>n.tag==='input').length,8);
   nodes.find(n=>n['aria-label']==='Remove line 2').onClick();refresh();assert.equal(nodes.filter(n=>n.tag==='input').length,5);
   nodes.find(n=>n.tag==='input'&&n.placeholder==='e.g. 001234').onChange({target:{value:'Order 7'}});refresh();
   nodes.find(n=>n['aria-label']==='Sheet number line 1').onChange({target:{value:'1'}});refresh();
