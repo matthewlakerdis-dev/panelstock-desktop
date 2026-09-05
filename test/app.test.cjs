@@ -36,6 +36,7 @@ test('desktop scripts parse and do not contain the shared backend credential',()
  assert.match(html,/notificationCount>99\?"99\+":notificationCount/);
  assert.match(html,/Bell,\{size:31\}/);
  assert.match(html,/min-h-\[18px\] min-w-\[18px\]/);
+ assert.match(html,/right-0\.5 top-0\.5 grid min-h-\[18px\].*ring-white/);
  assert.match(html,/fill:"currentColor"/);
  assert.match(html,/function PushNotificationControl\(\)/);
  assert.match(html,/navigator\.serviceWorker\.register\('\/push-sw\.js'/);
