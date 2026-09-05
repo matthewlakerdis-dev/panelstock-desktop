@@ -6,6 +6,7 @@ const vm=require('node:vm');
 for (const repo of ['panelstock-desktop']) {
  const html=fs.readFileSync(require('node:path').join(__dirname,'../index.html'),'utf8');
  test(repo+': shared CNC picker keeps search text clear of its icon',()=>assert.match(html,/placeholder:"Search colour, material, size, SKU…",style:\{paddingLeft:"2\.5rem"\}/));
+test(repo+': mobile CNC entry keeps the remove button inside the form',()=>assert.match(html,/\.ps-cnc-row\{grid-template-columns:minmax\(0,\.8fr\) minmax\(0,1fr\) minmax\(0,1\.35fr\) 26px\}/));
  test(repo+': shared CNC picker follows SOH material sorting',()=>assert.match(html,/function CncStockPicker[\s\S]+?sortSohItems=items=>groupByMaterialLargestFirst/));
  test(repo+': shared CNC picker uses the compact reservation badge',()=>{const picker=html.slice(html.indexOf('function CncStockPicker'),html.indexOf('function CncSingleForm'));assert.match(picker,/children:`\$\{count\} CNC`/);assert.doesNotMatch(picker,/reserved for CNC/);});
  const normalize=html.slice(html.indexOf('function normalizeCncInput('),html.indexOf('function compareCncOrders('));
