@@ -552,7 +552,13 @@
     async snapshot(){
       if(!session)return null;
       await outbox.flush(session.username);
-      try{const r=await apiFetch(workerUrl+'/data');if(!r.ok)return null;return outbox.snapshot(await r.json(),session.username);}catch{announce('offline','Showing the last saved stock view. Changes will sync when connection returns.');return outbox.state.view?copy(outbox.state.view):null;}
+      try{
+        const r=await apiFetch(workerUrl+'/data');
+        if(!r.ok)return null;
+        const view=outbox.snapshot(await r.json(),session.username);
+        await durableStorage.flushWrites();
+        return view;
+      }catch{announce('offline','Showing the last saved stock view. Changes will sync when connection returns.');return outbox.state.view?copy(outbox.state.view):null;}
     },
     stage(fields,rendered){
       if(getLegacyPending())throw Error('Previous-version pending changes must be reviewed before editing stock.');
