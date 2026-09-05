@@ -124,4 +124,5 @@ test('CNC tracker shows estimated off-cuts and audits the operator decision',()=
  assert.match(html,/Estimated off-cut/);
  assert.match(html,/Saved CNC off-cut/);
  assert.match(html,/Proposed CNC off-cut not saved/);
+ assert.match(html,/offcutDetails:savedOffcut/);
 });
