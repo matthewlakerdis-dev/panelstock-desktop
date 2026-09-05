@@ -11,6 +11,14 @@
 <style>
   html, body { margin: 0; padding: 0; background: #f8fafc; height: 100%; }
   #root { min-height: 100vh; }
+  /* Shared button foundation. Pills, badges and app-chrome controls keep their intentional shapes. */
+  button { font-family: inherit; transition: background-color .15s ease, border-color .15s ease, color .15s ease, opacity .15s ease, box-shadow .15s ease; }
+  button:not([class*="rounded-full"]):not([class*="rounded-xl"]):not([class*="rounded-2xl"]) { border-radius: 8px !important; }
+  button:focus-visible, label:has(>input[type="file"]):focus-within { outline: 3px solid #67e8f9 !important; outline-offset: 2px; }
+  button:disabled { opacity: .4 !important; cursor: not-allowed !important; }
+  button:not(:disabled) { cursor: pointer; }
+  button:not(:disabled):active { transform: translateY(1px); }
+  button[class*="bg-cyan-800"]:not([class*="rounded-full"]), button[class*="bg-green-700"]:not([class*="rounded-full"]), button[class*="bg-red-800"]:not([class*="rounded-full"]), button[class*="border-slate-300"]:not([class*="rounded-full"]) { min-height: 40px; font-size: 14px; font-weight: 600; }
 </style>
 
 <!-- Cloudflare Web Analytics -->
@@ -29,7 +37,7 @@
 .ps-cnc-single-row{grid-template-columns:minmax(100px,.8fr) minmax(120px,1fr) minmax(180px,1.4fr)}
 @media(max-width:540px){.ps-cnc-single-row{grid-template-columns:1fr 1fr}.ps-cnc-single-row>label:last-child{grid-column:1/-1}}
 .ps-catalog-row{grid-template-columns:repeat(3,minmax(0,1fr)) 30px;gap:10px}.ps-single-row{grid-template-columns:repeat(2,minmax(0,1fr))}
-.ps-entry-actions{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:12px}.ps-entry-primary{background:#155e75;color:white;border-radius:8px;padding:12px 20px;font-size:14px;font-weight:600}.ps-entry-primary:disabled{opacity:.4;cursor:not-allowed}.ps-entry-cancel{color:#475569;background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:11px 16px;font-size:14px;font-weight:600}.ps-entry-cancel:hover{background:#f8fafc}
+.ps-entry-actions{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:12px}.ps-entry-primary{background:#155e75;color:white;border-radius:8px;padding:12px 20px;font-size:14px;font-weight:600}.ps-entry-primary:hover:not(:disabled){background:#164e63}.ps-entry-primary:disabled{opacity:.4;cursor:not-allowed}.ps-entry-cancel{color:#475569;background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:11px 16px;font-size:14px;font-weight:600}.ps-entry-cancel:hover:not(:disabled){background:#f8fafc}
 @media(max-width:1023px){section.mt-4.rounded-xl.border.border-slate-300.bg-white.p-5.space-y-4>.grid.grid-cols-2.gap-3{grid-template-columns:minmax(0,1fr)}}
 @media(min-width:1024px){section.mt-4.rounded-xl.border.border-slate-300.bg-white.p-5.space-y-4>.grid.grid-cols-2.gap-3{grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:start}section.mt-4.rounded-xl.border.border-slate-300.bg-white.p-5.space-y-4>.grid.grid-cols-2.gap-3>:nth-child(1){grid-column:1;grid-row:1}section.mt-4.rounded-xl.border.border-slate-300.bg-white.p-5.space-y-4>.grid.grid-cols-2.gap-3>:nth-child(2){grid-column:1;grid-row:2}section.mt-4.rounded-xl.border.border-slate-300.bg-white.p-5.space-y-4>.grid.grid-cols-2.gap-3>:nth-child(3){grid-column:1;grid-row:3}section.mt-4.rounded-xl.border.border-slate-300.bg-white.p-5.space-y-4>.grid.grid-cols-2.gap-3>:nth-child(4){grid-column:1;grid-row:4}section.mt-4.rounded-xl.border.border-slate-300.bg-white.p-5.space-y-4>.grid.grid-cols-2.gap-3>:nth-child(5){grid-column:1;grid-row:5}section.mt-4.rounded-xl.border.border-slate-300.bg-white.p-5.space-y-4>.grid.grid-cols-2.gap-3>:nth-child(6){grid-column:2;grid-row:1/span 5}}
 .ps-entry-add{border:1px solid #155e75;color:#155e75;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:600;margin-top:8px}.ps-entry-trash{color:#dc2626;width:30px;height:42px;display:grid;place-items:center}.ps-entry-note{font-size:12px;color:#64748b;margin-top:12px}.ps-entry-errors{background:#fef2f2;color:#991b1b;padding:12px;border-radius:8px;margin-top:12px;font-size:13px}
@@ -16039,7 +16047,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Quantity", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, type: "number", value: editForm.qty, onChange: setEdit("qty") }) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Note (optional)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CapitalizedInput, { value: editForm.note, onChange: (v) => setEditForm({ ...editForm, note: v }), placeholder: "e.g. leftover from WO-1042" }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: saveEdit, disabled: !canSaveEdit, className: "w-full bg-slate-900 disabled:opacity-40 text-white font-semibold rounded-lg py-2 text-sm hover:bg-slate-800", children: "Save changes" })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: saveEdit, disabled: !canSaveEdit, className: "w-full bg-cyan-800 disabled:opacity-40 text-white font-semibold rounded-lg py-2.5 text-sm hover:bg-cyan-900", children: "Save changes" })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: onPrintLabel, className: "w-full flex items-center justify-center gap-2 border border-slate-300 bg-slate-50 rounded-lg py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-100 mt-3", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Tag, { size: 14 }),
