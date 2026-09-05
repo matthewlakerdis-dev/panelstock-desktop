@@ -13,6 +13,15 @@ test('desktop scripts parse and do not contain the shared backend credential',()
  assert.match(html,/attempts >= 3 && await PanelStock\.confirm/);
  assert.match(html,/\/passcode-reset-request/);
  assert.match(html,/Passcode reset request sent to the administrators\./);
+ assert.match(html,/\/admin\/unlock-user/);
+ assert.match(html,/children:"Unlock account"/);
+ assert.match(html,/Number\(u\.lockedUntil\)>Date\.now\(\)\?"Locked"/);
+ assert.match(html,/children:\["Temporary PIN"/);
+ assert.match(html,/value:temporaryPins\[selectedUser\.username\]\|\|"No temporary PIN created"/);
+ assert.match(html,/onClick:\(\)=>resetPin\(selectedUser\.username,true\)/);
+ assert.match(html,/\.ps-edit-user>section:first-of-type>div:last-child>button:nth-child\(2\)\{display:none\}/);
+ assert.match(html,/status\?\.kind!=="ok"[\s\S]*setTimeout\(\(\)=>setStatus\(null\),2600\)/);
+ assert.match(html,/fixed bottom-6 right-6 z-50/);
  assert.match(html,/ResizeObserver loop \(\?:limit exceeded\|completed with undelivered notifications\)/);
  assert.match(html,/saveUser\(editUser,true\)/);
  const cncPage=html.slice(html.indexOf('function CncPage('),html.indexOf('function OrdersPage('));
