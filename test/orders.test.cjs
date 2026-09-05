@@ -58,7 +58,7 @@ test('desktop dispatch uses the same material sorting as stock and damage',()=>{
 
 test('web manages the shared schedule',()=>{
  const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
- assert.match(html,/function SchedulePage\(\{ canManage,canManageCnc \}\)/);
+ assert.match(html,/function SchedulePage\(\{ canManage,canManageCnc,variants,offcuts,onAddPanelsBulk \}\)/);
  assert.match(html,/function ScheduleCalendarIcon/);
  assert.match(html,/New schedule entry/);
  assert.match(html,/Save schedule/);
@@ -105,6 +105,9 @@ test('web manages the shared schedule',()=>{
  assert.match(html,/BAKED_WORKER_URL\+"\/schedule\/settings"/);
  assert.match(html,/https:\/\/cnc\.panelstockhq\.com\/tv\//);
  const schedule=html.slice(html.indexOf('function SchedulePage'),html.indexOf('function OrdersPage'));
+ assert.match(schedule,/Import CNC PDF/);
+ const cnc=html.slice(html.indexOf('function CncPage'),html.indexOf('function ScheduleTimeField'));
+ assert.doesNotMatch(cnc,/Import CNC PDF/);
  assert.doesNotMatch(schedule,/"Status"/);
  assert.ok(schedule.indexOf('"Person"')<schedule.indexOf('"Project"'));
  assert.match(schedule,/grid-cols-\[1fr_auto_1fr\]/);
