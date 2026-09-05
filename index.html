@@ -13866,6 +13866,8 @@ ${xrefStart}
       showToast("All stock information has been reset");
     }
     function validateCncSchedule(rows) {
+      const duplicateError=cncDuplicateError(rows,cncPanels);
+      if(duplicateError)return duplicateError;
       const existingSheets=new Map();
       for(const panel of cncPanels){
         if(panel.status==="completed")continue;
@@ -13892,7 +13894,7 @@ ${xrefStart}
     }
     function addCncPanel(input) {
       const { orderNumber, jobReference, sheetNumber, panelNumber, stockItemType, stockItemId, stockSku, sheetWidth, sheetHeight, totalPanelArea, pendingOffcut, pdfPage } = normalizeCncInput(input);
-      const validationError=validateCncSchedule([{orderNumber,jobReference,sheetNumber,stockItemType,stockItemId}]);
+      const validationError=validateCncSchedule([{orderNumber,jobReference,sheetNumber,panelNumber,stockItemType,stockItemId}]);
       if(validationError){showToast(validationError,"err");return false;}
       const entry = {
         id: uid(),
@@ -15161,8 +15163,24 @@ function normalizeCncInput(row) {
   const rawOrder = String(row.orderNumber ?? '').trim();
   const orderNumber = /\border(?=\b|\d)/i.test(rawOrder) ? rawOrder.replace(/\D/g, '') : rawOrder;
   const jobReference = String(row.jobReference ?? '').trim().replace(/\s+/g, ' ').toLowerCase().replace(/(^|[\s-])\p{L}/gu, letter => letter.toUpperCase());
+  const sheetNumber = String(row.sheetNumber ?? '').trim();
   const panelNumber = String(row.panelNumber ?? '').trim().replace(/^\p{L}/u, letter => letter.toUpperCase());
-  return {...row, orderNumber, jobReference, panelNumber};
+  return {...row, orderNumber, jobReference, sheetNumber, panelNumber};
+}
+
+function cncDuplicateKey(row) {
+  const value=normalizeCncInput(row);
+  return JSON.stringify([value.jobReference,value.orderNumber,value.sheetNumber,value.panelNumber].map(part=>String(part??"").trim().toLocaleLowerCase("en-AU")));
+}
+
+function cncDuplicateError(rows, existing) {
+  const seen=new Map((existing||[]).map(panel=>[cncDuplicateKey(panel),panel]));
+  for(const row of rows){
+    const value=normalizeCncInput(row),key=cncDuplicateKey(value),match=seen.get(key);
+    if(match){const imported=rows.includes(match);return `Order ${value.orderNumber} · Sheet ${value.sheetNumber} · Panel ${value.panelNumber} ${imported?"appears more than once in this import":`is already in the CNC tracker (${match.status||"pending"})`}.`;}
+    seen.set(key,row);
+  }
+  return "";
 }
 
 function compareCncOrders(a, b) {
