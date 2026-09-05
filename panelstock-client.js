@@ -49,6 +49,9 @@
       this.writes=this.writes.then(()=>new Promise((resolve,reject)=>{const tx=this.db.transaction('state','readwrite');tx.objectStore('state').delete(key);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);}));return this.writes;
     }
     flushWrites(){return this.writes;}
+    async read(key){await this.flushWrites();if(!this.db)return key===SESSION?null:this.fallback.getItem(key);return new Promise((resolve,reject)=>{const request=this.db.transaction('state').objectStore('state').get(key);request.onsuccess=()=>resolve(request.result??null);request.onerror=()=>reject(request.error);});}
+    async write(key,value){if(!this.db){if(key!==SESSION)this.fallback.setItem(key,value);return;}await new Promise((resolve,reject)=>{const tx=this.db.transaction('state','readwrite');tx.objectStore('state').put(value,key);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});}
+    async delete(key){if(!this.db){this.fallback.removeItem(key);return;}await new Promise((resolve,reject)=>{const tx=this.db.transaction('state','readwrite');tx.objectStore('state').delete(key);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});}
   }
 
   class Outbox {
@@ -171,6 +174,7 @@
 
   if(typeof module!=='undefined')module.exports={Outbox,IndexedOutboxStorage};
   if(!root.document)return;
+  if('serviceWorker'in navigator)navigator.serviceWorker.register('/push-sw.js',{updateViaCache:'none'}).catch(()=>{});
 
   const nativeArraySort=Array.prototype.sort;
   Array.prototype.sort=function(compareFn){
@@ -277,11 +281,13 @@
       if(result.token){
         session={token:result.token,username:result.username,isAdmin:result.isAdmin,taskAccess:result.taskAccess||{},expiresAt:result.expiresAt};
         sessionStorage.setItem(SESSION,JSON.stringify(session));
+        await durableStorage.write(SESSION,JSON.stringify(session));
       }
     }
     if(res.status===401 && !['/login','/set-pin'].includes(absolute.pathname)){
       session=null;
       sessionStorage.removeItem(SESSION);
+      void durableStorage.delete(SESSION);
       root.dispatchEvent(new Event('panelstock-session-expired'));
       announce('login','Session expired. Log in again; pending changes are retained.');
     }
@@ -528,25 +534,25 @@
     async init(url){
       await outboxReady;
       workerUrl=url.replace(/\/$/,'');
+      if(!session){try{session=JSON.parse(await durableStorage.read(SESSION)||'null');if(session?.expiresAt<=Date.now())session=null;if(session)sessionStorage.setItem(SESSION,JSON.stringify(session));}catch{session=null;}}
       if(!session)return null;
       try{
         const r=await apiFetch(workerUrl+'/session');
         if(!r.ok)return null;
         const user=await r.json();
         session={...session,...user};
+        await durableStorage.write(SESSION,JSON.stringify(session));
         void startLive();
         return user;
       }catch{
         announce('offline','Connection needed to verify login.');
-        return null;
+        return outbox.state.view?{username:session.username,isAdmin:!!session.isAdmin,taskAccess:session.taskAccess||{},offline:true}:null;
       }
     },
     async snapshot(){
       if(!session)return null;
       await outbox.flush(session.username);
-      const r=await apiFetch(workerUrl+'/data');
-      if(!r.ok)return null;
-      return outbox.snapshot(await r.json(),session.username);
+      try{const r=await apiFetch(workerUrl+'/data');if(!r.ok)return null;return outbox.snapshot(await r.json(),session.username);}catch{announce('offline','Showing the last saved stock view. Changes will sync when connection returns.');return outbox.state.view?copy(outbox.state.view):null;}
     },
     stage(fields,rendered){
       if(getLegacyPending())throw Error('Previous-version pending changes must be reviewed before editing stock.');
@@ -557,7 +563,7 @@
     async flush(){await outboxReady;return session?outbox.flush(session.username):false;},
     async logout(){
       try{if(session)await apiFetch(workerUrl+'/logout',{method:'POST'});}
-      finally{session=null;sessionStorage.removeItem(SESSION);clearTimeout(liveTimer);liveSocket?.close();liveSocket=null;}
+      finally{session=null;sessionStorage.removeItem(SESSION);await durableStorage.delete(SESSION);clearTimeout(liveTimer);liveSocket?.close();liveSocket=null;}
     },
     exportPending:downloadPendingBackup,
     reviewPending:()=>({legacy:getLegacyPending(),summary:pendingSummary(),outbox:copy(outbox.state)}),

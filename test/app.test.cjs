@@ -93,3 +93,9 @@ test('pending changes use IndexedDB with a legacy local-storage migration path',
  assert.match(client,/\/live-ticket/);
  assert.match(client,/panelstock-remote-change/);
 });
+
+test('the web interface and last verified session can reopen offline',()=>{
+ const client=fs.readFileSync(path.join(__dirname,'../panelstock-client.js'),'utf8'),worker=fs.readFileSync(path.join(__dirname,'../push-sw.js'),'utf8');
+ assert.match(client,/serviceWorker\.register\('\/push-sw\.js'/);assert.match(client,/await durableStorage\.read\(SESSION\)/);assert.match(client,/Showing the last saved stock view/);
+ assert.match(worker,/panelstock-shell-v1/);assert.match(worker,/request\.mode==='navigate'/);assert.match(worker,/caches\.match\(isNavigation\?'\.\/index\.html'/);assert.doesNotMatch(worker,/panelstock-reports/);
+});
