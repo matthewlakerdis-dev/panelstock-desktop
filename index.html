@@ -14438,7 +14438,7 @@ ${xrefStart}
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeading, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(User, { size: 18 }), title: "User Access", subtitle: "Manage users, administrators and the tasks each person can use." }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AdminPanel, { username, workerUrl: emailConfig.workerUrl, secret: emailConfig.secret, onLogTxn: logTxn })
           ] }),
-          tab === "audit" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AuditCenter, { transactions }),
+          tab === "audit" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AuditCenter, { transactions, onExportExcel:exportActivityExcel, onExportPDF:exportActivityPDF }),
           tab === "notifications" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NotificationCenter, { onOpen:key=>navigate(key), onUnreadChange:setNotificationCount }),
           tab === "support" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupportCenter, { isAdmin }),
           tab === "profile" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProfilePhotoPage, {onProfileChange:setOwnProfile}),
@@ -14450,8 +14450,6 @@ ${xrefStart}
               onRemoveReason: removeReason,
               onExportExcel: exportExcel,
               onExportPDF: exportSOHPDF,
-              onExportActivityExcel: exportActivityExcel,
-              onExportActivityPDF: exportActivityPDF,
               onExportCatalogExcel: exportCatalogExcel,
               onExportCatalogPDF: exportCatalogPDF,
               emailConfig,
@@ -14459,8 +14457,6 @@ ${xrefStart}
               onSendReportNow: sendReportNow,
               onPushLocalData: pushAllLocalDataNow,
               onOpenDamageLog: () => setDamageLogOpen(true),
-              transactions,
-              onVoidTransaction: voidTransaction,
               username,
               isAdmin,
               workerUrl: emailConfig.workerUrl,
@@ -16740,14 +16736,14 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
     if(loading)return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div",{className:"py-12 text-center text-sm text-slate-500",children:"Loading schedule settings..."});
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"max-w-xl mx-auto space-y-4",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"rounded-xl border border-slate-300 bg-white p-5",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2",{className:"text-sm font-semibold text-slate-800",children:"Working hours"}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p",{className:"mt-1 text-sm text-slate-500",children:"Choose the first and last hour shown on the daily schedule."}),/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"mt-4 grid grid-cols-2 gap-4",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label",{className:"text-xs font-medium text-slate-600",children:["Start of day",/* @__PURE__ */ (0, import_jsx_runtime.jsx)("select",{value:settings.startHour,onChange:event=>setSettings(current=>({...current,startHour:Number(event.target.value)})),className:"mt-1.5 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm",children:Array.from({length:23},(_,hour)=>/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option",{value:hour,children:hourLabel(hour)},hour))})]}),/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label",{className:"text-xs font-medium text-slate-600",children:["End of day",/* @__PURE__ */ (0, import_jsx_runtime.jsx)("select",{value:settings.endHour,onChange:event=>setSettings(current=>({...current,endHour:Number(event.target.value)})),className:"mt-1.5 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm",children:Array.from({length:23},(_,index)=>index+1).map(hour=>/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option",{value:hour,children:hourLabel(hour)},hour))})]})]})]}),/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"rounded-xl border border-slate-300 bg-white p-5",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2",{className:"text-sm font-semibold text-slate-800",children:"People shown in the schedule"}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p",{className:"mt-1 text-sm text-slate-500",children:"Hidden people are removed from schedule rows and assignment choices. Existing entries are preserved."}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div",{className:"mt-4 divide-y divide-slate-100",children:people.map(person=>/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label",{className:"flex items-center gap-3 py-3 text-sm text-slate-700",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input",{type:"checkbox",checked:settings.visibleUsernames.includes(person.username),onChange:()=>toggle(person.username),className:"h-4 w-4 accent-cyan-700"}),person.displayName]},person.username))})]}),notice&&/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p",{className:"text-sm text-cyan-800",children:notice}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button",{type:"button",onClick:save,disabled:saving,className:"w-full rounded-lg bg-cyan-800 py-2.5 text-sm font-semibold text-white disabled:opacity-50",children:saving?"Saving...":"Save schedule settings"})]});
   }
-  function AuditCenter({transactions}) {
+  function AuditCenter({transactions,onExportExcel,onExportPDF}) {
     const e=import_react.createElement,[query,setQuery]=useState(""),[type,setType]=useState("all"),[user,setUser]=useState("all"),[status,setStatus]=useState("all"),[from,setFrom]=useState(""),[to,setTo]=useState("");
     const records=transactions||[],types=[...new Set(records.map(item=>item.type).filter(Boolean))].sort(),users=[...new Set(records.flatMap(item=>[item.user,item.voidedBy]).filter(Boolean))].sort((a,b)=>a.localeCompare(b)),dateOf=item=>item.timestamp?localDateStr(new Date(item.timestamp)):"";
     const filtered=records.filter(item=>{const text=`${item.desc||""} ${item.sku||""} ${item.ref||""} ${item.customer||""} ${item.user||""}`.toLowerCase();return(type==="all"||item.type===type)&&(user==="all"||item.user===user||item.voidedBy===user)&&(status==="all"||(status==="voided"?item.voided:!item.voided))&&(!from||dateOf(item)>=from)&&(!to||dateOf(item)<=to)&&(!query.trim()||text.includes(query.trim().toLowerCase()));}).sort((a,b)=>Date.parse(b.timestamp)-Date.parse(a.timestamp));
     const tone=value=>value==="receipt"?"bg-green-50 text-green-800":value==="dispatch"?"bg-cyan-50 text-cyan-800":value==="damage"?"bg-red-50 text-red-800":value==="reset"?"bg-purple-50 text-purple-800":value==="user"?"bg-blue-50 text-blue-800":value==="backup"?"bg-teal-50 text-teal-800":value==="cnc"?"bg-orange-50 text-orange-800":"bg-slate-100 text-slate-700",inputClass="mt-1.5 h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm",field=(label,control)=>e("label",{className:"text-xs font-semibold text-slate-600"},label,control),clear=()=>{setQuery("");setType("all");setUser("all");setStatus("all");setFrom("");setTo("");};
-    return e("div",{className:"pb-24"},e(PageHeading,{icon:e(ClipboardList,{size:20}),title:"Audit Centre",subtitle:"Review recorded stock, CNC and administrative activity. This screen is read-only."}),e("div",{className:"mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4"},[["All records",records.length],["Today",records.filter(item=>dateOf(item)===todayStr()).length],["People",users.length],["Voided",records.filter(item=>item.voided).length]].map(([label,value])=>e("div",{key:label,className:"rounded-xl border border-slate-300 bg-white p-4"},e("div",{className:"text-xs font-semibold uppercase tracking-wide text-slate-400"},label),e("div",{className:"mt-1 text-2xl font-bold text-slate-900"},value)))),e("section",{className:"mb-5 rounded-xl border border-slate-300 bg-white p-4"},e("div",{className:"grid gap-3 sm:grid-cols-2 xl:grid-cols-4"},field("Search",e("input",{value:query,onChange:event=>setQuery(event.target.value),placeholder:"Description, SKU, reference or user",className:inputClass})),field("Action type",e("select",{value:type,onChange:event=>setType(event.target.value),className:inputClass},e("option",{value:"all"},"All types"),types.map(value=>e("option",{key:value,value},value==="catalog"?"Catalogue":value)))),field("User",e("select",{value:user,onChange:event=>setUser(event.target.value),className:inputClass},e("option",{value:"all"},"All users"),users.map(value=>e("option",{key:value,value},value)))),field("Status",e("select",{value:status,onChange:event=>setStatus(event.target.value),className:inputClass},e("option",{value:"all"},"All records"),e("option",{value:"active"},"Active"),e("option",{value:"voided"},"Voided"))),field("From date",e("input",{type:"date",value:from,onChange:event=>setFrom(event.target.value),className:inputClass})),field("To date",e("input",{type:"date",value:to,onChange:event=>setTo(event.target.value),className:inputClass})),e("button",{type:"button",onClick:clear,className:"mt-auto h-11 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-600"},"Clear filters"))),e("div",{className:"mb-2 text-sm font-semibold text-slate-600"},`${filtered.length} record${filtered.length===1?"":"s"} shown`),filtered.length===0?e("div",{className:"rounded-xl border border-slate-300 bg-white p-10 text-center text-sm text-slate-500"},"No audit records match these filters."):e("div",{className:"divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-300 bg-white"},filtered.map(item=>e("article",{key:item.id,className:`p-4 ${item.voided?"bg-red-50/40":""}`},e("div",{className:"flex items-start justify-between gap-3"},e("div",{className:"min-w-0 flex-1"},e("div",{className:"flex flex-wrap gap-2"},e("span",{className:`rounded px-2 py-0.5 text-[11px] font-bold uppercase ${tone(item.type)}`},item.type==="catalog"?"Catalogue":item.type),item.voided&&e("span",{className:"rounded bg-red-100 px-2 py-0.5 text-[11px] font-bold uppercase text-red-800"},"Voided")),e("p",{className:`mt-2 break-words text-sm text-slate-700 ${item.voided?"line-through":""}`},item.desc||"No description"),e("div",{className:"mt-2 flex flex-wrap gap-3 text-xs text-slate-400"},item.sku&&e("span",null,`SKU ${item.sku}`),item.ref&&e("span",null,`Ref ${item.ref}`),item.qty!==""&&item.qty!==undefined&&e("span",null,`Qty ${item.qty}`))),e("div",{className:"shrink-0 text-right text-xs text-slate-400"},e("strong",{className:"text-slate-600"},item.user||"Unknown"),e("div",{className:"mt-1"},item.timestamp?new Date(item.timestamp).toLocaleString("en-AU"):""),item.voided&&e("div",{className:"mt-1 text-red-700"},`Voided by ${item.voidedBy||"Unknown"}`)))))));
+    return e("div",{className:"pb-24"},e(PageHeading,{icon:e(ClipboardList,{size:20}),title:"Audit Centre",subtitle:"Review recorded stock, CNC and administrative activity. This screen is read-only.",action:e("div",{className:"flex gap-2"},e("button",{type:"button",onClick:onExportExcel,className:"inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"},e(FileSpreadsheet,{size:16}),"Excel"),e("button",{type:"button",onClick:onExportPDF,className:"inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"},e(Printer,{size:16}),"PDF"))}),e("div",{className:"mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4"},[["All records",records.length],["Today",records.filter(item=>dateOf(item)===todayStr()).length],["Users",users.length],["Voided transactions",records.filter(item=>item.voided).length]].map(([label,value])=>e("div",{key:label,className:"rounded-xl border border-slate-300 bg-white p-4"},e("div",{className:"text-xs font-semibold uppercase tracking-wide text-slate-400"},label),e("div",{className:"mt-1 text-2xl font-bold text-slate-900"},value)))),e("section",{className:"mb-5 rounded-xl border border-slate-300 bg-white p-4"},e("div",{className:"grid gap-3 sm:grid-cols-2 xl:grid-cols-4"},field("Search",e("input",{value:query,onChange:event=>setQuery(event.target.value),placeholder:"Description, SKU, reference or user",className:inputClass})),field("Action type",e("select",{value:type,onChange:event=>setType(event.target.value),className:inputClass},e("option",{value:"all"},"All types"),types.map(value=>e("option",{key:value,value},value==="catalog"?"Catalogue":value)))),field("User",e("select",{value:user,onChange:event=>setUser(event.target.value),className:inputClass},e("option",{value:"all"},"All users"),users.map(value=>e("option",{key:value,value},value)))),field("Status",e("select",{value:status,onChange:event=>setStatus(event.target.value),className:inputClass},e("option",{value:"all"},"All records"),e("option",{value:"active"},"Active"),e("option",{value:"voided"},"Voided"))),field("From date",e("input",{type:"date",value:from,onChange:event=>setFrom(event.target.value),className:inputClass})),field("To date",e("input",{type:"date",value:to,onChange:event=>setTo(event.target.value),className:inputClass})),e("button",{type:"button",onClick:clear,className:"mt-auto h-11 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-600"},"Clear filters"))),e("div",{className:"mb-2 text-sm font-semibold text-slate-600"},`${filtered.length} record${filtered.length===1?"":"s"} shown`),filtered.length===0?e("div",{className:"rounded-xl border border-slate-300 bg-white p-10 text-center text-sm text-slate-500"},"No audit records match these filters."):e("div",{className:"divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-300 bg-white"},filtered.map(item=>e("article",{key:item.id,className:`p-4 ${item.voided?"bg-red-50/40":""}`},e("div",{className:"flex items-start justify-between gap-3"},e("div",{className:"min-w-0 flex-1"},e("div",{className:"flex flex-wrap gap-2"},e("span",{className:`rounded px-2 py-0.5 text-[11px] font-bold uppercase ${tone(item.type)}`},item.type==="catalog"?"Catalogue":item.type),item.voided&&e("span",{className:"rounded bg-red-100 px-2 py-0.5 text-[11px] font-bold uppercase text-red-800"},"Voided")),e("p",{className:`mt-2 break-words text-sm text-slate-700 ${item.voided?"line-through":""}`},item.desc||"No description"),e("div",{className:"mt-2 flex flex-wrap gap-3 text-xs text-slate-400"},item.sku&&e("span",null,`SKU ${item.sku}`),item.ref&&e("span",null,`Ref ${item.ref}`),item.qty!==""&&item.qty!==undefined&&e("span",null,`Qty ${item.qty}`))),e("div",{className:"shrink-0 text-right text-xs text-slate-400"},e("strong",{className:"text-slate-600"},item.user||"Unknown"),e("div",{className:"mt-1"},item.timestamp?new Date(item.timestamp).toLocaleString("en-AU"):""),item.voided&&e("div",{className:"mt-1 text-red-700"},`Voided by ${item.voidedBy||"Unknown"}`)))))));
   }
-  function SettingsPage({ reasons, onAddReason, onRemoveReason, onExportExcel, onExportPDF, onExportActivityExcel, onExportActivityPDF, onExportCatalogExcel, onExportCatalogPDF, emailConfig, onSaveEmailConfig, onSendReportNow, onPushLocalData, onOpenDamageLog, transactions, onVoidTransaction, username, isAdmin, catalog, onAddCatalogItem, onRemoveCatalogItem, onEditCatalogItem, onAddCatalogItemsBulk, onLogTxn, onResetAllSOH, onResetAllInformation, workerUrl, workerSecret, initialSection="general" }) {
+  function SettingsPage({ reasons, onAddReason, onRemoveReason, onExportExcel, onExportPDF, onExportCatalogExcel, onExportCatalogPDF, emailConfig, onSaveEmailConfig, onSendReportNow, onPushLocalData, onOpenDamageLog, username, isAdmin, catalog, onAddCatalogItem, onRemoveCatalogItem, onEditCatalogItem, onAddCatalogItemsBulk, onLogTxn, onResetAllSOH, onResetAllInformation, workerUrl, workerSecret, initialSection="general" }) {
     const [newReason, setNewReason] = useState("");
     const [section, setSection] = useState(initialSection);
     useEffect(()=>setSection(initialSection),[initialSection]);
@@ -16757,7 +16753,6 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
       ...isAdmin ? [{ key: "schedule", label: "Schedule" }] : [],
       ...isAdmin ? [{ key: "catalog", label: "Material Catalogue" }] : [],
       ...isAdmin ? [{ key: "reasons", label: "Damage Reasons" }] : [],
-      { key: "activity", label: "Activity Log" },
       ...isAdmin ? [{ key: "email", label: "Email Reports" }] : [],
       ...isAdmin ? [{ key: "backup", label: "Backup & Reset" }] : []
     ];
@@ -16842,67 +16837,6 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
                 }, className: "bg-slate-900 text-white px-3 rounded-lg hover:bg-slate-800", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Plus, { size: 16 }) })
               ] })
             ] })
-          ] }),
-          section === "activity" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-              PageHeading,
-              {
-                icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ClipboardList, { size: 18 }),
-                title: "Recent Activity",
-                subtitle: "Every receipt, dispatch, damage write-off, and admin action, newest first.",
-                action: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center gap-2", children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: onExportActivityExcel, className: "flex items-center gap-1.5 text-sm font-medium text-slate-600 border border-slate-300 bg-white rounded-lg px-3 py-2 hover:bg-slate-50", children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FileSpreadsheet, { size: 15 }),
-                    " Excel"
-                  ] }),
-                  /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: onExportActivityPDF, className: "flex items-center gap-1.5 text-sm font-medium text-slate-600 border border-slate-300 bg-white rounded-lg px-3 py-2 hover:bg-slate-50", children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Printer, { size: 15 }),
-                    " PDF"
-                  ] })
-                ] })
-              }
-            ),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "bg-white border border-slate-300 rounded-xl overflow-hidden", children: transactions.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyState, { text: "No activity yet." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", { className: "w-full text-sm table-fixed", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { className: "bg-slate-50/60", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { children: [
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "w-20 px-2 py-1.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Date" }),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "w-24 px-2 py-1.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Type" }),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-2 py-1.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Description" }),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "w-28 px-2 py-1.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "SKU" }),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "w-16 px-2 py-1.5 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Qty" }),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "w-28 px-2 py-1.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "User" }),
-                isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "w-14" })
-              ] }) }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: transactions.slice(0, 100).map((t, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { className: `border-t border-slate-100 align-top ${i % 2 === 1 ? "bg-slate-50/50" : ""} ${t.voided ? "opacity-50" : ""}`, children: [
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-2 py-1.5 text-slate-400 font-mono text-xs whitespace-normal break-words", children: fmtDDMMYY(t.timestamp) }),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-2 py-1.5 whitespace-normal break-words", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: `font-semibold uppercase text-xs px-1.5 py-0.5 rounded inline-block ${t.type === "receipt" ? "bg-green-50 text-green-800" : t.type === "dispatch" ? "bg-slate-100 text-cyan-800" : t.type === "damage" ? "bg-red-50 text-red-800" : t.type === "reset" ? "bg-purple-100 text-purple-800" : t.type === "catalog" ? "bg-indigo-50 text-indigo-800" : t.type === "user" ? "bg-blue-50 text-blue-800" : t.type === "backup" ? "bg-teal-50 text-teal-800" : t.type === "cnc" ? "bg-orange-50 text-orange-800" : "bg-stone-100 text-amber-800"}`, children: t.type === "catalog" ? "catalogue" : t.type }) }),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("td", { className: "px-2 py-1.5 text-slate-600 whitespace-normal break-words", children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: t.voided ? "line-through" : "", children: [
-                    t.desc,
-                    t.ref ? ` \xB7 ${t.ref}` : "",
-                    t.customer ? ` \xB7 ${t.customer}` : ""
-                  ] }),
-                  t.voided && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "text-xs text-red-700 font-medium mt-0.5", children: [
-                    "VOIDED by ",
-                    t.voidedBy,
-                    " \xB7 ",
-                    new Date(t.voidedAt).toLocaleString()
-                  ] })
-                ] }),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-2 py-1.5 text-slate-400 font-mono text-xs whitespace-normal break-words", children: t.sku || "" }),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-2 py-1.5 text-right font-mono text-slate-700 whitespace-normal break-words", children: t.qty }),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-2 py-1.5 text-slate-400 whitespace-normal break-words", children: t.user }),
-                isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-2 py-1.5 text-right", children: !t.voided && (t.type === "receipt" || t.type === "dispatch" || t.type === "damage") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-                  "button",
-                  {
-                    onClick: async () => {
-                      if (await PanelStock.confirm({title:"Void activity entry?",message:"Void this entry? This reverses its effect on SOH and cannot be undone.",confirmLabel:"Void entry"})) onVoidTransaction(t.id);
-                    },
-                    className: "text-xs font-semibold text-red-700 hover:underline",
-                    children: "Void"
-                  }
-                ) })
-              ] }, t.id)) })
-            ] }) })
           ] }),
           section === "email" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "max-w-xl mx-auto", children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeading, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Mail, { size: 18 }), title: "Email Reports", subtitle: "Scheduled reports sent automatically by the server." }),

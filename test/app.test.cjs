@@ -107,9 +107,14 @@ test('confirmation actions use the PanelStock styled dialog',()=>{
  assert.match(client,/role','dialog'/);assert.match(client,/confirm:styledConfirm/);assert.match(client,/showCopy:showCopyDialog/);assert.match(html,/PanelStock\.confirm\(/);assert.match(html,/PanelStock\.showCopy\(/);
 });
 
-test('administrators have a read-only filtered Audit Centre',()=>{
+test('administrators have a read-only filtered Audit Centre with exports',()=>{
  const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8'),audit=html.slice(html.indexOf('function AuditCenter('),html.indexOf('function SettingsPage('));
  assert.match(html,/label:"Audit Centre"/);assert.match(html,/tab === "audit" && isAdmin/);assert.match(audit,/This screen is read-only/);
  for(const label of ['Search','Action type','User','Status','From date','To date'])assert.match(audit,new RegExp(`"${label}"`));
  assert.match(audit,/item\.voided/);assert.match(audit,/Clear filters/);
+ assert.match(html,/onExportExcel:exportActivityExcel/);assert.match(html,/onExportPDF:exportActivityPDF/);
+ assert.match(audit,/onClick:onExportExcel/);assert.match(audit,/onClick:onExportPDF/);
+ assert.match(audit,/\["Users",users\.length\]/);assert.match(audit,/"Voided transactions"/);
+ const settings=html.slice(html.indexOf('function SettingsPage('),html.indexOf('var container'));
+ assert.doesNotMatch(settings,/Activity Log|Recent Activity|section === "activity"/);
 });
