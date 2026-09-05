@@ -24,8 +24,9 @@ test(repo+': mobile CNC entry keeps the remove button inside the form',()=>asser
  });
  test(repo+': remake rows require a reason and preserve panel classifications',()=>{
   assert.ok(prepare({...stock,orderNumber:'7',jobReference:'Test'},[{sheetNumber:'1',panelNumber:'A',totalPanelArea:1,isRemake:true}]).errors.some(error=>error.includes('reason')));
-  const result=prepare({...stock,orderNumber:'7',jobReference:'Test'},[{sheetNumber:'1',panelNumber:'A',totalPanelArea:1,isRemake:true,isTemplate:true,remakeReason:'  damaged finish  '}]);
-  assert.equal(result.errors.length,0);assert.equal(result.rows[0].isRemake,true);assert.equal(result.rows[0].isTemplate,true);assert.equal(result.rows[0].remakeReason,'damaged finish');
+  assert.ok(prepare({...stock,orderNumber:'7',jobReference:'Test'},[{sheetNumber:'1',panelNumber:'A',totalPanelArea:1,isRemake:true,isTemplate:true,remakeReason:'damaged finish'}]).errors.some(error=>error.includes('either Remake or Template')));
+  const result=prepare({...stock,orderNumber:'7',jobReference:'Test'},[{sheetNumber:'1',panelNumber:'A',totalPanelArea:1,isRemake:true,isTemplate:false,remakeReason:'  damaged finish  '}]);
+  assert.equal(result.errors.length,0);assert.equal(result.rows[0].isRemake,true);assert.equal(result.rows[0].isTemplate,false);assert.equal(result.rows[0].remakeReason,'damaged finish');
  });
  test(repo+': invalid or duplicate lines reject the entire batch',()=>{
   for(const [order,lines] of [
