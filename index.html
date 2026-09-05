@@ -12869,6 +12869,10 @@
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("circle", { cx: "12", cy: "7", r: "4" })
   ] });
+  var Bell = (p) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Icon, { ...p, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M10 21h4" })
+  ] });
   var Truck = (p) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Icon, { ...p, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("rect", { x: "1", y: "3", width: "15", height: "13" }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("polygon", { points: "16 8 20 8 23 11 23 16 16 16 16 8" }),
@@ -14271,7 +14275,7 @@ ${xrefStart}
     const permittedPages = [
       ['stock','factory.stock'],['receive','factory.receive'],['dispatch','factory.dispatch'],['transfer','factory.transfer'],['damage','factory.damage'],['cnc','factory.cnc'],
       ...(isAdmin||can('site.orders.manage')?[['projects',null]]:[]),['orders','site.orders.view'],['schedule',can('schedule.view')?'schedule.view':'schedule.cnc.view'],['jobs','factory.jobs'],
-      ...(isAdmin?[['access',null]]:[]),['support',null],['profile',null],['settings','factory.settings']
+      ...(isAdmin?[['access',null]]:[]),['notifications',null],['support',null],['profile',null],['settings','factory.settings']
     ].filter(([,task])=>task===null||can(task)).map(([page])=>page);
     useEffect(()=>{if(username&&!permittedPages.includes(tab)&&permittedPages[0])setTab(permittedPages[0]);},[username,tab,taskAccess,isAdmin]);
     if (loading) {
@@ -14294,7 +14298,7 @@ ${xrefStart}
       {key:"workGroup",label:"Work",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Briefcase,{size:16}),items:[...(can("factory.jobs")?[{key:"jobs",label:"Jobs",target:"jobs",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Briefcase,{size:16})}]:[]),...(can("schedule.view")||can("schedule.cnc.view")?[{key:"schedule",label:"Schedule",target:"schedule",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(ScheduleCalendarIcon,{size:16})}]:[]),...(isAdmin||can("site.orders.manage")?[{key:"projects",label:"Projects",target:"projects",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Briefcase,{size:16})}]:[]),...(can("site.orders.view")?[{key:"orders",label:"Site Orders",target:"orders",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(ClipboardList,{size:16})}]:[])]},
       {key:"adminGroup",label:"Administration",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Settings2,{size:16}),items:[...(isAdmin?[{key:"access",label:"User Access",target:"access",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(User,{size:16})}]:[]),...(can("factory.settings")?[{key:"settings",label:"Settings",target:"settings",section:"general",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Settings2,{size:16})}]:[])]}
     ].filter(group=>group.items.length);
-    const pageLabels = { stock: "Stock", receive: "Receive", dispatch: "Dispatch", transfer:"Convert", damage: "Damage", cnc: "CNC", projects:"Projects", orders: "Orders", schedule: "Schedule", jobs: "Jobs", access: "User Access", support:"Support", profile:"My Profile", settings: "Settings" };
+    const pageLabels = { stock: "Stock", receive: "Receive", dispatch: "Dispatch", transfer:"Convert", damage: "Damage", cnc: "CNC", projects:"Projects", orders: "Orders", schedule: "Schedule", jobs: "Jobs", access: "User Access", notifications:"Notifications", support:"Support", profile:"My Profile", settings: "Settings" };
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex h-screen bg-slate-50 text-slate-900 font-sans", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("aside", { className: "w-60 bg-slate-900 flex flex-col shrink-0", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "px-4 py-5 border-b border-white/10", children: [
@@ -14305,6 +14309,7 @@ ${xrefStart}
           navGroups.filter(group=>group.key==="stockGroup").map(group=>/* @__PURE__ */ (0,import_jsx_runtime.jsx)(SideNavGroup,{...group,open:openNavGroup===group.key,onToggle:()=>setOpenNavGroup(current=>current===group.key?null:group.key),activeKey:navSelection,onSelect:item=>navigate(item.key,item.target,item.section)},group.key)),
           can("factory.cnc")&&/* @__PURE__ */ (0,import_jsx_runtime.jsx)(SideNavItem,{icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(CncRouterIcon,{size:18}),label:"CNC",active:navSelection==="cnc",onClick:()=>{setOpenNavGroup(null);navigate("cnc");}}),
           navGroups.filter(group=>group.key!=="stockGroup").map(group=>/* @__PURE__ */ (0,import_jsx_runtime.jsx)(SideNavGroup,{...group,open:openNavGroup===group.key,onToggle:()=>setOpenNavGroup(current=>current===group.key?null:group.key),activeKey:navSelection,onSelect:item=>navigate(item.key,item.target,item.section)},group.key)),
+          /* @__PURE__ */ (0,import_jsx_runtime.jsx)(SideNavItem,{icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Bell,{size:16}),label:"Notifications",active:navSelection==="notifications",onClick:()=>{setOpenNavGroup(null);navigate("notifications");}}),
           /* @__PURE__ */ (0,import_jsx_runtime.jsx)(SideNavItem,{icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(SupportHeadsetIcon,{size:16}),label:"Support",active:navSelection==="support",onClick:()=>{setOpenNavGroup(null);navigate("support");}}),
           /* @__PURE__ */ (0,import_jsx_runtime.jsx)(SideNavItem,{icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(User,{size:16}),label:"My Profile",active:navSelection==="profile",onClick:()=>{setOpenNavGroup(null);navigate("profile");}})
         ] }),
@@ -14376,6 +14381,7 @@ ${xrefStart}
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeading, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(User, { size: 18 }), title: "User Access", subtitle: "Manage users, administrators and the tasks each person can use." }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AdminPanel, { username, workerUrl: emailConfig.workerUrl, secret: emailConfig.secret, onLogTxn: logTxn })
           ] }),
+          tab === "notifications" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NotificationCenter, { onOpen:key=>navigate(key) }),
           tab === "support" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupportCenter, { isAdmin }),
           tab === "profile" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProfilePhotoPage, {onProfileChange:setOwnProfile}),
           tab === "settings" && can("factory.settings") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -14594,6 +14600,14 @@ ${xrefStart}
       });
     }
     return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { ref, className: className || inputCls, value, onChange: handleChange, ...props });
+  }
+  function NotificationCenter({onOpen}) {
+    const [items,setItems]=useState([]),[loading,setLoading]=useState(true),[notice,setNotice]=useState("");
+    const load=async()=>{try{const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/notifications"),result=await response.json().catch(()=>({}));if(!response.ok)throw Error(result.error||"Notifications could not be loaded.");setItems(result.notifications||[]);setNotice("");}catch(error){setNotice(error.message||"Notifications could not be loaded.");}finally{setLoading(false);}};
+    useEffect(()=>{void load();const timer=setInterval(load,30000);return()=>clearInterval(timer);},[]);
+    const mark=async id=>{const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/notifications/read",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(id?{id}:{})}),result=await response.json().catch(()=>({}));if(response.ok)setItems(result.notifications||[]);};
+    const unread=items.filter(item=>!item.read).length,tone=priority=>priority==="urgent"?"border-red-300 bg-red-50":priority==="important"?"border-amber-300 bg-amber-50":"border-slate-200 bg-white";
+    return /* @__PURE__ */ (0,import_jsx_runtime.jsxs)("div",{children:[/* @__PURE__ */ (0,import_jsx_runtime.jsx)(PageHeading,{icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Bell,{size:18}),title:"Notifications",subtitle:"Schedule changes, support updates and important account activity"}),/* @__PURE__ */ (0,import_jsx_runtime.jsxs)("div",{className:"p-6",children:[notice&&/* @__PURE__ */ (0,import_jsx_runtime.jsx)("p",{className:"mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700",children:notice}),/* @__PURE__ */ (0,import_jsx_runtime.jsxs)("div",{className:"mb-3 flex items-center justify-between",children:[/* @__PURE__ */ (0,import_jsx_runtime.jsx)("p",{className:"text-sm font-semibold text-slate-600",children:unread?`${unread} unread`:"You're up to date"}),unread>0&&/* @__PURE__ */ (0,import_jsx_runtime.jsx)("button",{type:"button",onClick:()=>mark(""),className:"rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-cyan-800",children:"Mark all as read"})]}),loading?/* @__PURE__ */ (0,import_jsx_runtime.jsx)("p",{className:"rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-500",children:"Loading notifications…"}):items.length?/* @__PURE__ */ (0,import_jsx_runtime.jsx)("div",{className:"space-y-3",children:items.map(item=>/* @__PURE__ */ (0,import_jsx_runtime.jsxs)("button",{type:"button",onClick:async()=>{if(!item.read)await mark(item.id);if(item.link)onOpen(item.link);},className:`w-full rounded-xl border p-4 text-left shadow-sm ${tone(item.priority)} ${item.read?"opacity-70":""}`,children:[/* @__PURE__ */ (0,import_jsx_runtime.jsxs)("div",{className:"flex items-start justify-between gap-3",children:[/* @__PURE__ */ (0,import_jsx_runtime.jsx)("strong",{className:"text-sm text-slate-900",children:item.title}),!item.read&&/* @__PURE__ */ (0,import_jsx_runtime.jsx)("span",{className:"mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-cyan-700","aria-label":"Unread"})]}),/* @__PURE__ */ (0,import_jsx_runtime.jsx)("p",{className:"mt-1 text-sm text-slate-600",children:item.message}),/* @__PURE__ */ (0,import_jsx_runtime.jsx)("p",{className:"mt-2 text-xs text-slate-400",children:new Date(item.createdAt).toLocaleString()})]},item.id))}):/* @__PURE__ */ (0,import_jsx_runtime.jsx)("div",{className:"rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500",children:"No notifications yet."})]})]});
   }
   function SupportCenter({isAdmin=false}) {
     const e=import_react.createElement;

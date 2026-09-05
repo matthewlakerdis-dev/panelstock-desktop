@@ -32,6 +32,10 @@ test('desktop scripts parse and do not contain the shared backend credential',()
  assert.match(html,/function SupportCenter\(\{isAdmin=false\}\) \{\s*const e=import_react\.createElement;/);
  assert.match(html,/label:"Support"/);
  assert.match(html,/tab === "support"/);
+ assert.match(html,/function NotificationCenter\(\{onOpen\}\)/);
+ assert.match(html,/label:"Notifications"/);
+ assert.match(html,/tab === "notifications"/);
+ assert.match(html,/\/notifications\/read/);
  assert.doesNotMatch(cncPage,/children: "Complete panel"/);
  const filter=html.match(/const dispatches = transactions.filter\(([^;]+)\);/)[1];
  const result=vm.runInNewContext(`transactions.filter(${filter})`,{transactions:[{type:'dispatch',qty:2},{type:'dispatch',qty:5,voided:true}]});
