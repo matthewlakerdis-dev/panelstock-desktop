@@ -33,6 +33,10 @@ test('desktop scripts parse and do not contain the shared backend credential',()
  assert.match(html,/label:"Support"/);
  assert.match(html,/tab === "support"/);
  assert.match(html,/function NotificationCenter\(\{onOpen,onUnreadChange\}\)/);
+ assert.match(html,/function CncPdfImport/);
+ assert.match(html,/Import CNC PDF/);
+ assert.match(html,/\/cnc-pdf\/analyse/);
+ assert.match(html,/Add the proposed off-cut to SOH/);
  assert.match(html,/notificationCount>99\?"99\+":notificationCount/);
  assert.doesNotMatch(html,/rounded-xl border-2 border-white/);
  assert.match(html,/right-0\.5 top-0\.5 grid min-h-\[18px\].*bg-red-500/);
