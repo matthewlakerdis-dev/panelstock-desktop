@@ -118,3 +118,10 @@ test('administrators have a read-only filtered Audit Centre with exports',()=>{
  const settings=html.slice(html.indexOf('function SettingsPage('),html.indexOf('var container'));
  assert.doesNotMatch(settings,/Activity Log|Recent Activity|section === "activity"/);
 });
+
+test('CNC tracker shows estimated off-cuts and audits the operator decision',()=>{
+ const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
+ assert.match(html,/Estimated off-cut/);
+ assert.match(html,/Saved CNC off-cut/);
+ assert.match(html,/Proposed CNC off-cut not saved/);
+});
