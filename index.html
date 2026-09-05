@@ -14674,6 +14674,13 @@ ${xrefStart}
     }
     return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { ref, className: className || inputCls, value, onChange: handleChange, ...props });
   }
+  function NotificationPreferences() {
+    const e=import_react.createElement,[preferences,setPreferences]=useState(null),[busy,setBusy]=useState(""),[notice,setNotice]=useState("");
+    useEffect(()=>{PanelStock.apiFetch(BAKED_WORKER_URL+"/notification-preferences").then(response=>response.json().then(result=>{if(!response.ok)throw Error(result.error||"Notification settings could not be loaded.");setPreferences(result.preferences);})).catch(error=>setNotice(error.message));},[]);
+    const toggle=async key=>{if(!preferences||busy)return;const next={...preferences,[key]:!preferences[key]};setPreferences(next);setBusy(key);setNotice("");try{const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/notification-preferences",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(next)}),result=await response.json().catch(()=>({}));if(!response.ok)throw Error(result.error||"Notification settings could not be saved.");setPreferences(result.preferences);}catch(error){setPreferences(preferences);setNotice(error.message||"Notification settings could not be saved.");}finally{setBusy("");}};
+    const row=(key,title,description)=>e("div",{className:"flex items-center justify-between gap-4 py-3"},e("div",null,e("strong",{className:"text-sm text-slate-900"},title),e("p",{className:"mt-0.5 text-xs text-slate-500"},description)),e("button",{type:"button",role:"switch","aria-checked":!!preferences?.[key],disabled:!preferences||!!busy,onClick:()=>toggle(key),className:`relative h-7 w-12 shrink-0 rounded-full transition-colors ${preferences?.[key]?"bg-cyan-700":"bg-slate-300"}`},e("span",{className:`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-transform ${preferences?.[key]?"left-6":"left-1"}`})));
+    return e("section",{className:"mx-6 mt-4 rounded-xl border border-slate-300 bg-white px-4"},e("h2",{className:"pt-4 text-sm font-semibold text-slate-900"},"Notification settings"),row("schedule","Schedule notifications","New, updated and cancelled schedule entries"),e("div",{className:"border-t border-slate-100"}),row("cnc","CNC scheduling notifications","New CNC sheets added to the cutting schedule"),e("div",{className:"border-t border-slate-100"}),row("support","Support notifications","New tickets, replies and status changes"),e("div",{className:"border-t border-slate-100"}),row("push","Push delivery","Send enabled alerts to registered devices"),notice&&e("p",{className:"pb-3 text-xs text-red-700"},notice));
+  }
   function PushNotificationControl() {
     const supported='serviceWorker'in navigator&&'PushManager'in window&&'Notification'in window,[status,setStatus]=useState(supported?'checking':'unsupported'),[busy,setBusy]=useState(false),[message,setMessage]=useState('');
     useEffect(()=>{if(!supported)return;navigator.serviceWorker.register('/push-sw.js',{updateViaCache:'none'}).then(()=>navigator.serviceWorker.ready).then(registration=>registration.pushManager.getSubscription()).then(subscription=>setStatus(subscription?'enabled':Notification.permission==='denied'?'denied':'disabled')).catch(()=>setStatus('unsupported'));},[]);
@@ -14731,7 +14738,7 @@ ${xrefStart}
         ] })
       ] }),
       action
-    ] }),title==="Notifications"&&/* @__PURE__ */ (0,import_jsx_runtime.jsx)(PushNotificationControl,{})]});
+    ] }),title==="Notifications"&&/* @__PURE__ */ (0,import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment,{children:[/* @__PURE__ */ (0,import_jsx_runtime.jsx)(NotificationPreferences,{}),/* @__PURE__ */ (0,import_jsx_runtime.jsx)(PushNotificationControl,{})]})]});
   }
   function SheetMeasureGuide({ compact = false }) {
     const h = import_jsx_runtime.jsx;
