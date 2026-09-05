@@ -14628,7 +14628,7 @@ ${xrefStart}
                 view === "offcuts" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3 text-slate-400", children: v.note || "\u2014" }),
                 /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("td", { className: "px-4 py-3 text-right", children: [
                   /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "font-mono font-semibold text-slate-800", children: v.qty }),
-                  isAdmin&&(reserved.get(`${view==="panels"?"variant":"offcut"}:${v.id}`)||0)>0&&/* @__PURE__ */ (0,import_jsx_runtime.jsx)("div",{className:"mt-1 text-xs font-semibold text-amber-700",children:`${reserved.get(`${view==="panels"?"variant":"offcut"}:${v.id}`)} reserved for CNC · ${Math.max(0,Number(v.qty)-reserved.get(`${view==="panels"?"variant":"offcut"}:${v.id}`))} available`})
+                  isAdmin&&(reserved.get(`${view==="panels"?"variant":"offcut"}:${v.id}`)||0)>0&&/* @__PURE__ */ (0,import_jsx_runtime.jsx)("span",{className:"mt-1 ml-auto inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800",title:"Reserved for pending CNC sheets",children:`${reserved.get(`${view==="panels"?"variant":"offcut"}:${v.id}`)} CNC`})
                 ] })
               ] }, v.id);
             })
