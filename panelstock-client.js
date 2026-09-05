@@ -22,6 +22,35 @@
     return next;
   };
 
+  class IndexedOutboxStorage {
+    constructor(fallback,notify=()=>{}){this.fallback=fallback;this.notify=notify;this.value=null;this.db=null;this.writes=Promise.resolve();}
+    async ready(){
+      if(!root.indexedDB){this.value=this.fallback.getItem(OUTBOX_KEY);return this;}
+      try{
+        this.db=await new Promise((resolve,reject)=>{const request=root.indexedDB.open('panelstock-sync',1);request.onupgradeneeded=()=>request.result.createObjectStore('state');request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});
+        const saved=await new Promise((resolve,reject)=>{const request=this.db.transaction('state').objectStore('state').get(OUTBOX_KEY);request.onsuccess=()=>resolve(request.result??null);request.onerror=()=>reject(request.error);});
+        const legacy=this.fallback.getItem(OUTBOX_KEY);this.value=saved??legacy;
+        if(saved==null&&legacy!=null){this.setItem(OUTBOX_KEY,legacy);await this.flushWrites();}
+        if(saved!=null)this.fallback.removeItem(OUTBOX_KEY);
+      }catch(error){this.db=null;this.value=this.fallback.getItem(OUTBOX_KEY);this.notify('storage','Reliable device storage could not be opened. Pending changes will use limited browser storage.');}
+      return this;
+    }
+    getItem(key){return key===OUTBOX_KEY?this.value:this.fallback.getItem(key);}
+    setItem(key,value){
+      if(key!==OUTBOX_KEY){this.fallback.setItem(key,value);return;}
+      this.value=value;
+      if(!this.db){this.fallback.setItem(key,value);return;}
+      this.writes=this.writes.then(()=>new Promise((resolve,reject)=>{const tx=this.db.transaction('state','readwrite');tx.objectStore('state').put(value,key);tx.oncomplete=()=>{this.fallback.removeItem(key);resolve();};tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);})).catch(()=>{try{this.fallback.setItem(key,this.value);}catch{}this.notify('storage','Reliable device storage failed. Pending changes were preserved in limited browser storage.');});
+    }
+    removeItem(key){
+      if(key!==OUTBOX_KEY){this.fallback.removeItem(key);return Promise.resolve();}
+      this.value=null;this.fallback.removeItem(key);
+      if(!this.db)return Promise.resolve();
+      this.writes=this.writes.then(()=>new Promise((resolve,reject)=>{const tx=this.db.transaction('state','readwrite');tx.objectStore('state').delete(key);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);}));return this.writes;
+    }
+    flushWrites(){return this.writes;}
+  }
+
   class Outbox {
     constructor(storage,send,notify=()=>{}) {
       this.storage=storage;
@@ -109,6 +138,7 @@
       this.finalize();
       if(this.state.owner!==owner||this.state.blocked)return false;
       while(this.state.queue.length) {
+        await this.storage.flushWrites?.();
         const packet=this.state.queue[0];
         this.notify('syncing');
         let res;
@@ -133,12 +163,13 @@
         next.view.revision=Math.max(next.view.revision||0,result.revision||0);
         next.blocked=null;
         this.save(next);
+        await this.storage.flushWrites?.();
       }
       return true;
     }
   }
 
-  if(typeof module!=='undefined')module.exports={Outbox};
+  if(typeof module!=='undefined')module.exports={Outbox,IndexedOutboxStorage};
   if(!root.document)return;
 
   const nativeArraySort=Array.prototype.sort;
@@ -222,7 +253,7 @@
   queueMicrotask(queueCncEnhance);
 
   const SESSION='panelstock:session:v2';
-  let session=null,workerUrl='',status='synced',message='',lockGranted=false,lockDenied=false;
+  let session=null,workerUrl='',status='synced',message='',lockGranted=false,lockDenied=false,liveSocket=null,liveRetry=1000,liveTimer=null;
   try{session=JSON.parse(sessionStorage.getItem(SESSION)||'null');}catch{}
   if(session?.expiresAt<=Date.now()){session=null;sessionStorage.removeItem(SESSION);}
 
@@ -256,11 +287,16 @@
     }
     return res;
   };
+  const startLive=async()=>{
+    clearTimeout(liveTimer);if(!root.WebSocket||!session||!workerUrl||liveSocket?.readyState===WebSocket.OPEN||liveSocket?.readyState===WebSocket.CONNECTING)return;
+    try{const response=await apiFetch(workerUrl+'/live-ticket'),result=await response.json();if(!response.ok||!result.ticket)throw Error();const url=new URL(workerUrl);url.protocol=url.protocol==='https:'?'wss:':'ws:';url.pathname='/live';url.search='?ticket='+encodeURIComponent(result.ticket);const socket=liveSocket=new WebSocket(url);socket.onopen=()=>{liveRetry=1000;};socket.onmessage=event=>{try{const update=JSON.parse(event.data);if(['ready','revision'].includes(update.type)&&update.revision>(outbox?.state.view?.revision||0))root.dispatchEvent(new CustomEvent('panelstock-remote-change',{detail:update}));}catch{}};socket.onclose=()=>{if(liveSocket===socket)liveSocket=null;if(session)liveTimer=setTimeout(()=>void startLive(),liveRetry=Math.min(liveRetry*2,30000));};socket.onerror=()=>socket.close();}catch{if(session)liveTimer=setTimeout(()=>void startLive(),liveRetry=Math.min(liveRetry*2,30000));}
+  };
 
-  outbox=new Outbox(localStorage,(packet,owner)=>{
+  const durableStorage=new IndexedOutboxStorage(localStorage,announce);
+  const outboxReady=durableStorage.ready().then(()=>{outbox=new Outbox(durableStorage,(packet,owner)=>{
     if(!session || session.username!==owner)return Promise.resolve(new Response('{}',{status:401}));
     return apiFetch(workerUrl+'/mutations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(packet)});
-  },announce);
+  },announce);root.PanelStock.outbox=outbox;return outbox;});
 
   function getLegacyPending() {
     const raw=localStorage.getItem(LEGACY_KEY);
@@ -458,8 +494,7 @@
         :'These unsynced changes will NOT be applied to shared stock. Export a backup first if they may still be needed. Discard them now?';
       if(!confirm(warning))return;
       localStorage.removeItem(LEGACY_KEY);
-      localStorage.removeItem(OUTBOX_KEY);
-      location.reload();
+      void durableStorage.removeItem(OUTBOX_KEY).then(()=>location.reload());
     }));
 
     card.appendChild(actions);
@@ -491,6 +526,7 @@
     apiFetch,
     outbox,
     async init(url){
+      await outboxReady;
       workerUrl=url.replace(/\/$/,'');
       if(!session)return null;
       try{
@@ -498,6 +534,7 @@
         if(!r.ok)return null;
         const user=await r.json();
         session={...session,...user};
+        void startLive();
         return user;
       }catch{
         announce('offline','Connection needed to verify login.');
@@ -517,22 +554,23 @@
       if(!session)throw Error('Please log in before editing.');
       outbox.stage(fields,session.username,rendered);
     },
-    async flush(){return session?outbox.flush(session.username):false;},
+    async flush(){await outboxReady;return session?outbox.flush(session.username):false;},
     async logout(){
       try{if(session)await apiFetch(workerUrl+'/logout',{method:'POST'});}
-      finally{session=null;sessionStorage.removeItem(SESSION);}
+      finally{session=null;sessionStorage.removeItem(SESSION);clearTimeout(liveTimer);liveSocket?.close();liveSocket=null;}
     },
     exportPending:downloadPendingBackup,
     reviewPending:()=>({legacy:getLegacyPending(),summary:pendingSummary(),outbox:copy(outbox.state)}),
     get username(){return session?.username||null;},
-    get revision(){return outbox.state.view?.revision;},
+    get revision(){return outbox?.state.view?.revision;},
     get status(){return status;},
-    get pending(){return outbox.pending()||!!getLegacyPending();}
+    get pending(){return !!outbox?.pending()||!!getLegacyPending();}
   };
 
   root.addEventListener('online',()=>{void root.PanelStock.flush();});
+  root.addEventListener('online',()=>{void startLive();});
   root.addEventListener('beforeunload',event=>{
     if(root.PanelStock.pending){event.preventDefault();event.returnValue='';}
   });
-  queueMicrotask(renderNotice);
+  void outboxReady.then(renderNotice);
 })(typeof window==='undefined'?globalThis:window);

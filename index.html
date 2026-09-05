@@ -13670,9 +13670,10 @@ ${xrefStart}
       window.addEventListener("panelstock-sync", onSync);
       window.addEventListener("panelstock-session-expired", onExpired);
       window.addEventListener("online", refresh);
+      window.addEventListener("panelstock-remote-change", refresh);
       document.addEventListener("visibilitychange", refresh);
       setSyncStatus(PanelStock.status);
-      return () => { active = false; clearInterval(timer); window.removeEventListener("panelstock-sync", onSync); window.removeEventListener("panelstock-session-expired", onExpired); window.removeEventListener("online", refresh); document.removeEventListener("visibilitychange", refresh); };
+      return () => { active = false; clearInterval(timer); window.removeEventListener("panelstock-sync", onSync); window.removeEventListener("panelstock-session-expired", onExpired); window.removeEventListener("online", refresh); window.removeEventListener("panelstock-remote-change", refresh); document.removeEventListener("visibilitychange", refresh); };
     }, [username]);
     function showToast(msg, kind = "ok") {
       setToast({ msg, kind });
@@ -14738,7 +14739,7 @@ ${xrefStart}
         ] })
       ] }),
       action
-    ] }),title==="Notifications"&&/* @__PURE__ */ (0,import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment,{children:[/* @__PURE__ */ (0,import_jsx_runtime.jsx)(NotificationPreferences,{}),/* @__PURE__ */ (0,import_jsx_runtime.jsx)(PushNotificationControl,{})]})]});
+    ] })]});
   }
   function SheetMeasureGuide({ compact = false }) {
     const h = import_jsx_runtime.jsx;
@@ -16726,6 +16727,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
     useEffect(()=>setSection(initialSection),[initialSection]);
     const sections = [
       { key: "general", label: "General" },
+      { key: "notifications", label: "Notifications" },
       ...isAdmin ? [{ key: "schedule", label: "Schedule" }] : [],
       ...isAdmin ? [{ key: "catalog", label: "Material Catalogue" }] : [],
       ...isAdmin ? [{ key: "reasons", label: "Damage Reasons" }] : [],
@@ -16782,6 +16784,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
               ] })
             ] })
           ] }),
+          section === "notifications" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "max-w-xl mx-auto", children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(NotificationPreferences, {}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PushNotificationControl, {})] }),
           section === "schedule" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ScheduleSettingsPanel, {}),
           section === "catalog" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CatalogAdmin, { catalog, onAdd: onAddCatalogItem, onRemove: onRemoveCatalogItem, onEdit: onEditCatalogItem, onAddBulk: onAddCatalogItemsBulk, onExportExcel: onExportCatalogExcel, onExportPDF: onExportCatalogPDF }),
           section === "reasons" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "max-w-xl mx-auto", children: [

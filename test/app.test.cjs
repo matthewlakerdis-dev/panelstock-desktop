@@ -83,3 +83,13 @@ test('pending change recovery keeps review, retry, export and explicit discard c
  assert.match(client,/Previous-version pending changes must be reviewed before editing stock\./);
  assert.match(client,/format:'panelstock-pending-backup-v1'/);
 });
+
+test('pending changes use IndexedDB with a legacy local-storage migration path',()=>{
+ const client=fs.readFileSync(path.join(__dirname,'../panelstock-client.js'),'utf8');
+ assert.match(client,/class IndexedOutboxStorage/);
+ assert.match(client,/indexedDB\.open\('panelstock-sync',1\)/);
+ assert.match(client,/saved\?\?legacy/);
+ assert.match(client,/await this\.storage\.flushWrites\?\.\(\)/);
+ assert.match(client,/\/live-ticket/);
+ assert.match(client,/panelstock-remote-change/);
+});
