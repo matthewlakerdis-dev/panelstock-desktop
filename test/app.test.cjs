@@ -9,6 +9,10 @@ test('desktop scripts parse and do not contain the shared backend credential',()
  for(const match of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g))if(match[1].trim())new vm.Script(match[1]);
  new vm.Script(fs.readFileSync(path.join(__dirname,'../panelstock-client.js'),'utf8'));
  assert.ok(!html.includes('BAKED_SHARED_SECRET'));assert.ok(!html.includes('.slice(0, 800)'));
+ assert.match(html,/if \(!result\.ok\) \{\s*setPin\(""\);\s*setError\(result\.error \|\| "Login failed\."\)/);
+ assert.match(html,/attempts >= 3 && await PanelStock\.confirm/);
+ assert.match(html,/\/passcode-reset-request/);
+ assert.match(html,/Passcode reset request sent to the administrators\./);
  assert.match(html,/ResizeObserver loop \(\?:limit exceeded\|completed with undelivered notifications\)/);
  assert.match(html,/saveUser\(editUser,true\)/);
  const cncPage=html.slice(html.indexOf('function CncPage('),html.indexOf('function OrdersPage('));

@@ -15911,6 +15911,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
     const [username, setUsernameField] = useState(defaultUsername || "");
     const [rememberMe, setRememberMe] = useState(true);
     const [pin, setPin] = useState("");
+    const [failedAttempts, setFailedAttempts] = useState(0);
     const [newPin, setNewPin] = useState("");
     const [confirmPin, setConfirmPin] = useState("");
     const [error, setError] = useState("");
@@ -15943,9 +15944,19 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
         const result = await callWorker("/login", { username: uname, pin });
         setBusy(false);
         if (!result.ok) {
+          setPin("");
           setError(result.error || "Login failed.");
+          if (result.error === "Invalid username or PIN") {
+            const attempts = failedAttempts + 1;
+            setFailedAttempts(attempts >= 3 ? 0 : attempts);
+            if (attempts >= 3 && await PanelStock.confirm({ title: "Request a passcode reset?", message: "Would you like to notify the administrators that you need help resetting your passcode?", confirmLabel: "Send request" })) {
+              const reset = await callWorker("/passcode-reset-request", { username: uname });
+              if (reset.ok) setError("Passcode reset request sent to the administrators.");
+            }
+          }
           return;
         }
+        setFailedAttempts(0);
         if (result.mustChangePin) setStep("setpin");
         else onLoggedIn(uname, result.isAdmin, rememberMe);
       } catch {
@@ -16010,7 +16021,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bg-white rounded-xl shadow-xl p-6", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { className: "text-sm font-semibold text-slate-800 mb-4", children: step === "setpin" ? "Set a new PIN" : "Log in to PanelStock" }),
         step === "form" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Username", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, value: username, onChange: (e) => setUsernameField(e.target.value), placeholder: "e.g. Sam" }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Username", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, value: username, onChange: (e) => { setUsernameField(e.target.value); setFailedAttempts(0); }, placeholder: "e.g. Sam" }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "PIN", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, type: "password", inputMode: "numeric", value: pin, onChange: (e) => setPin(e.target.value), placeholder: "Your PIN", onKeyDown: (e) => e.key === "Enter" && handleLogin() }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "flex items-center gap-2 text-xs font-medium text-slate-600 mb-4", children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { type: "checkbox", checked: rememberMe, onChange: (e) => setRememberMe(e.target.checked) }),
