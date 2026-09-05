@@ -51,9 +51,11 @@ test('desktop scripts parse and do not contain the shared backend credential',()
  assert.match(html,/\/notifications\/clear/);
  assert.match(html,/Clear notifications/);
  assert.match(html,/function CncPdfImport/);
- assert.match(html,/Import CNC PDF/);
+ assert.match(html,/function chooseCncPdf\(closeEditor\)/);
  const pdfImport=html.slice(html.indexOf('function CncPdfImport'),html.indexOf('function CncDimensionBackfill'));
  assert.match(pdfImport,/"Choose PDF"/);
+ assert.match(html,/function chooseCncPdf\(closeEditor\)/);
+ assert.match(html,/initialFile:pdfImportFile/);
  assert.match(pdfImport,/className:"ps-entry-primary"/);
  assert.match(pdfImport,/className:"ps-entry-cancel"/);
  assert.match(pdfImport,/onClick:onClose/);
