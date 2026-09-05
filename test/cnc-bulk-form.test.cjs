@@ -19,8 +19,13 @@ test(repo+': mobile CNC entry keeps the remove button inside the form',()=>asser
   const result=prepare({...stock,orderNumber:'Order #0007',jobReference:'mERIDIAN CONSTRUCTIONS'},[{sheetNumber:' 01 ',panelNumber:'a73-219',totalPanelArea:'4.2'},{sheetNumber:'2',panelNumber:'0002',totalPanelArea:'3.1'},{sheetNumber:'',panelNumber:''}]);
   assert.equal(result.errors.length,0);assert.equal(result.rows.length,2);
   assert.deepEqual(JSON.parse(JSON.stringify(result.rows)),[
-   {orderNumber:'0007',jobReference:'Meridian Constructions',stockItemType:'variant',stockItemId:'stock-1',stockSku:'SKU-1',sheetWidth:4000,sheetHeight:1500,totalPanelArea:4.2,sheetNumber:'01',panelNumber:'A73-219'},
-   {orderNumber:'0007',jobReference:'Meridian Constructions',stockItemType:'variant',stockItemId:'stock-1',stockSku:'SKU-1',sheetWidth:4000,sheetHeight:1500,totalPanelArea:3.1,sheetNumber:'2',panelNumber:'0002'}]);
+   {orderNumber:'0007',jobReference:'Meridian Constructions',stockItemType:'variant',stockItemId:'stock-1',stockSku:'SKU-1',sheetWidth:4000,sheetHeight:1500,totalPanelArea:4.2,sheetNumber:'01',panelNumber:'A73-219',isRemake:false,isTemplate:false,remakeReason:''},
+   {orderNumber:'0007',jobReference:'Meridian Constructions',stockItemType:'variant',stockItemId:'stock-1',stockSku:'SKU-1',sheetWidth:4000,sheetHeight:1500,totalPanelArea:3.1,sheetNumber:'2',panelNumber:'0002',isRemake:false,isTemplate:false,remakeReason:''}]);
+ });
+ test(repo+': remake rows require a reason and preserve panel classifications',()=>{
+  assert.ok(prepare({...stock,orderNumber:'7',jobReference:'Test'},[{sheetNumber:'1',panelNumber:'A',totalPanelArea:1,isRemake:true}]).errors.some(error=>error.includes('reason')));
+  const result=prepare({...stock,orderNumber:'7',jobReference:'Test'},[{sheetNumber:'1',panelNumber:'A',totalPanelArea:1,isRemake:true,isTemplate:true,remakeReason:'  damaged finish  '}]);
+  assert.equal(result.errors.length,0);assert.equal(result.rows[0].isRemake,true);assert.equal(result.rows[0].isTemplate,true);assert.equal(result.rows[0].remakeReason,'damaged finish');
  });
  test(repo+': invalid or duplicate lines reject the entire batch',()=>{
   for(const [order,lines] of [

@@ -32,6 +32,7 @@
 .ps-entry-grid{display:grid;grid-template-columns:1fr 1fr 2fr;gap:16px;align-items:start}.ps-catalog-grid{grid-template-columns:1fr 1fr .58fr 2.02fr}
 .ps-entry label{display:block;min-width:0;font-size:12px;color:#475569}.ps-entry label>input{margin-top:6px}
 .ps-entry input{width:100%;min-width:0;height:42px;padding:10px 12px;border:1px solid #dbe3ef;border-radius:8px;font-size:14px;background:white}
+.ps-entry input[type="checkbox"]{width:18px;height:18px;margin:0;padding:0}
 .ps-entry input:focus{outline:2px solid #cce4eb;outline-offset:1px}.ps-entry-rows{min-width:0}.ps-entry-row,.ps-entry-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr)) 30px;gap:16px;align-items:center}
 .ps-entry-row{margin-bottom:8px}.ps-entry-columns{font-size:12px;color:#475569;margin-bottom:6px}.ps-entry-columns>span{min-width:0}
 .ps-cnc-row{grid-template-columns:minmax(90px,.8fr) minmax(110px,1fr) minmax(160px,1.35fr) 30px}.ps-cnc-row>input:nth-child(3){padding-left:14px;padding-right:14px}
@@ -13895,7 +13896,7 @@ ${xrefStart}
       return "";
     }
     function addCncPanel(input) {
-      const { orderNumber, jobReference, sheetNumber, panelNumber, stockItemType, stockItemId, stockSku, sheetWidth, sheetHeight, totalPanelArea, pendingOffcut, pdfPage } = normalizeCncInput(input);
+      const { orderNumber, jobReference, sheetNumber, panelNumber, stockItemType, stockItemId, stockSku, sheetWidth, sheetHeight, totalPanelArea, pendingOffcut, pdfPage, isRemake, isTemplate, remakeReason } = normalizeCncInput(input);
       const validationError=validateCncSchedule([{orderNumber,jobReference,sheetNumber,panelNumber,stockItemType,stockItemId}]);
       if(validationError){showToast(validationError,"err");return false;}
       const entry = {
@@ -13912,6 +13913,9 @@ ${xrefStart}
         totalPanelArea: Number(totalPanelArea),
         pendingOffcut: pendingOffcut || null,
         pdfPage: pdfPage || null,
+        isRemake,
+        isTemplate,
+        remakeReason,
         status: "pending",
         uploadedBy: username || "Unknown",
         uploadedAt: (/* @__PURE__ */ new Date()).toISOString(),
@@ -13944,6 +13948,9 @@ ${xrefStart}
         totalPanelArea: Number(r.totalPanelArea),
         pendingOffcut: r.pendingOffcut || null,
         pdfPage: r.pdfPage || null,
+        isRemake: r.isRemake,
+        isTemplate: r.isTemplate,
+        remakeReason: r.remakeReason,
         status: "pending",
         uploadedBy: username || "Unknown",
         uploadedAt: now,
@@ -14760,7 +14767,7 @@ ${xrefStart}
     const h = import_jsx_runtime.jsx;
     const field = (key, label, placeholder) => h("label", { children: [label, h(key === "orderNumber" || key === "jobReference" ? CapitalizedInput : "input", { value: form[key], placeholder, onChange: value => setForm({ ...form, [key]: key === "orderNumber" || key === "jobReference" ? value : value.target.value }) })] });
     const fmtDim=(a,b)=>`${Math.max(Number(a),Number(b))} × ${Math.min(Number(a),Number(b))}`,chooseStock=stock=>setForm({...form,stockItemType:stock?.itemType||"",stockItemId:stock?.id||"",stockSku:stock?.sku||"",sheetWidth:stock?.width||"",sheetHeight:stock?.height||""});
-    return h("div", { className: "ps-entry", children: [h("h2", { children: "Schedule a panel" }), h("p", { className: "ps-entry-intro", children: "Select the full panel or off-cut that will be deducted when this CNC sheet is completed." }), h("div", { className: "ps-entry-grid", children: [field("orderNumber", "Order number *", "e.g. 001234"), field("jobReference", "Job reference (optional)", "e.g. Meridian Constructions"),h(CncStockPicker,{variants,offcuts,cncPanels,selected:form.stockItemType&&form.stockItemId?`${form.stockItemType}:${form.stockItemId}`:"",onSelect:chooseStock}),h("p",{className:"ps-entry-note",children:form.stockItemId?`Sheet dimensions (Length × Width): ${fmtDim(form.sheetWidth,form.sheetHeight)} mm`:"Sheet dimensions populate from SOH."}), h("div", { className: "ps-entry-rows ps-entry-row ps-cnc-single-row", children: [field("sheetNumber", "Sheet number", "e.g. 1"), field("panelNumber", "Panel ID", "A73-219"),field("totalPanelArea","Total panel area (m²)","e.g. 4.75")] })] }), h("div", { className: "ps-entry-actions", children: [h("button", { onClick: onSave, disabled: !form.orderNumber || !form.sheetNumber || !form.panelNumber || !form.stockItemId || !(Number(form.totalPanelArea)>0), className: "ps-entry-primary", children: "Add to schedule" }), h("button", { onClick: onClose, className: "ps-entry-cancel", children: "Cancel" })] })] });
+    return h("div", { className: "ps-entry", children: [h("h2", { children: "Schedule a panel" }), h("p", { className: "ps-entry-intro", children: "Select the full panel or off-cut that will be deducted when this CNC sheet is completed." }), h("div", { className: "ps-entry-grid", children: [field("orderNumber", "Order number *", "e.g. 001234"), field("jobReference", "Job reference (optional)", "e.g. Meridian Constructions"),h(CncStockPicker,{variants,offcuts,cncPanels,selected:form.stockItemType&&form.stockItemId?`${form.stockItemType}:${form.stockItemId}`:"",onSelect:chooseStock}),h("p",{className:"ps-entry-note",children:form.stockItemId?`Sheet dimensions (Length × Width): ${fmtDim(form.sheetWidth,form.sheetHeight)} mm`:"Sheet dimensions populate from SOH."}), h("div", { className: "ps-entry-rows ps-entry-row ps-cnc-single-row", children: [field("sheetNumber", "Sheet number", "e.g. 1"), field("panelNumber", "Panel ID", "A73-219"),field("totalPanelArea","Total panel area (m²)","e.g. 4.75")] }),h(CncPanelTypeFields,{value:form,onChange:patch=>setForm({...form,...patch})})] }), h("div", { className: "ps-entry-actions", children: [h("button", { onClick: onSave, disabled: !form.orderNumber || !form.sheetNumber || !form.panelNumber || !form.stockItemId || !(Number(form.totalPanelArea)>0) || (form.isRemake&&!String(form.remakeReason||"").trim()), className: "ps-entry-primary", children: "Add to schedule" }), h("button", { onClick: onClose, className: "ps-entry-cancel", children: "Cancel" })] })] });
   }
   function CatalogSingleForm({ form, setForm, isEditing, onSave, onClose }) {
     const h = import_jsx_runtime.jsx;
@@ -15165,7 +15172,10 @@ function normalizeCncInput(row) {
   const jobReference = String(row.jobReference ?? '').trim().replace(/\s+/g, ' ').toLowerCase().replace(/(^|[\s-])\p{L}/gu, letter => letter.toUpperCase());
   const sheetNumber = String(row.sheetNumber ?? '').trim();
   const panelNumber = String(row.panelNumber ?? '').trim().replace(/^\p{L}/u, letter => letter.toUpperCase());
-  return {...row, orderNumber, jobReference, sheetNumber, panelNumber};
+  const isRemake = row.isRemake === true;
+  const isTemplate = row.isTemplate === true;
+  const remakeReason = isRemake ? String(row.remakeReason ?? '').trim().replace(/\s+/g, ' ') : '';
+  return {...row, orderNumber, jobReference, sheetNumber, panelNumber, isRemake, isTemplate, remakeReason};
 }
 
 function cncDuplicateKey(row) {
@@ -15272,7 +15282,8 @@ function compareCncOrders(a, b) {
       if (!sheetNumber || !panelNumber) { errors.push(`Line ${i + 1}: enter both a sheet number and panel ID.`); return; }
       const totalPanelArea=Number(line.totalPanelArea);
       if(!(totalPanelArea>0))errors.push(`Line ${i + 1}: enter the total panel area in m².`);
-      const row = normalizeCncInput({ orderNumber: shared.orderNumber, jobReference: shared.jobReference,stockItemType:order.stockItemType,stockItemId:order.stockItemId,stockSku:order.stockSku,sheetWidth:Number(order.sheetWidth),sheetHeight:Number(order.sheetHeight),totalPanelArea, sheetNumber, panelNumber });
+      const row = normalizeCncInput({ orderNumber: shared.orderNumber, jobReference: shared.jobReference,stockItemType:order.stockItemType,stockItemId:order.stockItemId,stockSku:order.stockSku,sheetWidth:Number(order.sheetWidth),sheetHeight:Number(order.sheetHeight),totalPanelArea, sheetNumber, panelNumber,isRemake:line.isRemake===true,isTemplate:line.isTemplate===true,remakeReason:line.remakeReason||"" });
+      if(row.isRemake&&!row.remakeReason)errors.push(`Line ${i + 1}: enter a reason for the remake.`);
       if (row.sheetNumber.length > 200 || row.panelNumber.length > 200) errors.push(`Line ${i + 1}: sheet number and panel ID must be 200 characters or fewer.`);
       const key = JSON.stringify([row.sheetNumber, row.panelNumber]);
       if (seen.has(key)) errors.push(`Line ${i + 1}: this sheet and panel ID are repeated.`);
@@ -15283,9 +15294,13 @@ function compareCncOrders(a, b) {
     if (!rows.length && !errors.length) errors.push("Add at least one sheet number and panel ID.");
     return { rows: errors.length ? [] : rows, errors };
   }
+  function CncPanelTypeFields({value,onChange}) {
+    const h=import_jsx_runtime.jsx;
+    return h("div",{className:"col-span-full rounded-xl border border-slate-200 bg-slate-50 p-4",children:[h("p",{className:"mb-3 text-xs font-semibold text-slate-600",children:"Panel type"}),h("div",{className:"flex flex-wrap gap-5",children:[h("label",{className:"inline-flex items-center gap-2 text-sm font-medium text-slate-700",children:[h("input",{type:"checkbox",checked:value.isRemake===true,onChange:e=>onChange({isRemake:e.target.checked,remakeReason:e.target.checked?(value.remakeReason||""):""})}),"Remake"]}),h("label",{className:"inline-flex items-center gap-2 text-sm font-medium text-slate-700",children:[h("input",{type:"checkbox",checked:value.isTemplate===true,onChange:e=>onChange({isTemplate:e.target.checked})}),"Template"]})]}),value.isRemake&&h("label",{className:"mt-3 block text-xs font-semibold text-slate-600",children:["Reason for remake *",h("input",{value:value.remakeReason||"",maxLength:500,placeholder:"Enter the reason this panel is being remade",onChange:e=>onChange({remakeReason:e.target.value}),className:inputCls+" mt-1"})]})]});
+  }
   function CncBulkForm({ onSave, onClose, variants, offcuts, cncPanels }) {
     const [order, setOrder] = useState({ orderNumber: "", jobReference: "",stockItemType:"",stockItemId:"",stockSku:"",sheetWidth:"",sheetHeight:"" });
-    const [lines, setLines] = useState([{ id: 1, sheetNumber: "", panelNumber: "",totalPanelArea:"" }]);
+    const [lines, setLines] = useState([{ id: 1, sheetNumber: "", panelNumber: "",totalPanelArea:"",isRemake:false,isTemplate:false,remakeReason:"" }]);
     const [errors, setErrors] = useState([]);
     const nextId = useRef(2);
     const saving = useRef(false);
@@ -15299,7 +15314,7 @@ function compareCncOrders(a, b) {
     }
     function addLine() {
       const id = nextId.current++;
-      setLines(current => [...current, { id, sheetNumber: "", panelNumber: "",totalPanelArea:"" }]);
+      setLines(current => [...current, { id, sheetNumber: "", panelNumber: "",totalPanelArea:"",isRemake:false,isTemplate:false,remakeReason:"" }]);
     }
     function submit(event) {
       event.preventDefault();
@@ -15321,12 +15336,12 @@ function compareCncOrders(a, b) {
         h(CncStockPicker,{variants,offcuts,cncPanels,selected:order.stockItemType&&order.stockItemId?`${order.stockItemType}:${order.stockItemId}`:"",onSelect:stock=>setOrder({...order,stockItemType:stock?.itemType||"",stockItemId:stock?.id||"",stockSku:stock?.sku||"",sheetWidth:stock?.width||"",sheetHeight:stock?.height||""})}),
         h("div", { className: "ps-entry-rows", children: [
           h("div", { className: "ps-entry-columns ps-cnc-row", children: [h("span", { children: "Sheet number" }), h("span", { children: "Panel ID" }),h("span",{children:"Total panel area (m²)"})] }),
-          ...lines.map((line, i) => h("div", { className: "ps-entry-row ps-cnc-row", children: [
+          ...lines.map((line, i) => h("div", { className: "rounded-xl border border-slate-200 p-3", children: [h("div", { className: "ps-entry-row ps-cnc-row", children: [
             h("input", { "aria-label": "Sheet number line " + (i + 1), value: line.sheetNumber, placeholder: "e.g. 1", onChange: e => updateLine(line.id, "sheetNumber", e.target.value) }),
             h("input", { "aria-label": "Panel ID line " + (i + 1), value: line.panelNumber, placeholder: "A73-219", onChange: e => updateLine(line.id, "panelNumber", e.target.value) }),
             h("input", { type:"number",min:"0.01",step:"0.01","aria-label":"Total panel area line "+(i+1),value:line.totalPanelArea,placeholder:"4.75",onChange:e=>updateLine(line.id,"totalPanelArea",e.target.value)}),
             h("button", { type: "button", className: "ps-entry-trash", "aria-label": "Remove line " + (i + 1), onClick: () => { setLines(current => current.filter(item => item.id !== line.id)); setErrors([]); }, children: h(Trash2, { size: 16 }) })
-          ] }, line.id)),
+          ] }),h(CncPanelTypeFields,{value:line,onChange:patch=>{setLines(current=>current.map(item=>item.id===line.id?{...item,...patch}:item));setErrors([]);}})] }, line.id)),
           h("button", { type: "button", onClick: addLine, className: "ps-entry-add", children: "+ Add line" })
         ] })
       ] }),
@@ -15341,7 +15356,7 @@ function compareCncOrders(a, b) {
     const update=(index,patch)=>setPages(current=>current.map((page,i)=>i===index?{...page,...patch}:page));
     async function analyse(event){const file=event.target.files?.[0];if(!file)return;setFileName(file.name);if(file.type!=="application/pdf"||file.size>8*1024*1024){setError("Choose a PDF under 8 MB.");return;}setBusy(true);setError("");try{const pdf=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file);}),response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/cnc-pdf/analyse",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pdf})}),result=await response.json();if(!response.ok)throw Error(result.error||"The CNC PDF could not be analysed.");setPages((result.pages||[]).map(page=>{const stock=choices.find(item=>Number(item.width)===Number(page.sheetWidth)&&Number(item.height)===Number(page.sheetHeight)&&String(page.material||"").toLowerCase().includes(String(item.material||"").toLowerCase()));return {...page,jobReference:projectTitleCase(page.project),panelNumbers:(page.panelIds||[]).join(", "),stockItemType:stock?.id?(offcuts.some(value=>value.id===stock.id)?"offcut":"variant"):"",stockItemId:stock?.id||"",stockSku:stock?.sku||"",offcutLength:page.proposedOffcut?.length||"",offcutWidth:page.proposedOffcut?.width||""};}));}catch(reason){setError(reason.message||"The CNC PDF could not be analysed.");}finally{setBusy(false);}}
     useEffect(()=>{if(initialFile)void analyse({target:{files:[initialFile]}});},[initialFile]);
-    function submit(){const rows=[];for(const page of pages){const ids=String(page.panelNumbers||"").split(",").map(value=>value.trim()).filter(Boolean);if(!page.orderNumber||!page.sheetNumber||!page.stockItemId||!ids.length||!(Number(page.panelArea)>0)){setError("Review every page and select its stock sheet, panel IDs and panel area.");return;}for(let copy=0;copy<Number(page.quantity||1);copy++)for(const panelNumber of ids)rows.push(normalizeCncInput({orderNumber:page.orderNumber,jobReference:page.jobReference,sheetNumber:copy?`${page.sheetNumber}.${copy+1}`:page.sheetNumber,panelNumber,stockItemType:page.stockItemType,stockItemId:page.stockItemId,stockSku:page.stockSku,sheetWidth:Number(page.sheetWidth),sheetHeight:Number(page.sheetHeight),totalPanelArea:Number(page.panelArea),pdfPage:page.page,pendingOffcut:Number(page.offcutLength)>0&&Number(page.offcutWidth)>0?{length:Number(page.offcutLength),width:Number(page.offcutWidth),status:"pending",source:"cnc-pdf"}:null}));}if(onSave(rows)===false)return;onClose();}
+    function submit(){const rows=[];for(const page of pages){const ids=String(page.panelNumbers||"").split(",").map(value=>value.trim()).filter(Boolean);if(!page.orderNumber||!page.sheetNumber||!page.stockItemId||!ids.length||!(Number(page.panelArea)>0)){setError("Review every page and select its stock sheet, panel IDs and panel area.");return;}if(page.isRemake&&!String(page.remakeReason||"").trim()){setError(`PDF page ${page.page}: enter a reason for the remake.`);return;}for(let copy=0;copy<Number(page.quantity||1);copy++)for(const panelNumber of ids)rows.push(normalizeCncInput({orderNumber:page.orderNumber,jobReference:page.jobReference,sheetNumber:copy?`${page.sheetNumber}.${copy+1}`:page.sheetNumber,panelNumber,stockItemType:page.stockItemType,stockItemId:page.stockItemId,stockSku:page.stockSku,sheetWidth:Number(page.sheetWidth),sheetHeight:Number(page.sheetHeight),totalPanelArea:Number(page.panelArea),pdfPage:page.page,isRemake:page.isRemake===true,isTemplate:page.isTemplate===true,remakeReason:page.remakeReason||"",pendingOffcut:Number(page.offcutLength)>0&&Number(page.offcutWidth)>0?{length:Number(page.offcutLength),width:Number(page.offcutWidth),status:"pending",source:"cnc-pdf"}:null}));}if(onSave(rows)===false)return;onClose();}
     return h("div",null,[h(PageHeading,{icon:h(Upload,{size:22}),title:"Import CNC program PDF",subtitle:"Upload one complete order PDF, review every detected sheet, then add it to the CNC schedule."}),h("div",{className:"rounded-xl border border-slate-300 bg-white p-5"},[h("div",{className:"flex flex-wrap items-center gap-3"},[h("label",{className:"inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"},[h(Upload,{size:16}),busy?"Analysing…":fileName?"Choose another PDF":"Choose PDF",h("input",{type:"file",accept:"application/pdf",onChange:analyse,disabled:busy,className:"sr-only"})]),fileName&&h("span",{className:"min-w-0 truncate text-sm text-slate-500"},fileName)]),busy&&h("p",{className:"mt-3 text-sm text-slate-500"},"Analysing every page…"),error&&h("p",{role:"alert",className:"mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700"},error)]),pages.map((page,index)=>h("section",{key:page.page,className:"mt-4 rounded-xl border border-slate-300 bg-white p-5 space-y-4"},[h("div",{className:"flex justify-between gap-3"},[h("strong",null,`PDF page ${page.page}`),h("span",{className:"text-sm text-slate-500"},page.warnings?.length?page.warnings.join(" · "):"All fields detected")]),h("div",{className:"grid grid-cols-2 gap-3"},[h(Field,{label:"Project",children:h("input",{className:inputCls,value:page.jobReference,onChange:event=>update(index,{jobReference:event.target.value})})}),h(Field,{label:"Order number",children:h("input",{className:inputCls,value:page.orderNumber,onChange:event=>update(index,{orderNumber:event.target.value})})}),h(Field,{label:"Sheet number",children:h("input",{className:inputCls,value:page.sheetNumber,onChange:event=>update(index,{sheetNumber:event.target.value})})}),h(Field,{label:"Panel IDs (comma separated)",children:h("input",{className:inputCls,value:page.panelNumbers,onChange:event=>update(index,{panelNumbers:event.target.value})})}),h(Field,{label:"Panel area (m²)",children:h("input",{type:"number",step:"0.01",className:inputCls,value:page.panelArea,onChange:event=>update(index,{panelArea:event.target.value})})}),h("div",null,h(CncStockPicker,{variants,offcuts,selected:page.stockItemType&&page.stockItemId?`${page.stockItemType}:${page.stockItemId}`:"",onSelect:stock=>update(index,{stockItemType:stock?.itemType||"",stockItemId:stock?.id||"",stockSku:stock?.sku||"",sheetWidth:stock?.width||page.sheetWidth,sheetHeight:stock?.height||page.sheetHeight})}))]),h("div",{className:"rounded-lg bg-cyan-50 border border-cyan-200 p-3"},[h("p",{className:"text-sm font-semibold text-cyan-900"},"Proposed off-cut (confirm when completing the sheet)"),h("div",{className:"mt-2 grid grid-cols-2 gap-3"},[h("input",{type:"number",className:inputCls,"aria-label":"Off-cut length",value:page.offcutLength,onChange:event=>update(index,{offcutLength:event.target.value})}),h("input",{type:"number",className:inputCls,"aria-label":"Off-cut width",value:page.offcutWidth,onChange:event=>update(index,{offcutWidth:event.target.value})})])])])),h("div",{className:"ps-entry-actions"},[pages.length>0&&h("button",{type:"button",onClick:submit,className:"ps-entry-primary"},"Add reviewed sheets to schedule"),h("button",{type:"button",onClick:onClose,className:"ps-entry-cancel"},"Cancel")])]);
   }
   function CncDimensionBackfill({ panels, onSave, onClose }) {
@@ -15392,7 +15407,7 @@ function compareCncOrders(a, b) {
     const [pdfImportOpen, setPdfImportOpen] = useState(false);
     const [pdfImportFile, setPdfImportFile] = useState(null);
     const [backfillOpen, setBackfillOpen] = useState(false);
-    const [form, setForm] = useState({ orderNumber: "", jobReference: "", sheetNumber: "", panelNumber: "",stockItemType:"",stockItemId:"",stockSku:"",sheetWidth:"",sheetHeight:"",totalPanelArea:"" });
+    const [form, setForm] = useState({ orderNumber: "", jobReference: "", sheetNumber: "", panelNumber: "",stockItemType:"",stockItemId:"",stockSku:"",sheetWidth:"",sheetHeight:"",totalPanelArea:"",isRemake:false,isTemplate:false,remakeReason:"" });
     const [linkCopied, setLinkCopied] = useState(false);
     const shareableLink = `https://cnc.panelstockhq.com/cnc-tracker/view?token=${encodeURIComponent(CNC_PUBLIC_TOKEN)}`;
     const excelLink = `https://cnc.panelstockhq.com/cnc-tracker?token=${encodeURIComponent(CNC_PUBLIC_TOKEN)}`;
@@ -15415,7 +15430,7 @@ function compareCncOrders(a, b) {
       if (!cleaned.orderNumber) { setInputError("Enter an order number containing digits after Order."); return; }
       setInputError("");
       if(onAddPanel(cleaned)===false)return;
-      setForm({ orderNumber: "", jobReference: "", sheetNumber: "", panelNumber: "",stockItemType:"",stockItemId:"",stockSku:"",sheetWidth:"",sheetHeight:"",totalPanelArea:"" });
+      setForm({ orderNumber: "", jobReference: "", sheetNumber: "", panelNumber: "",stockItemType:"",stockItemId:"",stockSku:"",sheetWidth:"",sheetHeight:"",totalPanelArea:"",isRemake:false,isTemplate:false,remakeReason:"" });
       setAddOpen(false);
     }
     function chooseCncPdf(closeEditor){const input=document.createElement("input");input.type="file";input.accept="application/pdf";input.onchange=()=>{const file=input.files?.[0];if(!file)return;setPdfImportFile(file);closeEditor();setPdfImportOpen(true);};input.click();}
@@ -15498,6 +15513,9 @@ function compareCncOrders(a, b) {
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: groupPanels.map((p, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { className: `border-t border-slate-100 ${i % 2 === 1 ? "bg-slate-50/30" : ""}`, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center gap-2 pl-2", children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "font-bold text-slate-800", children: ["Panel ", normalizeCncInput(p).panelNumber] }),
+              p.isRemake && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { title: p.remakeReason ? `Remake reason: ${p.remakeReason}` : "Remake", className: "shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800", children: "Remake" }),
+              p.isTemplate && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "shrink-0 rounded-full bg-cyan-100 px-2 py-0.5 text-[10px] font-semibold text-cyan-800", children: "Template" }),
+              p.isRemake && p.remakeReason && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "text-xs text-amber-800", children: ["Reason: ", p.remakeReason] }),
               p.sheetWidth&&p.sheetHeight&&/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span",{className:"text-xs text-slate-500",children:`${p.sheetWidth} × ${p.sheetHeight} mm${p.totalPanelArea?` · ${p.totalPanelArea} m² panels`:""}`}),
               i===0&&cncEstimatedOffcut(groupPanels)&&/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span",{className:"rounded-full bg-cyan-50 px-2 py-1 text-xs font-semibold text-cyan-800",children:`Estimated off-cut ${fmtDim(cncEstimatedOffcut(groupPanels).length,cncEstimatedOffcut(groupPanels).width)} mm`}),
               isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", "aria-label": "Remove panel " + normalizeCncInput(p).panelNumber, className: "shrink-0 p-1", onClick: async () => {
