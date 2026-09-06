@@ -170,6 +170,10 @@ test('web navigation uses exclusive parent sections and standalone CNC and profi
  assert.match(html,/label:"My Profile",active:navSelection==="profile"/);
  assert.match(navigation,/label:"Receive"[^}]+icon:/);
  assert.match(navigation,/label:"Schedule"[^}]+icon:/);
+ const workNavigation=navigation.slice(navigation.indexOf('key:"workGroup"'),navigation.indexOf('key:"adminGroup"'));
+ assert.ok(workNavigation.indexOf('label:"Schedule"')<workNavigation.indexOf('label:"Projects"'));
+ assert.ok(workNavigation.indexOf('label:"Projects"')<workNavigation.indexOf('label:"Jobs"'));
+ assert.ok(workNavigation.indexOf('label:"Jobs"')<workNavigation.indexOf('label:"Site Orders"'));
  assert.match(navigation,/label:"User Access"[^}]+icon:/);
  assert.match(html,/SideNavItem,\{icon:item\.icon,label:item\.label/);
 });
