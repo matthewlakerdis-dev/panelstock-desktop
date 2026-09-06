@@ -157,6 +157,9 @@ test('web navigation uses exclusive parent sections and standalone CNC and profi
  assert.match(html,/label:"CNC",active:navSelection==="cnc"/);
  assert.match(navigation,/label:"User Access"/);
  assert.match(navigation,/label:"Projects",target:"projects"/);
+ assert.match(navigation,/key:"projects",label:"Projects",target:"projects",icon:[^\n]+ProjectPlanIcon/);
+ assert.match(html,/function ProjectPlanIcon/);
+ assert.match(html,/projectsOnly \? ProjectPlanIcon : ClipboardList/);
  assert.match(html,/tab === "projects"/);
  assert.match(html,/projects:"Projects"/);
  assert.match(html,/isAdmin\|\|can\('site\.orders\.manage'\)\?\[\['projects',null\]\]/);
@@ -169,6 +172,14 @@ test('web navigation uses exclusive parent sections and standalone CNC and profi
  assert.match(html,/setOpenNavGroup\(current=>current===group\.key\?null:group\.key\)/);
  assert.match(html,/label:"My Profile",active:navSelection==="profile"/);
  assert.match(navigation,/label:"Receive"[^}]+icon:/);
+ assert.match(navigation,/key:"stock",label:"SOH",target:"stock",icon:[^\n]+StockOnHandIcon/);
+ assert.match(html,/function StockOnHandIcon/);
+ assert.match(navigation,/key:"receive",label:"Receive",target:"receive",icon:[^\n]+ReceiveStockIcon/);
+ assert.match(html,/function ReceiveStockIcon/);
+ assert.match(html,/ReceiveStockIcon, \{ size: 18 \}[^\n]+title: "Receive stock"/);
+ assert.match(html,/function AuditCentreIcon/);
+ assert.match(navigation,/key:"audit",label:"Audit Centre",target:"audit",icon:[^\n]+AuditCentreIcon/);
+ assert.match(html,/function AuditCenter\([^)]*\) \{\s*const ClipboardList=AuditCentreIcon;/);
  assert.match(navigation,/label:"Schedule"[^}]+icon:/);
  const workNavigation=navigation.slice(navigation.indexOf('key:"workGroup"'),navigation.indexOf('key:"adminGroup"'));
  assert.ok(workNavigation.indexOf('label:"Schedule"')<workNavigation.indexOf('label:"Projects"'));
