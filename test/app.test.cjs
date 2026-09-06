@@ -13,6 +13,12 @@ test('desktop scripts parse and do not contain the shared backend credential',()
  assert.match(html,/attempts >= 3 && await PanelStock\.confirm/);
  assert.match(html,/\/passcode-reset-request/);
  assert.match(html,/Passcode reset request sent to the administrators\./);
+ assert.match(html,/const \[newReasonPhotoOptional, setNewReasonPhotoOptional\] = useState\(false\)/);
+ assert.match(html,/onAddReason\(newReason, newReasonPhotoOptional\)/);
+ assert.match(html,/selectedReason\?\.photoOptional !== true/);
+ assert.match(html,/label: photoRequired \?[\s\S]*: "Photo of damage"/);
+ assert.match(html,/"aria-hidden": !photoRequired[\s\S]*children: photoRequired \? "At least one photo is required before this can be submitted\." : ""/);
+ assert.doesNotMatch(html,/Leaving a usable off-cut behind/);
  assert.match(html,/\/admin\/unlock-user/);
  assert.match(html,/children:"Unlock account"/);
  assert.match(html,/Number\(u\.lockedUntil\)>Date\.now\(\)\?"Locked"/);

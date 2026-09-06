@@ -12,6 +12,10 @@ test('Web conversion uses the full-panel picker and entered output dimensions',(
   assert.match(source,/Width \(mm\)/);
   assert.match(source,/output\.length/);
   assert.match(source,/output\.width/);
+  assert.match(source,/ConvertMaterialSummary/);
+  assert.match(source,/disabled:!source/);
+  assert.doesNotMatch(source,/source&&outputs\.map/);
+  assert.doesNotMatch(source,/source&&.*Source quantity/);
   assert.match(source,/onClick:submit/);
   assert.match(source,/===true/);
   assert.match(source,/setSource\(null\)/);
