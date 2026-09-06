@@ -1,5 +1,10 @@
 # PanelStock release notes
 
+## CNC off-cut allowance — 7 September 2026
+
+- Increased the shared CNC PDF off-cut allowance from 5 mm to 10 mm on the newly cut edge only. Factory-edge dimensions are unchanged, and strips with no usable size after the allowance are not suggested.
+- Applies to newly analysed PDFs in both apps after the companion converter is published. Existing saved off-cuts and historical suggestions are not recalculated.
+
 ## Audit Centre and CNC workflow — 6 September 2026
 
 - Audit Centre places a two-column statistics grid and a two-column/four-row filter panel in a left rail, with records on the right. The list holds at most 30 records; reaching the bottom advances to the next batch. Previous/Next controls retain keyboard access, and changing filters returns to the first batch.
