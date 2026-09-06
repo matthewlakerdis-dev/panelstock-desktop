@@ -15330,8 +15330,8 @@ function compareCncOrders(a, b) {
     }
     const field = (label, props) => h("label", { className: "block min-w-0 text-xs font-semibold text-slate-600", children: [label, h("input", { ...props, type: "text", className: inputCls + " mt-1 w-full", autoComplete: "off" })] });
     return h("form", { onSubmit: submit, noValidate: true, className: "ps-entry", children: [
-      h("h2", { children: "Schedule multiple panels" }),
-      h("p", { className: "ps-entry-intro", children: "Enter the order and job once, then add your panels." }),
+      h("h2", { children: "Schedule CNC panels" }),
+      h("p", { className: "ps-entry-intro", children: "Enter the order and material once, then add one or more panels." }),
       h("div", { className: "ps-entry-grid", children: [
         field("Order number *", { required: true, value: order.orderNumber, placeholder: "e.g. 001234", onChange: e => { setOrder({ ...order, orderNumber: e.target.value }); setErrors([]); } }),
         field("Job reference *", { required: true, value: order.jobReference, placeholder: "e.g. Meridian Constructions", onChange: e => setOrder({ ...order, jobReference: e.target.value }) }),
@@ -15436,9 +15436,8 @@ function compareCncOrders(a, b) {
       setAddOpen(false);
     }
     function chooseCncPdf(closeEditor){const input=document.createElement("input");input.type="file";input.accept="application/pdf";input.onchange=()=>{const file=input.files?.[0];if(!file)return;setPdfImportFile(file);closeEditor();setPdfImportOpen(true);};input.click();}
-    if (isAdmin && bulkOpen) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeading, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncRouterIcon, { size: 22 }), title: "Bulk CNC scheduling", subtitle: "Schedule multiple panels against a selected material.", action:h("button",{type:"button",onClick:()=>chooseCncPdf(()=>setBulkOpen(false)),className:"inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"},h(Upload,{size:16}),"Import CNC PDF") }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncBulkForm, { variants, offcuts, cncPanels, onSave: onAddPanelsBulk, onClose: () => setBulkOpen(false) })] });
     if (isAdmin && pdfImportOpen) return h(CncPdfImport,{variants,offcuts,cncPanels,initialFile:pdfImportFile,onSave:onAddPanelsBulk,onClose:()=>{setPdfImportOpen(false);setPdfImportFile(null);}});
-    if (isAdmin && addOpen) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [inputError && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { role: "alert", className: "text-sm text-red-700 p-3", children: inputError }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeading, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncRouterIcon, { size: 22 }), title: "Schedule a CNC panel", subtitle: "Add one panel against a selected material.", action:h("button",{type:"button",onClick:()=>chooseCncPdf(()=>setAddOpen(false)),className:"inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"},h(Upload,{size:16}),"Import CNC PDF") }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncSingleForm, { variants, offcuts, cncPanels, form, setForm, onSave: submitAdd, onClose: () => setAddOpen(false) })] });
+    if (isAdmin && addOpen) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeading, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncRouterIcon, { size: 22 }), title: "Schedule CNC panels", subtitle: "Schedule one or more panels against a selected material.", action:h("button",{type:"button",onClick:()=>chooseCncPdf(()=>setAddOpen(false)),className:"inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"},h(Upload,{size:16}),"Import CNC PDF") }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncBulkForm, { variants, offcuts, cncPanels, onSave: onAddPanelsBulk, onClose: () => setAddOpen(false) })] });
     if (isAdmin && backfillOpen) return h(CncDimensionBackfill, { panels: cncPanels, onSave: onBackfillDimensions, onClose: () => setBackfillOpen(false) });
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
       inputError && (0, import_jsx_runtime.jsx)("p", { role: "alert", className: "text-sm text-red-700 p-3", children: inputError }),
@@ -15451,15 +15450,7 @@ function compareCncOrders(a, b) {
           subtitle: "Panels scheduled to be cut, and their completion status. The shareable link always reflects the latest data \u2014 no need to re-send it.",
           action: isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center gap-2", children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => {
-                setBulkOpen(!bulkOpen);
-                setAddOpen(false);
-              }, className: "flex items-center gap-1.5 text-sm font-medium text-slate-600 border border-slate-300 bg-white rounded-lg px-3 py-2 hover:bg-slate-50", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Plus, { size: 15 }),
-                " Bulk entry"
-              ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => {
                 setAddOpen(!addOpen);
-                setBulkOpen(false);
               }, className: "flex items-center gap-1.5 text-sm font-medium text-white bg-cyan-800 rounded-lg px-3 py-2 hover:bg-cyan-900", children: [
                 /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Plus, { size: 15 }),
                 " Schedule panel"

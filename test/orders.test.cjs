@@ -107,10 +107,10 @@ test('web manages the shared schedule',()=>{
  const schedule=html.slice(html.indexOf('function SchedulePage'),html.indexOf('function OrdersPage'));
  assert.doesNotMatch(schedule,/Import CNC PDF/);
  const cnc=html.slice(html.indexOf('function CncPage'),html.indexOf('function ScheduleTimeField'));
- assert.match(cnc,/title: "Bulk CNC scheduling"[\s\S]+?"Import CNC PDF"/);
- assert.match(cnc,/title: "Schedule a CNC panel"[\s\S]+?"Import CNC PDF"/);
+ assert.match(cnc,/title: "Schedule CNC panels"[\s\S]+?"Import CNC PDF"/);
  assert.match(cnc,/CncBulkForm, \{ variants, offcuts, cncPanels,/);
- assert.match(cnc,/CncSingleForm, \{ variants, offcuts, cncPanels,/);
+ assert.doesNotMatch(cnc,/CncSingleForm, \{ variants, offcuts, cncPanels,/);
+ assert.doesNotMatch(cnc,/" Bulk entry"/);
  assert.doesNotMatch(schedule,/"Status"/);
  assert.ok(schedule.indexOf('"Person"')<schedule.indexOf('"Project"'));
  assert.match(schedule,/grid-cols-\[1fr_auto_1fr\]/);
