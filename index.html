@@ -37,6 +37,7 @@
 .ps-entry-row{margin-bottom:8px}.ps-entry-columns{font-size:12px;color:#475569;margin-bottom:6px}.ps-entry-columns>span{min-width:0}
 .ps-cnc-row{grid-template-columns:minmax(90px,.8fr) minmax(110px,1fr) minmax(160px,1.35fr) 30px}.ps-cnc-row>input:nth-child(3){padding-left:14px;padding-right:14px}
 .ps-cnc-single-row{grid-template-columns:minmax(100px,.8fr) minmax(120px,1fr) minmax(180px,1.4fr)}
+.ps-cnc-schedule-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
 @media(max-width:540px){.ps-cnc-single-row{grid-template-columns:1fr 1fr}.ps-cnc-single-row>label:last-child{grid-column:1/-1}}
 .ps-catalog-row{grid-template-columns:repeat(3,minmax(0,1fr)) 30px;gap:10px}.ps-single-row{grid-template-columns:repeat(2,minmax(0,1fr))}
 .ps-entry-actions{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:12px}.ps-entry-primary{background:#155e75;color:white;border-radius:8px;padding:12px 20px;font-size:14px;font-weight:600}.ps-entry-primary:hover:not(:disabled){background:#164e63}.ps-entry-primary:disabled{opacity:.4;cursor:not-allowed}.ps-entry-cancel{color:#475569;background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:11px 16px;font-size:14px;font-weight:600}.ps-entry-cancel:hover:not(:disabled){background:#f8fafc}
@@ -52,6 +53,7 @@
 @media(min-width:1024px){.ps-edit-user>div:has(input[readonly][class*="tracking-widest"]){grid-template-columns:minmax(0,1fr) 480px}}
 @container (max-width:820px){.ps-catalog-grid{grid-template-columns:1fr 1fr 1fr}.ps-catalog-grid>.ps-entry-rows{grid-column:1/-1}}
 @container (max-width:620px){.ps-entry-grid{grid-template-columns:1fr 1fr}.ps-entry-rows{grid-column:1/-1}}
+@container (max-width:620px){.ps-cnc-schedule-grid{grid-template-columns:1fr}}
 @container (max-width:440px){.ps-entry-grid,.ps-catalog-grid{grid-template-columns:1fr}.ps-cnc-row{grid-template-columns:minmax(0,.8fr) minmax(0,1fr) minmax(0,1.35fr) 26px}.ps-cnc-row>.ps-entry-trash{width:26px}.ps-catalog-row input{padding:9px 6px;font-size:12px}.ps-entry-row,.ps-entry-columns{gap:8px}.ps-entry-columns{font-size:11px}}
 
 /* Place catalog guidance between shared material details and size entry. */
@@ -15332,11 +15334,14 @@ function compareCncOrders(a, b) {
     return h("form", { onSubmit: submit, noValidate: true, className: "ps-entry", children: [
       h("h2", { children: "Schedule CNC panels" }),
       h("p", { className: "ps-entry-intro", children: "Enter the order and material once, then add one or more panels." }),
-      h("div", { className: "ps-entry-grid", children: [
-        field("Order number *", { required: true, value: order.orderNumber, placeholder: "e.g. 001234", onChange: e => { setOrder({ ...order, orderNumber: e.target.value }); setErrors([]); } }),
-        field("Job reference *", { required: true, value: order.jobReference, placeholder: "e.g. Meridian Constructions", onChange: e => setOrder({ ...order, jobReference: e.target.value }) }),
-        h(CncStockPicker,{variants,offcuts,cncPanels,selected:order.stockItemType&&order.stockItemId?`${order.stockItemType}:${order.stockItemId}`:"",onSelect:stock=>setOrder({...order,stockItemType:stock?.itemType||"",stockItemId:stock?.id||"",stockSku:stock?.sku||"",sheetWidth:stock?.width||"",sheetHeight:stock?.height||""})}),
-        h("div", { className: "ps-entry-rows", children: [
+      h("div", { className: "ps-entry-grid ps-cnc-schedule-grid", children: [
+        h("div",{className:"space-y-4",children:[
+          field("Project / job reference *", { required: true, value: order.jobReference, placeholder: "e.g. Meridian Constructions", onChange: e => setOrder({ ...order, jobReference: e.target.value }) }),
+          field("Order number *", { required: true, value: order.orderNumber, placeholder: "e.g. 001234", onChange: e => { setOrder({ ...order, orderNumber: e.target.value }); setErrors([]); } }),
+          order.stockItemId&&h("p",{className:"text-xs text-slate-500",children:`Selected sheet: ${fmtDim(order.sheetWidth,order.sheetHeight)} mm (Length × Width)`})
+        ]}),
+        h("div",{className:"min-w-0",children:h(CncStockPicker,{variants,offcuts,cncPanels,selected:order.stockItemType&&order.stockItemId?`${order.stockItemType}:${order.stockItemId}`:"",onSelect:stock=>setOrder({...order,stockItemType:stock?.itemType||"",stockItemId:stock?.id||"",stockSku:stock?.sku||"",sheetWidth:stock?.width||"",sheetHeight:stock?.height||""})})}),
+        h("div", { className: "ps-entry-rows col-span-full", children: [
           h("div", { className: "ps-entry-columns ps-cnc-row", children: [h("span", { children: "Sheet number" }), h("span", { children: "Panel ID" }),h("span",{children:"Total panel area (m²)"})] }),
           ...lines.map((line, i) => h("div", { className: "rounded-xl border border-slate-200 p-3", children: [h("div", { className: "ps-entry-row ps-cnc-row", children: [
             h("input", { "aria-label": "Sheet number line " + (i + 1), value: line.sheetNumber, placeholder: "e.g. 1", onChange: e => updateLine(line.id, "sheetNumber", e.target.value) }),
