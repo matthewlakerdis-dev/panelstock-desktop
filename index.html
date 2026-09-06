@@ -13654,16 +13654,23 @@ ${xrefStart}
           saveKey(STORAGE_KEYS.emailConfig, { workerUrl: BAKED_WORKER_URL });
           if (user) {
             PanelStock.apiFetch(BAKED_WORKER_URL + "/profile").then(async response=>{if(response.ok&&active)setOwnProfile((await response.json()).profile);}).catch(()=>{});
-            const shareResponse = await PanelStock.apiFetch(BAKED_WORKER_URL + "/cnc-share");
-            if (shareResponse.ok) CNC_PUBLIC_TOKEN = (await shareResponse.json()).token;
+            // Optional metadata must not delay or prevent restoring the saved stock view.
+            PanelStock.apiFetch(BAKED_WORKER_URL + "/cnc-share").then(async response => {
+              if (!response.ok) return;
+              const share = await response.json();
+              if (active && PanelStock.username === user.username) CNC_PUBLIC_TOKEN = share.token;
+            }).catch(() => {});
             const data = await PanelStock.snapshot();
             if (!active) return;
             if (data) { setVariants(data.variants || []); setOffcuts(data.offcuts || []);
           setTransactions(data.transactions || []); setReasons(ensureMissingPanelReason(data.reasons));
           setCatalog(data.catalog || []); setPhotos(data.photos || {}); setCncPanels(data.cncPanels || []); setUsername(user.username); setIsAdmin(user.isAdmin); setTaskAccess(user.taskAccess || {}); }
             if (user.isAdmin) {
-              const response = await PanelStock.apiFetch(BAKED_WORKER_URL + "/config");
-              if (response.ok && active) setEmailConfig({ ...DEFAULT_EMAIL_CONFIG, ...await response.json(), workerUrl: BAKED_WORKER_URL, secret: "session-managed" });
+              PanelStock.apiFetch(BAKED_WORKER_URL + "/config").then(async response => {
+                if (!response.ok) return;
+                const config = await response.json();
+                if (active && PanelStock.username === user.username) setEmailConfig({ ...DEFAULT_EMAIL_CONFIG, ...config, workerUrl: BAKED_WORKER_URL, secret: "session-managed" });
+              }).catch(() => {});
             }
           }
         } catch (error) { console.warn("Startup could not verify shared stock", error.message); }
@@ -13886,11 +13893,11 @@ ${xrefStart}
       persist({ variants: [], offcuts: [], catalog: [], reasons: DEFAULT_REASONS, transactions: [resetEntry, ...transactions] });
       showToast("All stock information has been reset");
     }
-    function validateCncSchedule(rows) {
-      const duplicateError=cncDuplicateError(rows,cncPanels);
+    function validateCncSchedule(rows, scheduledPanels = cncPanels) {
+      const duplicateError=cncDuplicateError(rows,scheduledPanels);
       if(duplicateError)return duplicateError;
       const existingSheets=new Map();
-      for(const panel of cncPanels){
+      for(const panel of scheduledPanels){
         if(panel.status==="completed")continue;
         const sheetKey=JSON.stringify([panel.jobReference||"",panel.orderNumber||"",panel.sheetNumber||""]);
         existingSheets.set(sheetKey,`${panel.stockItemType||"variant"}:${panel.stockItemId||panel.stockVariantId||""}`);
@@ -13905,7 +13912,7 @@ ${xrefStart}
         if(requestedSheets.has(sheetKey)&&requestedSheets.get(sheetKey)!==stockKey)return "Panels on the same CNC sheet must use the same stock item.";
         requestedSheets.set(sheetKey,stockKey);
       }
-      const reserved=cncReservedSheets(cncPanels),needed=new Map();
+      const reserved=cncReservedSheets(scheduledPanels),needed=new Map();
       for(const stockKey of requestedSheets.values())needed.set(stockKey,(needed.get(stockKey)||0)+1);
       for(const [stockKey,count] of needed){
         const [type,id]=stockKey.split(":"),stock=(type==="offcut"?offcuts:variants).find(item=>String(item.id)===id),available=Math.max(0,Number(stock?.qty||0)-(reserved.get(stockKey)||0));
@@ -13914,7 +13921,7 @@ ${xrefStart}
       return "";
     }
     function addCncPanel(input) {
-      const { orderNumber, jobReference, sheetNumber, panelNumber, stockItemType, stockItemId, stockSku, sheetWidth, sheetHeight, totalPanelArea, pendingOffcut, pdfPage, isRemake, isTemplate, remakeReason } = normalizeCncInput(input);
+      const { orderNumber, jobReference, sheetNumber, panelNumber, stockItemType, stockItemId, stockSku, sheetWidth, sheetHeight, totalPanelArea, panelAreaScope, pendingOffcut, pdfPage, isRemake, isTemplate, remakeReason } = normalizeCncInput(input);
       const validationError=validateCncSchedule([{orderNumber,jobReference,sheetNumber,panelNumber,stockItemType,stockItemId}]);
       if(validationError){showToast(validationError,"err");return false;}
       const entry = {
@@ -13929,6 +13936,7 @@ ${xrefStart}
         sheetWidth: Number(sheetWidth),
         sheetHeight: Number(sheetHeight),
         totalPanelArea: Number(totalPanelArea),
+        ...(panelAreaScope ? {panelAreaScope} : {}),
         pendingOffcut: pendingOffcut || null,
         pdfPage: pdfPage || null,
         isRemake,
@@ -13947,13 +13955,19 @@ ${xrefStart}
       showToast("Panel added to CNC schedule");
       return true;
     }
-    function addCncPanelsBulk(rows) {
+    function addCncPanelsBulk(rows, options = {}) {
       rows = rows.map(normalizeCncInput);
-      const validationError=validateCncSchedule(rows);
+      if(!rows.length)return false;
+      const fromPdf=options.replacePending===true;
+      const plan=fromPdf?cncPdfImportPlan(rows,cncPanels):{error:"",replacements:new Map()};
+      if(plan.error){showToast(plan.error,"err");return false;}
+      const replacedIds=new Set([...plan.replacements.values()].map(panel=>panel.id));
+      const remaining=cncPanels.filter(panel=>!replacedIds.has(panel.id));
+      const validationError=validateCncSchedule(rows,remaining);
       if(validationError){showToast(validationError,"err");return false;}
       const now = (/* @__PURE__ */ new Date()).toISOString();
       const newEntries = rows.map((r) => ({
-        id: uid(),
+        id: plan.replacements.get(cncDuplicateKey(r))?.id || uid(),
         orderNumber: r.orderNumber,
         jobReference: r.jobReference || "",
         sheetNumber: r.sheetNumber,
@@ -13964,22 +13978,29 @@ ${xrefStart}
         sheetWidth: Number(r.sheetWidth),
         sheetHeight: Number(r.sheetHeight),
         totalPanelArea: Number(r.totalPanelArea),
+        ...(r.panelAreaScope ? {panelAreaScope:r.panelAreaScope} : {}),
         pendingOffcut: r.pendingOffcut || null,
         pdfPage: r.pdfPage || null,
         isRemake: r.isRemake,
         isTemplate: r.isTemplate,
         remakeReason: r.remakeReason,
         status: "pending",
-        uploadedBy: username || "Unknown",
-        uploadedAt: now,
+        uploadedBy: plan.replacements.get(cncDuplicateKey(r))?.uploadedBy || username || "Unknown",
+        uploadedAt: plan.replacements.get(cncDuplicateKey(r))?.uploadedAt || now,
+        ...(fromPdf?{pdfRevision:(plan.replacements.get(cncDuplicateKey(r))?.pdfRevision||0)+1,pdfUpdatedBy:username||"Unknown",pdfUpdatedAt:now}:{}),
         completedBy: null,
         completedAt: null
       }));
-      const next = [...cncPanels, ...newEntries];
+      const replacements=new Map(newEntries.filter(panel=>replacedIds.has(panel.id)).map(panel=>[panel.id,panel]));
+      const next = [...cncPanels.map(panel=>replacements.has(panel.id)?{...panel,...replacements.get(panel.id)}:panel),...newEntries.filter(panel=>!replacedIds.has(panel.id))];
+      const updated=replacedIds.size,added=rows.length-updated;
+      const message=fromPdf?`PDF schedule saved: ${updated} updated · ${added} added`:`${rows.length} panel${rows.length===1?"":"s"} added to CNC schedule`;
+      const activity={id:uid(),type:"cnc",desc:fromPdf?message:`Bulk scheduled ${rows.length} panel${rows.length===1?"":"s"} for CNC`,qty:"",user:username||"Unknown",timestamp:now,...(fromPdf?{source:"cnc-pdf",panelRecordIds:newEntries.map(panel=>panel.id)}:{})};
+      const nextTransactions=[activity,...transactions];
       setCncPanels(next);
-      persist({ cncPanels: next });
-      logTxn({ type: "cnc", desc: `Bulk scheduled ${rows.length} panel${rows.length === 1 ? "" : "s"} for CNC`, qty: "" });
-      showToast(`${rows.length} panel${rows.length === 1 ? "" : "s"} added to CNC schedule`);
+      setTransactions(nextTransactions);
+      persist({cncPanels:next,transactions:nextTransactions});
+      showToast(message);
       return true;
     }
     function completeCncPanel(id) {
@@ -13993,8 +14014,8 @@ ${xrefStart}
       logTxn({ type: "cnc", desc: `Completed CNC cut: Order ${panel.orderNumber} \xB7 Sheet ${panel.sheetNumber} \xB7 Panel ${panel.panelNumber}`, qty: "" });
       showToast("Panel marked as completed");
     }
-    function completeCncSheet(orderNumber, sheetNumber, confirmedOffcut = null) {
-      const matches = (p) => p.status === "pending" && p.orderNumber === orderNumber && p.sheetNumber === sheetNumber;
+    function completeCncSheet(orderNumber, sheetNumber, confirmedOffcut = null, jobReference = undefined) {
+      const matches = (p) => p.status === "pending" && p.orderNumber === orderNumber && p.sheetNumber === sheetNumber && (jobReference === undefined || normalizeCncInput(p).jobReference === normalizeCncInput({jobReference}).jobReference);
       const sheetPanels = cncPanels.filter(matches), count = sheetPanels.length;
       if (!count) return;
       const scheduled=sheetPanels[0],stockType=scheduled.stockItemType||"variant",stockList=stockType==="offcut"?offcuts:variants,stock=stockList.find(item=>item.id===(scheduled.stockItemId||scheduled.stockVariantId)&&item.sku===scheduled.stockSku);
@@ -14027,7 +14048,7 @@ ${xrefStart}
         if (!Array.isArray(item.ids) || !item.ids.length || !Number.isFinite(length) || !Number.isFinite(width) || length <= 0 || width <= 0 || !Number.isFinite(panelArea) || panelArea <= 0) return showToast("Enter valid dimensions and panel area", "err");
         item.ids.forEach(id => updates.set(id, { length, width, panelArea: panelArea / item.ids.length }));
       }
-      const next = cncPanels.map((panel) => { const dimensions = updates.get(panel.id); return dimensions && panel.status === "completed" ? { ...panel, sheetWidth: dimensions.length, sheetHeight: dimensions.width, totalPanelArea: dimensions.panelArea } : panel; });
+      const next = cncPanels.map((panel) => { const dimensions = updates.get(panel.id); return dimensions && panel.status === "completed" ? { ...panel, sheetWidth: dimensions.length, sheetHeight: dimensions.width, totalPanelArea: dimensions.panelArea, panelAreaScope: "panel" } : panel; });
       const changed = next.filter((panel, index) => panel !== cncPanels[index]).length;
       if (!changed) return showToast("No historical sheets were updated", "err");
       const now = new Date().toISOString(), activity = [{ id: uid(), timestamp: now, user: username || "Unknown", type: "cnc", desc: `Added historical CNC dimensions to ${requested.length} sheet${requested.length === 1 ? "" : "s"} · ${changed} panel${changed === 1 ? "" : "s"}`, qty: "" }, ...transactions];
@@ -15215,6 +15236,33 @@ function cncDuplicateError(rows, existing) {
   return "";
 }
 
+function sumCncPanelArea(panels) {
+  let individual = 0, sheetTotal = 0;
+  for (const panel of panels) {
+    const area = Number(panel.totalPanelArea) || 0;
+    if (panel.panelAreaScope === 'sheet') sheetTotal = Math.max(sheetTotal, area);
+    else individual += area;
+  }
+  return sheetTotal + individual;
+}
+
+function cncSheetKey(row) {
+  return JSON.stringify(JSON.parse(cncDuplicateKey(row)).slice(0,3));
+}
+function cncPdfImportPlan(rows, existing = []) {
+  const replacements=new Map(),error=cncDuplicateError(rows,[]);
+  if(error)return {error,replacements};
+  const matches=new Map(),completedSheets=new Set(existing.filter(panel=>panel.status==="completed").map(cncSheetKey));
+  for(const panel of existing){const key=cncDuplicateKey(panel);if(!matches.has(key))matches.set(key,[]);matches.get(key).push(panel);}
+  for(const row of rows){
+    const found=matches.get(cncDuplicateKey(row))||[];
+    if(found.length>1)return {error:"Multiple scheduled records match this PDF panel. Review the existing duplicates first.",replacements};
+    if(found.some(panel=>panel.status!=="pending"))return {error:`Order ${row.orderNumber} · Sheet ${row.sheetNumber} · Panel ${row.panelNumber} is already completed and cannot be overwritten.`,replacements};
+    if(completedSheets.has(cncSheetKey(row)))return {error:"A completed CNC sheet cannot be replaced or extended by PDF.",replacements};
+    if(found.length)replacements.set(cncDuplicateKey(row),found[0]);
+  }
+  return {error:"",replacements};
+}
 function compareCncOrders(a, b) {
   const left = String(a).match(/\d+/)?.[0];
   const right = String(b).match(/\d+/)?.[0];
@@ -15225,7 +15273,7 @@ function compareCncOrders(a, b) {
   return String(b).localeCompare(String(a), 'en', {numeric: true});
 }
 
-  function CncJobGroups({ panels, allPanels, query, renderGroup }) {
+  function CncJobGroups({ panels, allPanels, query, renderGroup, onCompleteSheet }) {
     const [expanded, setExpanded] = useState(() => new Map());
     const groups = new Map();
     const jobKey = panel => normalizeCncInput(panel).jobReference;
@@ -15244,11 +15292,11 @@ function compareCncOrders(a, b) {
           h("span", { className: "min-w-0 break-words font-semibold text-sm text-slate-800", children: job || "No job reference" }),
           h("span", { className: "text-xs text-slate-500", children: (total.length - done) + " pending · " + done + "/" + total.length + " complete " + (open ? "▾" : "▸") })
         ] }),
-        h("div", { hidden: !open, children: h(CncOrderGroups, { panels: rows, allPanels: total, query, renderGroup }) })
+        h("div", { hidden: !open, children: h(CncOrderGroups, { panels: rows, allPanels: total, query, renderGroup, onCompleteSheet }) })
       ] }, job);
     }) });
   }
-  function CncOrderGroups({ panels, allPanels, query, renderGroup }) {
+  function CncOrderGroups({ panels, allPanels, query, renderGroup, onCompleteSheet }) {
     const [expanded, setExpanded] = useState(() => new Map());
     const groups = new Map();
     for (const panel of panels) {
@@ -15265,11 +15313,11 @@ function compareCncOrders(a, b) {
           h("span", { className: "min-w-0 break-words font-semibold text-sm text-slate-800", children: "Order " + order }),
           h("span", { className: "shrink-0 text-xs text-slate-500", children: (total.length - done) + " pending · " + done + "/" + total.length + " complete " + (open ? "▾" : "▸") })
         ] }),
-        open && h("div", { className: "overflow-x-auto p-2", children: h(CncSheetGroups, { panels: rows, allPanels: total, renderGroup }) })
+        open && h("div", { className: "overflow-x-auto p-2", children: h(CncSheetGroups, { panels: rows, allPanels: total, renderGroup, onCompleteSheet }) })
       ] }, order);
     }) });
   }
-  function CncSheetGroups({ panels, allPanels, renderGroup }) {
+  function CncSheetGroups({ panels, allPanels, renderGroup, onCompleteSheet }) {
     const [expanded, setExpanded] = useState(() => new Map());
     const groups = new Map();
     for (const panel of panels) {
@@ -15283,9 +15331,12 @@ function compareCncOrders(a, b) {
       const total = allPanels.filter((p) => String(p.sheetNumber ?? "").trim() === sheet);
       const done = total.filter((p) => p.status === "completed").length;
       return h("section", { className: "bg-white border border-slate-200 rounded-xl overflow-hidden", children: [
-        h("button", { type: "button", "aria-expanded": open, onClick: () => setExpanded((previous) => { const next = new Map(previous); next.set(sheet, !open); return next; }), className: "w-full flex items-center justify-between gap-3 px-4 py-3 text-left bg-slate-50 hover:bg-slate-100", children: [
-          h("span", { className: "min-w-0 break-words font-semibold text-sm text-slate-800", children: "Sheet " + sheet }),
-          h("span", { className: "shrink-0 text-xs text-slate-500", children: (total.length - done) + " pending · " + done + "/" + total.length + " complete " + (open ? "▾" : "▸") })
+        h("div", { className: "flex flex-wrap items-center gap-2 bg-neutral-50 px-4 py-3", children: [
+          h("button", { type: "button", "aria-expanded": open, onClick: () => setExpanded((previous) => { const next = new Map(previous); next.set(sheet, !open); return next; }), className: "flex min-w-0 flex-1 flex-wrap items-center justify-between gap-3 text-left", children: [
+            h("span", { className: "min-w-0 break-words font-semibold text-sm text-neutral-800", children: "Sheet " + sheet }),
+            h("span", { className: "text-xs text-neutral-500", children: (total.length - done) + " pending · " + done + "/" + total.length + " complete " + (open ? "▾" : "▸") })
+          ] }),
+          onCompleteSheet && total.some(p => p.status === "pending") && h("button", { type: "button", onClick: () => onCompleteSheet({jobReference: rows[0].jobReference || "", orderNumber: rows[0].orderNumber, sheetNumber: rows[0].sheetNumber}), className: "shrink-0 rounded-lg bg-green-700 px-3 py-2 text-xs font-semibold text-white hover:bg-green-800", children: "Complete sheet" })
         ] }),
         open && h("div", { className: "p-2", children: renderGroup(rows) })
       ] }, sheet);
@@ -15381,8 +15432,10 @@ function compareCncOrders(a, b) {
     const update=(index,patch)=>setPages(current=>current.map((page,i)=>i===index?{...page,...patch}:page));
     async function analyse(event){const file=event.target.files?.[0];if(!file)return;setFileName(file.name);if(file.type!=="application/pdf"||file.size>8*1024*1024){setError("Choose a PDF under 8 MB.");return;}setBusy(true);setError("");try{const pdf=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file);}),response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/cnc-pdf/analyse",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pdf})}),result=await response.json();if(!response.ok)throw Error(result.error||"The CNC PDF could not be analysed.");setPages((result.pages||[]).map(page=>{const stock=choices.find(item=>Number(item.width)===Number(page.sheetWidth)&&Number(item.height)===Number(page.sheetHeight)&&String(page.material||"").toLowerCase().includes(String(item.material||"").toLowerCase()));return {...page,jobReference:projectTitleCase(page.project),panelNumbers:(page.panelIds||[]).join(", "),stockItemType:stock?.id?(offcuts.some(value=>value.id===stock.id)?"offcut":"variant"):"",stockItemId:stock?.id||"",stockSku:stock?.sku||"",offcutLength:page.proposedOffcut?.length||"",offcutWidth:page.proposedOffcut?.width||""};}));}catch(reason){setError(reason.message||"The CNC PDF could not be analysed.");}finally{setBusy(false);}}
     useEffect(()=>{if(initialFile)void analyse({target:{files:[initialFile]}});},[initialFile]);
-    function submit(){const rows=[];for(const page of pages){const ids=String(page.panelNumbers||"").split(",").map(value=>value.trim()).filter(Boolean);if(!page.orderNumber||!page.sheetNumber||!page.stockItemId||!ids.length||!(Number(page.panelArea)>0)){setError("Review every page and select its stock sheet, panel IDs and panel area.");return;}if(page.isRemake&&!String(page.remakeReason||"").trim()){setError(`PDF page ${page.page}: enter a reason for the remake.`);return;}for(let copy=0;copy<Number(page.quantity||1);copy++)for(const panelNumber of ids)rows.push(normalizeCncInput({orderNumber:page.orderNumber,jobReference:page.jobReference,sheetNumber:copy?`${page.sheetNumber}.${copy+1}`:page.sheetNumber,panelNumber,stockItemType:page.stockItemType,stockItemId:page.stockItemId,stockSku:page.stockSku,sheetWidth:Number(page.sheetWidth),sheetHeight:Number(page.sheetHeight),totalPanelArea:Number(page.panelArea),pdfPage:page.page,isRemake:page.isRemake===true,isTemplate:page.isTemplate===true,remakeReason:page.remakeReason||"",pendingOffcut:Number(page.offcutLength)>0&&Number(page.offcutWidth)>0?{length:Number(page.offcutLength),width:Number(page.offcutWidth),status:"pending",source:"cnc-pdf"}:null}));}if(onSave(rows)===false)return;onClose();}
-    return h("div",null,[h(PageHeading,{icon:h(Upload,{size:22}),title:"Import CNC program PDF",subtitle:"Upload one complete order PDF, review every detected sheet, then add it to the CNC schedule."}),h("div",{className:"rounded-xl border border-slate-300 bg-white p-5"},[h("div",{className:"flex flex-wrap items-center gap-3"},[h("label",{className:"inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"},[h(Upload,{size:16}),busy?"Analysing…":fileName?"Choose another PDF":"Choose PDF",h("input",{type:"file",accept:"application/pdf",onChange:analyse,disabled:busy,className:"sr-only"})]),fileName&&h("span",{className:"min-w-0 truncate text-sm text-slate-500"},fileName)]),busy&&h("p",{className:"mt-3 text-sm text-slate-500"},"Analysing every page…"),error&&h("p",{role:"alert",className:"mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700"},error)]),pages.map((page,index)=>h("section",{key:page.page,className:"mt-4 rounded-xl border border-slate-300 bg-white p-5 space-y-4"},[h("div",{className:"flex justify-between gap-3"},[h("strong",null,`PDF page ${page.page}`),h("span",{className:"text-sm text-slate-500"},page.warnings?.length?page.warnings.join(" · "):"All fields detected")]),h("div",{className:"grid grid-cols-2 gap-3"},[h(Field,{label:"Project",children:h("input",{className:inputCls,value:page.jobReference,onChange:event=>update(index,{jobReference:event.target.value})})}),h(Field,{label:"Order number",children:h("input",{className:inputCls,value:page.orderNumber,onChange:event=>update(index,{orderNumber:event.target.value})})}),h(Field,{label:"Sheet number",children:h("input",{className:inputCls,value:page.sheetNumber,onChange:event=>update(index,{sheetNumber:event.target.value})})}),h(Field,{label:"Panel IDs (comma separated)",children:h("input",{className:inputCls,value:page.panelNumbers,onChange:event=>update(index,{panelNumbers:event.target.value})})}),h(Field,{label:"Panel area (m²)",children:h("input",{type:"number",step:"0.01",className:inputCls,value:page.panelArea,onChange:event=>update(index,{panelArea:event.target.value})})}),h("div",null,h(CncStockPicker,{variants,offcuts,selected:page.stockItemType&&page.stockItemId?`${page.stockItemType}:${page.stockItemId}`:"",onSelect:stock=>update(index,{stockItemType:stock?.itemType||"",stockItemId:stock?.id||"",stockSku:stock?.sku||"",sheetWidth:stock?.width||page.sheetWidth,sheetHeight:stock?.height||page.sheetHeight})}))]),h(CncPanelTypeFields,{value:page,onChange:patch=>update(index,patch)}),h("div",{className:"rounded-lg bg-cyan-50 border border-cyan-200 p-3"},[h("p",{className:"text-sm font-semibold text-cyan-900"},"Proposed off-cut (confirm when completing the sheet)"),h("div",{className:"mt-2 grid grid-cols-2 gap-3"},[h("input",{type:"number",className:inputCls,"aria-label":"Off-cut length",value:page.offcutLength,onChange:event=>update(index,{offcutLength:event.target.value})}),h("input",{type:"number",className:inputCls,"aria-label":"Off-cut width",value:page.offcutWidth,onChange:event=>update(index,{offcutWidth:event.target.value})})])])])),h("div",{className:"ps-entry-actions"},[pages.length>0&&h("button",{type:"button",onClick:submit,className:"ps-entry-primary"},"Add reviewed sheets to schedule"),h("button",{type:"button",onClick:onClose,className:"ps-entry-cancel"},"Cancel")])]);
+    function review(){const rows=[];for(const page of pages){const ids=String(page.panelNumbers||"").split(",").map(value=>value.trim()).filter(Boolean);if(!page.orderNumber||!page.sheetNumber||!page.stockItemId||!ids.length||!(Number(page.panelArea)>0)){return {rows,error:"Review every page and select its stock sheet, panel IDs and panel area."};}if(page.isRemake&&!String(page.remakeReason||"").trim()){return {rows,error:`PDF page ${page.page}: enter a reason for the remake.`};}for(let copy=0;copy<Number(page.quantity||1);copy++)for(const panelNumber of ids)rows.push(normalizeCncInput({orderNumber:page.orderNumber,jobReference:page.jobReference,sheetNumber:copy?`${page.sheetNumber}.${copy+1}`:page.sheetNumber,panelNumber,stockItemType:page.stockItemType,stockItemId:page.stockItemId,stockSku:page.stockSku,sheetWidth:Number(page.sheetWidth),sheetHeight:Number(page.sheetHeight),totalPanelArea:Number(page.panelArea),panelAreaScope:"sheet",pdfPage:page.page,isRemake:page.isRemake===true,isTemplate:page.isTemplate===true,remakeReason:page.remakeReason||"",pendingOffcut:Number(page.offcutLength)>0&&Number(page.offcutWidth)>0?{length:Number(page.offcutLength),width:Number(page.offcutWidth),status:"pending",source:"cnc-pdf"}:null}));}return {rows,error:""};}
+    const reviewed=review(),plan=cncPdfImportPlan(reviewed.rows,cncPanels||[]);
+    function submit(){if(reviewed.error||plan.error){setError(reviewed.error||plan.error);return;}if(onSave(reviewed.rows,{replacePending:true})===false)return;onClose();}
+    return h("div",null,[h(PageHeading,{icon:h(Upload,{size:22}),title:"Import CNC program PDF",subtitle:"Upload one complete order PDF, review every detected sheet, then save it to the CNC schedule. Matching pending panels will be updated; completed panels are protected."}),h("div",{className:"rounded-xl border border-slate-300 bg-white p-5"},[h("div",{className:"flex flex-wrap items-center gap-3"},[h("label",{className:"inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"},[h(Upload,{size:16}),busy?"Analysing…":fileName?"Choose another PDF":"Choose PDF",h("input",{type:"file",accept:"application/pdf",onChange:analyse,disabled:busy,className:"sr-only"})]),fileName&&h("span",{className:"min-w-0 truncate text-sm text-slate-500"},fileName)]),busy&&h("p",{className:"mt-3 text-sm text-slate-500"},"Analysing every page…"),error&&h("p",{role:"alert",className:"mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700"},error)]),pages.map((page,index)=>h("section",{key:page.page,className:"mt-4 rounded-xl border border-slate-300 bg-white p-5 space-y-4"},[h("div",{className:"flex justify-between gap-3"},[h("strong",null,`PDF page ${page.page}`),h("span",{className:"text-sm text-slate-500"},page.warnings?.length?page.warnings.join(" · "):"All fields detected")]),h("div",{className:"grid grid-cols-2 gap-3"},[h(Field,{label:"Project",children:h("input",{className:inputCls,value:page.jobReference,onChange:event=>update(index,{jobReference:event.target.value})})}),h(Field,{label:"Order number",children:h("input",{className:inputCls,value:page.orderNumber,onChange:event=>update(index,{orderNumber:event.target.value})})}),h(Field,{label:"Sheet number",children:h("input",{className:inputCls,value:page.sheetNumber,onChange:event=>update(index,{sheetNumber:event.target.value})})}),h(Field,{label:"Panel IDs (comma separated)",children:h("input",{className:inputCls,value:page.panelNumbers,onChange:event=>update(index,{panelNumbers:event.target.value})})}),h(Field,{label:"Panel area (m²)",children:h("input",{type:"number",step:"0.01",className:inputCls,value:page.panelArea,onChange:event=>update(index,{panelArea:event.target.value})})}),h("div",null,h(CncStockPicker,{variants,offcuts,selected:page.stockItemType&&page.stockItemId?`${page.stockItemType}:${page.stockItemId}`:"",onSelect:stock=>update(index,{stockItemType:stock?.itemType||"",stockItemId:stock?.id||"",stockSku:stock?.sku||"",sheetWidth:stock?.width||page.sheetWidth,sheetHeight:stock?.height||page.sheetHeight})}))]),h(CncPanelTypeFields,{value:page,onChange:patch=>update(index,patch)}),h("div",{className:"rounded-lg bg-cyan-50 border border-cyan-200 p-3"},[h("p",{className:"text-sm font-semibold text-cyan-900"},"Proposed off-cut (confirm when completing the sheet)"),h("div",{className:"mt-2 grid grid-cols-2 gap-3"},[h("input",{type:"number",className:inputCls,"aria-label":"Off-cut length",value:page.offcutLength,onChange:event=>update(index,{offcutLength:event.target.value})}),h("input",{type:"number",className:inputCls,"aria-label":"Off-cut width",value:page.offcutWidth,onChange:event=>update(index,{offcutWidth:event.target.value})})])])])),pages.length>0&&h("p",{role:plan.error?"alert":"status",className:plan.error?"mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700":"mt-4 rounded-lg bg-cyan-50 p-3 text-sm text-cyan-900"},plan.error||(reviewed.error?"Review every page before saving. Matching pending panels will be overwritten.":`${plan.replacements.size} existing pending panel${plan.replacements.size===1?"":"s"} will be updated · ${reviewed.rows.length-plan.replacements.size} new panel${reviewed.rows.length-plan.replacements.size===1?"":"s"} will be added. Panels not listed in this PDF are kept.`)),h("div",{className:"ps-entry-actions"},[pages.length>0&&h("button",{type:"button",onClick:submit,disabled:busy||Boolean(plan.error),className:"ps-entry-primary"},"Save reviewed sheets"),h("button",{type:"button",onClick:onClose,className:"ps-entry-cancel"},"Cancel")])]);
   }
   function CncDimensionBackfill({ panels, onSave, onClose }) {
     const h = import_react.createElement;
@@ -15390,7 +15443,7 @@ function compareCncOrders(a, b) {
     const groups = [...panels.reduce((map, panel) => {
       if (panel.status !== "completed") return map;
       const key = JSON.stringify([panel.jobReference || "", panel.orderNumber || "", panel.sheetNumber || ""]), current = map.get(key) || { key, ids: [], jobReference: panel.jobReference || "", orderNumber: panel.orderNumber || "", sheetNumber: panel.sheetNumber || "", sheetWidth: Number(panel.sheetWidth) || 0, sheetHeight: Number(panel.sheetHeight) || 0, panelIds: [], panelArea: 0, completedAt: panel.completedAt || "", needsBackfill: false };
-      current.ids.push(panel.id); if (panel.panelNumber) current.panelIds.push(panel.panelNumber); current.panelArea += Number(panel.totalPanelArea) || 0; current.needsBackfill ||= !(Number(panel.sheetWidth) > 0 && Number(panel.sheetHeight) > 0 && Number(panel.totalPanelArea) > 0);
+      current.ids.push(panel.id); if (panel.panelNumber) current.panelIds.push(panel.panelNumber); current.areaPanels = [...(current.areaPanels || []), panel]; current.panelArea = sumCncPanelArea(current.areaPanels); current.needsBackfill ||= !(Number(panel.sheetWidth) > 0 && Number(panel.sheetHeight) > 0 && Number(panel.totalPanelArea) > 0);
       map.set(key, current); return map;
     }, new Map()).values()].filter(group => group.needsBackfill).sort((a, b) => String(a.completedAt).localeCompare(String(b.completedAt)));
     const [values, setValues] = useState({});
@@ -15464,7 +15517,7 @@ function compareCncOrders(a, b) {
     if (isAdmin && backfillOpen) return h(CncDimensionBackfill, { panels: cncPanels, onSave: onBackfillDimensions, onClose: () => setBackfillOpen(false) });
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
       inputError && (0, import_jsx_runtime.jsx)("p", { role: "alert", className: "text-sm text-red-700 p-3", children: inputError }),
-      sheetToComplete && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncSheetDialog, { sheet: sheetToComplete, affectedPanels: cncPanels.filter((p) => p.status === "pending" && p.orderNumber === sheetToComplete.orderNumber && p.sheetNumber === sheetToComplete.sheetNumber && (!sheetToComplete.panelId || p.id === sheetToComplete.panelId)), onClose: () => setSheetToComplete(null), onConfirm: (offcut) => { if (sheetToComplete.panelId) onCompletePanel(sheetToComplete.panelId); else onCompleteSheet(sheetToComplete.orderNumber, sheetToComplete.sheetNumber,offcut); setSheetToComplete(null); } }),
+      sheetToComplete && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncSheetDialog, { sheet: sheetToComplete, affectedPanels: cncPanels.filter((p) => p.status === "pending" && p.orderNumber === sheetToComplete.orderNumber && p.sheetNumber === sheetToComplete.sheetNumber && normalizeCncInput(p).jobReference === normalizeCncInput(sheetToComplete).jobReference && (!sheetToComplete.panelId || p.id === sheetToComplete.panelId)), onClose: () => setSheetToComplete(null), onConfirm: (offcut) => { if (sheetToComplete.panelId) onCompletePanel(sheetToComplete.panelId); else onCompleteSheet(sheetToComplete.orderNumber, sheetToComplete.sheetNumber,offcut,sheetToComplete.jobReference || ""); setSheetToComplete(null); } }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         PageHeading,
         {
@@ -15520,12 +15573,7 @@ function compareCncOrders(a, b) {
             ] })
           ] })
         ] }) }),
-        filtered.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyState, { text: view === "pending" ? "No panels currently scheduled for the CNC." : "No completed panels yet." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncJobGroups, { panels: filtered, allPanels: cncPanels, query: q, renderGroup: (groupPanels) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", { className: "w-full text-sm", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { className: "bg-slate-50/60", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Panel" }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: view === "pending" ? "" : "Completed" }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "w-32" })
-          ] }) }),
+        filtered.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyState, { text: view === "pending" ? "No panels currently scheduled for the CNC." : "No completed panels yet." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncJobGroups, { panels: filtered, allPanels: cncPanels, query: q, onCompleteSheet: view === "pending" ? setSheetToComplete : null, renderGroup: (groupPanels) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", { className: "w-full text-sm", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: groupPanels.map((p, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { className: `border-t border-slate-100 ${i % 2 === 1 ? "bg-slate-50/30" : ""}`, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center gap-2 pl-2", children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "font-bold text-slate-800", children: ["Panel ", normalizeCncInput(p).panelNumber] }),
@@ -15539,10 +15587,6 @@ function compareCncOrders(a, b) {
               }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Trash2, { size: 15, className: "text-slate-400 hover:text-red-700" }) })
             ] }) }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3 text-slate-400 text-xs", children: view === "completed" && p.completedAt && `${p.completedBy} \xB7 ${new Date(p.completedAt).toLocaleString()}` }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center justify-end gap-3", children: [
-              view === "pending" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setSheetToComplete({ orderNumber: p.orderNumber, sheetNumber: p.sheetNumber }), className: "text-xs font-semibold text-white bg-green-700 rounded-lg px-3 py-2 hover:bg-green-800", children: "Complete sheet" }),
-
-            ] }) })
           ] }, p.id)) })
         ] }) })
       ] })
@@ -16797,10 +16841,49 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
   }
   function AuditCenter({transactions,onExportExcel,onExportPDF}) {
     const e=import_react.createElement,[query,setQuery]=useState(""),[type,setType]=useState("all"),[user,setUser]=useState("all"),[status,setStatus]=useState("all"),[from,setFrom]=useState(""),[to,setTo]=useState("");
+    const [batch,setBatch]=useState({key:"",offset:0}),listRef=useRef(null),advancing=useRef(false);
     const records=transactions||[],types=[...new Set(records.map(item=>item.type).filter(Boolean))].sort(),users=[...new Set(records.flatMap(item=>[item.user,item.voidedBy]).filter(Boolean))].sort((a,b)=>a.localeCompare(b)),dateOf=item=>item.timestamp?localDateStr(new Date(item.timestamp)):"";
     const filtered=records.filter(item=>{const text=`${item.desc||""} ${item.sku||""} ${item.ref||""} ${item.customer||""} ${item.user||""}`.toLowerCase();return(type==="all"||item.type===type)&&(user==="all"||item.user===user||item.voidedBy===user)&&(status==="all"||(status==="voided"?item.voided:!item.voided))&&(!from||dateOf(item)>=from)&&(!to||dateOf(item)<=to)&&(!query.trim()||text.includes(query.trim().toLowerCase()));}).sort((a,b)=>Date.parse(b.timestamp)-Date.parse(a.timestamp));
     const tone=value=>value==="receipt"?"bg-green-50 text-green-800":value==="dispatch"?"bg-cyan-50 text-cyan-800":value==="damage"?"bg-red-50 text-red-800":value==="reset"?"bg-purple-50 text-purple-800":value==="user"?"bg-blue-50 text-blue-800":value==="backup"?"bg-teal-50 text-teal-800":value==="cnc"?"bg-orange-50 text-orange-800":"bg-slate-100 text-slate-700",inputClass="mt-1.5 h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm",field=(label,control)=>e("label",{className:"text-xs font-semibold text-slate-600"},label,control),clear=()=>{setQuery("");setType("all");setUser("all");setStatus("all");setFrom("");setTo("");};
-    return e("div",{className:"pb-24"},e(PageHeading,{icon:e(ClipboardList,{size:20}),title:"Audit Centre",subtitle:"Review recorded stock, CNC and administrative activity. This screen is read-only.",action:e("div",{className:"flex gap-2"},e("button",{type:"button",onClick:onExportExcel,className:"inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"},e(FileSpreadsheet,{size:16}),"Excel"),e("button",{type:"button",onClick:onExportPDF,className:"inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"},e(Printer,{size:16}),"PDF"))}),e("div",{className:"mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4"},[["All records",records.length],["Today",records.filter(item=>dateOf(item)===todayStr()).length],["Users",users.length],["Voided transactions",records.filter(item=>item.voided).length]].map(([label,value])=>e("div",{key:label,className:"rounded-xl border border-slate-300 bg-white p-4"},e("div",{className:"text-xs font-semibold uppercase tracking-wide text-slate-400"},label),e("div",{className:"mt-1 text-2xl font-bold text-slate-900"},value)))),e("section",{className:"mb-5 rounded-xl border border-slate-300 bg-white p-4"},e("div",{className:"grid gap-3 sm:grid-cols-2 xl:grid-cols-4"},field("Search",e("input",{value:query,onChange:event=>setQuery(event.target.value),placeholder:"Description, SKU, reference or user",className:inputClass})),field("Action type",e("select",{value:type,onChange:event=>setType(event.target.value),className:inputClass},e("option",{value:"all"},"All types"),types.map(value=>e("option",{key:value,value},value==="catalog"?"Catalogue":value)))),field("User",e("select",{value:user,onChange:event=>setUser(event.target.value),className:inputClass},e("option",{value:"all"},"All users"),users.map(value=>e("option",{key:value,value},value)))),field("Status",e("select",{value:status,onChange:event=>setStatus(event.target.value),className:inputClass},e("option",{value:"all"},"All records"),e("option",{value:"active"},"Active"),e("option",{value:"voided"},"Voided"))),field("From date",e("input",{type:"date",value:from,onChange:event=>setFrom(event.target.value),className:inputClass})),field("To date",e("input",{type:"date",value:to,onChange:event=>setTo(event.target.value),className:inputClass})),e("button",{type:"button",onClick:clear,className:"mt-auto h-11 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-600"},"Clear filters"))),e("div",{className:"mb-2 text-sm font-semibold text-slate-600"},`${filtered.length} record${filtered.length===1?"":"s"} shown`),filtered.length===0?e("div",{className:"rounded-xl border border-slate-300 bg-white p-10 text-center text-sm text-slate-500"},"No audit records match these filters."):e("div",{className:"divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-300 bg-white"},filtered.map(item=>e("article",{key:item.id,className:`p-4 ${item.voided?"bg-red-50/40":""}`},e("div",{className:"flex items-start justify-between gap-3"},e("div",{className:"min-w-0 flex-1"},e("div",{className:"flex flex-wrap gap-2"},e("span",{className:`rounded px-2 py-0.5 text-[11px] font-bold uppercase ${tone(item.type)}`},item.type==="catalog"?"Catalogue":item.type),item.voided&&e("span",{className:"rounded bg-red-100 px-2 py-0.5 text-[11px] font-bold uppercase text-red-800"},"Voided")),e("p",{className:`mt-2 break-words text-sm text-slate-700 ${item.voided?"line-through":""}`},item.desc||"No description"),e("div",{className:"mt-2 flex flex-wrap gap-3 text-xs text-slate-400"},item.sku&&e("span",null,`SKU ${item.sku}`),item.ref&&e("span",null,`Ref ${item.ref}`),item.qty!==""&&item.qty!==undefined&&e("span",null,`Qty ${item.qty}`))),e("div",{className:"shrink-0 text-right text-xs text-slate-400"},e("strong",{className:"text-slate-600"},item.user||"Unknown"),e("div",{className:"mt-1"},item.timestamp?new Date(item.timestamp).toLocaleString("en-AU"):""),item.voided&&e("div",{className:"mt-1 text-red-700"},`Voided by ${item.voidedBy||"Unknown"}`)))))));
+    const filterKey=JSON.stringify([query,type,user,status,from,to]),pageSize=30;
+    const offset=batch.key===filterKey?Math.min(batch.offset,Math.max(0,Math.ceil(filtered.length/pageSize)-1)*pageSize):0;
+    const visible=filtered.slice(offset,offset+pageSize),hasNext=offset+pageSize<filtered.length;
+    useEffect(()=>{setBatch({key:filterKey,offset:0});},[filterKey]);
+    useEffect(()=>{if(listRef.current)listRef.current.scrollTop=0;advancing.current=false;},[offset,filterKey]);
+    const moveBatch=next=>{advancing.current=true;setBatch({key:filterKey,offset:Math.max(0,next)});};
+    const loadNext=()=>{if(hasNext&&!advancing.current)moveBatch(offset+pageSize);};
+    return e("div",{className:"pb-24"},
+      e("div",{className:"mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"},e("div",{className:"min-w-0 flex-1"},e(PageHeading,{icon:e(ClipboardList,{size:20}),title:"Audit Centre",subtitle:"Review recorded stock, CNC and administrative activity. This screen is read-only."})),e("div",{className:"flex gap-2"},e("button",{type:"button",onClick:onExportExcel,className:"inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"},e(FileSpreadsheet,{size:16}),"Excel"),e("button",{type:"button",onClick:onExportPDF,className:"inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"},e(Printer,{size:16}),"PDF"))),
+      e("div",{className:"grid items-start gap-5 lg:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]"},
+        e("aside",{"aria-label":"Audit filters and statistics",className:"min-w-0 space-y-4"},
+          e("div",{className:"grid grid-cols-2 gap-3"},
+            [["All records",records.length],["Today",records.filter(item=>dateOf(item)===localDateStr(new Date())).length],["Users",users.length],["Voided transactions",records.filter(item=>item.voided).length]].map(([label,value])=>e("div",{key:label,className:"rounded-xl border border-slate-300 bg-white p-4"},e("div",{className:"text-xs font-semibold uppercase tracking-wide text-slate-400"},label),e("div",{className:"mt-1 text-2xl font-bold text-slate-900"},value)))),
+          e("section",{className:"rounded-xl border border-slate-300 bg-white p-4"},
+            e("div",{className:"grid grid-cols-2 gap-3"},
+              field("Search",e("input",{value:query,onChange:event=>setQuery(event.target.value),placeholder:"Description, SKU, reference or user",className:inputClass})),
+              field("Action type",e("select",{value:type,onChange:event=>setType(event.target.value),className:inputClass},e("option",{value:"all"},"All types"),types.map(value=>e("option",{key:value,value},value==="catalog"?"Catalogue":value)))),
+              field("User",e("select",{value:user,onChange:event=>setUser(event.target.value),className:inputClass},e("option",{value:"all"},"All users"),users.map(value=>e("option",{key:value,value},value)))),
+              field("Status",e("select",{value:status,onChange:event=>setStatus(event.target.value),className:inputClass},e("option",{value:"all"},"All records"),e("option",{value:"active"},"Active"),e("option",{value:"voided"},"Voided"))),
+              field("From date",e("input",{type:"date",value:from,onChange:event=>setFrom(event.target.value),className:inputClass})),
+              field("To date",e("input",{type:"date",value:to,onChange:event=>setTo(event.target.value),className:inputClass})),
+              e("button",{type:"button",onClick:clear,className:"h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-600"},"Clear filters"),
+              e("div",{className:"flex items-center text-xs font-semibold text-slate-500"},`${filtered.length} matching record${filtered.length===1?"":"s"}`)
+            )
+          )
+        ),
+        e("section",{"aria-label":"Audit records",className:"min-w-0 overflow-hidden rounded-xl border border-slate-300 bg-white"},
+          e("div",{className:"flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 p-4"},
+            e("span",{"aria-live":"polite",className:"text-sm font-semibold text-slate-600"},filtered.length?`Records ${offset+1}–${offset+visible.length} of ${filtered.length}`:"No matching records"),
+            e("button",{type:"button",disabled:offset===0,onClick:()=>moveBatch(offset-pageSize),className:"rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 disabled:opacity-40"},"Previous 30")
+          ),
+          e("div",{ref:listRef,tabIndex:0,"aria-label":"Scrollable audit records",className:"h-[65vh] min-h-80 overflow-y-auto overscroll-contain lg:h-[calc(100vh-17rem)]",onScroll:event=>{const list=event.currentTarget;if(list.scrollTop>0&&list.scrollTop+list.clientHeight>=list.scrollHeight-4)loadNext();}},
+            filtered.length===0?e("div",{className:"p-10 text-center text-sm text-slate-500"},"No audit records match these filters."):e("div",{className:"divide-y divide-slate-100"},visible.map(item=>e("article",{key:item.id,className:`p-4 ${item.voided?"bg-red-50/40":""}`},e("div",{className:"flex items-start justify-between gap-3"},e("div",{className:"min-w-0 flex-1"},e("div",{className:"flex flex-wrap gap-2"},e("span",{className:`rounded px-2 py-0.5 text-[11px] font-bold uppercase ${tone(item.type)}`},item.type==="catalog"?"Catalogue":item.type),item.voided&&e("span",{className:"rounded bg-red-100 px-2 py-0.5 text-[11px] font-bold uppercase text-red-800"},"Voided")),e("p",{className:`mt-2 break-words text-sm text-slate-700 ${item.voided?"line-through":""}`},item.desc||"No description"),e("div",{className:"mt-2 flex flex-wrap gap-3 text-xs text-slate-400"},item.sku&&e("span",null,`SKU ${item.sku}`),item.ref&&e("span",null,`Ref ${item.ref}`),item.qty!==""&&item.qty!==undefined&&e("span",null,`Qty ${item.qty}`))),e("div",{className:"shrink-0 text-right text-xs text-slate-400"},e("strong",{className:"text-slate-600"},item.user||"Unknown"),e("div",{className:"mt-1"},item.timestamp?new Date(item.timestamp).toLocaleString("en-AU"):""),item.voided&&e("div",{className:"mt-1 text-red-700"},`Voided by ${item.voidedBy||"Unknown"}`)))))),
+            e("div",{className:"border-t border-slate-100 p-3 text-center text-xs text-slate-400"},hasNext?"Scroll to the bottom to load the next 30 records.":"End of records")
+          ),
+          e("div",{className:"flex justify-end border-t border-slate-100 p-3"},e("button",{type:"button",disabled:!hasNext,onClick:loadNext,className:"rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 disabled:opacity-40"},"Next 30"))
+        )
+      )
+    );
   }
   function SettingsPage({ reasons, onAddReason, onRemoveReason, onExportExcel, onExportPDF, onExportCatalogExcel, onExportCatalogPDF, emailConfig, onSaveEmailConfig, onSendReportNow, onPushLocalData, onOpenDamageLog, username, isAdmin, catalog, onAddCatalogItem, onRemoveCatalogItem, onEditCatalogItem, onAddCatalogItemsBulk, onLogTxn, onResetAllSOH, onResetAllInformation, workerUrl, workerSecret, initialSection="general" }) {
     const [newReason, setNewReason] = useState("");

@@ -196,14 +196,16 @@
         }
         if(!res.ok) {
           if([400,403,409,413,422,426].includes(res.status)) {
-            const error=await res.json().catch(()=>({}));
+            let error;
+            try{error=await res.json();}catch{this.notify('offline');return false;}
             this.save({...this.state,blocked:error.error||'Pending changes require review.'});
           } else {
             this.notify(res.status===401?'login':'offline');
           }
           return false;
         }
-        const result=await res.json();
+        let result;
+        try{result=await res.json();}catch{this.notify('offline');return false;}
         const next=copy(this.state);
         next.queue=next.queue.filter(p=>p.mutationId!==packet.mutationId);
         next.view.revision=Math.max(next.view.revision||0,result.revision||0);
@@ -301,8 +303,9 @@
 
   const SESSION='panelstock:session:v2';
   let session=null,workerUrl='',status='synced',message='',lockGranted=false,lockDenied=false,liveSocket=null,liveRetry=1000,liveTimer=null;
+  let sessionVersion=0,sessionWrites=Promise.resolve();
   try{session=JSON.parse(sessionStorage.getItem(SESSION)||'null');}catch{}
-  if(session?.expiresAt<=Date.now()){session=null;sessionStorage.removeItem(SESSION);}
+  if(session && !(session.expiresAt>Date.now())){session=null;sessionStorage.removeItem(SESSION);}
 
   let outbox;
   const announce=(s,m='')=>{
@@ -312,29 +315,65 @@
     renderNotice();
   };
 
+  const persistSession=()=>{
+    const saved=session?JSON.stringify(session):null;
+    if(saved)sessionStorage.setItem(SESSION,saved);else sessionStorage.removeItem(SESSION);
+    const write=sessionWrites.catch(()=>{}).then(()=>saved?durableStorage.write(SESSION,saved):durableStorage.delete(SESSION));
+    sessionWrites=write;
+    return write;
+  };
+  const clearSession=()=>{
+    session=null;sessionVersion++;
+    status='login';message='Signed out. Pending changes are retained.';
+    clearTimeout(liveTimer);const socket=liveSocket;liveSocket=null;if(socket)socket.onclose=null;socket?.close();
+    const saved=persistSession();
+    root.dispatchEvent(new Event('panelstock-session-expired'));
+    return saved;
+  };
+  const sessionChanged=()=>Error('Session changed. Please retry with the current account.');
+  const temporaryFailure=response=>response.status===408||response.status===429||(response.status>=500&&response.status<=599);
+  // Cached stock is usable only by its still-current, unexpired session owner.
+  const cachedView=(version,owner=session?.username)=>version===sessionVersion&&session?.username===owner&&session?.expiresAt>Date.now()&&outbox.state.owner===owner&&outbox.state.view?copy(outbox.state.view):null;
+
   const apiFetch=async(url,options={})=>{
     const absolute=new URL(url,location.href);
     if(!workerUrl || absolute.origin!==new URL(workerUrl).origin)throw Error('Unapproved API destination');
+    const authenticating=['/login','/set-pin'].includes(absolute.pathname);
+    // Starting a new login also invalidates an older login still in flight.
+    if(authenticating)sessionVersion++;
+    let version=sessionVersion,token=session?.token||null;
+    const current=()=>version===sessionVersion&&token===(session?.token||null);
     const headers=new Headers(options.headers||{});
     headers.delete('Authorization');
-    if(session?.token)headers.set('Authorization','Bearer '+session.token);
+    if(token)headers.set('Authorization','Bearer '+token);
     const res=await fetch(url,{...options,headers,cache:'no-store',signal:options.signal||AbortSignal.timeout(20000)});
-    if(['/login','/set-pin'].includes(absolute.pathname) && res.ok){
+    if(!current())throw sessionChanged();
+    if(authenticating && res.ok){
       const result=await res.clone().json();
+      if(!current())throw sessionChanged();
       if(result.token){
         session={token:result.token,username:result.username,isAdmin:result.isAdmin,taskAccess:result.taskAccess||{},expiresAt:result.expiresAt};
-        sessionStorage.setItem(SESSION,JSON.stringify(session));
-        await durableStorage.write(SESSION,JSON.stringify(session));
+        version=++sessionVersion;token=session.token;
+        await persistSession();
+        if(!current())throw sessionChanged();
       }
     }
-    if(res.status===401 && !['/login','/set-pin'].includes(absolute.pathname)){
-      session=null;
-      sessionStorage.removeItem(SESSION);
-      void durableStorage.delete(SESSION);
-      root.dispatchEvent(new Event('panelstock-session-expired'));
+    if(res.status===401 && !authenticating){
+      const saved=clearSession();
+      version=sessionVersion;token=null;
+      await saved;
+      if(!current())throw sessionChanged();
       announce('login','Session expired. Log in again; pending changes are retained.');
     }
-    return res;
+    const guard=response=>{
+      for(const method of ['json','text','arrayBuffer','blob']){
+        const read=response[method].bind(response);
+        response[method]=async(...args)=>{if(!current())throw sessionChanged();const value=await read(...args);if(!current())throw sessionChanged();return value;};
+      }
+      const clone=response.clone.bind(response);response.clone=()=>{if(!current())throw sessionChanged();return guard(clone());};
+      return response;
+    };
+    return guard(res);
   };
   const startLive=async()=>{
     clearTimeout(liveTimer);if(!root.WebSocket||!session||!workerUrl||liveSocket?.readyState===WebSocket.OPEN||liveSocket?.readyState===WebSocket.CONNECTING)return;
@@ -517,6 +556,13 @@
     const actions=document.createElement('div');
     actions.style.cssText='display:flex;flex-wrap:wrap;gap:8px;margin-top:16px';
 
+    if(ownerMismatch)actions.appendChild(makeButton('Switch user',async event=>{
+      event.currentTarget.disabled=true;
+      event.currentTarget.textContent='Signing out…';
+      await root.PanelStock.logout();
+      renderNotice();
+    },true));
+
     if(!legacy && !ownerMismatch && session) {
       actions.appendChild(makeButton('Retry sync now',async event=>{
         const button=event.currentTarget;
@@ -577,33 +623,52 @@
     apiFetch,
     outbox,
     async init(url){
+      const initialVersion=sessionVersion;
       await outboxReady;
       workerUrl=url.replace(/\/$/,'');
-      if(!session){try{session=JSON.parse(await durableStorage.read(SESSION)||'null');if(session?.expiresAt<=Date.now())session=null;if(session)sessionStorage.setItem(SESSION,JSON.stringify(session));}catch{session=null;}}
+      if(initialVersion!==sessionVersion)return null;
+      if(!session){try{await sessionWrites;const saved=JSON.parse(await durableStorage.read(SESSION)||'null');if(initialVersion!==sessionVersion)return null;session=saved?.expiresAt>Date.now()?saved:null;if(session)sessionStorage.setItem(SESSION,JSON.stringify(session));}catch{if(initialVersion!==sessionVersion)return null;session=null;}}
+      if(session && !(session.expiresAt>Date.now())){await clearSession();return null;}
       if(!session)return null;
+      const version=sessionVersion;
+      const offlineUser=()=>{
+        if(!cachedView(version))return null;
+        announce('offline','Showing the last saved stock view. Connection needed to verify login.');
+        return {username:session.username,isAdmin:!!session.isAdmin,taskAccess:session.taskAccess||{},offline:true};
+      };
       try{
         const r=await apiFetch(workerUrl+'/session');
-        if(!r.ok)return null;
+        if(!r.ok)return temporaryFailure(r)?offlineUser():null;
         const user=await r.json();
+        if(version!==sessionVersion)return null;
         session={...session,...user};
-        await durableStorage.write(SESSION,JSON.stringify(session));
+        await persistSession();
+        if(version!==sessionVersion)return null;
         void startLive();
         return user;
-      }catch{
-        announce('offline','Connection needed to verify login.');
-        return outbox.state.view?{username:session.username,isAdmin:!!session.isAdmin,taskAccess:session.taskAccess||{},offline:true}:null;
-      }
+      }catch{return offlineUser();}
     },
     async snapshot(){
+      if(session && !(session.expiresAt>Date.now())){await clearSession();return null;}
       if(!session)return null;
-      await outbox.flush(session.username);
+      const version=sessionVersion,owner=session.username;
+      const offlineSnapshot=()=>{
+        const view=cachedView(version,owner);
+        if(view)announce('offline','Showing the last saved stock view. Changes will sync when connection returns.');
+        return view;
+      };
+      await outbox.flush(owner);
+      if(version!==sessionVersion)return null;
       try{
         const r=await apiFetch(workerUrl+'/data');
-        if(!r.ok)return null;
-        const view=outbox.snapshot(await r.json(),session.username);
+        if(!r.ok)return temporaryFailure(r)?offlineSnapshot():null;
+        const data=await r.json();
+        if(version!==sessionVersion)return null;
+        const view=outbox.snapshot(data,owner);
         await durableStorage.flushWrites();
+        if(version!==sessionVersion)return null;
         return view;
-      }catch{announce('offline','Showing the last saved stock view. Changes will sync when connection returns.');return outbox.state.view?copy(outbox.state.view):null;}
+      }catch{return offlineSnapshot();}
     },
     stage(fields,rendered){
       if(getLegacyPending())throw Error('Previous-version pending changes must be reviewed before editing stock.');
@@ -613,8 +678,16 @@
     },
     async flush(){await outboxReady;return session?outbox.flush(session.username):false;},
     async logout(){
-      try{if(session)await apiFetch(workerUrl+'/logout',{method:'POST'});}
-      finally{session=null;sessionStorage.removeItem(SESSION);await durableStorage.delete(SESSION);clearTimeout(liveTimer);liveSocket?.close();liveSocket=null;}
+      const token=session?.token;
+      const saved=clearSession(),version=sessionVersion;
+      renderNotice();
+      let revoked=true;
+      try{
+        if(token){const response=await fetch(workerUrl+'/logout',{method:'POST',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:'{}',cache:'no-store',signal:AbortSignal.timeout(20000)});revoked=response.ok||response.status===401;}
+      }catch{revoked=false;}
+      try{await saved;}catch{revoked=false;}
+      if(version===sessionVersion)announce('login',revoked?'Signed out. Pending changes are retained.':'Signed out on this device. Server sign-out could not be confirmed; pending changes are retained.');
+      return revoked;
     },
     exportPending:downloadPendingBackup,
     reviewPending:()=>({legacy:getLegacyPending(),summary:pendingSummary(),outbox:copy(outbox.state)}),

@@ -43,7 +43,7 @@ test('desktop scripts parse and do not contain the shared backend credential',()
  assert.match(html,/ResizeObserver loop \(\?:limit exceeded\|completed with undelivered notifications\)/);
  assert.match(html,/saveUser\(editUser,true\)/);
  const cncPage=html.slice(html.indexOf('function CncPage('),html.indexOf('function OrdersPage('));
- assert.match(cncPage,/children: "Complete sheet"/);
+ assert.match(cncPage,/onCompleteSheet: view === "pending" \? setSheetToComplete : null/);
  assert.match(html,/function CncDimensionBackfill/);
  assert.match(html,/fixed inset-0 z-50 flex flex-col bg-white/);
  assert.match(html,/children:"Adjust current photo"|"Adjust current photo"/);
