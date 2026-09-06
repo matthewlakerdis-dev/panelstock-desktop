@@ -47,7 +47,7 @@ test('an already completed sheet makes no changes',()=>{
 test('sheet dialog cancels without completing and requires its confirm button',()=>{
   const source=html.slice(html.indexOf('  function CncSheetDialog('),html.indexOf('  function Cnc',html.indexOf('  function CncSheetDialog(')+10));
   let closed=0,confirmed=0;
-  const context={useRef:()=>({current:null}),useEffect:()=>{},import_jsx_runtime:{jsx:(type,props)=>({type,...props})}};
+  const context={useRef:()=>({current:null}),useEffect:()=>{},import_react:{useState:value=>[value,()=>{}]},import_jsx_runtime:{jsx:(type,props)=>({type,...props})}};
   const render=vm.runInNewContext(source+';CncSheetDialog',context);
   const tree=render({sheet:{orderNumber:'ORDER-A',sheetNumber:'1'},affectedPanels:[{id:'a',panelNumber:'a73-219'},{id:'b',panelNumber:'B73-220'}],onClose:()=>closed++,onConfirm:()=>confirmed++});
   function flatten(node){return node && typeof node==='object'?[node,...[node.children].flat().flatMap(flatten)]:[];}
@@ -93,7 +93,7 @@ test('job references are collapsible and separate the same order across differen
 test('single panel dialog requires confirmation and disables it when no longer pending',()=>{
  const start=html.indexOf('  function CncSheetDialog(');
  const source=html.slice(start,html.indexOf('  function Cnc',start+10));
- const render=vm.runInNewContext(source+';CncSheetDialog',{useRef:()=>({current:null}),useEffect:()=>{},import_jsx_runtime:{jsx:(type,props)=>({type,...props})}});
+ const render=vm.runInNewContext(source+';CncSheetDialog',{useRef:()=>({current:null}),useEffect:()=>{},import_react:{useState:value=>[value,()=>{}]},import_jsx_runtime:{jsx:(type,props)=>({type,...props})}});
  let cancelled=0,confirmed=0;
  const props={sheet:{orderNumber:'0007',sheetNumber:'1',panelId:'a'},affectedPanels:[{id:'a',panelNumber:'a73-219'}],onClose:()=>cancelled++,onConfirm:()=>confirmed++};
  const flatten=node=>node&&typeof node==='object'?[node,...[node.children].flat().flatMap(flatten)]:[];
