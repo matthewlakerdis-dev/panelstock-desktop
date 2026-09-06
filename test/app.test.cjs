@@ -22,8 +22,11 @@ test('desktop scripts parse and do not contain the shared backend credential',()
  assert.match(html,/onClick:\(\)=>resetPin\(selectedUser\.username,false\)/);
  assert.match(html,/lg:grid-cols-\[minmax\(0,1fr\)_minmax\(380px,520px\)\]/);
  assert.match(html,/status\?\.kind!=="ok"[\s\S]*setTimeout\(\(\)=>setStatus\(null\),2600\)/);
- assert.match(html,/fixed bottom-6 right-6 z-50/);
- assert.match(html,/\.fixed\.bottom-6\.right-6 \{ top: 50%;[\s\S]*transform: translate\(-50%, -50%\)/);
+ assert.match(html,/fixed bottom-6 left-1\/2 z-50 -translate-x-1\/2/);
+ assert.match(html,/\.fixed\.bottom-6\.left-1\\\/2 \{[\s\S]*transform: translateX\(-50%\)/);
+ assert.match(html,/@keyframes panelstock-toast-enter-exit[\s\S]*animation: panelstock-toast-enter-exit 2\.6s ease-out both/);
+ assert.match(html,/@media \(prefers-reduced-motion: reduce\)/);
+ assert.doesNotMatch(html,/fixed bottom-6 right-6/);
  assert.match(html,/ResizeObserver loop \(\?:limit exceeded\|completed with undelivered notifications\)/);
  assert.match(html,/saveUser\(editUser,true\)/);
  const cncPage=html.slice(html.indexOf('function CncPage('),html.indexOf('function OrdersPage('));
