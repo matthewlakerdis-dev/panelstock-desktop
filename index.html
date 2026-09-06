@@ -14581,10 +14581,7 @@ ${xrefStart}
     const totalSOH = variants.reduce((s, v) => s + v.qty, 0);
     const reserved=useMemo(()=>cncReservedSheets(cncPanels),[cncPanels]);
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "flex items-start justify-between mb-6", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { className: "text-xl font-semibold text-slate-900 tracking-tight", children: "Stock on Hand" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "text-sm text-slate-500 mt-0.5", children: "Every full panel and off-cut currently in the warehouse, grouped by material and colour." })
-      ] }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeading, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Layers, { size: 18 }), title: "Stock on Hand", subtitle: "Every full panel and off-cut currently in the warehouse, grouped by material and colour." }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "grid grid-cols-2 gap-4 mb-6", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bg-white border border-slate-300 rounded-xl p-4", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-xs font-medium text-slate-400 uppercase tracking-wide mb-1", children: "Total panels on hand" }),

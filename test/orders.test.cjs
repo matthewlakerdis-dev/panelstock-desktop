@@ -154,6 +154,7 @@ test('web navigation uses exclusive parent sections and standalone CNC and profi
  assert.doesNotMatch(html,/syncStatus === "synced"/);
  const navigation=html.slice(html.indexOf('const navGroups = ['),html.indexOf('const pageLabels ='));
  assert.match(navigation,/label:"SOH"/);
+ assert.match(html,/PageHeading, \{ icon:[^\n]+Layers, \{ size: 18 \}[^\n]+title: "Stock on Hand"/);
  assert.match(html,/label:"CNC",active:navSelection==="cnc"/);
  assert.match(navigation,/label:"User Access"/);
  assert.match(navigation,/label:"Projects",target:"projects"/);
