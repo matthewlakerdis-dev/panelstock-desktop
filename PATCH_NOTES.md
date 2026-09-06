@@ -1,6 +1,6 @@
 # PanelStock release notes
 
-## Audit Centre and CNC workflow — 6 September 2026 (awaiting publication)
+## Audit Centre and CNC workflow — 6 September 2026
 
 - Audit Centre places a two-column statistics grid and a two-column/four-row filter panel in a left rail, with records on the right. The list holds at most 30 records; reaching the bottom advances to the next batch. Previous/Next controls retain keyboard access, and changing filters returns to the first batch.
 - Complete sheet appears once beside each sheet's pending/completed summary, not on individual panels. Confirmation and completion are scoped to the selected project, order and sheet. The redundant PANEL table heading is removed.
@@ -8,12 +8,12 @@
 - PDF updates and their activity entry save atomically, retaining record IDs and original upload attribution. Server-stamped revision attribution, stale-data checks and stock reservation checks protect replacements. Deploy the companion Worker safeguards with both app updates.
 - Added responsive layouts and supplied missing mobile heading/local-date helpers used by Audit Centre and PDF import. Verified both apps at wide and narrow sizes using synthetic records only.
 
-## Shared Excel styling — 6 September 2026 (awaiting publication)
+## Shared Excel styling — 6 September 2026
 
 - Shared CNC workbooks alternate solid grey and solid white fills on all four tabs, including rows added by refresh. Existing status, off-cut and template/remake colours retain priority.
 - CNC Tracker columns Q (Off-cut) and S (Template / Remake) are fixed at width 10 and keep that width during refresh. Other column widths and workbook data are unchanged.
 
-## Workflow audit fixes — 6 September 2026 (staging backend validation; frontend not deployed)
+## Workflow audit fixes — 6 September 2026
 
 - The companion Worker's new CNC Excel downloads connect Daily, Weekly and Monthly Report tabs to read-only live feeds, so Refresh All and the one-minute refresh update all four tabs. Existing downloads need replacing after release to obtain the added connections.
 - Site Order Excel exports now retain all supported items across 30-row continuation sheets; the companion PDF converter applies the A4 print area to every sheet.
