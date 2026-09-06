@@ -37,6 +37,13 @@ test(repo+': mobile CNC entry keeps the remove button inside the form',()=>asser
   ]){const r=prepare(order,lines);assert.ok(r.errors.length);assert.equal(r.rows.length,0);}
   assert.equal(prepare({...stock,orderNumber:'7',jobReference:'Test'},[{sheetNumber:'1',panelNumber:'A',totalPanelArea:1},{sheetNumber:'2',panelNumber:'A',totalPanelArea:1}]).rows.length,2);
  });
+ test(repo+': each panel preserves its own selected material',()=>{
+  const rows=prepare({orderNumber:'7',jobReference:'Test'},[
+   {sheetNumber:'1',panelNumber:'A',totalPanelArea:1,...stock},
+   {sheetNumber:'2',panelNumber:'B',totalPanelArea:1,stockItemType:'offcut',stockItemId:'offcut-2',stockSku:'OFF-2',sheetWidth:1200,sheetHeight:800}
+  ]).rows;
+  assert.equal(rows.length,2);assert.equal(rows[0].stockItemId,'stock-1');assert.equal(rows[1].stockItemId,'offcut-2');assert.equal(rows[1].stockItemType,'offcut');
+ });
  test(repo+': form adds/removes rows, preserves shared details and saves once',()=>{
   const states=[],refs=[];let cursor=0,refCursor=0,saves=[],closed=0;
   const render=vm.runInNewContext(source+';CncBulkForm',{
