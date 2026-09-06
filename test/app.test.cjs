@@ -101,6 +101,7 @@ test('desktop scripts parse and do not contain the shared backend credential',()
 test('all desktop trash buttons are centred, borderless and red',()=>{
   const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
   assert.match(html,/button:has\(> svg > polyline\[points="3 6 5 6 21 6"\]\) \{ display: grid; place-items: center; border: 0 !important; background: transparent !important; color: #dc2626 !important;/);
+  assert.match(html,/\.ps-split-picker-form button:has\([^}]+align-self: end; margin-bottom: 12px;/);
 });
 
 test('desktop loads Cloudflare analytics only once',()=>{
