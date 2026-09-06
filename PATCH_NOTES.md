@@ -1,5 +1,12 @@
 # PanelStock release notes
 
+## Repository cleanup and receiving clarification - 6 September 2026
+
+- Normalised panelstock-client.js to LF line endings in both repositories and added an explicit Git attribute to preserve that format.
+- Removed the two orphaned mobile-sync recovery trigger files from the companion mobile/backend repository; their workflows were already retired.
+- Add missing material remains removed from Receive. Its historical measurement-guide entry below describes the old UI, not an available action today.
+- The receipt-linked stock-size permission is still active: staff use Receive to add a new size under an existing approved catalogue material. It is distinct from creating a new catalogue material and has not been removed. Conversion permissions are unchanged.
+
 ## Missing-material workflow removed - 5 September 2026
 
 - Removed the Add missing material buttons, dialogs and handlers from the app and web Receive screens.
