@@ -2,6 +2,13 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
+
+test('desktop uses its local production stylesheet',()=>{
+ const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
+ assert.match(html,/href="tailwind\.css"/);
+ assert.doesNotMatch(html,/cdn\.tailwindcss\.com/);
+ assert.ok(fs.statSync(path.join(__dirname,'../tailwind.css')).size>10000);
+});
 const vm=require('node:vm');
 
 test('desktop scripts parse and do not contain the shared backend credential',()=>{
@@ -133,7 +140,7 @@ test('the web interface and last verified session can reopen offline',()=>{
  const client=fs.readFileSync(path.join(__dirname,'../panelstock-client.js'),'utf8'),worker=fs.readFileSync(path.join(__dirname,'../push-sw.js'),'utf8');
  assert.match(client,/serviceWorker\.register\('\/push-sw\.js'/);assert.match(client,/await durableStorage\.read\(SESSION\)/);assert.match(client,/Showing the last saved stock view/);
  assert.match(client,/const view=outbox\.snapshot[\s\S]*await durableStorage\.flushWrites\(\)[\s\S]*return view/);
- assert.match(worker,/panelstock-shell-v1/);assert.match(worker,/request\.mode==='navigate'/);assert.match(worker,/caches\.match\(isNavigation\?'\.\/index\.html'/);assert.doesNotMatch(worker,/panelstock-reports/);
+ assert.match(worker,/panelstock-shell-v2/);assert.match(worker,/request\.mode==='navigate'/);assert.match(worker,/cache\.match\(assetUrl\)/);assert.doesNotMatch(worker,/panelstock-reports/);
 });
 
 test('confirmation actions use the PanelStock styled dialog',()=>{

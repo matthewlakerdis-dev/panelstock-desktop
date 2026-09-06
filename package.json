@@ -1,1 +1,11 @@
-{"name":"panelstock-desktop","private":true,"scripts":{"test":"node --test test/*.test.cjs"},"engines":{"node":">=22"}}
+{
+  "name": "panelstock-desktop",
+  "private": true,
+  "scripts": {
+    "build:css": "node scripts/styles.cjs",
+    "check:css": "node scripts/styles.cjs --check",
+    "test": "npm run check:css && node --test test/*.test.cjs"
+  },
+  "devDependencies": {"tailwindcss": "3.4.17", "postcss": "8.5.6"},
+  "engines": {"node": ">=22"}
+}
