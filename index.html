@@ -18,6 +18,7 @@
   button:disabled { opacity: .4 !important; cursor: not-allowed !important; }
   button:not(:disabled) { cursor: pointer; }
   button:not(:disabled):active { transform: translateY(1px); }
+  button:has(> svg > polyline[points="3 6 5 6 21 6"]) { display: grid; place-items: center; border: 0 !important; background: transparent !important; color: #dc2626 !important; line-height: 1; }
   button[class*="bg-cyan-800"]:not([class*="rounded-full"]), button[class*="bg-green-700"]:not([class*="rounded-full"]), button[class*="bg-red-800"]:not([class*="rounded-full"]), button[class*="border-slate-300"]:not([class*="rounded-full"]) { min-height: 40px; font-size: 14px; font-weight: 600; }
   @keyframes panelstock-toast-enter-exit {
     0% { opacity: 0; transform: translate(-50%, 20px); }
@@ -15366,8 +15367,8 @@ function compareCncOrders(a, b) {
         ]}),
         h("div",{className:"min-w-0",children:h(CncStockPicker,{variants,offcuts,cncPanels,selected:firstLine.stockItemType&&firstLine.stockItemId?`${firstLine.stockItemType}:${firstLine.stockItemId}`:"",onSelect:stock=>chooseLineStock(firstLine,stock)})}),
         lines.length>1&&h("div", { className: "ps-entry-rows col-span-full", children: [
-          h("p",{className:"mb-3 text-sm font-semibold text-slate-700",children:"Additional panels"}),
-          ...lines.slice(1).map((line, i) => h("div", { className: "rounded-xl border border-slate-200 p-4", children: [h("div",{className:"flex items-center justify-between gap-3",children:[h("strong",{className:"text-sm text-slate-800",children:`Panel ${i+2}`}),h("button", { type: "button", className: "ps-entry-trash", "aria-label": "Remove line " + (i + 2), onClick: () => { setLines(current => current.filter(item => item.id !== line.id)); setErrors([]); }, children: h(Trash2, { size: 16 }) })]}),h("div",{className:"mt-3 grid ps-cnc-schedule-grid gap-4",children:[panelEditor(line,i+2),h("div",{className:"min-w-0",children:h(CncStockPicker,{variants,offcuts,cncPanels,selected:line.stockItemType&&line.stockItemId?`${line.stockItemType}:${line.stockItemId}`:"",onSelect:stock=>chooseLineStock(line,stock)})})]})] }, line.id)),
+          h("p",{className:"mb-3 text-sm font-semibold text-slate-700",children:"Additional sheets"}),
+          ...lines.slice(1).map((line, i) => h("div", { className: "rounded-xl border border-slate-200 p-4", children: [h("div",{className:"flex items-center justify-between gap-3",children:[h("strong",{className:"text-sm text-slate-800",children:`Sheet ${i+2}`}),h("button", { type: "button", className: "ps-entry-trash", "aria-label": "Remove line " + (i + 2), onClick: () => { setLines(current => current.filter(item => item.id !== line.id)); setErrors([]); }, children: h(Trash2, { size: 16 }) })]}),h("div",{className:"mt-3 grid ps-cnc-schedule-grid gap-4",children:[panelEditor(line,i+2),h("div",{className:"min-w-0",children:h(CncStockPicker,{variants,offcuts,cncPanels,selected:line.stockItemType&&line.stockItemId?`${line.stockItemType}:${line.stockItemId}`:"",onSelect:stock=>chooseLineStock(line,stock)})})]})] }, line.id)),
         ] }),
         h("div",{className:"col-span-full",children:h("button", { type: "button", onClick: addLine, className: "ps-entry-add", children: "+ Add line" })})
       ] }),

@@ -109,6 +109,9 @@ test('web manages the shared schedule',()=>{
  const cnc=html.slice(html.indexOf('function CncPage'),html.indexOf('function ScheduleTimeField'));
  assert.match(cnc,/title: "Schedule CNC panels"[\s\S]+?"Import CNC PDF"/);
  assert.match(cnc,/CncBulkForm, \{ variants, offcuts, cncPanels,/);
+ assert.match(html,/children:"Additional sheets"/);
+ assert.match(html,/children:`Sheet \$\{i\+2\}`/);
+ assert.doesNotMatch(html,/children:"Additional panels"/);
  assert.doesNotMatch(cnc,/CncSingleForm, \{ variants, offcuts, cncPanels,/);
  assert.doesNotMatch(cnc,/" Bulk entry"/);
  assert.doesNotMatch(schedule,/"Status"/);
