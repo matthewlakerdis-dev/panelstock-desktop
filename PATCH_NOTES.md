@@ -1,5 +1,11 @@
 # PanelStock release notes
 
+## Shared Excel row height — 7 September 2026
+
+- Shared CNC Tracker, Daily, Weekly and Monthly Report downloads now use fixed 18-point data rows with non-wrapping cell text. Live refresh feeds supply the same row height and non-wrapping formatting for incoming records.
+- Long notes and details retain their full text, available in Excel's formula bar. Headings stay at 30 points; grey/white stripes, status colours, column widths, numeric formats and read-only connections are unchanged.
+- Download a fresh shared workbook after the companion Worker update to receive the fixed-height worksheet settings. Existing saved data is not changed. Automated export/feed checks pass; native Excel Refresh All verification remains outstanding.
+
 ## CNC off-cut allowance — 7 September 2026
 
 - Increased the shared CNC PDF off-cut allowance from 5 mm to 10 mm on the newly cut edge only. Factory-edge dimensions are unchanged, and strips with no usable size after the allowance are not suggested.
