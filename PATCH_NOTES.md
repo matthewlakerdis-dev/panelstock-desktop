@@ -1,5 +1,17 @@
 # PanelStock release notes
 
+## CNC settings and larger tracker folders — 7 September 2026
+
+- Administrators can manage CNC rules from a new CNC Settings page inside the CNC navigation folder: minimum off-cut size, cut-edge allowance, and the green/yellow/orange wastage limits.
+- New PDF analyses use the saved off-cut rules. Newly downloaded shared Excel trackers use the saved waste colour limits, with values above orange shown in red.
+- Job, order and sheet folder headings now have larger clickable areas in the factory, desktop, public and Site CNC tracker views.
+- Existing defaults remain safe: 1 mm minimum off-cut size, 10 mm cut-edge allowance, and waste limits of 5% green, 10% yellow and 15% orange.
+
+## Shared Excel flag column widths — 7 September 2026
+
+- CNC Tracker columns Q (Off-cut) and S (Template / Remake) now fit their displayed tick, cross or dash values instead of their longer headings. The headings remain wrapped, and refresh preserves the compact fitted widths.
+- All other column widths, values, colours, formulas, row heights and report tabs are unchanged.
+
 ## Shared Excel auto-fit columns — 7 September 2026
 
 - Every shared CNC workbook column now fits its initial header and displayed data, instead of forcing fixed widths for the flag, Details and Notes columns. Details and Notes remain left-aligned and full values are retained.

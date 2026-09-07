@@ -13058,6 +13058,7 @@
     time: "07:00",
     enabled: false
   };
+  var DEFAULT_CNC_SETTINGS = { minimumOffcutSizeMm: 1, wasteGreenMax: 5, wasteYellowMax: 10, wasteOrangeMax: 15, cutEdgeAllowanceMm: 10 };
   var DEFAULT_REASONS = [
     { id: "r1", label: "Scratched", code: "001" },
     { id: "r2", label: "Bent / Warped", code: "002" },
@@ -13637,6 +13638,7 @@ ${xrefStart}
     const [detailItem, setDetailItem] = useState(null);
     const [damageLogOpen, setDamageLogOpen] = useState(false);
     const [emailConfig, setEmailConfig] = useState(DEFAULT_EMAIL_CONFIG);
+    const [cncSettings, setCncSettings] = useState(DEFAULT_CNC_SETTINGS);
     const [syncStatus, setSyncStatus] = useState("synced");
     const [notificationCount,setNotificationCount]=useState(0);
     useEffect(() => {
@@ -13666,6 +13668,11 @@ ${xrefStart}
           setTransactions(data.transactions || []); setReasons(ensureMissingPanelReason(data.reasons));
           setCatalog(data.catalog || []); setPhotos(data.photos || {}); setCncPanels(data.cncPanels || []); setUsername(user.username); setIsAdmin(user.isAdmin); setTaskAccess(user.taskAccess || {}); }
             if (user.isAdmin) {
+              PanelStock.apiFetch(BAKED_WORKER_URL + "/cnc-settings").then(async response => {
+                if (!response.ok) return;
+                const result = await response.json();
+                if (active && PanelStock.username === user.username) setCncSettings({ ...DEFAULT_CNC_SETTINGS, ...result.settings });
+              }).catch(() => {});
               PanelStock.apiFetch(BAKED_WORKER_URL + "/config").then(async response => {
                 if (!response.ok) return;
                 const config = await response.json();
@@ -14388,7 +14395,7 @@ ${xrefStart}
     }
     const can = (task) => isAdmin || taskAccess[task] !== false;
     const permittedPages = [
-      ['stock','factory.stock'],['receive','factory.receive'],['dispatch','factory.dispatch'],['transfer','factory.transfer'],['damage','factory.damage'],['cnc','factory.cnc'],
+      ['stock','factory.stock'],['receive','factory.receive'],['dispatch','factory.dispatch'],['transfer','factory.transfer'],['damage','factory.damage'],['cnc','factory.cnc'],...(isAdmin?[['cnc-settings',null]]:[]),
       ...(isAdmin||can('site.orders.manage')?[['projects',null]]:[]),['orders','site.orders.view'],['schedule',can('schedule.view')?'schedule.view':'schedule.cnc.view'],['jobs','factory.jobs'],
       ...(isAdmin?[['access',null],['audit',null]]:[]),['notifications',null],['support',null],['profile',null],['settings','factory.settings']
     ].filter(([,task])=>task===null||can(task)).map(([page])=>page);
@@ -14410,10 +14417,11 @@ ${xrefStart}
     const navigate=(key,target=key,section=null)=>{setNavSelection(key);if(section)setSettingsSection(section);setTab(target);};
     const navGroups = [
       {key:"stockGroup",label:"Stock",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Layers,{size:16}),items:[...(can("factory.stock")?[{key:"stock",label:"SOH",target:"stock",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Layers,{size:16})}]:[]),...(can("factory.receive")?[{key:"receive",label:"Receive",target:"receive",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Package,{size:16})}]:[]),...(can("factory.dispatch")?[{key:"dispatch",label:"Dispatch",target:"dispatch",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Truck,{size:16})}]:[]),...(can("factory.damage")?[{key:"damage",label:"Damage",target:"damage",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(AlertTriangle,{size:16})}]:[]),...(can("factory.transfer")?[{key:"transfer",label:"Convert",target:"transfer",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Scissors,{size:16})}]:[])]},
+      {key:"cncGroup",label:"CNC",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(CncRouterIcon,{size:16}),items:[...(can("factory.cnc")?[{key:"cnc",label:"CNC Tracker",target:"cnc",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(CncRouterIcon,{size:16})}]:[]),...(isAdmin?[{key:"cnc-settings",label:"CNC Settings",target:"cnc-settings",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Settings2,{size:16})}]:[])]},
       {key:"workGroup",label:"Work",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Briefcase,{size:16}),items:[...(can("schedule.view")||can("schedule.cnc.view")?[{key:"schedule",label:"Schedule",target:"schedule",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(ScheduleCalendarIcon,{size:16})}]:[]),...(isAdmin||can("site.orders.manage")?[{key:"projects",label:"Projects",target:"projects",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Briefcase,{size:16})}]:[]),...(can("factory.jobs")?[{key:"jobs",label:"Jobs",target:"jobs",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Briefcase,{size:16})}]:[]),...(can("site.orders.view")?[{key:"orders",label:"Site Orders",target:"orders",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(ClipboardList,{size:16})}]:[])]},
       {key:"adminGroup",label:"Administration",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Settings2,{size:16}),items:[...(isAdmin?[{key:"access",label:"User Access",target:"access",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(User,{size:16})},{key:"audit",label:"Audit Centre",target:"audit",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(ClipboardList,{size:16})}]:[]),...(can("factory.settings")?[{key:"settings",label:"Settings",target:"settings",section:"general",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Settings2,{size:16})}]:[])]}
     ].filter(group=>group.items.length);
-    const pageLabels = { stock: "Stock", receive: "Receive", dispatch: "Dispatch", transfer:"Convert", damage: "Damage", cnc: "CNC", projects:"Projects", orders: "Orders", schedule: "Schedule", jobs: "Jobs", access: "User Access", audit:"Audit Centre", notifications:"Notifications", support:"Support", profile:"My Profile", settings: "Settings" };
+    const pageLabels = { stock: "Stock", receive: "Receive", dispatch: "Dispatch", transfer:"Convert", damage: "Damage", cnc: "CNC", "cnc-settings":"CNC Settings", projects:"Projects", orders: "Orders", schedule: "Schedule", jobs: "Jobs", access: "User Access", audit:"Audit Centre", notifications:"Notifications", support:"Support", profile:"My Profile", settings: "Settings" };
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex h-screen bg-slate-50 text-slate-900 font-sans", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("aside", { className: "w-60 bg-slate-900 flex flex-col shrink-0", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center justify-between gap-3 px-4 py-4 border-b border-white/10", children: [
@@ -14422,7 +14430,6 @@ ${xrefStart}
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("nav", { className: "flex-1 px-3 py-4 space-y-1 overflow-y-auto", children: [
           navGroups.filter(group=>group.key==="stockGroup").map(group=>/* @__PURE__ */ (0,import_jsx_runtime.jsx)(SideNavGroup,{...group,open:openNavGroup===group.key,onToggle:()=>setOpenNavGroup(current=>current===group.key?null:group.key),activeKey:navSelection,onSelect:item=>navigate(item.key,item.target,item.section)},group.key)),
-          can("factory.cnc")&&/* @__PURE__ */ (0,import_jsx_runtime.jsx)(SideNavItem,{icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(CncRouterIcon,{size:18}),label:"CNC",active:navSelection==="cnc",onClick:()=>{setOpenNavGroup(null);navigate("cnc");}}),
           navGroups.filter(group=>group.key!=="stockGroup").map(group=>/* @__PURE__ */ (0,import_jsx_runtime.jsx)(SideNavGroup,{...group,open:openNavGroup===group.key,onToggle:()=>setOpenNavGroup(current=>current===group.key?null:group.key),activeKey:navSelection,onSelect:item=>navigate(item.key,item.target,item.section)},group.key)),
           /* @__PURE__ */ (0,import_jsx_runtime.jsx)(SideNavItem,{icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(SupportHeadsetIcon,{size:16}),label:"Support",active:navSelection==="support",onClick:()=>{setOpenNavGroup(null);navigate("support");}}),
           /* @__PURE__ */ (0,import_jsx_runtime.jsx)(SideNavItem,{icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(User,{size:16}),label:"My Profile",active:navSelection==="profile",onClick:()=>{setOpenNavGroup(null);navigate("profile");}})
@@ -14490,6 +14497,7 @@ ${xrefStart}
               onBackfillDimensions: backfillCncDimensions
             }
           ),
+          tab === "cnc-settings" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncSettingsPage, { settings:cncSettings, onSaved:setCncSettings }),
           tab === "orders" && can("site.orders.view") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(OrdersPage, { canCreate: can("site.orders.create"), canManage: can("site.orders.manage"), isAdmin }),
           tab === "projects" && (isAdmin || can("site.orders.manage")) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(OrdersPage, { canCreate: false, canManage: can("site.orders.manage"), isAdmin, projectsOnly: true }),
           tab === "schedule" && (can("schedule.view")||can("schedule.cnc.view")) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchedulePage, { canManage: can("schedule.manage"), canManageCnc:can("schedule.cnc.manage") }),
@@ -15329,7 +15337,7 @@ function compareCncOrders(a, b) {
       const total = allPanels.filter((p) => jobKey(p) === job);
       const done = total.filter((p) => p.status === "completed").length;
       return h("section", { className: "bg-white border border-slate-200 rounded-xl overflow-hidden", children: [
-        h("button", { type: "button", "aria-expanded": open, onClick: () => setExpanded((previous) => { const next = new Map(previous); next.set(job, !open); return next; }), className: "w-full flex flex-wrap items-center justify-between gap-2 p-4 text-left bg-slate-100 hover:bg-slate-200", children: [
+        h("button", { type: "button", "aria-expanded": open, onClick: () => setExpanded((previous) => { const next = new Map(previous); next.set(job, !open); return next; }), className: "min-h-[64px] w-full flex flex-wrap items-center justify-between gap-2 px-4 py-5 text-left bg-slate-100 hover:bg-slate-200", children: [
           h("span", { className: "min-w-0 break-words font-semibold text-sm text-slate-800", children: job || "No job reference" }),
           h("span", { className: "text-xs text-slate-500", children: (total.length - done) + " pending · " + done + "/" + total.length + " complete " + (open ? "▾" : "▸") })
         ] }),
@@ -15351,7 +15359,7 @@ function compareCncOrders(a, b) {
       const done = total.filter((p) => p.status === "completed").length;
       return h("section", { className: "bg-white border border-slate-200 rounded-xl overflow-hidden", children: [
         h("div", {className:"flex flex-wrap items-center gap-2 bg-slate-50 p-3",children:[
-        h("button", { type: "button", "aria-expanded": open, onClick: () => setExpanded((previous) => { const next = new Map(previous); next.set(order, !open); return next; }), className: "flex w-full min-w-0 flex-wrap items-center justify-between gap-3 text-left sm:w-auto sm:flex-1", children: [
+        h("button", { type: "button", "aria-expanded": open, onClick: () => setExpanded((previous) => { const next = new Map(previous); next.set(order, !open); return next; }), className: "flex min-h-[64px] w-full min-w-0 flex-wrap items-center justify-between gap-3 px-3 py-4 text-left sm:w-auto sm:flex-1", children: [
           h("span", { className: "min-w-0 break-words font-semibold text-sm text-slate-800", children: "Order " + order }),
           h("span", { className: "shrink-0 text-xs text-slate-500", children: (total.length - done) + " pending · " + done + "/" + total.length + " complete " + (open ? "▾" : "▸") })
         ] }),
@@ -15376,7 +15384,7 @@ function compareCncOrders(a, b) {
       const done = total.filter((p) => p.status === "completed").length;
       return h("section", { className: "bg-white border border-slate-200 rounded-xl overflow-hidden", children: [
         h("div", { className: "flex flex-wrap items-center gap-2 bg-neutral-50 px-4 py-3", children: [
-          h("button", { type: "button", "aria-expanded": open, onClick: () => setExpanded((previous) => { const next = new Map(previous); next.set(sheet, !open); return next; }), className: "flex w-full min-w-0 flex-wrap items-center justify-between gap-3 text-left sm:w-auto sm:flex-1", children: [
+          h("button", { type: "button", "aria-expanded": open, onClick: () => setExpanded((previous) => { const next = new Map(previous); next.set(sheet, !open); return next; }), className: "flex min-h-[56px] w-full min-w-0 flex-wrap items-center justify-between gap-3 py-3 text-left sm:w-auto sm:flex-1", children: [
             h("span", { className: "min-w-0 break-words font-semibold text-sm text-neutral-800", children: "Sheet " + sheet }),
             h("span", { className: "text-xs text-neutral-500", children: (total.length - done) + " pending · " + done + "/" + total.length + " complete " + (open ? "▾" : "▸") })
           ] }),
@@ -15527,6 +15535,13 @@ function compareCncOrders(a, b) {
   }
   function cncEstimatedOffcut(panels) {
     return (panels || []).find((panel) => Number(panel.pendingOffcut?.length) > 0 && Number(panel.pendingOffcut?.width) > 0)?.pendingOffcut || null;
+  }
+  function CncSettingsPage({settings,onSaved}) {
+    const h=import_react.createElement,[form,setForm]=useState(()=>({...DEFAULT_CNC_SETTINGS,...settings})),[busy,setBusy]=useState(false),[message,setMessage]=useState("");
+    useEffect(()=>setForm({...DEFAULT_CNC_SETTINGS,...settings}),[settings]);
+    const field=(key,label,help,min,max)=>h("label",{className:"block"},[h("span",{className:"text-sm font-semibold text-slate-700"},label),h("input",{type:"number",min,max,step:"1",required:true,value:form[key],onChange:event=>setForm(current=>({...current,[key]:event.target.value})),className:inputCls+" mt-1"}),h("span",{className:"mt-1 block text-xs text-slate-500"},help)]);
+    async function save(event){event.preventDefault();setBusy(true);setMessage("");try{const payload=Object.fromEntries(Object.keys(DEFAULT_CNC_SETTINGS).map(key=>[key,Number(form[key])])),response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/cnc-settings",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}),result=await response.json().catch(()=>({}));if(!response.ok)throw Error(result.error||"CNC settings could not be saved.");onSaved(result.settings);setMessage("CNC settings saved.");}catch(error){setMessage(error.message||"CNC settings could not be saved.");}finally{setBusy(false);}}
+    return h("div",{className:"mx-auto max-w-3xl px-4 py-6"},[h("div",{className:"mb-5"},[h("h1",{className:"text-2xl font-bold text-slate-900"},"CNC Settings"),h("p",{className:"mt-1 text-sm text-slate-500"},"Control off-cut suggestions and the waste colours used in newly downloaded shared Excel trackers.")]),h("form",{onSubmit:save,className:"space-y-5 rounded-xl border border-slate-200 bg-white p-5"},[field("minimumOffcutSizeMm","Minimum off-cut size (mm)","Both finished sides must be at least this size.",1,10000),field("cutEdgeAllowanceMm","Off-cut allowance on cut edge (mm)","Removed from the newly cut edge before an off-cut is proposed.",0,1000),h("fieldset",{className:"rounded-xl border border-slate-200 p-4"},[h("legend",{className:"px-1 text-sm font-semibold text-slate-800"},"Wastage percentage colours"),h("p",{className:"mb-3 text-xs text-slate-500"},"Set the upper limit for each colour. Anything above orange displays red."),h("div",{className:"grid gap-4 sm:grid-cols-3"},[field("wasteGreenMax","Green up to (%)","Low wastage.",0,100),field("wasteYellowMax","Yellow up to (%)","Moderate wastage.",0,100),field("wasteOrangeMax","Orange up to (%)","High wastage.",0,100)])]),message&&h("p",{role:"status",className:message.includes("saved")?"text-sm text-green-700":"text-sm text-red-700"},message),h("button",{type:"submit",disabled:busy,className:"rounded-lg bg-cyan-800 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"},busy?"Saving…":"Save CNC settings")])]);
   }
   function CncPage({ cncPanels, variants, offcuts, isAdmin, onAddPanel, onAddPanelsBulk, onCompletePanel, onCompleteSheet, onRemovePanel, onRemoveScheduled, onBackfillDimensions }) {
     const h = import_react.createElement;

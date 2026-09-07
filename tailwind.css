@@ -838,6 +838,12 @@ video {
 .min-h-\[18px\] {
   min-height: 18px;
 }
+.min-h-\[56px\] {
+  min-height: 56px;
+}
+.min-h-\[64px\] {
+  min-height: 64px;
+}
 .min-h-\[82px\] {
   min-height: 82px;
 }
@@ -2074,6 +2080,10 @@ video {
 
   .sm\:flex-1 {
     flex: 1 1 0%;
+  }
+
+  .sm\:grid-cols-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .sm\:grid-cols-\[minmax\(0\2c 1fr\)_180px_auto\] {
