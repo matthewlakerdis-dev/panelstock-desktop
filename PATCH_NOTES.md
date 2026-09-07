@@ -2,10 +2,15 @@
 
 ## CNC settings and larger tracker folders — 7 September 2026
 
-- Administrators can manage CNC rules from a new CNC Settings page inside the CNC navigation folder: minimum off-cut size, cut-edge allowance, and the green/yellow/orange wastage limits.
-- New PDF analyses use the saved off-cut rules. Newly downloaded shared Excel trackers use the saved waste colour limits, with values above orange shown in red.
+- Administrators can manage CNC rules from a new CNC Settings page inside the CNC navigation folder: minimum off-cut size, cut-edge allowance, and the green/yellow wastage limits.
+- New PDF analyses use the saved off-cut rules. Newly downloaded shared Excel trackers use the saved waste colour limits, with values above yellow shown in red.
 - Job, order and sheet folder headings now have larger clickable areas in the factory, desktop, public and Site CNC tracker views.
-- Existing defaults remain safe: 1 mm minimum off-cut size, 10 mm cut-edge allowance, and waste limits of 5% green, 10% yellow and 15% orange.
+- Existing defaults remain safe: 1 mm minimum off-cut size, 10 mm cut-edge allowance, and waste limits of 5% green and 10% yellow.
+
+## Shared Excel alignment and waste colours — 7 September 2026
+
+- Removed the orange wastage band. Waste now displays green, yellow or red using the two administrator-set limits.
+- Fixed column Q at width 7 and column S at width 9. Details and Notes now use the same fitted width and matching left/middle text alignment.
 
 ## Shared Excel flag column widths — 7 September 2026
 
