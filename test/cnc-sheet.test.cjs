@@ -69,11 +69,11 @@ test('orders group exactly and retain their expansion state across refreshed dat
  const render=vm.runInNewContext(html.slice(html.indexOf('function compareCncOrders('),html.indexOf('  function CncJobGroups('))+html.slice(start,end)+';CncOrderGroups',{useState:()=>[state,fn=>state=fn(state)],CncSheetGroups:()=>{},import_jsx_runtime:{jsx:(type,props,key)=>({type,...props,key})}});
  const rows=[{id:'1',orderNumber:'20',status:'pending'},{id:'2',orderNumber:'20',status:'completed'},{id:'3',orderNumber:'10',status:'pending'}];
  const props={panels:rows,allPanels:rows,query:'',renderGroup:group=>group};
- let tree=render(props);assert.equal(tree.children.length,2);assert.equal(tree.children[0].children[0]['aria-expanded'],false);
- tree.children[0].children[0].onClick();tree=render({...props,panels:rows.map(p=>({...p}))});
- assert.equal(tree.children[0].children[0]['aria-expanded'],true);assert.equal(tree.children[0].children[1].children.panels.length,2);
- assert.equal(tree.children[1].children[0]['aria-expanded'],false);
- tree=render({...props,query:'A',panels:rows.slice(0,2)});assert.equal(tree.children.length,1);assert.equal(tree.children[0].children[0]['aria-expanded'],true);
+ let tree=render(props);assert.equal(tree.children.length,2);assert.equal(tree.children[0].children[0].children[0]['aria-expanded'],false);
+ tree.children[0].children[0].children[0].onClick();tree=render({...props,panels:rows.map(p=>({...p}))});
+ assert.equal(tree.children[0].children[0].children[0]['aria-expanded'],true);assert.equal(tree.children[0].children[1].children.panels.length,2);
+ assert.equal(tree.children[1].children[0].children[0]['aria-expanded'],false);
+ tree=render({...props,query:'A',panels:rows.slice(0,2)});assert.equal(tree.children.length,1);assert.equal(tree.children[0].children[0].children[0]['aria-expanded'],true);
 });
 test('job references are collapsible and separate the same order across different jobs',()=>{
  const start=html.indexOf('  function CncJobGroups('),end=html.indexOf('\n  function ',start+5);

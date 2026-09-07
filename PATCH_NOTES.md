@@ -1,5 +1,18 @@
 # PanelStock release notes
 
+## CNC sheet and order removal — 7 September 2026
+
+- PDF import review has a red Remove sheet action and Undo last removal. Repeated copies are reviewed separately, so removing one copy preserves the other sheet numbers and original PDF page references. Removing a review sheet does not delete any existing scheduled records.
+- Administrators can delete a pending order or sheet from its heading, with a confirmation showing the project, order, sheet and affected counts, including panels hidden by search. Small screens place the actions below the heading.
+- Completed and partly completed sheets are protected. Orders containing completed work cannot be deleted as a whole; their entirely pending sheets can still be deleted individually. Existing single-panel removal uses the same safeguards.
+- Deletions and their linked audit entry save together without changing stock on hand. Server checks reject staff, missing audit entries, changed group membership and completion/update races rather than partially deleting a schedule. Deploy both apps and the companion Worker together; older open clients should refresh before deleting scheduled work.
+
+## Shared Excel text columns — 7 September 2026
+
+- Shared CNC Tracker downloads reserve width 60 for Details (R) and width 70 for Notes (T), including initially empty columns. Both columns' data is left-aligned in the workbook and refresh feed.
+- Grey/white stripe rules now control fill only, allowing the text alignment to persist on both stripe colours. Status colours, centred headings and flag columns, fixed 18-point data rows, full cell values and read-only connections are retained.
+- After the companion Worker update is published, download a fresh shared workbook to obtain the new column widths and styles. Existing saved data is unchanged. Native Excel Refresh All verification remains outstanding.
+
 ## Shared Excel row height — 7 September 2026
 
 - Shared CNC Tracker, Daily, Weekly and Monthly Report downloads now use fixed 18-point data rows with non-wrapping cell text. Live refresh feeds supply the same row height and non-wrapping formatting for incoming records.

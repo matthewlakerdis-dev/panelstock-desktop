@@ -1763,6 +1763,10 @@ video {
   --tw-text-opacity: 1;
   color: rgb(107 33 168 / var(--tw-text-opacity, 1));
 }
+.text-red-600 {
+  --tw-text-opacity: 1;
+  color: rgb(220 38 38 / var(--tw-text-opacity, 1));
+}
 .text-red-700 {
   --tw-text-opacity: 1;
   color: rgb(185 28 28 / var(--tw-text-opacity, 1));
@@ -2063,6 +2067,14 @@ video {
   opacity: 0.5;
 }
 @media (min-width: 640px) {
+
+  .sm\:w-auto {
+    width: auto;
+  }
+
+  .sm\:flex-1 {
+    flex: 1 1 0%;
+  }
 
   .sm\:grid-cols-\[minmax\(0\2c 1fr\)_180px_auto\] {
     grid-template-columns: minmax(0,1fr) 180px auto;
