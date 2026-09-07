@@ -1,5 +1,10 @@
 # PanelStock release notes
 
+## Shared Excel auto-fit columns — 7 September 2026
+
+- Every shared CNC workbook column now fits its initial header and displayed data, instead of forcing fixed widths for the flag, Details and Notes columns. Details and Notes remain left-aligned and full values are retained.
+- Refreshing any of the four connected worksheets allows Excel to resize its columns for the refreshed results. Fixed row heights, colours, formulas, number formats and read-only connections remain unchanged.
+
 ## CNC sheet and order removal — 7 September 2026
 
 - PDF import review has a red Remove sheet action and Undo last removal. Repeated copies are reviewed separately, so removing one copy preserves the other sheet numbers and original PDF page references. Removing a review sheet does not delete any existing scheduled records.
