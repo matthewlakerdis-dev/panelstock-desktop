@@ -1,5 +1,13 @@
 # PanelStock release notes
 
+## QA checks foundation — 8 September 2026
+
+- Added a secured QA Centre under Work, between Jobs and Site Orders, for completed CNC panels and manually entered metalwork.
+- The inspection screen shows the CNC operator and completion time, retains recheck history, requires notes and a photo for failures, and prevents unrecorded self-approval.
+- Existing completed panels remain Pre-QA so the rollout does not block current work.
+- Completed CNC remakes automatically link to their failed matching panel, and an approved replacement resolves the original while preserving both records.
+- Added Dispatch Load to QA Centre so authorised staff can record approved finished items leaving the factory, including partial quantities, destination, transport, driver, notes and optional photo evidence. Unresolved orders require an administrator override reason.
+
 ## CNC settings and larger tracker folders — 7 September 2026
 
 - Administrators can manage CNC rules from a new CNC Settings page inside the CNC navigation folder: minimum off-cut size, cut-edge allowance, and the green/yellow wastage limits.
