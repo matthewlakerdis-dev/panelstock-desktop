@@ -4,7 +4,8 @@
 
 - Added a Complete all control to mark every visible inspection item as passed in one action.
 - QA photos can now be attached to passed or failed inspections, with an administrator setting to require photo evidence for every QA check.
-- Administrators can rename the panel and metalwork checks, add their own checks, and choose which checks are active without breaking saved QA history.
+- The QA photo area now matches the app's card styling and offers separate Take photo and Choose photo actions, with large camera images resized automatically.
+- Administrators can rename, add or delete panel and metalwork checks, and choose which checks are active without breaking saved QA history.
 
 ## QA Settings visual alignment — 8 September 2026
 
