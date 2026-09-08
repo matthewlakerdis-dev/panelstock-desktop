@@ -1,5 +1,9 @@
 # PanelStock release notes
 
+## QA Settings visual alignment — 8 September 2026
+
+- Restyled QA Settings to match the site's standard settings layout, including compact sections, custom checklist selectors, cyan toggle switches and a consistent save bar.
+
 ## QA checks foundation — 8 September 2026
 
 - Added a secured QA Centre under Work, between Jobs and Site Orders, for completed CNC panels and manually entered metalwork.
