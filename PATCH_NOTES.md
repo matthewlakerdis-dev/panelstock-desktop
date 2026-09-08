@@ -7,6 +7,7 @@
 - Existing completed panels remain Pre-QA so the rollout does not block current work.
 - Completed CNC remakes automatically link to their failed matching panel, and an approved replacement resolves the original while preserving both records.
 - Added Dispatch Load to QA Centre so authorised staff can record approved finished items leaving the factory, including partial quantities, destination, transport, driver, notes and optional photo evidence. Unresolved orders require an administrator override reason.
+- Added a dedicated QA navigation folder with QA Check and administrator-only QA Settings for checklists, evidence, approvals and dispatch requirements.
 
 ## CNC settings and larger tracker folders — 7 September 2026
 
