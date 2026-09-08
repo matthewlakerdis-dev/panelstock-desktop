@@ -1,5 +1,11 @@
 # PanelStock release notes
 
+## QA completion and photo evidence — 8 September 2026
+
+- Added a Complete all control to mark every visible inspection item as passed in one action.
+- QA photos can now be attached to passed or failed inspections, with an administrator setting to require photo evidence for every QA check.
+- Administrators can rename the panel and metalwork checks, add their own checks, and choose which checks are active without breaking saved QA history.
+
 ## QA Settings visual alignment — 8 September 2026
 
 - Restyled QA Settings to match the site's standard settings layout, including compact sections, custom checklist selectors, cyan toggle switches and a consistent save bar.
