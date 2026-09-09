@@ -1,5 +1,11 @@
 # PanelStock release notes
 
+## Recut sheet sizing — 9 September 2026
+
+- Recut PDF imports can use a different available stock sheet size.
+- Recut layouts are treated as bottom-left aligned, and the proposed off-cut is recalculated against the selected sheet with the configured cut-edge allowance and minimum off-cut size.
+- A selected sheet that is too small for the detected recut layout is rejected before scheduling.
+
 ## Unified QA recut status — 9 September 2026
 
 - Removed the separate Rework status. All failed panel and metalwork checks now appear under Recut required.

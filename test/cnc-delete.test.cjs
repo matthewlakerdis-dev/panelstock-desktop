@@ -52,7 +52,7 @@ test('PDF review removes one sheet copy, preserves original numbering, supports 
  const stock={id:'stock',sku:'SKU',qty:8,width:4000,height:1500,material:'ACM'},pdfPages=[{page:1,project:'Alpha',orderNumber:'01',sheetNumber:'1',panelIds:['A','B'],quantity:2,sheetWidth:4000,sheetHeight:1500,panelArea:4,material:'ACM'},{page:2,project:'Alpha',orderNumber:'01',sheetNumber:'2',panelIds:['C'],quantity:1,sheetWidth:4000,sheetHeight:1500,panelArea:4,material:'ACM'}];
  let saved=[],closed=0;const scheduled=[{...base,status:'completed'}],before=JSON.stringify(scheduled);
  const runtime=hooks({PageHeading:'heading',Upload:'upload',Trash2:'trash',Field:'field',CncStockPicker:'picker',CncPanelTypeFields:'classification',inputCls:'input',BAKED_WORKER_URL:'https://example.invalid',projectTitleCase:v=>v,FileReader:class{readAsDataURL(){this.result='data:application/pdf;base64,AA==';this.onload();}},PanelStock:{apiFetch:async()=>({ok:true,json:async()=>({pages:pdfPages})})}});
- const render=vm.runInNewContext(normalizers+source('expandCncPdfSheets')+source('CncPdfImport')+';CncPdfImport',runtime.context),props={variants:[stock],offcuts:[],cncPanels:scheduled,onSave:(rows,options)=>saved.push({rows,options}),onClose:()=>closed++},draw=()=>nodes(runtime.render(render,props));
+ const render=vm.runInNewContext(normalizers+source('expandCncPdfSheets')+source('cncRecutSheetPlan')+source('CncPdfImport')+';CncPdfImport',runtime.context),props={variants:[stock],offcuts:[],cncPanels:scheduled,onSave:(rows,options)=>saved.push({rows,options}),onClose:()=>closed++},draw=()=>nodes(runtime.render(render,props));
  let all=draw();
  // The model stores an input element's type attribute on the same object key.
  const input=all.find(n=>n.accept==='application/pdf');await input.onChange({target:{files:[{type:'application/pdf',size:1,name:'example.pdf'}]}});
@@ -64,4 +64,10 @@ test('PDF review removes one sheet copy, preserves original numbering, supports 
  assert.equal(saved.length,1);assert.deepEqual(Array.from(saved[0].rows,p=>p.sheetNumber),['1.2','1.2','2']);assert.deepEqual(Array.from(saved[0].rows,p=>p.pdfPage),[1,1,2]);assert.equal(saved[0].options.replacePending,true);assert.equal(closed,1);assert.equal(JSON.stringify(scheduled),before);
  for(const button of draw().filter(n=>n['aria-label']?.startsWith('Remove sheet'))) {draw().find(n=>n['aria-label']===button['aria-label']).onClick();}
  all=draw();assert.equal(all.some(n=>n.children?.includes?.('Save reviewed sheets')),false);assert.equal(saved.length,1);
+});
+test('recut sheet changes keep the layout bottom-left and recalculate the usable off-cut',()=>{
+ const plan=vm.runInNewContext(source('cncRecutSheetPlan')+';cncRecutSheetPlan({layout:{anchor:"bottom-left",usedLength:1800,usedWidth:900},cutEdgeAllowance:10,minimumOffcutSize:100},2400,1200)');
+ assert.equal(plan.fits,true);assert.deepEqual(JSON.parse(JSON.stringify(plan.offcut)),{length:1200,width:590,edge:'right',cutEdgeAllowance:10,minimumOffcutSize:100,layout:{anchor:'bottom-left',usedLength:1800,usedWidth:900},confidence:'high'});
+ const tooSmall=vm.runInNewContext(source('cncRecutSheetPlan')+';cncRecutSheetPlan({layout:{anchor:"bottom-left",usedLength:1800,usedWidth:900}},1700,1200)');
+ assert.equal(tooSmall.fits,false);assert.equal(tooSmall.offcut,null);
 });
