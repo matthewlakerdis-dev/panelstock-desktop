@@ -1,5 +1,11 @@
 # PanelStock release notes
 
+## Scheduled CNC editing and panel recuts — 9 September 2026
+
+- Administrators can edit pending scheduled CNC panels from the tracker. Changes are revalidated against sheet identity, stock consistency and availability, and saved with an activity record.
+- Failed panel QA now becomes Recut required and the failed panel cannot be re-approved, dispatched (including by override) or sent through metalwork rework. A completed remake must pass QA to replace it.
+- Failed metalwork continues to use Rework required and can be rechecked after correction.
+
 ## QA completion and photo evidence — 8 September 2026
 
 - Added a Complete all control to mark every visible inspection item as passed in one action.
