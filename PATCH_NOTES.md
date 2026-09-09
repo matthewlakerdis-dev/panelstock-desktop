@@ -1,10 +1,17 @@
 # PanelStock release notes
 
+## Unified QA recut status — 9 September 2026
+
+- Removed the separate Rework status. All failed panel and metalwork checks now appear under Recut required.
+- Existing Rework records are migrated automatically, including their latest result, history and replacement status.
+- Failed panels remain locked until a completed remake passes QA; failed metalwork can still be corrected and rechecked.
+- Made CNC order folders thinner, shifted them further right and added a pale cyan subfolder treatment so they are clearly distinct from project folders.
+
 ## Scheduled CNC editing and panel recuts — 9 September 2026
 
 - Administrators can edit pending scheduled CNC panels from the tracker. Changes are revalidated against sheet identity, stock consistency and availability, and saved with an activity record.
-- Failed panel QA now becomes Recut required and the failed panel cannot be re-approved, dispatched (including by override) or sent through metalwork rework. A completed remake must pass QA to replace it.
-- Failed metalwork continues to use Rework required and can be rechecked after correction.
+- Failed panel QA now becomes Recut required and the failed panel cannot be re-approved or dispatched, including by override. A completed remake must pass QA to replace it.
+- Failed metalwork can be corrected and rechecked.
 
 ## QA completion and photo evidence — 8 September 2026
 

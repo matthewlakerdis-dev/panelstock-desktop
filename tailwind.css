@@ -1234,6 +1234,10 @@ video {
 .border-current {
   border-color: currentColor;
 }
+.border-cyan-100 {
+  --tw-border-opacity: 1;
+  border-color: rgb(207 250 254 / var(--tw-border-opacity, 1));
+}
 .border-cyan-200 {
   --tw-border-opacity: 1;
   border-color: rgb(165 243 252 / var(--tw-border-opacity, 1));
@@ -1363,6 +1367,9 @@ video {
 .bg-cyan-50 {
   --tw-bg-opacity: 1;
   background-color: rgb(236 254 255 / var(--tw-bg-opacity, 1));
+}
+.bg-cyan-50\/40 {
+  background-color: rgb(236 254 255 / 0.4);
 }
 .bg-cyan-700 {
   --tw-bg-opacity: 1;
@@ -1628,8 +1635,14 @@ video {
 .pl-4 {
   padding-left: 1rem;
 }
+.pl-6 {
+  padding-left: 1.5rem;
+}
 .pl-9 {
   padding-left: 2.25rem;
+}
+.pr-2 {
+  padding-right: 0.5rem;
 }
 .pr-3 {
   padding-right: 0.75rem;
@@ -2000,6 +2013,9 @@ video {
   --tw-bg-opacity: 1;
   background-color: rgb(255 251 235 / var(--tw-bg-opacity, 1));
 }
+.hover\:bg-cyan-100\/60:hover {
+  background-color: rgb(207 250 254 / 0.6);
+}
 .hover\:bg-cyan-50:hover {
   --tw-bg-opacity: 1;
   background-color: rgb(236 254 255 / var(--tw-bg-opacity, 1));
@@ -2144,10 +2160,6 @@ video {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .sm\:grid-cols-4 {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-
   .sm\:grid-cols-\[1fr_120px\] {
     grid-template-columns: 1fr 120px;
   }
@@ -2187,6 +2199,10 @@ video {
   .sm\:px-6 {
     padding-left: 1.5rem;
     padding-right: 1.5rem;
+  }
+
+  .sm\:pl-10 {
+    padding-left: 2.5rem;
   }
 }
 @media (min-width: 768px) {
