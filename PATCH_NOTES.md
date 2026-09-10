@@ -1,5 +1,10 @@
 # PanelStock release notes
 
+## Separately completed QA recuts — 10 September 2026
+
+- Administrators can resolve a panel recut that was completed and scheduled separately.
+- The failed panel, QA evidence and an audited resolution reason are preserved.
+
 ## Recut sheet sizing — 9 September 2026
 
 - Recut PDF imports can use a different available stock sheet size.
