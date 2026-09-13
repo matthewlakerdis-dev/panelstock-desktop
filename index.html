@@ -14401,7 +14401,7 @@ ${xrefStart}
       [variants, offcuts]
     );
     useEffect(()=>{if(!username){setNotificationCount(0);return;}let active=true;const load=async()=>{try{const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/notifications"),result=await response.json().catch(()=>({}));if(active&&response.ok)setNotificationCount((result.notifications||[]).filter(item=>!item.read).length);}catch{}};void load();const timer=setInterval(load,30000);return()=>{active=false;clearInterval(timer);};},[username]);
-    useEffect(()=>{if(!username)return;const open=new URLSearchParams(location.search).get('open');if(['notifications','support','schedule'].includes(open)){setTab(open);setNavSelection(open);history.replaceState({},'',location.pathname);}},[username]);
+    useEffect(()=>{if(!username)return;const params=new URLSearchParams(location.search),requested=params.get('page')||params.get('open'),initial=permittedPages.includes(requested)?requested:permittedPages.includes(tab)?tab:permittedPages[0]||"profile";setTab(initial);setNavSelection(initial);history.replaceState({panelstock:true,key:initial,target:initial,section:null},"",`${location.pathname}?page=${encodeURIComponent(initial)}`);const onBack=event=>{const state=event.state;if(state?.panelstock===true&&permittedPages.includes(state.target)){setNavSelection(state.key||state.target);if(state.section)setSettingsSection(state.section);setTab(state.target);}};addEventListener("popstate",onBack);return()=>removeEventListener("popstate",onBack);},[username,isAdmin,taskAccess]);
     function lookupSku(code) {
       const v = variants.find((x) => x.sku === code);
       if (v) return { ...v, itemType: "variant" };
@@ -14430,7 +14430,7 @@ ${xrefStart}
         }
       );
     }
-    const navigate=(key,target=key,section=null)=>{setNavSelection(key);if(section)setSettingsSection(section);setTab(target);};
+    const navigate=(key,target=key,section=null)=>{if(key===navSelection&&target===tab&&(!section||section===settingsSection))return;history.pushState({panelstock:true,key,target,section},"",`${location.pathname}?page=${encodeURIComponent(key)}`);setNavSelection(key);if(section)setSettingsSection(section);setTab(target);};
     const navGroups = [
       {key:"stockGroup",label:"Stock",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Layers,{size:16}),items:[...(can("factory.stock")?[{key:"stock",label:"SOH",target:"stock",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Layers,{size:16})}]:[]),...(can("factory.receive")?[{key:"receive",label:"Receive",target:"receive",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Package,{size:16})}]:[]),...(can("factory.dispatch")?[{key:"dispatch",label:"Dispatch",target:"dispatch",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Truck,{size:16})}]:[]),...(can("factory.damage")?[{key:"damage",label:"Damage",target:"damage",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(AlertTriangle,{size:16})}]:[]),...(can("factory.transfer")?[{key:"transfer",label:"Convert",target:"transfer",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Scissors,{size:16})}]:[])]},
       {key:"cncGroup",label:"CNC",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(CncRouterIcon,{size:16}),items:[...(can("factory.cnc")?[{key:"cnc",label:"CNC Tracker",target:"cnc",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(CncRouterIcon,{size:16})}]:[]),...(isAdmin?[{key:"cnc-settings",label:"CNC Settings",target:"cnc-settings",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Settings2,{size:16})}]:[])]},

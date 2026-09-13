@@ -50,6 +50,14 @@ test('desktop web exposes permission-aware order management',()=>{
  assert.match(client,/taskAccess:result\.taskAccess\|\|\{\}/);
 });
 
+test('desktop web navigation uses browser history for in-app pages',()=>{
+ const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
+ assert.match(html,/history\.pushState\(\{panelstock:true,key,target,section\}/);
+ assert.match(html,/history\.replaceState\(\{panelstock:true,key:initial,target:initial,section:null\}/);
+ assert.match(html,/addEventListener\("popstate",onBack\)/);
+ assert.match(html,/state\?\.panelstock===true&&permittedPages\.includes\(state\.target\)/);
+});
+
 test('desktop dispatch uses the same material sorting as stock and damage',()=>{
  const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
  const dispatch=html.slice(html.indexOf('function DispatchPage'),html.indexOf('function DamagePage'));
