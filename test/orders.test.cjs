@@ -56,6 +56,9 @@ test('desktop web navigation uses browser history for in-app pages',()=>{
  assert.match(html,/history\.replaceState\(\{panelstock:true,key:initial,target:initial,section:null\}/);
  assert.match(html,/addEventListener\("popstate",onBack\)/);
  assert.match(html,/state\?\.panelstock===true&&permittedPages\.includes\(state\.target\)/);
+ assert.match(html,/open:openNavGroup===group\.key\|\|previewNavGroup===group\.key/);
+ assert.match(html,/setOpenNavGroup\(group\.key\);setPreviewNavGroup\(null\);navigate/);
+ assert.match(html,/const group=navGroups\.find\(value=>value\.items\.some\(item=>item\.target===state\.target\)\)/);
 });
 
 test('desktop dispatch uses the same material sorting as stock and damage',()=>{
@@ -177,7 +180,7 @@ test('web navigation uses exclusive parent sections with CNC settings under CNC'
  assert.doesNotMatch(navigation,/label:"Schedule Settings"/);
  assert.doesNotMatch(navigation,/label:"Other Settings"/);
  assert.match(html,/open:openNavGroup===group\.key/);
- assert.match(html,/setOpenNavGroup\(current=>current===group\.key\?null:group\.key\)/);
+ assert.match(html,/setPreviewNavGroup\(current=>current===group\.key\?null:group\.key\)/);
  assert.match(html,/label:"My Profile",active:navSelection==="profile"/);
  assert.match(navigation,/label:"Receive"[^}]+icon:/);
  assert.match(navigation,/label:"Schedule"[^}]+icon:/);
