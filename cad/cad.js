@@ -1,0 +1,97 @@
+/* CAD drafts never enter PanelStock's stock mutation queue. */
+(()=>{'use strict';
+const API='https://panelstock-reports.matthewlakerdis.workers.dev';
+const $=id=>document.getElementById(id),KEY='panelstock:cad:session:v1';
+let session=null,spec=null,result=null,busy=false,previewURL=null,version=0;
+const codes=['B','S','NT','RE','FE','CR'],directions=['right','up','left','down'];
+function notice(message){$('notice').textContent=message;}
+function invalidate(){version++;result=null;$('download').disabled=true;$('confirmed').checked=false;$('preview').hidden=true;$('validation').textContent='Generate a new preview after reviewing your changes.';}
+async function api(path,body){const token=session?.token;const response=await fetch(API+path,{method:body?'POST':'GET',headers:{...(token?{Authorization:'Bearer '+token}:{}),...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),cache:'no-store',signal:AbortSignal.timeout(95000)});const data=await response.json();if(response.status===401){session=null;sessionStorage.removeItem(KEY);showSession();}if(!response.ok)throw Error(data.error||'Request failed');return data;}
+function showSession(){if(!session){spec=null;invalidate();$('edges').replaceChildren();$('panelid').value='';$('folds').value='';$('questions').replaceChildren();if(previewURL){URL.revokeObjectURL(previewURL);previewURL=null;}}$('login').hidden=!!session;$('workspace').hidden=!session;$('signout').hidden=!session;$('account').textContent=session?.username||'';}
+async function run(action){if(busy)return;busy=true;for(const b of document.querySelectorAll('button'))b.disabled=true;notice('Working…');try{await action();}catch(e){notice(e.name==='TimeoutError'?'This request timed out. Please retry.':e.message||'Could not reach the server.');}finally{busy=false;for(const b of document.querySelectorAll('button'))b.disabled=false;$('download').disabled=!result;}}
+function edgeRow(edge,index){const tr=document.createElement('tr');const name=document.createElement('input');name.value=edge.name||'Edge '+(index+1);name.maxLength=60;name.setAttribute('aria-label','Edge name');
+ const fields=[name,...[directions,codes].map((options,j)=>{const select=document.createElement('select');select.setAttribute('aria-label',j?'Edge type':'Edge direction');for(const option of options){const el=document.createElement('option');el.value=option;el.textContent=option;select.append(el);}select.value=edge[j?'code':'direction'];return select;}),...['site','finished'].map(key=>{const input=document.createElement('input');input.type='number';input.min='.001';input.max='10000';input.step='any';input.value=edge[key]??'';input.setAttribute('aria-label',key+' length in mm');return input;})];
+ for(const field of fields){const td=document.createElement('td');td.append(field);tr.append(td);field.addEventListener('input',()=>{const keys=['name','direction','code','site','finished'];fields.forEach((f,j)=>edge[keys[j]]=j>2?(f.value===''?null:Number(f.value)):f.value);invalidate();if(fields.indexOf(field)>=1&&fields.indexOf(field)<=3)recalculateEditedOutline();renderQuestions();});}
+ const td=document.createElement('td'),remove=document.createElement('button');remove.className='remove-edge';remove.setAttribute('aria-label','Remove edge '+(index+1));remove.title='Remove edge';remove.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6"/></svg>';remove.onclick=()=>{spec.edges.splice(index,1);recalculateOutline(spec);renderSpec();};td.append(remove);tr.append(td);return tr;}
+function recalculateOutline(draft){
+ initialiseSiteFolds(draft);
+ const es=draft.edges,v={right:[1,0],up:[0,1],left:[-1,0],down:[0,-1]},tags=['B','S','NT','RE'];
+ es.forEach(e=>e.finished=null);
+ draft.calculationError='';
+ if(!Array.isArray(draft.siteFolds)){draft.calculationError='Enter the original site fold heights to recalculate this older draft.';return true;}
+ draft.folds=[];
+ if(draft.unsupported||es.length<4||es.length>32)return true;
+ let x=0,y=0;const points=[];
+ for(const e of es){if(!v[e.direction]||!codes.includes(e.code)||typeof e.site!=='number'||!Number.isFinite(e.site)||e.site<.001||e.site>10000)return true;points.push([x,y]);x+=v[e.direction][0]*e.site;y+=v[e.direction][1]*e.site;}
+ if(Math.hypot(x,y)>.001)return true;
+ let area=0;
+ for(let i=0;i<es.length;i++){const a=v[es[(i+es.length-1)%es.length].direction],b=v[es[i].direction],p=points[i],q=points[(i+1)%es.length];if(a[0]*b[0]+a[1]*b[1]!==0)return true;area+=p[0]*q[1]-q[0]*p[1];}
+ if(area<=0)return true;
+ const shifted=points.map((p,i)=>{const prev=es[(i+es.length-1)%es.length],cur=es[i],a=v[prev.direction],b=v[cur.direction],da=tags.includes(prev.code)?1:0,db=tags.includes(cur.code)?1:0;return [p[0]-(a[1]?a[1]*da:b[1]*db),p[1]+(a[0]?a[0]*da:b[0]*db)];});
+ const folds=[...draft.siteFolds].sort((a,b)=>a-b),height=Math.max(...points.map(p=>p[1]))-Math.min(...points.map(p=>p[1]));
+ if(folds.length&&(es.length!==4||es.some(e=>!tags.includes(e.code)))){draft.calculationError='Internal folds require a rectangular panel with four tagged edges.';return true;}
+ if(folds.length>12||new Set(folds).size!==folds.length||folds.some(f=>typeof f!=='number'||!Number.isFinite(f)||f<.001||f>height-.001)){draft.calculationError='Enter distinct site fold heights inside the panel (at most 12).';return true;}
+ const finishedFolds=folds.map((f,i)=>Number((f-2*(i+1)).toFixed(6)));
+ const lengths=es.map((e,i)=>{const p=shifted[i],q=shifted[(i+1)%es.length],u=v[e.direction];return Number(((q[0]-p[0])*u[0]+(q[1]-p[1])*u[1]-(u[1]?2*folds.length:0)).toFixed(6));});
+ if(lengths.some((n,i)=>n<.001||n>10000||!Number.isFinite(n)||(es[i].code==='FE'&&Math.abs(n-es[i].site)>.001)))return true;
+ if(folds.length){const levels=[0,...finishedFolds,Math.max(...lengths.filter((n,i)=>v[es[i].direction][1]))];if(levels.some((n,i)=>i&&n-levels[i-1]<=.001)){draft.calculationError='Fold deductions leave an empty or reversed panel section.';return true;}}
+ draft.folds=finishedFolds;es.forEach((e,i)=>e.finished=lengths[i]);return true;
+}
+function initialiseSiteFolds(draft){
+ if(Array.isArray(draft.siteFolds))return;
+ if(!(draft.folds||[]).length){draft.siteFolds=[];return;}
+ if(draft.dimensionSource==='site-outline-1mm-fold-allowance')draft.siteFolds=[...draft.folds].sort((a,b)=>a-b).map((f,i)=>Number((f+2*(i+1)).toFixed(6)));
+ else draft.calculationError='Enter the original site fold heights to recalculate this older draft.';
+}
+function recalculateEditedOutline(){
+ recalculateOutline(spec);
+ const inputs=$('edges').querySelectorAll('input[aria-label="finished length in mm"]');
+ spec.edges.forEach((e,i)=>{if(inputs[i])inputs[i].value=e.finished??'';});
+ notice(spec.edges.every(e=>e.finished!==null)?'Finished dimensions recalculated. Review them before generating.':'Resolve the panel checks to calculate finished dimensions.');
+}
+function currentIssues(draft){
+ const issues=[],valid=v=>typeof v==='number'&&Number.isFinite(v)&&v>=.001&&v<=10000;
+ if(draft.calculationError)issues.push(draft.calculationError);
+ if(!/^[A-Za-z0-9][A-Za-z0-9 _.-]{0,59}$/.test(draft.panelId||''))issues.push('Enter a panel ID using letters, numbers, spaces or hyphens.');
+ if(!Array.isArray(draft.edges)||draft.edges.length<4||draft.edges.length>32)return [...issues,'Use 4 to 32 perimeter edges.'];
+ const vectors={right:[1,0],up:[0,1],left:[-1,0],down:[0,-1]};
+ for(const key of ['site','finished']){
+  let x=0,y=0,complete=true;
+  draft.edges.forEach((e,i)=>{if(!valid(e[key])){issues.push('Edge '+(i+1)+' '+key+' must be between 0.001 and 10000 mm.');complete=false;}if(!vectors[e.direction]||!codes.includes(e.code)){complete=false;return;}if(valid(e[key])){x+=vectors[e.direction][0]*e[key];y+=vectors[e.direction][1]*e[key];}});
+  if(complete&&Math.hypot(x,y)>.001)issues.push(key+' dimensions do not close: horizontal difference '+Number(x.toFixed(3))+', vertical difference '+Number(y.toFixed(3))+' mm.');
+ }
+ if(draft.unsupported)issues.push('This reading contains unsupported or uncertain geometry. Review the original reading notes; a field edit alone does not clear that flag.');
+ return issues;
+}
+function renderQuestions(){
+ $('questions').replaceChildren();if(!spec){$('questions').hidden=true;return;}
+ const issues=currentIssues({...spec,panelId:$('panelid').value.trim()}),notes=spec.questions||[];
+ const foldNotes=spec.folds?.length&&Array.isArray(spec.siteFolds)?['Finished fold heights from bottom: '+spec.folds.join(', ')+' mm.']:[];
+ $('questions').hidden=!issues.length&&!notes.length&&!foldNotes.length;
+ for(const [title,items] of [['Current panel checks',issues],['Calculated folds',foldNotes],['Original sketch-reading notes (not updated by edits)',notes]]){
+  if(!items.length)continue;const h=document.createElement('strong');h.textContent=title;$('questions').append(h);
+  for(const item of items){const p=document.createElement('p');p.textContent=item;$('questions').append(p);}
+ }
+}
+function renderSpec(){initialiseSiteFolds(spec);invalidate();$('panelid').value=spec.panelId||'';$('folds').value=(spec.siteFolds||[]).join(', ');$('folds').setAttribute('aria-label','Site fold heights from bottom (mm)');const label=document.querySelector('label[for=folds]');if(label)label.textContent='Site fold heights from bottom (mm)';$('edges').replaceChildren(...spec.edges.map(edgeRow));renderQuestions();}
+function example(){return {panelId:'Z3-130',edges:[['Bottom','right','NT',700,698],['Lower right','up','B',300,298],['Right shoulder','left','S',150,150],['Right stem','up','RE',200,200],['Top','left','RE',400,398],['Left stem','down','RE',200,200],['Left shoulder','left','S',150,150],['Lower left','down','B',300,298]].map(([name,direction,code,site,finished])=>({name,direction,code,site,finished})),folds:[],questions:[],unsupported:false};}
+function collect(){if(!spec)throw Error('Load a sketch or start a panel first.');return {...spec,panelId:$('panelid').value.trim(),reviewed:$('confirmed').checked};}
+function download(data,type,filename){const url=URL.createObjectURL(new Blob([data],{type}));const a=document.createElement('a');a.href=url;a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+$('loginform').onsubmit=e=>{e.preventDefault();run(async()=>{const form=new FormData(e.target);const data=await api('/login',{username:form.get('username'),pin:form.get('pin')});if(data.mustChangePin)throw Error('Set your new PIN in the main PanelStock app, then return here.');session=data;sessionStorage.setItem(KEY,JSON.stringify(data));e.target.reset();await verify();notice('Signed in. Load a sketch or start with a test panel.');});};
+async function verify(){const data=await api('/session');if(!data.isAdmin&&data.taskAccess?.['factory.cnc']!==true){session=null;sessionStorage.removeItem(KEY);showSession();throw Error('This account needs Factory CNC access.');}session={...session,...data};showSession();}
+$('signout').onclick=()=>run(async()=>{try{await api('/logout',{});}finally{session=null;sessionStorage.removeItem(KEY);spec=null;invalidate();$('edges').replaceChildren();$('file').value='';showSession();notice('Signed out.');}});
+$('example').onclick=()=>{spec=example();renderSpec();notice('Z3-130 loaded. Review the details before generating.');};
+$('blank').onclick=()=>{spec={panelId:'',edges:['right','up','left','down'].map((direction,i)=>({name:['Bottom','Right','Top','Left'][i],direction,code:'B',site:null,finished:null})),folds:[],questions:[],unsupported:false};renderSpec();notice('Enter the site and finished lengths.');};
+$('addedge').onclick=()=>{if(!spec)spec={panelId:'',edges:[],folds:[],questions:[],unsupported:false};if(spec.edges.length>=32)return;spec.edges.push({name:'New edge',direction:'right',code:'B',site:null,finished:null});renderSpec();};
+for(const id of ['panelid','folds'])$(id).addEventListener('input',()=>{invalidate();if(id==='folds'&&spec){const text=$('folds').value.trim();spec.siteFolds=text?text.split(',').map(x=>x.trim()===''?NaN:Number(x.trim())):[];recalculateEditedOutline();}renderQuestions();});
+$('file').onchange=invalidate;
+$('analyse').onclick=()=>run(async()=>{const file=$('file').files[0];if(!file||!['application/pdf','image/png','image/jpeg'].includes(file.type)||file.size>6*1024*1024)throw Error('Choose a PDF, PNG or JPEG up to 6 MB.');const v=version;const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=reject;reader.readAsDataURL(file);});const response=await api('/cad/analyse',{filename:file.name,mime:file.type,data});if(version!==v)throw Error('Details changed while reading. Retry to apply the sketch.');spec=response.spec;renderSpec();notice(spec.unsupported?'This sketch has unsupported details. Review the questions; generation is blocked.':'Sketch read. Check every proposed dimension and edge type.');});
+$('generate').onclick=()=>run(async()=>{const request=collect();if(!request.reviewed)throw Error('Check the review box after reviewing your dimensions.');const issues=currentIssues(request);if(issues.length)throw Error(issues[0]);const v=version;const generated=await api('/cad/generate',request);if(version!==v)throw Error('Details changed. Generate a fresh drawing.');result=generated;if(previewURL)URL.revokeObjectURL(previewURL);previewURL=URL.createObjectURL(new Blob([result.svg],{type:'image/svg+xml'}));$('preview').src=previewURL;$('preview').hidden=false;$('validation').textContent=`Closed CUT checked · ${result.validation.holes} holes · ${result.validation.routes} route lines · ${result.validation.stiffener?'Stiffener included':'No stiffener required'}`;notice('Drawing ready. Check the preview before downloading.');});
+$('download').onclick=()=>{if(result)download(result.dxf,'application/dxf',result.filename);};
+$('save').onclick=()=>{try{download(JSON.stringify({...collect(),reviewed:false},null,2),'application/json',($('panelid').value.replace(/[^a-z0-9_-]/gi,'_')||'panel')+'-draft.json');notice('Draft downloaded.');}catch(e){notice(e.message);}};
+$('import').onchange=()=>run(async()=>{const file=$('import').files[0];if(!file||file.size>128*1024)throw Error('Choose a panel draft smaller than 128 KB.');const data=JSON.parse(await file.text());if(!Array.isArray(data.edges)||data.edges.length<4||data.edges.length>32||!data.edges.every(e=>e&&codes.includes(e.code)&&directions.includes(e.direction)))throw Error('Invalid panel draft.');spec=data;renderSpec();notice('Draft loaded. Review it before generating.');});
+(async()=>{for(const key of [KEY,'panelstock:session:v2','panelstock:site-orders:session:v1']){try{const saved=JSON.parse(sessionStorage.getItem(key)||'null');if(saved?.token&&saved.expiresAt>Date.now()){session=saved;break;}}catch{}}showSession();if(session)await run(async()=>{await verify();notice('Ready. Upload a sketch or load a test panel.');});})();
+})();
+
+
+
