@@ -11,8 +11,33 @@ function showSession(){if(!session){spec=null;invalidate();$('edges').replaceChi
 async function run(action){if(busy)return;busy=true;for(const b of document.querySelectorAll('button'))b.disabled=true;notice('Working…');try{await action();}catch(e){notice(e.name==='TimeoutError'?'This request timed out. Please retry.':e.message||'Could not reach the server.');}finally{busy=false;for(const b of document.querySelectorAll('button'))b.disabled=false;$('download').disabled=!result;}}
 function edgeRow(edge,index){const tr=document.createElement('tr');const name=document.createElement('input');name.value=edge.name||'Edge '+(index+1);name.maxLength=60;name.setAttribute('aria-label','Edge name');
  const fields=[name,...[directions,codes].map((options,j)=>{const select=document.createElement('select');select.setAttribute('aria-label',j?'Edge type':'Edge direction');for(const option of options){const el=document.createElement('option');el.value=option;el.textContent=option;select.append(el);}select.value=edge[j?'code':'direction'];return select;}),...['site','finished'].map(key=>{const input=document.createElement('input');input.type='number';input.min='.001';input.max='10000';input.step='any';input.value=edge[key]??'';input.setAttribute('aria-label',key+' length in mm');return input;})];
- for(const field of fields){const td=document.createElement('td');td.append(field);tr.append(td);field.addEventListener('input',()=>{const keys=['name','direction','code','site','finished'];fields.forEach((f,j)=>edge[keys[j]]=j>2?(f.value===''?null:Number(f.value)):f.value);invalidate();renderQuestions();});}
- const td=document.createElement('td'),remove=document.createElement('button');remove.className='remove-edge';remove.setAttribute('aria-label','Remove edge '+(index+1));remove.title='Remove edge';remove.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6"/></svg>';remove.onclick=()=>{spec.edges.splice(index,1);renderSpec();};td.append(remove);tr.append(td);return tr;}
+ for(const field of fields){const td=document.createElement('td');td.append(field);tr.append(td);field.addEventListener('input',()=>{const keys=['name','direction','code','site','finished'];fields.forEach((f,j)=>edge[keys[j]]=j>2?(f.value===''?null:Number(f.value)):f.value);invalidate();if(fields.indexOf(field)>=1&&fields.indexOf(field)<=3)recalculateEditedOutline();renderQuestions();});}
+ const td=document.createElement('td'),remove=document.createElement('button');remove.className='remove-edge';remove.setAttribute('aria-label','Remove edge '+(index+1));remove.title='Remove edge';remove.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6"/></svg>';remove.onclick=()=>{spec.edges.splice(index,1);recalculateOutline(spec);renderSpec();};td.append(remove);tr.append(td);return tr;}
+function recalculateOutline(draft){
+ // Fold heights in existing drafts are already finished heights. Do not apply
+ // site fold deductions again or overwrite manually reviewed folded panels.
+ if((draft.folds||[]).length)return false;
+ const es=draft.edges,v={right:[1,0],up:[0,1],left:[-1,0],down:[0,-1]},tags=['B','S','NT','RE'];
+ es.forEach(e=>e.finished=null);
+ if(draft.unsupported||es.length<4||es.length>32)return true;
+ let x=0,y=0;const points=[];
+ for(const e of es){if(!v[e.direction]||!codes.includes(e.code)||typeof e.site!=='number'||!Number.isFinite(e.site)||e.site<.001||e.site>10000)return true;points.push([x,y]);x+=v[e.direction][0]*e.site;y+=v[e.direction][1]*e.site;}
+ if(Math.hypot(x,y)>.001)return true;
+ let area=0;
+ for(let i=0;i<es.length;i++){const a=v[es[(i+es.length-1)%es.length].direction],b=v[es[i].direction],p=points[i],q=points[(i+1)%es.length];if(a[0]*b[0]+a[1]*b[1]!==0)return true;area+=p[0]*q[1]-q[0]*p[1];}
+ if(area<=0)return true;
+ const shifted=points.map((p,i)=>{const prev=es[(i+es.length-1)%es.length],cur=es[i],a=v[prev.direction],b=v[cur.direction],da=tags.includes(prev.code)?1:0,db=tags.includes(cur.code)?1:0;return [p[0]-(a[1]?a[1]*da:b[1]*db),p[1]+(a[0]?a[0]*da:b[0]*db)];});
+ const lengths=es.map((e,i)=>{const p=shifted[i],q=shifted[(i+1)%es.length],u=v[e.direction];return Number(((q[0]-p[0])*u[0]+(q[1]-p[1])*u[1]).toFixed(6));});
+ if(lengths.some((n,i)=>n<.001||n>10000||!Number.isFinite(n)||(es[i].code==='FE'&&Math.abs(n-es[i].site)>.001)))return true;
+ es.forEach((e,i)=>e.finished=lengths[i]);return true;
+}
+function recalculateEditedOutline(){
+ if(($('folds').value||'').trim()||(spec.folds||[]).length){notice('This panel has internal folds. Review its finished dimensions manually after changing the outline.');return;}
+ recalculateOutline(spec);
+ const inputs=$('edges').querySelectorAll('input[aria-label="finished length in mm"]');
+ spec.edges.forEach((e,i)=>{if(inputs[i])inputs[i].value=e.finished??'';});
+ notice('Finished dimensions recalculated from the site outline. Review them before generating.');
+}
 function currentIssues(draft){
  const issues=[],valid=v=>typeof v==='number'&&Number.isFinite(v)&&v>=.001&&v<=10000;
  if(!/^[A-Za-z0-9][A-Za-z0-9 _.-]{0,59}$/.test(draft.panelId||''))issues.push('Enter a panel ID using letters, numbers, spaces or hyphens.');
@@ -54,3 +79,5 @@ $('save').onclick=()=>{try{download(JSON.stringify({...collect(),reviewed:false}
 $('import').onchange=()=>run(async()=>{const file=$('import').files[0];if(!file||file.size>128*1024)throw Error('Choose a panel draft smaller than 128 KB.');const data=JSON.parse(await file.text());if(!Array.isArray(data.edges)||data.edges.length<4||data.edges.length>32||!data.edges.every(e=>e&&codes.includes(e.code)&&directions.includes(e.direction)))throw Error('Invalid panel draft.');spec=data;renderSpec();notice('Draft loaded. Review it before generating.');});
 (async()=>{for(const key of [KEY,'panelstock:session:v2','panelstock:site-orders:session:v1']){try{const saved=JSON.parse(sessionStorage.getItem(key)||'null');if(saved?.token&&saved.expiresAt>Date.now()){session=saved;break;}}catch{}}showSession();if(session)await run(async()=>{await verify();notice('Ready. Upload a sketch or load a test panel.');});})();
 })();
+
+
