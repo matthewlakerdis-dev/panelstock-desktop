@@ -4,7 +4,7 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const out = path.join(root, 'dist-staging');
 const api = 'https://panelstock-reports-staging.matthewlakerdis.workers.dev';
-const files = ['index.html','panelstock-client.js','tailwind.css','icon-192.png','PanelStock_SOP.pdf','push-sw.js','cad/index.html','cad/cad.js','cad/cad.css'];
+const files = ['index.html','panelstock-client.js','tailwind.css','icon-192.png','PanelStock_SOP.pdf','push-sw.js','cad/index.html','cad/cad.js','cad/cad.css','cad/visual-editor.js','cad/visual-editor.css','cad/editor-theme.css','cad/embedded.js'];
 const production = 'https://panelstock-reports.matthewlakerdis.workers.dev';
 for (const file of ['index.html','cad/cad.js']) {
   if (!fs.readFileSync(path.join(root,file),'utf8').includes(production)) throw Error('Backend marker missing: '+file);
@@ -16,7 +16,7 @@ for (const file of files) {
   if (/\.(html|js|css)$/.test(file)) {
     let text = fs.readFileSync(path.join(root,file),'utf8');
     text = text.replaceAll(production,api).replaceAll('https://cnc.panelstockhq.com',api).replaceAll('https://tv.panelstockhq.com',api);
-    if (file.endsWith('.html')) text = text.replace('<title>','<title>STAGING · ');
+    if (file.endsWith('.html')) text = text.replace('<title>','<title>STAGING � ');
     fs.writeFileSync(target,text);
   } else fs.copyFileSync(path.join(root,file),target);
 }

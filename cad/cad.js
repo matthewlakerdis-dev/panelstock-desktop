@@ -90,8 +90,5 @@ $('generate').onclick=()=>run(async()=>{const request=collect();if(!request.revi
 $('download').onclick=()=>{if(result)download(result.dxf,'application/dxf',result.filename);};
 $('save').onclick=()=>{try{download(JSON.stringify({...collect(),reviewed:false},null,2),'application/json',($('panelid').value.replace(/[^a-z0-9_-]/gi,'_')||'panel')+'-draft.json');notice('Draft downloaded.');}catch(e){notice(e.message);}};
 $('import').onchange=()=>run(async()=>{const file=$('import').files[0];if(!file||file.size>128*1024)throw Error('Choose a panel draft smaller than 128 KB.');const data=JSON.parse(await file.text());if(!Array.isArray(data.edges)||data.edges.length<4||data.edges.length>32||!data.edges.every(e=>e&&codes.includes(e.code)&&directions.includes(e.direction)))throw Error('Invalid panel draft.');spec=data;renderSpec();notice('Draft loaded. Review it before generating.');});
-(async()=>{for(const key of [KEY,'panelstock:session:v2','panelstock:site-orders:session:v1']){try{const saved=JSON.parse(sessionStorage.getItem(key)||'null');if(saved?.token&&saved.expiresAt>Date.now()){session=saved;break;}}catch{}}showSession();if(session)await run(async()=>{await verify();notice('Ready. Upload a sketch or load a test panel.');});})();
+(async()=>{for(const key of (window.parent!==window?['panelstock:session:v2']:[KEY,'panelstock:session:v2','panelstock:site-orders:session:v1'])){try{const saved=JSON.parse(sessionStorage.getItem(key)||'null');if(saved?.token&&saved.expiresAt>Date.now()){session=saved;break;}}catch{}}showSession();if(session)await run(async()=>{await verify();notice('Ready. Upload a sketch or load a test panel.');});})();
 })();
-
-
-
