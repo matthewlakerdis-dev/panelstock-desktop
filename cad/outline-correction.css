@@ -20,3 +20,5 @@
 .trace-canvas-area>svg[data-tool=line] [data-fold],.trace-canvas-area>svg[data-tool=line] [data-edge],.trace-canvas-area>svg[data-tool=fold] [data-edge],.trace-canvas-area>svg[data-tool=angle] [data-corner]{pointer-events:none}
 .trace-canvas-area>svg[data-tool=angle] [data-corner]{opacity:.3}.trace-canvas-area>svg[data-tool=fold] [data-corner]{cursor:crosshair}.trace-canvas-area>svg[data-tool=angle] [data-edge]{cursor:crosshair}
 .trace-tools button[aria-pressed=true]{box-shadow:inset 3px 0 0 #80d8ef,0 1px 3px #16384733}.trace-tools button[data-fit]{margin-top:9px}.trace-tools button[data-fit]::before{content:'';position:absolute;top:-8px;left:4px;right:4px;border-top:1px solid #d0dce4}
+
+.trace-canvas-area>svg[data-tool=hand]{cursor:grab}.trace-canvas-area>svg[data-tool=hand] [data-edge],.trace-canvas-area>svg[data-tool=hand] [data-fold]{pointer-events:none}.trace-canvas-area>svg[data-tool=hand][data-dragging=true],.trace-canvas-area>svg[data-tool=hand][data-dragging=true] [data-corner]{cursor:grabbing}
