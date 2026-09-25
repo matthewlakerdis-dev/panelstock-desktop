@@ -32,3 +32,5 @@ fs.mkdirSync(pdfOut,{recursive:true});
 for(const name of ['pdf.min.mjs','pdf.worker.min.mjs'])fs.copyFileSync(path.join(pdfRoot,'build',name),path.join(pdfOut,name));
 for(const name of ['cmaps','standard_fonts','wasm'])fs.cpSync(path.join(pdfRoot,name),path.join(pdfOut,name),{recursive:true});
 fs.copyFileSync(path.join(pdfRoot,'LICENSE'),path.join(pdfOut,'LICENSE'));
+
+require('./version-cad.cjs')(out);

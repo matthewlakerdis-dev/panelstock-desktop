@@ -18,3 +18,5 @@ for(const file of ['index.html','cad/cad.js']){
  if(!text.includes('https://panelstock-reports.matthewlakerdis.workers.dev')||text.includes('panelstock-reports-staging')) throw Error('Production API configuration invalid: '+file);
 }
 console.log('Production website built with PDF assets in dist-production');
+
+require('./version-cad.cjs')(out);
