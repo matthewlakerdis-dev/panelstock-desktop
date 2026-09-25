@@ -99,9 +99,18 @@ $('blank').onclick=()=>{const draft={panelId:'',edges:['right','up','left','down
 $('addedge').onclick=()=>{if(!spec)spec={panelId:'',edges:[],folds:[],questions:[],unsupported:false};if(spec.edges.length>=32)return;spec.edges.push({name:'New edge',direction:'right',code:'B',site:null,finished:null});renderSpec();};
 for(const id of ['panelid','folds'])$(id).addEventListener('input',()=>{invalidate();if(id==='folds'&&spec){const text=$('folds').value.trim();spec.siteFolds=text?text.split(',').map(x=>x.trim()===''?NaN:Number(x.trim())):[];recalculateEditedOutline();}renderQuestions();});
 $('file').multiple=true;
-$('file').onchange=()=>{if(busy)return;const files=[...$('file').files];if(!files.length)return;if(panels.length+files.length>30){notice('Use up to 30 panels in one workspace.');return;}
- if(files.some(file=>!['application/pdf','image/png','image/jpeg'].includes(file.type)||file.size>6*1024*1024)){notice('Each sketch must be a PDF, PNG or JPEG up to 6 MB.');return;}
- rememberPanel();const first=panels.length;files.forEach(file=>panels.push({file,name:file.name,spec:null,result:null,reviewed:false}));panelIndex=-1;selectPanel(first);$('file').value='';notice(files.length+' sketch files added. Select Read sketches.');};
+$('file').onchange=()=>{if(busy)return;const files=[...$('file').files];if(!files.length)return;run(async()=>{
+ const additions=[];
+ for(const file of files){
+  const pdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name);
+  if(!pdf&&!['image/png','image/jpeg'].includes(file.type))throw Error('Choose PDF, PNG or JPEG files.');
+  if(file.size>(pdf?25:6)*1024*1024)throw Error(file.name+': maximum '+(pdf?25:6)+' MB per file.');
+  if(pdf){notice('Preparing PDF pages: '+file.name);const pages=await splitPanelPdf(file,30-panels.length-additions.length);for(const page of pages)additions.push(new File([page.bytes],page.name,{type:'application/pdf'}));}
+  else additions.push(file);
+  if(panels.length+additions.length>30)throw Error('Use up to 30 panel pages in one workspace.');
+ }
+ rememberPanel();const first=panels.length;additions.forEach(file=>panels.push({file,name:file.name,spec:null,result:null,reviewed:false}));panelIndex=-1;selectPanel(first);$('file').value='';notice(additions.length+' panel pages added. Select Read sketches.');
+ });};
 $('analyse').textContent='Read sketches';
 $('analyse').onclick=()=>run(async()=>{rememberPanel();const pending=panels.filter(p=>p.file&&!p.spec);if(!pending.length)throw Error('Choose one or more new sketch files first.');let completed=0,failed=0;
  for(const p of pending){if(!session)break;notice('Reading '+(completed+failed+1)+' of '+pending.length+': '+p.name);try{const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=reject;reader.readAsDataURL(p.file);});const response=await api('/cad/analyse',{filename:p.file.name,mime:p.file.type,data});p.spec=response.spec;p.message='Sketch read. Review dimensions and edge types.';completed++;}catch(e){if(!session)throw e;p.message=e.message||'Could not read this sketch. Select Read sketches to retry.';failed++;}}
@@ -112,3 +121,7 @@ $('save').onclick=()=>{try{download(JSON.stringify({...collect(),reviewed:false}
 $('import').onchange=()=>run(async()=>{const file=$('import').files[0];if(!file||file.size>128*1024)throw Error('Choose a panel draft smaller than 128 KB.');const data=JSON.parse(await file.text());if(!Array.isArray(data.edges)||data.edges.length<4||data.edges.length>32||!data.edges.every(e=>e&&codes.includes(e.code)&&directions.includes(e.direction)))throw Error('Invalid panel draft.');addPanel(data,file.name);notice('Draft loaded. Review it before generating.');});
 (async()=>{for(const key of (window.parent!==window?['panelstock:session:v2']:[KEY,'panelstock:session:v2','panelstock:site-orders:session:v1'])){try{const saved=JSON.parse(sessionStorage.getItem(key)||'null');if(saved?.token&&saved.expiresAt>Date.now()){session=saved;break;}}catch{}}showSession();if(session)await run(async()=>{await verify();notice('Ready. Upload a sketch or load a test panel.');});})();
 })();
+
+
+
+
