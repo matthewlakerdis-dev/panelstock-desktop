@@ -1,0 +1,9 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
+const c={window:{}};for(const f of ['sketch-components.js','outline-correction.js'])vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../cad',f),'utf8'),c);
+const api=c.window.PanelSketchComponents;
+const pts=[{x:0,y:900},{x:800,y:900},{x:800,y:500},{x:600,y:200},{x:0,y:200}];
+const vals=[{site:800,kind:'horizontal',code:'B'},{site:400,kind:'vertical',code:'RE'},{width:200,height:300,kind:'sloping',code:'B'},{site:600,kind:'horizontal',code:'B'},{site:700,kind:'vertical',code:'S'}];
+test('standard trace retains slopes and uses written projected dimensions',()=>{assert.doesNotThrow(()=>c.window.PanelOutlineCorrection.directions(pts,true));const d=api.build(pts,vals);assert.equal(d.measuredEdges[2].dx,-200);assert.equal(d.measuredEdges[2].dy,300);});
+test('non-scale sketch pixels do not change millimetres',()=>{const d=api.build(pts,vals),p=pts.map(p=>({x:p.x*.4,y:p.y*.8}));assert.equal(JSON.stringify(api.build(p,vals)),JSON.stringify(d));});
+test('missing sloping dimension and unclosed outline require correction',()=>{assert.throws(()=>api.build(pts,vals.map((v,i)=>i===2?{...v,height:null}:v)),/section 3/);assert.throws(()=>api.build(pts,vals.map((v,i)=>i===2?{...v,height:310}:v)),/gap/);});
+test('reopening preserves dimensions, fold endpoints and each separate tag',()=>{const d=api.build(pts,vals,[{from:2,to:4}],{rightAngles:[{fold:0,end:0,edge:1}]});const r=api.restore({...d,outlineSections:pts.map(start=>({start}))});const saved=api.build(r.points,r.values,r.folds,{rightAngles:d.rightAngles});assert.equal(JSON.stringify(saved),JSON.stringify(d));r.values[2].code='S';const edited=api.build(r.points,r.values,r.folds);assert.equal(edited.measuredEdges[2].dy,300);assert.equal(edited.measuredFolds.length,1);});
