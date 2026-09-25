@@ -22,10 +22,16 @@ function resolve(points,values,folds=[],constraints={}){
   let r=0;const pivots=[];
   for(let col=0;col<unknown.length;col++){const pivot=rows.findIndex((row,i)=>i>=r&&Math.abs(row[col])>1e-9);if(pivot<0)continue;[rows[r],rows[pivot]]=[rows[pivot],rows[r]];const divisor=rows[r][col];rows[r]=rows[r].map(n=>n/divisor);for(let j=0;j<rows.length;j++){if(j===r)continue;const factor=rows[j][col];rows[j]=rows[j].map((n,k)=>n-factor*rows[r][k]);}pivots.push(col);r++;}
   if(rows.some(row=>row.slice(0,-1).every(n=>Math.abs(n)<1e-8)&&Math.abs(row.at(-1))>.001))throw Error('Written measurements conflict with a marked right angle. Your entries have been kept.');
-  if(pivots.length!==unknown.length)throw Error('More than one missing '+(axis==='x'?'across':'rise/drop')+' measurement remains. Enter another written dimension or mark the fold and its 90° junction.');
-  pivots.forEach((col,j)=>{const {i,key}=unknown[col],n=rows[j].at(-1);if(Math.abs(n)>10000)throw Error('Calculated measurement exceeds 10000 mm.');result[i][key]=Math.abs(n);result[i][axis==='x'?'xSign':'ySign']=sign(n);notes.push('Section '+(i+1)+' '+key+': '+Number(Math.abs(n).toFixed(3))+' mm, calculated from the other measurements'+(rows.length>1?' and marked right angles':'')+'.');});
+  if(pivots.length!==unknown.length&&!constraints.partial)throw Error('More than one missing '+(axis==='x'?'across':'rise/drop')+' measurement remains. Enter another written dimension or mark the fold and its 90° junction.');
+  pivots.forEach((col,j)=>{if(rows[j].slice(0,-1).some((n,k)=>k!==col&&Math.abs(n)>1e-8))return;const {i,key}=unknown[col],n=rows[j].at(-1),a=points[i],b=points[(i+1)%points.length];if(Math.abs(n)>10000)throw Error('Calculated measurement exceeds 10000 mm.');if(key==='site'&&(Math.abs(n)<.001||sign(n)!==sign(axis==='x'?b.x-a.x:a.y-b.y)))throw Error('Section '+(i+1)+' cannot be calculated without reversing or collapsing the traced line. Check the supplied dimensions.');result[i][key]=Math.abs(n);result[i][axis==='x'?'xSign':'ySign']=sign(n);notes.push('Section '+(i+1)+' '+key+': '+Number(Math.abs(n).toFixed(3))+' mm, calculated from the other measurements'+(rows.length>1?' and marked right angles':'')+'.');});
  }
  return {values:result,notes};
+}
+function infer(points,values,folds=[],constraints={}){
+ const prepared=values.map((v,i)=>{const copy={...v},k=v.kind||kind(points[i],points[(i+1)%points.length]);if(k!=='sloping'&&v.site==null)copy.calculatesite=true;return copy;});
+ const solved=resolve(points,prepared,folds,{...constraints,partial:true});
+ const remaining=solved.values.filter((v,i)=>(v.kind||kind(points[i],points[(i+1)%points.length]))!=='sloping'&&v.site==null).length;
+ return {...solved,remaining};
 }
 function kind(a,b){const x=Math.abs(b.x-a.x),y=Math.abs(b.y-a.y);return y<=x*.05?'horizontal':x<=y*.05?'vertical':'sloping';}
 function build(points,values,folds=[],constraints={}){
@@ -47,5 +53,5 @@ function restore(d){
  const folds=(d.measuredFolds||[]).map(f=>({from:Number.isInteger(f.startPoint)?f.startPoint:ps.findIndex(p=>Math.hypot(p.x-f.start.x,p.y-f.start.y)<.001),to:Number.isInteger(f.endPoint)?f.endPoint:ps.findIndex(p=>Math.hypot(p.x-f.end.x,p.y-f.end.y)<.001)}));
  return {points,values,folds};
 }
-window.PanelSketchComponents={kind,build,restore,resolve};
+window.PanelSketchComponents={kind,build,restore,resolve,infer};
 })();
