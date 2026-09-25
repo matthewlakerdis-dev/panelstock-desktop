@@ -74,12 +74,20 @@ function render(rebuild=true){
  badge.append(el('rect',{x:-badgeWidth/2,y:-12,width:badgeWidth,height:24,rx:3,fill:errors.bad[i].size?'#fff1f2':'#f8fafc',stroke:'none'}),measureText);
 
  badge.onclick=()=>choose(i);badge.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();choose(i);}};svg.append(badge);
+ const splits=[0,1];
+ if(closed&&a[1]!==b[1]&&['B','S','NT','RE'].includes(f[2].value)&&foldValues){
+  for(const value of foldValues.split(',').map(Number)){const t=(minY+value-a[1])/(b[1]-a[1]);if(Number.isFinite(t)&&t>0&&t<1&&!splits.includes(t))splits.push(t);}
+ }
+ splits.sort((a,b)=>a-b);
+ for(let section=0;section<splits.length-1;section++){
+ const lo=splits[section],hi=splits[section+1],middle=(lo+hi)/2;
  const code=el('g',{class:'edge-code',role:'button',tabindex:'0','aria-label':'Edit '+f[0].value+' edge type '+f[2].value});
- let cx=mx-nx*22,cy=my-ny*22;
- for(const depth of [12,22,34,46,58]){let found=false;for(const fraction of [.5,.35,.65,.2,.8,.1,.9]){const tx=p[0]+dx*fraction-nx*depth,ty=p[1]+dy*fraction-ny*depth,b={x:tx-18,y:ty-14,w:36,h:28};if((!closed||[[b.x,b.y],[b.x+b.w,b.y],[b.x,b.y+b.h],[b.x+b.w,b.y+b.h]].every(v=>inside(...v)))&&!codeBoxes.some(v=>overlaps(b,v))){cx=tx;cy=ty;found=true;break;}}if(found)break;}
+ let cx=p[0]+dx*middle-nx*22,cy=p[1]+dy*middle-ny*22;
+ for(const depth of [12,22,34,46,58]){let found=false;for(const fraction of [.5,.35,.65,.2,.8,.1,.9]){const along=lo+(hi-lo)*fraction,tx=p[0]+dx*along-nx*depth,ty=p[1]+dy*along-ny*depth,b={x:tx-18,y:ty-14,w:36,h:28};if((!closed||[[b.x,b.y],[b.x+b.w,b.y],[b.x,b.y+b.h],[b.x+b.w,b.y+b.h]].every(v=>inside(...v)))&&!codeBoxes.some(v=>overlaps(b,v))){cx=tx;cy=ty;found=true;break;}}if(found)break;}
  codeBoxes.push({x:cx-18,y:cy-14,w:36,h:28});
  code.append(el('rect',{x:cx-18,y:cy-14,width:36,height:28,rx:4,fill:'transparent'}),el('text',{x:cx,y:cy,'text-anchor':'middle','dominant-baseline':'middle',fill:active?'#155e75':'#526c7a','font-size':15,'font-weight':600},f[2].value));
  const editCode=()=>{choose(i);controls.querySelector('select[data-field="2"]')?.focus();};code.onclick=editCode;code.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();editCode();}};svg.append(code);
+ }
  if(active&&editing&&rebuild){inspector.style.left=Math.max(2,Math.min(58,lx/760*100-12))+'%';inspector.style.top=Math.max(3,Math.min(30,ly/540*100-8))+'%';}
  });
  // Chain dimensions read top to bottom, like the original sketch.
@@ -124,6 +132,3 @@ document.getElementById('folds').addEventListener('input',()=>render(false));
 new MutationObserver(()=>{editing=false;render(true);}).observe(rows,{childList:true});
 render();
 })();
-
-
-
