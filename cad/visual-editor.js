@@ -6,9 +6,23 @@ const summary=document.createElement('summary');summary.textContent='Show all ed
 table.before(details);details.append(summary,table);
 const host=document.createElement('div');host.className='visual-editor';details.before(host);
 host.innerHTML='<div class="drawing-space"><div class="drawing-heading"><div><span class="editor-eyebrow">PANEL WORKSPACE</span><strong>Edit your panel</strong></div><span class="editor-hint">Select a dimension or edge to edit</span></div><div class="drawing-canvas"><svg viewBox="0 0 760 540" aria-label="Interactive site outline"></svg><div class="edge-inspector" hidden><div class="inspector-heading"><h3>Selected edge</h3><button type="button" class="close-editor" aria-label="Close edge editor">×</button></div><div class="edge-controls"></div><p class="small">Changes update the outline automatically.</p></div></div><div class="drawing-footer"><p class="drawing-status" role="status"></p><span>Site · Finished (mm)</span></div><div class="edge-picker" hidden></div></div>';
+
+function wheelZoom(svg){
+ let base=svg.getAttribute('viewBox'),zoom=1;
+ const reset=()=>{zoom=1;svg.setAttribute('viewBox',base);};
+ svg.addEventListener('wheel',e=>{
+  if(!e.ctrlKey)return;e.preventDefault();
+  const matrix=svg.getScreenCTM();if(!matrix)return;
+  const p=new DOMPoint(e.clientX,e.clientY).matrixTransform(matrix.inverse()),v=svg.viewBox.baseVal;
+  const next=Math.max(.5,Math.min(5,zoom*Math.exp(-Math.max(-100,Math.min(100,e.deltaY))*.003))),ratio=zoom/next;
+  svg.setAttribute('viewBox',[p.x-(p.x-v.x)*ratio,p.y-(p.y-v.y)*ratio,v.width*ratio,v.height*ratio].join(' '));zoom=next;
+ },{passive:false});
+ return {reset,setBase(value){if(value!==base){base=value;reset();}}};
+}
 const svg=host.querySelector('svg'),picker=host.querySelector('.edge-picker'),controls=host.querySelector('.edge-controls'),status=host.querySelector('.drawing-status');
 let selected=0,editing=false;const inspector=host.querySelector('.edge-inspector');host.querySelector('.close-editor').onclick=()=>{editing=false;inspector.hidden=true;};host.addEventListener('keydown',e=>{if(e.key==='Escape'){editing=false;inspector.hidden=true;}});
 document.addEventListener('pointerdown',e=>{if(editing&&!inspector.contains(e.target)){editing=false;inspector.hidden=true;}},true);
+const zoomView=wheelZoom(svg);const fit=document.createElement('button');fit.type='button';fit.textContent='Fit panel';fit.onclick=zoomView.reset;host.querySelector('.drawing-heading').append(fit);svg.title='Hold Ctrl and use the mouse wheel to zoom';
 const ns='http://www.w3.org/2000/svg';
 function el(tag,attrs,text){const n=document.createElementNS(ns,tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,v);if(text!==undefined)n.textContent=text;return n;}
 function fields(){return [...rows.children].map(r=>[...r.querySelectorAll('input,select')]);}
@@ -116,7 +130,7 @@ function render(rebuild=true){
    }
   }
  }
- const viewWidth=extent.right-extent.left,viewHeight=extent.bottom-extent.top;svg.setAttribute('viewBox',[extent.left,extent.top,viewWidth,viewHeight].join(' '));svg.style.aspectRatio=viewWidth+' / '+viewHeight;
+ const viewWidth=extent.right-extent.left,viewHeight=extent.bottom-extent.top;zoomView.setBase([extent.left,extent.top,viewWidth,viewHeight].join(' '));svg.style.aspectRatio=viewWidth+' / '+viewHeight;
  if(editing&&rebuild&&labelBoxes[selected]){const anchor=labelBoxes[selected];inspector.style.left=Math.max(2,Math.min(58,(anchor.x-extent.left)/viewWidth*100-12))+'%';inspector.style.top=Math.max(3,Math.min(30,(anchor.y-extent.top)/viewHeight*100-8))+'%';}
  inspector.hidden=!editing;
  status.textContent=!complete?'Enter missing site lengths. The outline uses placeholder lengths until all measurements are supplied.':closed?'Site outline closes · Dimensions in mm':'Outline is open — check lengths and directions.';
