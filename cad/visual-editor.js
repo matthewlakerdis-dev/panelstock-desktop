@@ -78,6 +78,31 @@ function render(rebuild=true){
  const editCode=()=>{choose(i);controls.querySelector('select[data-field="2"]')?.focus();};code.onclick=editCode;code.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();editCode();}};svg.append(code);
  if(active&&editing&&rebuild){inspector.style.left=Math.max(2,Math.min(58,lx/760*100-12))+'%';inspector.style.top=Math.max(3,Math.min(30,ly/540*100-8))+'%';}
  });
+ // Chain dimensions read top to bottom, like the original sketch.
+ if(closed&&all.length===4&&foldValues){
+  const sites=foldValues.split(',').map(Number).sort((a,b)=>a-b);
+  let finished=[];try{finished=JSON.parse(document.getElementById('folds').dataset.finishedFolds||'[]');}catch{}
+  const vertical=all.filter(f=>['up','down'].includes(f[1].value));
+  const finishedHeight=Number(vertical[0]?.[4].value);
+  const validSite=sites.every((n,i)=>Number.isFinite(n)&&n>0&&n<h&&(!i||n>sites[i-1]));
+  const validFinished=finished.length===sites.length&&vertical.every(f=>f[4].value!==''&&Number(f[4].value)===finishedHeight)&&finishedHeight>0&&finished.every((n,i)=>Number.isFinite(n)&&n>0&&n<finishedHeight&&(!i||n>finished[i-1]));
+  if(validSite){
+   const levels=[h,...sites.slice().reverse(),0],flevels=validFinished?[finishedHeight,...finished.slice().reverse(),0]:[];
+   const edgeX=map([minX+w,minY])[0],column=Math.max(edgeX+70,...labelBoxes.map(b=>b.x+b.w+24));
+   let previousBottom=-Infinity;
+   for(let i=0;i<levels.length-1;i++){
+    const top=map([minX+w,minY+levels[i]])[1],bottom=map([minX+w,minY+levels[i+1]])[1];
+    const site=Number((levels[i]-levels[i+1]).toFixed(3)),finish=validFinished?Number((flevels[i]-flevels[i+1]).toFixed(3)):null;
+    const label=site+' · '+(finish>0?finish:'—'),width=label.length*9+20,mid=(top+bottom)/2,cy=Math.max(mid,previousBottom+20);previousBottom=cy+12;
+    const ink=finish>0?'#475569':'#dc2626';
+    const g=el('g',{'aria-label':'Section '+(i+1)+' from top: site '+site+' mm, finished '+(finish>0?finish+' mm':'unresolved'),class:'fold-section-dimension'});
+    for(const yy of [top,bottom]){g.append(el('line',{x1:edgeX+8,y1:yy,x2:column+7,y2:yy,stroke:'#94a3b8','stroke-width':1}),el('line',{x1:column-5,y1:yy-4,x2:column+5,y2:yy+4,stroke:ink,'stroke-width':1}));}
+    g.append(el('line',{x1:column,y1:top,x2:column,y2:bottom,stroke:ink,'stroke-width':1}));
+    if(cy!==mid)g.append(el('line',{x1:column,y1:mid,x2:column+16,y2:cy,stroke:ink,'stroke-width':1}));
+    g.append(el('rect',{x:column+12,y:cy-12,width,height:24,rx:3,fill:'#f8fafc'}),el('text',{x:column+20,y:cy,'dominant-baseline':'middle','font-size':15,fill:ink},label));svg.append(g);reserve({x:column-5,y:Math.min(top,cy-12),w:width+25,h:Math.max(bottom,cy+12)-Math.min(top,cy-12)});
+   }
+  }
+ }
  const viewWidth=extent.right-extent.left,viewHeight=extent.bottom-extent.top;svg.setAttribute('viewBox',[extent.left,extent.top,viewWidth,viewHeight].join(' '));svg.style.aspectRatio=viewWidth+' / '+viewHeight;
  if(editing&&rebuild&&labelBoxes[selected]){const anchor=labelBoxes[selected];inspector.style.left=Math.max(2,Math.min(58,(anchor.x-extent.left)/viewWidth*100-12))+'%';inspector.style.top=Math.max(3,Math.min(30,(anchor.y-extent.top)/viewHeight*100-8))+'%';}
  inspector.hidden=!editing;

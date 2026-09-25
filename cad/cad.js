@@ -78,6 +78,7 @@ function currentIssues(draft){
  return issues;
 }
 function renderQuestions(){
+ $('folds').dataset.finishedFolds=JSON.stringify(spec?.folds||[]);
  $('questions').replaceChildren();if(!spec){$('questions').hidden=true;return;}
  const issues=currentIssues({...spec,panelId:$('panelid').value.trim()}),notes=spec.questions||[];
  const foldNotes=spec.folds?.length&&Array.isArray(spec.siteFolds)?['Finished fold heights from bottom: '+spec.folds.join(', ')+' mm.']:[];
