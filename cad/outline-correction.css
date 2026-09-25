@@ -14,3 +14,5 @@
 .trace-layout .trace-tools svg{display:block;width:22px;height:22px;max-height:none;border:0;background:none;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
 .trace-tools button::after{content:attr(data-tooltip);display:none;position:absolute;left:calc(100% + 12px);top:50%;transform:translateY(-50%);width:max-content;max-width:min(280px,60vw);padding:9px 12px;border-radius:7px;background:#173747;color:white;font:13px/1.45 system-ui;text-align:left;box-shadow:0 3px 12px #15203333;pointer-events:none;z-index:10}.trace-tools button:hover::after,.trace-tools button:focus-visible::after{display:block}
 @media(max-width:760px){.trace-canvas-area{grid-template-columns:44px minmax(0,1fr);gap:6px}.trace-canvas-area>.trace-tools{padding:4px 1px}.trace-tools button{width:36px;height:36px;min-height:36px}}
+
+.trace-fold-hit{cursor:crosshair}
