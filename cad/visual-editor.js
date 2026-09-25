@@ -12,10 +12,6 @@ document.addEventListener('pointerdown',e=>{if(editing&&!inspector.contains(e.ta
 const ns='http://www.w3.org/2000/svg';
 function el(tag,attrs,text){const n=document.createElementNS(ns,tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,v);if(text!==undefined)n.textContent=text;return n;}
 function fields(){return [...rows.children].map(r=>[...r.querySelectorAll('input,select')]);}
-const warning=document.createElement('dialog');warning.className='measurement-warning';warning.setAttribute('aria-labelledby','measurement-warning-title');
-warning.innerHTML='<h3 id="measurement-warning-title">Check these measurements</h3><ul></ul><button type="button" class="primary">Back to drawing</button>';
-document.body.append(warning);warning.querySelector('button').onclick=()=>warning.close();
-let lastWarning='';
 function measurementErrors(all){
  const bad=all.map(()=>new Set()),messages=[],vectors={right:[1,0],up:[0,1],left:[-1,0],down:[0,-1]};
  for(const column of [3,4]){let x=0,y=0,complete=true;const label=column===3?'Site':'Finished';
@@ -28,16 +24,12 @@ function measurementErrors(all){
  controls.querySelectorAll('[data-field]').forEach(f=>f.setAttribute('aria-invalid',String(bad[selected]?.has(Number(f.dataset.field))||false)));
  return {bad,messages:[...new Set(messages)]};
 }
-function showMeasurementWarning(){const errors=measurementErrors(fields()),key=errors.messages.join('\n');if(!key){lastWarning='';if(warning.open)warning.close();return;}if(key===lastWarning)return;lastWarning=key;const list=warning.querySelector('ul');list.replaceChildren(...errors.messages.map(message=>{const li=document.createElement('li');li.textContent=message;return li;}));if(!warning.open)warning.showModal();}
-// Explain errors after a committed edit, rather than interrupting each keystroke.
-host.addEventListener('change',showMeasurementWarning);rows.addEventListener('change',showMeasurementWarning);document.getElementById('folds').addEventListener('change',showMeasurementWarning);
-document.getElementById('generate').addEventListener('click',showMeasurementWarning);
 function choose(i){selected=i;editing=true;render(true);controls.querySelector('input[type=number]')?.focus();}
 function render(rebuild=true){
  const all=fields();selected=Math.max(0,Math.min(selected,all.length-1));svg.replaceChildren();picker.replaceChildren();
  if(rebuild)controls.replaceChildren();
  if(!all.length){inspector.hidden=true;svg.setAttribute('viewBox','0 0 760 540');svg.style.aspectRatio='760 / 540';svg.append(el('text',{x:380,y:270,'text-anchor':'middle','dominant-baseline':'middle',fill:'#64748b','font-size':20,'font-weight':600,'letter-spacing':1.5},'NO FILE UPLOADED'));status.textContent='Load a sketch or start a rectangle to begin.';return;}
- const errors=measurementErrors(all);if(!errors.messages.length){lastWarning='';if(warning.open)warning.close();}
+ const errors=measurementErrors(all);
  let x=0,y=0,complete=true;const vectors={right:[1,0],up:[0,1],left:[-1,0],down:[0,-1]};
  const points=[[0,0]],segments=[];
  all.forEach((f,i)=>{const value=Number(f[3].value),valid=f[3].value!==''&&Number.isFinite(value)&&value>0;complete=complete&&valid;const v=vectors[f[1].value]||[1,0],len=valid?value:100;const a=[x,y];x+=v[0]*len;y+=v[1]*len;segments.push({a,b:[x,y],f,i});points.push([x,y]);
@@ -102,3 +94,6 @@ document.getElementById('folds').addEventListener('input',()=>render(false));
 new MutationObserver(()=>{editing=false;render(true);}).observe(rows,{childList:true});
 render();
 })();
+
+
+

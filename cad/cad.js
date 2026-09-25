@@ -81,7 +81,8 @@ function renderQuestions(){
  $('questions').replaceChildren();if(!spec){$('questions').hidden=true;return;}
  const issues=currentIssues({...spec,panelId:$('panelid').value.trim()}),notes=spec.questions||[];
  const foldNotes=spec.folds?.length&&Array.isArray(spec.siteFolds)?['Finished fold heights from bottom: '+spec.folds.join(', ')+' mm.']:[];
- $('questions').hidden=!issues.length&&!notes.length&&!foldNotes.length;
+ // Retain validation data for red field highlights without the summary box.
+ $('questions').hidden=true;
  for(const [title,items] of [['Current panel checks',issues],['Calculated folds',foldNotes],['Original sketch-reading notes (not updated by edits)',notes]]){
   if(!items.length)continue;const h=document.createElement('strong');h.textContent=title;$('questions').append(h);
   for(const item of items){const p=document.createElement('p');p.textContent=item;$('questions').append(p);}
