@@ -28,6 +28,14 @@ function edgeRow(edge,index){const tr=document.createElement('tr');tr.dataset.se
  for(const field of fields){const td=document.createElement('td');td.append(field);tr.append(td);field.addEventListener('input',()=>{const keys=['name','direction','code','site','finished'];const j=fields.indexOf(field);edge[keys[j]]=j>2?(field.value===''?null:Number(field.value)):field.value;if(j===2&&edge.sections){edge.sections.forEach(s=>s.code=edge.code);tr.dataset.sections=JSON.stringify(edge.sections);}invalidate();if([1,2,3].includes(j))recalculateEditedOutline();renderQuestions();});}
  const td=document.createElement('td'),remove=document.createElement('button');remove.className='remove-edge';remove.setAttribute('aria-label','Remove edge '+(index+1));remove.title='Remove edge';remove.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6"/></svg>';remove.onclick=()=>{spec.edges.splice(index,1);recalculateOutline(spec);renderSpec();};td.append(remove);tr.append(td);return tr;}
 function recalculateOutline(draft){
+ const legacyFoldNote='Vertical or diagonal folds are marked and saved. Their deductions and machining geometry still need review before generation.';
+ if(draft.unsupported&&draft.directionSource==='manual-sketch-trace'&&(draft.questions||[]).includes(legacyFoldNote)&&draft.foldLines?.length&&draft.foldLines.every(f=>Math.abs(f.start.x-f.end.x)<.001&&Math.abs(f.start.y-f.end.y)>.001)&&!(draft.siteFolds||[]).length){
+  const migrated=structuredClone(draft);migrated.unsupported=false;
+  migrated.questions=migrated.questions.filter(q=>q!==legacyFoldNote);
+  recalculateOutline(migrated);
+  if(!migrated.calculationError){Object.assign(draft,migrated);return true;}
+ }
+
  const lines=draft.foldLines||[],vertical=lines.filter(f=>Math.abs(f.start.x-f.end.x)<.001&&Math.abs(f.start.y-f.end.y)>.001);
  if(vertical.length){
   if(vertical.length!==lines.length||(draft.siteFolds||[]).length){draft.calculationError='Combined fold orientations need review.';return true;}
