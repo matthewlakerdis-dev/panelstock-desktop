@@ -1,0 +1,4 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');const ctx={window:{}};vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../cad/outline-correction.js'),'utf8'),ctx);const snap=ctx.window.PanelOutlineCorrection.snapPoint;
+test('new lines snap to horizontal or vertical without changing source points',()=>{const a={x:20,y:20},b={x:100,y:60};assert.equal(snap(a,b).y,20);assert.equal(snap(a,{x:40,y:100}).x,20);assert.equal(b.y,60);});
+test('Ctrl preserves slopes including shallow slopes',()=>{assert.equal(snap({x:0,y:0},{x:100,y:1},true).y,1);assert.equal(snap({x:0,y:0},{x:100,y:80},true).y,80);});
+test('axis choice respects displayed sketch proportions',()=>{assert.equal(snap({x:0,y:0},{x:80,y:60},false,1,2).x,0);});
