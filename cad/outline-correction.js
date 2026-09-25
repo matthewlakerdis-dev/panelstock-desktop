@@ -94,9 +94,9 @@ async function open(file,draft,readMeasurements){
  const sitePoints=[];let sx=0,sy=0;const vectors={right:[1,0],up:[0,1],left:[-1,0],down:[0,-1]};values.forEach((v,i)=>{sitePoints.push({x:sx,y:sy});sx+=vectors[ds[i]][0]*v.site;sy+=vectors[ds[i]][1]*v.site;});
  const foldLines=markedFolds.map(f=>({start:sitePoints[f.from],end:sitePoints[f.to]}));
  if(foldLines.some(f=>!f.start||!f.end))throw Error('Check the marked fold endpoints.');
- const needsReview=foldLines.some(f=>Math.abs(f.start.y-f.end.y)>.001);
+ const diagonal=foldLines.some(f=>Math.abs(f.start.y-f.end.y)>.001&&Math.abs(f.start.x-f.end.x)>.001),hasVertical=foldLines.some(f=>Math.abs(f.start.y-f.end.y)>.001),hasHorizontal=foldLines.some(f=>Math.abs(f.start.x-f.end.x)>.001);const needsReview=diagonal||(hasVertical&&hasHorizontal);
  if(markedFolds.length)traced.siteFolds=[...new Set([...folds,...foldLines.filter(f=>Math.abs(f.start.y-f.end.y)<.001).map(f=>f.start.y)])].sort((a,b)=>a-b);
- finish({panelId:q('[data-id]').value.trim(),panelDirection:q('[data-arrow]').value,...traced,markedFolds,foldLines,manualSiteFolds:folds,folds:[],questions:[needsReview?'Vertical or diagonal folds are marked and saved. Their deductions and machining geometry still need review before generation.':'Outline and fold measurements entered manually from the sketch. Review before generating.'],unsupported:needsReview,reviewed:false,directionSource:'manual-sketch-trace'});}catch(e){status(e.message);}};
+ finish({panelId:q('[data-id]').value.trim(),panelDirection:q('[data-arrow]').value,...traced,markedFolds,foldLines,manualSiteFolds:folds,folds:[],questions:[needsReview?'Diagonal or combined fold orientations are marked and saved; their machining geometry needs review.':'Outline and fold measurements entered manually from the sketch. Review before generating.'],unsupported:needsReview,reviewed:false,directionSource:'manual-sketch-trace'});}catch(e){status(e.message);}};
  q('[data-close]').onclick=q('[data-cancel]').onclick=()=>finish(null);dialog.oncancel=e=>{e.preventDefault();finish(null);};
  const image=new Image();image.onload=()=>{svg.style.aspectRatio=image.naturalWidth+'/'+image.naturalHeight;draw();fields();dialog.showModal();};image.onerror=()=>{URL.revokeObjectURL(url);dialog.remove();reject(Error('Could not open the sketch image.'));};image.src=url;
  });

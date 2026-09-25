@@ -60,6 +60,9 @@ function render(rebuild=true){
  const closed=complete&&Math.hypot(x,y)<.001;
  if(closed)svg.append(el('polygon',{points:points.map(p=>map(p).join(',')).join(' '),fill:'#e6f0f3',stroke:'none'}));
  const foldValues=document.getElementById('folds').value.trim();
+ let markedLines=[];try{markedLines=JSON.parse(document.getElementById('folds').dataset.foldLines||'[]');}catch{}
+ if(closed)for(const fold of markedLines){if(Math.abs(fold.start.x-fold.end.x)>.001)continue;const a=map([fold.start.x,fold.start.y]),b=map([fold.end.x,fold.end.y]);svg.append(el('line',{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:'#b96c26','stroke-width':2,'stroke-dasharray':'7 5'}));}
+
  if(closed&&foldValues)foldValues.split(',').map(Number).filter(n=>Number.isFinite(n)&&n>0&&n<h).forEach(n=>{
   const level=minY+n,intersections=segments.filter(s=>level>Math.min(s.a[1],s.b[1])&&level<Math.max(s.a[1],s.b[1])).map(s=>s.a[0]).sort((a,b)=>a-b);
   for(let i=0;i+1<intersections.length;i+=2){const a=map([intersections[i],level]),b=map([intersections[i+1],level]);svg.append(el('line',{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:'#b96c26','stroke-width':2,'stroke-dasharray':'7 5'}));}
@@ -92,6 +95,7 @@ function render(rebuild=true){
  if(closed&&a[1]!==b[1]&&['B','S','NT','RE'].includes(f[2].value)&&foldValues){
   for(const value of foldValues.split(',').map(Number)){const t=(minY+value-a[1])/(b[1]-a[1]);if(Number.isFinite(t)&&t>0&&t<1&&!splits.includes(t))splits.push(t);}
  }
+ if(closed&&a[0]!==b[0])for(const fold of markedLines){if(Math.abs(fold.start.x-fold.end.x)>.001)continue;const t=(fold.start.x-a[0])/(b[0]-a[0]);if(t>0&&t<1&&!splits.includes(t))splits.push(t);}
  splits.sort((a,b)=>a-b);
  for(let section=0;section<splits.length-1;section++){
  const lo=splits[section],hi=splits[section+1],middle=(lo+hi)/2;
