@@ -68,7 +68,7 @@ function recalculateEditedOutline(){
 }
 function currentIssues(draft){
  const issues=[],valid=v=>typeof v==='number'&&Number.isFinite(v)&&v>=.001&&v<=10000;
- if(draft.calculationError)issues.push(draft.calculationError);
+ if(draft.calculationError){const check=structuredClone(draft);recalculateOutline(check);if(check.calculationError)issues.push(check.calculationError);}
  if(!/^[A-Za-z0-9][A-Za-z0-9 _.-]{0,59}$/.test(draft.panelId||''))issues.push('Enter a panel ID using letters, numbers, spaces or hyphens.');
  if(!Array.isArray(draft.edges)||draft.edges.length<4||draft.edges.length>32)return [...issues,'Use 4 to 32 perimeter edges.'];
  const vectors={right:[1,0],up:[0,1],left:[-1,0],down:[0,-1]};
