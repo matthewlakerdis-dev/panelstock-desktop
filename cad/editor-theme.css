@@ -7,7 +7,7 @@
 .panel-navigator{display:flex;align-items:center;justify-content:center;gap:20px;padding:14px;margin:0 0 20px;border:1px solid #dbe3ef;border-radius:10px;background:#f8fafc}.panel-navigator>div{display:grid;text-align:center;gap:4px;min-width:140px;max-width:65%}.panel-navigator span{font-size:12px;color:#64748b;overflow-wrap:anywhere}.panel-navigator button{font-size:20px;color:#155e75}
 
 /* Give panel editing more screen space while retaining the full drawing. */
-@media(min-width:761px){.drawing-space svg{max-height:none;min-height:560px}.drawing-canvas{min-height:560px}}
+
 
 /* Enlarge the actual main drawing, with scrolling when space is limited. */
-@media(min-width:761px){.drawing-canvas{overflow:auto}.drawing-space .drawing-canvas svg{width:100%;min-width:1100px;max-height:none}}
+@media(min-width:761px){.drawing-canvas{overflow:hidden;min-height:0}.drawing-space .drawing-canvas svg{width:100%;min-width:0;min-height:340px;max-height:620px}}
