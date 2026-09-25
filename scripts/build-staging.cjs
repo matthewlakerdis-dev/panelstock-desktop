@@ -4,7 +4,7 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const out = path.join(root, 'dist-staging');
 const api = 'https://panelstock-reports-staging.matthewlakerdis.workers.dev';
-const files = ['index.html','panelstock-client.js','tailwind.css','icon-192.png','PanelStock_SOP.pdf','push-sw.js','cad/index.html','cad/cad.js','cad/cad.css','cad/visual-editor.js','cad/visual-editor.css','cad/editor-theme.css','cad/embedded.js','cad/pdf-selection.js','cad/pdf-selection.css','cad/outline-correction.js','cad/outline-correction.css'];
+const files = ['index.html','panelstock-client.js','tailwind.css','icon-192.png','PanelStock_SOP.pdf','push-sw.js','cad/index.html','cad/cad.js','cad/cad.css','cad/visual-editor.js','cad/visual-editor.css','cad/editor-theme.css','cad/embedded.js','cad/pdf-selection.js','cad/pdf-selection.css','cad/outline-correction.js','cad/outline-correction.css','cad/measured-outline.js'];
 const production = 'https://panelstock-reports.matthewlakerdis.workers.dev';
 for (const file of ['index.html','cad/cad.js']) {
   if (!fs.readFileSync(path.join(root,file),'utf8').includes(production)) throw Error('Backend marker missing: '+file);

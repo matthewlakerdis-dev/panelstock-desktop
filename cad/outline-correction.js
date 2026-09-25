@@ -5,7 +5,7 @@ function directions(points){
  const cross=(a,b,c)=>(b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x);
  let area=0;
  const ds=points.map((a,i)=>{const b=points[(i+1)%points.length],dx=b.x-a.x,dy=b.y-a.y;area+=a.x*b.y-b.x*a.y;
-  if(Math.max(Math.abs(dx),Math.abs(dy))<1||Math.min(Math.abs(dx),Math.abs(dy))>Math.max(Math.abs(dx),Math.abs(dy))*.2)throw Error('Edge '+(i+1)+': align its corners horizontally or vertically.');
+  if(Math.max(Math.abs(dx),Math.abs(dy))<1||Math.min(Math.abs(dx),Math.abs(dy))>Math.max(Math.abs(dx),Math.abs(dy))*.2)throw Error('Edge '+(i+1)+': if this edge is sloping, close this window and choose Edit measured / angled outline. Otherwise align its corners horizontally or vertically.');
   return Math.abs(dx)>Math.abs(dy)?(dx>0?'right':'left'):(dy>0?'down':'up');});
  if(area>=0)throw Error('Start at the bottom-left corner and trace along the bottom towards the right.');
  for(let i=0;i<points.length;i++)for(let j=i+1;j<points.length;j++){
