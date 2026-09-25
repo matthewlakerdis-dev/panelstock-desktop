@@ -22,3 +22,5 @@
 .trace-tools button[aria-pressed=true]{box-shadow:inset 3px 0 0 #80d8ef,0 1px 3px #16384733}.trace-tools button[data-fit]{margin-top:9px}.trace-tools button[data-fit]::before{content:'';position:absolute;top:-8px;left:4px;right:4px;border-top:1px solid #d0dce4}
 
 .trace-canvas-area>svg[data-tool=hand]{cursor:grab}.trace-canvas-area>svg[data-tool=hand] [data-edge],.trace-canvas-area>svg[data-tool=hand] [data-fold]{pointer-events:none}.trace-canvas-area>svg[data-tool=hand][data-dragging=true],.trace-canvas-area>svg[data-tool=hand][data-dragging=true] [data-corner]{cursor:grabbing}
+
+.trace-inline-editor .trace-delete-line{width:34px;height:34px;padding:7px;border:1px solid #efb5b5;border-radius:6px;background:#fff0f0;color:#c62828;grid-column:1}.trace-inline-editor .trace-delete-line svg{width:18px;height:18px;background:none;border:0;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.trace-inline-editor .trace-delete-line:hover{background:#ffdada}.trace-inline-editor .trace-delete-line:disabled{opacity:.35}
