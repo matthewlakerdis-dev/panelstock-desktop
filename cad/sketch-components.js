@@ -1,13 +1,40 @@
 /* Written dimensions determine size; traced points determine travel only. */
 (()=>{'use strict';
 const sign=n=>n<0?-1:1;
+function resolve(points,values,folds=[],constraints={}){
+ const result=values.map(v=>({...v})),notes=[];
+ for(const axis of ['x','y']){
+  const unknown=[],components=result.map((v,i)=>{
+   const a=points[i],b=points[(i+1)%points.length],k=v.kind||kind(a,b);
+   const key=k==='sloping'?(axis==='x'?'width':'height'):'site';
+   if((axis==='x'&&k==='vertical')||(axis==='y'&&k==='horizontal'))return 0;
+   if(v['calculate'+key]){unknown.push({i,key});return null;}
+   if(!Number.isFinite(v[key])||v[key]<0)throw Error('Enter section '+(i+1)+' '+key+' or choose Calculate.');
+   const direction=axis==='x'?(v.xSign??sign(b.x-a.x)):(v.ySign??sign(a.y-b.y));return direction*v[key];
+  });
+  if(!unknown.length)continue;
+  const equation=indices=>[...unknown.map(u=>indices.includes(u.i)?1:0),-indices.reduce((sum,i)=>sum+(components[i]??0),0)];
+  const rows=[equation(result.map((_,i)=>i))];
+  for(const c of constraints.rightAngles||[]){const f=folds[c.fold],e=result[c.edge];if(!f||!e)continue;const ek=e.kind||kind(points[c.edge],points[(c.edge+1)%points.length]);
+   if(!((axis==='y'&&ek==='vertical')||(axis==='x'&&ek==='horizontal')))continue;
+   const indices=[];for(let i=f.from;i!==f.to;i=(i+1)%points.length){indices.push(i);if(indices.length>points.length)throw Error('Check fold endpoints.');}rows.push(equation(indices));
+  }
+  let r=0;const pivots=[];
+  for(let col=0;col<unknown.length;col++){const pivot=rows.findIndex((row,i)=>i>=r&&Math.abs(row[col])>1e-9);if(pivot<0)continue;[rows[r],rows[pivot]]=[rows[pivot],rows[r]];const divisor=rows[r][col];rows[r]=rows[r].map(n=>n/divisor);for(let j=0;j<rows.length;j++){if(j===r)continue;const factor=rows[j][col];rows[j]=rows[j].map((n,k)=>n-factor*rows[r][k]);}pivots.push(col);r++;}
+  if(rows.some(row=>row.slice(0,-1).every(n=>Math.abs(n)<1e-8)&&Math.abs(row.at(-1))>.001))throw Error('Written measurements conflict with a marked right angle. Your entries have been kept.');
+  if(pivots.length!==unknown.length)throw Error('More than one missing '+(axis==='x'?'across':'rise/drop')+' measurement remains. Enter another written dimension or mark the fold and its 90° junction.');
+  pivots.forEach((col,j)=>{const {i,key}=unknown[col],n=rows[j].at(-1);if(Math.abs(n)>10000)throw Error('Calculated measurement exceeds 10000 mm.');result[i][key]=Math.abs(n);result[i][axis==='x'?'xSign':'ySign']=sign(n);notes.push('Section '+(i+1)+' '+key+': '+Number(Math.abs(n).toFixed(3))+' mm, calculated from the other measurements'+(rows.length>1?' and marked right angles':'')+'.');});
+ }
+ return {values:result,notes};
+}
 function kind(a,b){const x=Math.abs(b.x-a.x),y=Math.abs(b.y-a.y);return y<=x*.05?'horizontal':x<=y*.05?'vertical':'sloping';}
 function build(points,values,folds=[],constraints={}){
+ values=resolve(points,values,folds,constraints).values;
  let x=0,y=0;const ps=[];
  const edges=values.map((v,i)=>{const a=points[i],b=points[(i+1)%points.length],k=v.kind||kind(a,b);ps.push({x,y});
  const w=k==='vertical'?0:k==='horizontal'?v.site:v.width,h=k==='horizontal'?0:k==='vertical'?v.site:v.height;
  if(!Number.isFinite(w)||!Number.isFinite(h)||w<0||h<0||w>10000||h>10000||Math.hypot(w,h)<.001||!['B','S','NT','RE','FE','CR'].includes(v.code))throw Error('Check section '+(i+1)+' written measurements and tag.');
- const dx=sign(b.x-a.x)*w,dy=sign(a.y-b.y)*h;x+=dx;y+=dy;return {dx,dy,code:v.code};});
+ const dx=(v.xSign??sign(b.x-a.x))*w,dy=(v.ySign??sign(a.y-b.y))*h;x+=dx;y+=dy;return {dx,dy,code:v.code};});
  if(Math.hypot(x,y)>.001)throw Error('The written measurements leave a gap of '+Number(Math.abs(x).toFixed(3))+' mm across and '+Number(Math.abs(y).toFixed(3))+' mm vertically. Check the section measurements.');
  return {measuredEdges:edges,measuredFolds:folds.map(f=>{if(!ps[f.from]||!ps[f.to])throw Error('Check fold endpoints.');return {start:{...ps[f.from]},end:{...ps[f.to]},startPoint:f.from,endPoint:f.to};}),rightAngles:constraints.rightAngles||[],reliefEnds:constraints.reliefEnds||[]};
 }
@@ -16,9 +43,9 @@ function restore(d){
  let x=0,y=0;const ps=d.measuredEdges.map(e=>{const p={x,y};x+=e.dx;y+=e.dy;return p;});
  const xs=ps.map(p=>p.x),ys=ps.map(p=>p.y),minX=Math.min(...xs),maxY=Math.max(...ys),scale=800/Math.max(Math.max(...xs)-minX,maxY-Math.min(...ys),1);
  const points=d.outlineSections?.length===ps.length?d.outlineSections.map(s=>({...s.start})):ps.map(p=>({x:100+(p.x-minX)*scale,y:100+(maxY-p.y)*scale}));
- const values=d.measuredEdges.map(e=>({code:e.code,kind:e.dx===0?'vertical':e.dy===0?'horizontal':'sloping',site:e.dx===0?Math.abs(e.dy):Math.abs(e.dx),width:Math.abs(e.dx),height:Math.abs(e.dy)}));
+ const values=d.measuredEdges.map((e,i)=>({...d.outlineSections?.[i],xSign:sign(e.dx),ySign:sign(e.dy),code:e.code,kind:e.dx===0?'vertical':e.dy===0?'horizontal':'sloping',site:e.dx===0?Math.abs(e.dy):Math.abs(e.dx),width:Math.abs(e.dx),height:Math.abs(e.dy)}));
  const folds=(d.measuredFolds||[]).map(f=>({from:Number.isInteger(f.startPoint)?f.startPoint:ps.findIndex(p=>Math.hypot(p.x-f.start.x,p.y-f.start.y)<.001),to:Number.isInteger(f.endPoint)?f.endPoint:ps.findIndex(p=>Math.hypot(p.x-f.end.x,p.y-f.end.y)<.001)}));
  return {points,values,folds};
 }
-window.PanelSketchComponents={kind,build,restore};
+window.PanelSketchComponents={kind,build,restore,resolve};
 })();
