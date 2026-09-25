@@ -28,9 +28,9 @@ function resolve(points,values,folds=[],constraints={}){
  return {values:result,notes};
 }
 function infer(points,values,folds=[],constraints={}){
- const prepared=values.map((v,i)=>{const copy={...v},k=v.kind||kind(points[i],points[(i+1)%points.length]);if(k!=='sloping'&&v.site==null)copy.calculatesite=true;return copy;});
+ const prepared=values.map((v,i)=>{const copy={...v},k=v.kind||kind(points[i],points[(i+1)%points.length]);for(const key of ['site','width','height'])delete copy['calculate'+key];for(const key of k==='sloping'?['width','height']:['site'])if(v[key]==null)copy['calculate'+key]=true;return copy;});
  const solved=resolve(points,prepared,folds,{...constraints,partial:true});
- const remaining=solved.values.filter((v,i)=>(v.kind||kind(points[i],points[(i+1)%points.length]))!=='sloping'&&v.site==null).length;
+ const remaining=solved.values.reduce((n,v,i)=>n+((v.kind||kind(points[i],points[(i+1)%points.length]))==='sloping'?['width','height']:['site']).filter(key=>v[key]==null).length,0);for(const v of solved.values)for(const key of ['site','width','height'])delete v['calculate'+key];
  return {...solved,remaining};
 }
 function kind(a,b){const x=Math.abs(b.x-a.x),y=Math.abs(b.y-a.y);return y<=x*.05?'horizontal':x<=y*.05?'vertical':'sloping';}
