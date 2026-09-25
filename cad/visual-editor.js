@@ -36,7 +36,7 @@ function choose(i){selected=i;editing=true;render(true);controls.querySelector('
 function render(rebuild=true){
  const all=fields();selected=Math.max(0,Math.min(selected,all.length-1));svg.replaceChildren();picker.replaceChildren();
  if(rebuild)controls.replaceChildren();
- if(!all.length){inspector.hidden=true;status.textContent='Load a sketch or start a rectangle to begin.';return;}
+ if(!all.length){inspector.hidden=true;svg.setAttribute('viewBox','0 0 760 540');svg.style.aspectRatio='760 / 540';svg.append(el('text',{x:380,y:270,'text-anchor':'middle','dominant-baseline':'middle',fill:'#64748b','font-size':20,'font-weight':600,'letter-spacing':1.5},'NO FILE UPLOADED'));status.textContent='Load a sketch or start a rectangle to begin.';return;}
  const errors=measurementErrors(all);if(!errors.messages.length){lastWarning='';if(warning.open)warning.close();}
  let x=0,y=0,complete=true;const vectors={right:[1,0],up:[0,1],left:[-1,0],down:[0,-1]};
  const points=[[0,0]],segments=[];
