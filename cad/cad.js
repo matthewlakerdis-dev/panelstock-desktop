@@ -42,13 +42,18 @@ function recalculateOutline(draft){
  for(let i=0;i<es.length;i++){const a=v[es[(i+es.length-1)%es.length].direction],b=v[es[i].direction],p=points[i],q=points[(i+1)%es.length];if(a[0]*b[0]+a[1]*b[1]!==0)return true;area+=p[0]*q[1]-q[0]*p[1];}
  if(area<=0)return true;
  const shifted=points.map((p,i)=>{const prev=es[(i+es.length-1)%es.length],cur=es[i],a=v[prev.direction],b=v[cur.direction],da=tags.includes(prev.code)?1:0,db=tags.includes(cur.code)?1:0;return [p[0]-(a[1]?a[1]*da:b[1]*db),p[1]+(a[0]?a[0]*da:b[0]*db)];});
- const folds=[...draft.siteFolds].sort((a,b)=>a-b),height=Math.max(...points.map(p=>p[1]))-Math.min(...points.map(p=>p[1]));
- if(folds.length&&(es.length!==4||es.some(e=>!tags.includes(e.code)))){draft.calculationError='Internal folds require a rectangular panel with four tagged edges.';return true;}
+ const folds=[...draft.siteFolds].sort((a,b)=>a-b),minY=Math.min(...points.map(p=>p[1])),height=Math.max(...points.map(p=>p[1]))-minY;
  if(folds.length>12||new Set(folds).size!==folds.length||folds.some(f=>typeof f!=='number'||!Number.isFinite(f)||f<.001||f>height-.001)){draft.calculationError='Enter distinct site fold heights inside the panel (at most 12).';return true;}
- const finishedFolds=folds.map((f,i)=>Number((f-2*(i+1)).toFixed(6)));
- const lengths=es.map((e,i)=>{const p=shifted[i],q=shifted[(i+1)%es.length],u=v[e.direction];return Number(((q[0]-p[0])*u[0]+(q[1]-p[1])*u[1]-(u[1]?2*folds.length:0)).toFixed(6));});
- if(lengths.some((n,i)=>n<.001||n>10000||!Number.isFinite(n)||(es[i].code==='FE'&&Math.abs(n-es[i].site)>.001)))return true;
- if(folds.length){const levels=[0,...finishedFolds,Math.max(...lengths.filter((n,i)=>v[es[i].direction][1]))];if(levels.some((n,i)=>i&&n-levels[i-1]<=.001)){draft.calculationError='Fold deductions leave an empty or reversed panel section.';return true;}}
+ for(const f of folds){const level=minY+f;
+  const crossing=es.filter((e,i)=>{const a=points[i],b=points[(i+1)%es.length];return level>Math.min(a[1],b[1])&&level<Math.max(a[1],b[1]);});
+  if(points.some(p=>Math.abs(p[1]-level)<.001)||crossing.length<2||crossing.length%2||crossing.some(e=>!tags.includes(e.code))){draft.calculationError='Internal folds must cross material and end at tagged vertical sides, away from corners.';return true;}
+ }
+ const bottomShift=shifted[0][1]-points[0][1];
+ const finishedFolds=folds.map((f,i)=>Number((f-bottomShift-1-2*i).toFixed(6)));
+ shifted.forEach((p,i)=>p[1]-=2*folds.filter(f=>points[i][1]>minY+f).length);
+ const lengths=es.map((e,i)=>{const p=shifted[i],q=shifted[(i+1)%es.length],u=v[e.direction];return Number(((q[0]-p[0])*u[0]+(q[1]-p[1])*u[1]).toFixed(6));});
+ if(lengths.some(n=>n<.001||n>10000||!Number.isFinite(n)))return true;
+ if(folds.length){const finishedHeight=Math.max(...shifted.map(p=>p[1]))-Math.min(...shifted.map(p=>p[1])),levels=[0,...finishedFolds,finishedHeight];if(levels.some((n,i)=>i&&n-levels[i-1]<=.001)){draft.calculationError='Fold deductions leave an empty or reversed panel section.';return true;}}
  draft.folds=finishedFolds;es.forEach((e,i)=>e.finished=lengths[i]);return true;
 }
 function initialiseSiteFolds(draft){

@@ -29,6 +29,7 @@ function render(rebuild=true){
  const all=fields();selected=Math.max(0,Math.min(selected,all.length-1));svg.replaceChildren();picker.replaceChildren();
  if(rebuild)controls.replaceChildren();
  if(!all.length){inspector.hidden=true;svg.setAttribute('viewBox','0 0 760 540');svg.style.aspectRatio='760 / 540';svg.append(el('text',{x:380,y:270,'text-anchor':'middle','dominant-baseline':'middle',fill:'#64748b','font-size':20,'font-weight':600,'letter-spacing':1.5},'NO FILE UPLOADED'));status.textContent='Load a sketch or start a rectangle to begin.';return;}
+ if(all.some(f=>!['right','up','left','down'].includes(f[1].value))){svg.setAttribute('viewBox','0 0 760 540');svg.append(el('text',{x:380,y:270,'text-anchor':'middle',fill:'#b45309','font-size':18},'Outline could not be traced. Review edge directions or read the sketch again.'));status.textContent='Missing edge directions — no outline drawn.';inspector.hidden=true;return;}
  const errors=measurementErrors(all);
  let x=0,y=0,complete=true;const vectors={right:[1,0],up:[0,1],left:[-1,0],down:[0,-1]};
  const points=[[0,0]],segments=[];
@@ -45,7 +46,10 @@ function render(rebuild=true){
  const closed=complete&&Math.hypot(x,y)<.001;
  if(closed)svg.append(el('polygon',{points:points.map(p=>map(p).join(',')).join(' '),fill:'#e6f0f3',stroke:'none'}));
  const foldValues=document.getElementById('folds').value.trim();
- if(closed&&all.length===4&&foldValues)foldValues.split(',').map(Number).filter(n=>Number.isFinite(n)&&n>0&&n<h).forEach(n=>{const a=map([minX,minY+n]),b=map([minX+w,minY+n]);svg.append(el('line',{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:'#b96c26','stroke-width':2,'stroke-dasharray':'7 5'}),el('text',{x:a[0]+10,y:a[1]-8,fill:'#915119','font-size':15},'Fold '+n+' mm'));});
+ if(closed&&foldValues)foldValues.split(',').map(Number).filter(n=>Number.isFinite(n)&&n>0&&n<h).forEach(n=>{
+  const level=minY+n,intersections=segments.filter(s=>level>Math.min(s.a[1],s.b[1])&&level<Math.max(s.a[1],s.b[1])).map(s=>s.a[0]).sort((a,b)=>a-b);
+  for(let i=0;i+1<intersections.length;i+=2){const a=map([intersections[i],level]),b=map([intersections[i+1],level]);svg.append(el('line',{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:'#b96c26','stroke-width':2,'stroke-dasharray':'7 5'}));}
+ });
  segments.forEach(({a,b,f,i})=>{const p=map(a),q=map(b),active=i===selected,g=el('g',{role:'button',tabindex:'0','aria-label':f[0].value+', '+f[3].value+' millimetres, '+f[2].value,'aria-pressed':String(active),class:'outline-edge'});g.append(el('line',{x1:p[0],y1:p[1],x2:q[0],y2:q[1],stroke:active?'#155e75':'#6c8793','stroke-width':active?7:3}),el('line',{x1:p[0],y1:p[1],x2:q[0],y2:q[1],stroke:'transparent','stroke-width':24}));g.onclick=()=>choose(i);g.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();choose(i);}};svg.append(g);
  const mx=(p[0]+q[0])/2,my=(p[1]+q[1])/2,dx=q[0]-p[0],dy=q[1]-p[1],len=Math.hypot(dx,dy)||1;
  const nx=-dy/len,ny=dx/len;
@@ -72,20 +76,21 @@ function render(rebuild=true){
  badge.onclick=()=>choose(i);badge.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();choose(i);}};svg.append(badge);
  const code=el('g',{class:'edge-code',role:'button',tabindex:'0','aria-label':'Edit '+f[0].value+' edge type '+f[2].value});
  let cx=mx-nx*22,cy=my-ny*22;
- for(const depth of [22,34,12,46]){let found=false;for(const fraction of [.5,.35,.65,.2,.8]){const tx=p[0]+dx*fraction-nx*depth,ty=p[1]+dy*fraction-ny*depth,b={x:tx-18,y:ty-14,w:36,h:28};if((!closed||[[b.x,b.y],[b.x+b.w,b.y],[b.x,b.y+b.h],[b.x+b.w,b.y+b.h]].every(v=>inside(...v)))&&!codeBoxes.some(v=>overlaps(b,v))){cx=tx;cy=ty;found=true;break;}}if(found)break;}
+ for(const depth of [12,22,34,46,58]){let found=false;for(const fraction of [.5,.35,.65,.2,.8,.1,.9]){const tx=p[0]+dx*fraction-nx*depth,ty=p[1]+dy*fraction-ny*depth,b={x:tx-18,y:ty-14,w:36,h:28};if((!closed||[[b.x,b.y],[b.x+b.w,b.y],[b.x,b.y+b.h],[b.x+b.w,b.y+b.h]].every(v=>inside(...v)))&&!codeBoxes.some(v=>overlaps(b,v))){cx=tx;cy=ty;found=true;break;}}if(found)break;}
  codeBoxes.push({x:cx-18,y:cy-14,w:36,h:28});
  code.append(el('rect',{x:cx-18,y:cy-14,width:36,height:28,rx:4,fill:'transparent'}),el('text',{x:cx,y:cy,'text-anchor':'middle','dominant-baseline':'middle',fill:active?'#155e75':'#526c7a','font-size':15,'font-weight':600},f[2].value));
  const editCode=()=>{choose(i);controls.querySelector('select[data-field="2"]')?.focus();};code.onclick=editCode;code.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();editCode();}};svg.append(code);
  if(active&&editing&&rebuild){inspector.style.left=Math.max(2,Math.min(58,lx/760*100-12))+'%';inspector.style.top=Math.max(3,Math.min(30,ly/540*100-8))+'%';}
  });
  // Chain dimensions read top to bottom, like the original sketch.
- if(closed&&all.length===4&&foldValues){
+ if(closed&&foldValues){
   const sites=foldValues.split(',').map(Number).sort((a,b)=>a-b);
   let finished=[];try{finished=JSON.parse(document.getElementById('folds').dataset.finishedFolds||'[]');}catch{}
-  const vertical=all.filter(f=>['up','down'].includes(f[1].value));
-  const finishedHeight=Number(vertical[0]?.[4].value);
+  let fx=0,fy=0;const finishedYs=[0];const finishedComplete=all.every(f=>f[4].value!==''&&Number(f[4].value)>0);
+  all.forEach(f=>{const v=vectors[f[1].value];fx+=v[0]*Number(f[4].value);fy+=v[1]*Number(f[4].value);finishedYs.push(fy);});
+  const finishedHeight=Math.max(...finishedYs)-Math.min(...finishedYs);
   const validSite=sites.every((n,i)=>Number.isFinite(n)&&n>0&&n<h&&(!i||n>sites[i-1]));
-  const validFinished=finished.length===sites.length&&vertical.every(f=>f[4].value!==''&&Number(f[4].value)===finishedHeight)&&finishedHeight>0&&finished.every((n,i)=>Number.isFinite(n)&&n>0&&n<finishedHeight&&(!i||n>finished[i-1]));
+  const validFinished=finished.length===sites.length&&finishedComplete&&Math.hypot(fx,fy)<.001&&finishedHeight>0&&finished.every((n,i)=>Number.isFinite(n)&&n>0&&n<finishedHeight&&(!i||n>finished[i-1]));
   if(validSite){
    const levels=[h,...sites.slice().reverse(),0],flevels=validFinished?[finishedHeight,...finished.slice().reverse(),0]:[];
    const edgeX=map([minX+w,minY])[0],column=Math.max(edgeX+70,...labelBoxes.map(b=>b.x+b.w+24));
