@@ -8,3 +8,6 @@
 
 /* Give panel editing more screen space while retaining the full drawing. */
 @media(min-width:761px){.drawing-space svg{max-height:none;min-height:560px}.drawing-canvas{min-height:560px}}
+
+/* Enlarge the actual main drawing, with scrolling when space is limited. */
+@media(min-width:761px){.drawing-canvas{overflow:auto}.drawing-space .drawing-canvas svg{width:100%;min-width:1100px;max-height:none}}
