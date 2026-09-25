@@ -99,18 +99,18 @@ $('blank').onclick=()=>{const draft={panelId:'',edges:['right','up','left','down
 $('addedge').onclick=()=>{if(!spec)spec={panelId:'',edges:[],folds:[],questions:[],unsupported:false};if(spec.edges.length>=32)return;spec.edges.push({name:'New edge',direction:'right',code:'B',site:null,finished:null});renderSpec();};
 for(const id of ['panelid','folds'])$(id).addEventListener('input',()=>{invalidate();if(id==='folds'&&spec){const text=$('folds').value.trim();spec.siteFolds=text?text.split(',').map(x=>x.trim()===''?NaN:Number(x.trim())):[];recalculateEditedOutline();}renderQuestions();});
 $('file').multiple=true;
-$('file').onchange=()=>{if(busy)return;const files=[...$('file').files];if(!files.length)return;run(async()=>{
- const additions=[];
+$('file').onchange=async()=>{if(busy)return;const files=[...$('file').files];if(!files.length)return;let readSelection=false;await run(async()=>{
+ const pdfs=[],additions=[];
  for(const file of files){
   const pdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name);
   if(!pdf&&!['image/png','image/jpeg'].includes(file.type))throw Error('Choose PDF, PNG or JPEG files.');
   if(file.size>(pdf?25:6)*1024*1024)throw Error(file.name+': maximum '+(pdf?25:6)+' MB per file.');
-  if(pdf){notice('Preparing PDF pages: '+file.name);const pages=await splitPanelPdf(file,30-panels.length-additions.length);for(const page of pages)additions.push(new File([page.bytes],page.name,{type:'application/pdf'}));}
-  else additions.push(file);
-  if(panels.length+additions.length>30)throw Error('Use up to 30 panel pages in one workspace.');
+  if(pdf)pdfs.push(file);else additions.push(file);
  }
- rememberPanel();const first=panels.length;additions.forEach(file=>panels.push({file,name:file.name,spec:null,result:null,reviewed:false}));panelIndex=-1;selectPanel(first);$('file').value='';notice(additions.length+' panel pages added. Select Read sketches.');
- });};
+ if(panels.length+additions.length>30)throw Error('Use up to 30 panels in one workspace.');
+ if(pdfs.length){const selected=await PanelPdfSelection.open(pdfs,30-panels.length-additions.length);if(!selected.length){notice('PDF selection cancelled.');return;}additions.push(...selected);readSelection=true;}
+ rememberPanel();const first=panels.length;additions.forEach(file=>panels.push({file,name:file.name,spec:null,result:null,reviewed:false}));panelIndex=-1;selectPanel(first);notice(additions.length+' panels added. Select Read sketches.');
+ });$('file').value='';if(readSelection)$('analyse').click();};
 $('analyse').textContent='Read sketches';
 $('analyse').onclick=()=>run(async()=>{rememberPanel();const pending=panels.filter(p=>p.file&&!p.spec);if(!pending.length)throw Error('Choose one or more new sketch files first.');let completed=0,failed=0;
  for(const p of pending){if(!session)break;notice('Reading '+(completed+failed+1)+' of '+pending.length+': '+p.name);try{const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=reject;reader.readAsDataURL(p.file);});const response=await api('/cad/analyse',{filename:p.file.name,mime:p.file.type,data});p.spec=response.spec;p.message='Sketch read. Review dimensions and edge types.';completed++;}catch(e){if(!session)throw e;p.message=e.message||'Could not read this sketch. Select Read sketches to retry.';failed++;}}
