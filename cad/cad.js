@@ -23,11 +23,22 @@ function invalidate(){version++;result=null;$('download').disabled=true;$('confi
 async function api(path,body){const token=session?.token;const response=await fetch(API+path,{method:body?'POST':'GET',headers:{...(token?{Authorization:'Bearer '+token}:{}),...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),cache:'no-store',signal:AbortSignal.timeout(95000)});const data=await response.json();if(response.status===401){session=null;sessionStorage.removeItem(KEY);showSession();}if(!response.ok)throw Error(data.error||'Request failed');return data;}
 function showSession(){if(!session){panels.length=0;panelIndex=-1;updateNavigator();spec=null;invalidate();$('edges').replaceChildren();$('panelid').value='';$('folds').value='';$('questions').replaceChildren();if(previewURL){URL.revokeObjectURL(previewURL);previewURL=null;}}$('login').hidden=!!session;$('workspace').hidden=!session;$('signout').hidden=!session;$('account').textContent=session?.username||'';}
 async function run(action){if(busy)return;busy=true;for(const b of document.querySelectorAll('button'))b.disabled=true;notice('Working…');try{await action();}catch(e){notice(e.name==='TimeoutError'?'This request timed out. Please retry.':e.message||'Could not reach the server.');}finally{busy=false;for(const b of document.querySelectorAll('button'))b.disabled=false;$('download').disabled=!result;updateNavigator();}}
-function edgeRow(edge,index){const tr=document.createElement('tr');const name=document.createElement('input');name.value=edge.name||'Edge '+(index+1);name.maxLength=60;name.setAttribute('aria-label','Edge name');
+function edgeRow(edge,index){const tr=document.createElement('tr');tr.dataset.sections=JSON.stringify(edge.sections||[]);const name=document.createElement('input');name.value=edge.name||'Edge '+(index+1);name.maxLength=60;name.setAttribute('aria-label','Edge name');
  const fields=[name,...[directions,codes].map((options,j)=>{const select=document.createElement('select');select.setAttribute('aria-label',j?'Edge type':'Edge direction');for(const option of options){const el=document.createElement('option');el.value=option;el.textContent=option;select.append(el);}select.value=edge[j?'code':'direction'];return select;}),...['site','finished'].map(key=>{const input=document.createElement('input');input.type='number';input.min='.001';input.max='10000';input.step='any';input.value=edge[key]??'';input.setAttribute('aria-label',key+' length in mm');return input;})];
- for(const field of fields){const td=document.createElement('td');td.append(field);tr.append(td);field.addEventListener('input',()=>{const keys=['name','direction','code','site','finished'];const j=fields.indexOf(field);edge[keys[j]]=j>2?(field.value===''?null:Number(field.value)):field.value;invalidate();if([1,2,3].includes(j))recalculateEditedOutline();renderQuestions();});}
+ for(const field of fields){const td=document.createElement('td');td.append(field);tr.append(td);field.addEventListener('input',()=>{const keys=['name','direction','code','site','finished'];const j=fields.indexOf(field);edge[keys[j]]=j>2?(field.value===''?null:Number(field.value)):field.value;if(j===2&&edge.sections){edge.sections.forEach(s=>s.code=edge.code);tr.dataset.sections=JSON.stringify(edge.sections);}invalidate();if([1,2,3].includes(j))recalculateEditedOutline();renderQuestions();});}
  const td=document.createElement('td'),remove=document.createElement('button');remove.className='remove-edge';remove.setAttribute('aria-label','Remove edge '+(index+1));remove.title='Remove edge';remove.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6"/></svg>';remove.onclick=()=>{spec.edges.splice(index,1);recalculateOutline(spec);renderSpec();};td.append(remove);tr.append(td);return tr;}
 function recalculateOutline(draft){
+ const lines=draft.foldLines||[],vertical=lines.filter(f=>Math.abs(f.start.x-f.end.x)<.001&&Math.abs(f.start.y-f.end.y)>.001);
+ if(vertical.length){
+  if(vertical.length!==lines.length||(draft.siteFolds||[]).length){draft.calculationError='Combined fold orientations need review.';return true;}
+  const rotated=structuredClone(draft),turn={right:'up',up:'left',left:'down',down:'right'};
+  delete rotated.foldLines;rotated.siteFolds=[...new Set(vertical.map(f=>f.start.x))].sort((a,b)=>a-b);
+  rotated.edges.forEach(e=>e.direction=turn[e.direction]);recalculateOutline(rotated);
+  draft.calculationError=rotated.calculationError;
+  if(!rotated.calculationError){draft.edges.forEach((e,i)=>e.finished=rotated.edges[i].finished);draft.verticalFolds=rotated.folds;draft.folds=[];}
+  return true;
+ }
+
  initialiseSiteFolds(draft);
  const es=draft.edges,v={right:[1,0],up:[0,1],left:[-1,0],down:[0,-1]},tags=['B','S','NT','RE'];
  draft.calculationError='Complete a valid closed outline to recalculate. Existing measurements have been kept.';
@@ -81,7 +92,7 @@ function currentIssues(draft){
  return issues;
 }
 function renderQuestions(){
- $('folds').dataset.finishedFolds=JSON.stringify(spec?.folds||[]);
+ $('folds').dataset.finishedFolds=JSON.stringify(spec?.folds||[]);$('folds').dataset.foldLines=JSON.stringify(spec?.foldLines||[]);
  $('questions').replaceChildren();if(!spec){$('questions').hidden=true;return;}
  const issues=currentIssues({...spec,panelId:$('panelid').value.trim()}),notes=spec.questions||[];
  const foldNotes=spec.folds?.length&&Array.isArray(spec.siteFolds)?['Finished fold heights from bottom: '+spec.folds.join(', ')+' mm.']:[];
