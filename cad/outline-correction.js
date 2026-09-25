@@ -26,9 +26,9 @@ function sections(points,values,manualFolds=[]){
   if(!v.code||!Number.isFinite(v.site)||v.site<.001||v.site>10000)throw Error('Enter a valid measurement and type for every section.');
   if(prev&&prev.direction===d){
    
-   if(prev.code!==v.code)throw Error('Different tag types along one straight side need review; keep the entered section values.');
+   prev.sections.push({code:v.code,site:v.site});
    if(d==='up'||d==='down')folds.push(y);prev.site+=v.site;
-  }else edges.push({name:'Edge '+(edges.length+1),start:points[i],direction:d,code:v.code,site:v.site,finished:null});
+  }else edges.push({name:'Edge '+(edges.length+1),start:points[i],direction:d,code:v.code,site:v.site,finished:null,sections:[{code:v.code,site:v.site}]});
   x+=vectors[d][0]*v.site;y+=vectors[d][1]*v.site;minY=Math.min(minY,y);
  }
  if(Math.hypot(x,y)>.001){
