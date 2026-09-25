@@ -7,14 +7,22 @@ window.PanelPdfSelection={rectangle,open:async function(files,capacity){
  const pdfjs=await import('./pdfjs/pdf.min.mjs');
  pdfjs.GlobalWorkerOptions.workerSrc=new URL('./pdfjs/pdf.worker.min.mjs',location.href).href;
  const dialog=document.createElement('dialog');dialog.className='pdf-picker';
- dialog.innerHTML=`<div class="pdf-picker-head"><div><h2>Select your panels</h2><p>Drag a box around each panel, including its dimensions, edge codes and ID.</p></div><button type="button" data-action="cancel" aria-label="Close PDF selection">✕</button></div><div class="pdf-picker-toolbar"><button type="button" data-action="prev" aria-label="Previous PDF page">←</button><select aria-label="PDF page"></select><button type="button" data-action="next" aria-label="Next PDF page">→</button><button type="button" data-action="whole">Select whole page</button><button type="button" data-action="remove">Remove selected area</button></div><p class="pdf-picker-status" role="status" aria-live="polite">Opening PDF…</p><div class="pdf-picker-scroll"><div class="pdf-picker-paper"><canvas></canvas><div class="pdf-picker-overlay" aria-label="Draw panel selection boxes"></div></div></div><div class="pdf-picker-foot"><span>Drag a box to move it; drag its corner to resize. Arrow keys move a focused box; Shift + arrows resize; Delete removes it.</span><button type="button" class="primary" data-action="accept">Read selected panels</button></div>`;
+ dialog.innerHTML=`<div class="pdf-picker-head"><div><h2>Select your panels</h2><p>Drag a box around each panel, including its dimensions, edge codes and ID.</p></div><button type="button" data-action="cancel" aria-label="Close PDF selection">✕</button></div><div class="pdf-picker-toolbar"><button type="button" data-action="prev" aria-label="Previous PDF page">←</button><select aria-label="PDF page"></select><button type="button" data-action="next" aria-label="Next PDF page">→</button><div class="pdf-picker-zoom" role="group" aria-label="PDF zoom"><button type="button" data-action="zoom-out" aria-label="Zoom out">−</button><output aria-label="Zoom level">100%</output><button type="button" data-action="zoom-in" aria-label="Zoom in">+</button><button type="button" data-action="fit">Fit width</button></div><button type="button" data-action="whole">Select whole page</button><button type="button" data-action="remove">Remove selected area</button></div><p class="pdf-picker-status" role="status" aria-live="polite">Opening PDF…</p><div class="pdf-picker-scroll"><div class="pdf-picker-paper"><canvas></canvas><div class="pdf-picker-overlay" aria-label="Draw panel selection boxes"></div></div></div><div class="pdf-picker-foot"><span>Drag a box to move it; drag its corner to resize. Arrow keys move a focused box; Shift + arrows resize; Delete removes it.</span><button type="button" class="primary" data-action="accept">Read selected panels</button></div>`;
  document.body.append(dialog);dialog.showModal();
  const el=s=>dialog.querySelector(s),button=a=>el(`[data-action="${a}"]`),status=el('[role="status"]'),overlay=el('.pdf-picker-overlay'),canvas=el('canvas'),select=el('select');
  const docs=[],pages=[],boxes=[];let current=0,active=null,working=true,gesture=null,serial=0,done=false;
  let resolve;const answer=new Promise(r=>resolve=r);
+ const scroll=el('.pdf-picker-scroll'),paper=el('.pdf-picker-paper'),zoomLabel=el('output');
+ let zoom=1;
+ function layout(){const style=getComputedStyle(scroll),width=Math.max(1,scroll.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight));paper.style.width=Math.round(Math.min(1000,width)*zoom)+'px';zoomLabel.textContent=Math.round(zoom*100)+'%';}
+ function setZoom(value){if(working||gesture)return;const old=paper.getBoundingClientRect(),frame=scroll.getBoundingClientRect(),x=(frame.left+scroll.clientWidth/2-old.left)/old.width,y=(frame.top+scroll.clientHeight/2-old.top)/old.height;zoom=clamp(value,.5,3);layout();const next=paper.getBoundingClientRect();scroll.scrollLeft+=next.left+x*next.width-(frame.left+scroll.clientWidth/2);scroll.scrollTop+=next.top+y*next.height-(frame.top+scroll.clientHeight/2);controls();}
+ const resizeObserver=new ResizeObserver(layout);resizeObserver.observe(scroll);layout();
+ button('zoom-in').onclick=()=>setZoom(zoom+.25);
+ button('zoom-out').onclick=()=>setZoom(zoom-.25);
+ button('fit').onclick=()=>{setZoom(1);scroll.scrollLeft=0;scroll.scrollTop=0;};
  function count(){return boxes.length;}
- function controls(){select.disabled=working;for(const a of ['prev','next','whole','remove','accept'])button(a).disabled=working;
- if(!working){button('prev').disabled=current===0;button('next').disabled=current===pages.length-1;button('whole').disabled=count()>=capacity;button('remove').disabled=!active;button('accept').disabled=!count();}
+ function controls(){select.disabled=working;for(const a of ['prev','next','whole','remove','accept','zoom-in','zoom-out','fit'])button(a).disabled=working;
+ if(!working){button('zoom-in').disabled=zoom>=3;button('zoom-out').disabled=zoom<=.5;button('prev').disabled=current===0;button('next').disabled=current===pages.length-1;button('whole').disabled=count()>=capacity;button('remove').disabled=!active;button('accept').disabled=!count();}
  button('accept').textContent=`Read ${count()||''} selected panel${count()===1?'':'s'}`;}
  function paint(){overlay.replaceChildren();for(const box of boxes.filter(b=>b.page===current)){
  const node=document.createElement('div');node.className='pdf-selection'+(box===active?' selected':'');node.tabIndex=0;node.setAttribute('role','button');node.setAttribute('aria-label','Panel area '+(boxes.indexOf(box)+1)+'. Use arrow keys to move, Shift and arrows to resize.');node.dataset.id=box.id;
@@ -25,7 +33,7 @@ window.PanelPdfSelection={rectangle,open:async function(files,capacity){
  async function render(){working=true;gesture=null;active=null;controls();overlay.replaceChildren();status.textContent='Loading page…';
  try{const entry=pages[current],page=await entry.doc.getPage(entry.number),base=page.getViewport({scale:1}),viewport=page.getViewport({scale:Math.min(2,1800/Math.max(base.width,base.height))});
  canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);await page.render({canvasContext:canvas.getContext('2d'),viewport,background:'white'}).promise;
- select.value=String(current);status.textContent=entry.name+' · page '+entry.number+' · '+count()+' areas selected';
+ layout();scroll.scrollLeft=0;scroll.scrollTop=0;select.value=String(current);status.textContent=entry.name+' · page '+entry.number+' · '+count()+' areas selected';
  }catch(e){status.textContent='Could not display this PDF page. '+e.message;}finally{working=false;paint();}}
  function point(e){const r=overlay.getBoundingClientRect();return{x:clamp((e.clientX-r.left)/r.width),y:clamp((e.clientY-r.top)/r.height)};}
  overlay.onpointerdown=e=>{if(working||e.button!==0)return;e.preventDefault();const hit=e.target.closest('[data-id]');const start=point(e);
@@ -49,7 +57,7 @@ window.PanelPdfSelection={rectangle,open:async function(files,capacity){
  }finish(output);}catch(e){status.textContent=e.message;working=false;controls();button('cancel').disabled=false;}};
  controls();try{for(const file of files){const task=pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer()),cMapUrl:new URL('./pdfjs/cmaps/',location.href).href,cMapPacked:true,standardFontDataUrl:new URL('./pdfjs/standard_fonts/',location.href).href,wasmUrl:new URL('./pdfjs/wasm/',location.href).href,isEvalSupported:false});docs.push(task);const locked=new Promise((resolve,reject)=>{task.onPassword=()=>reject(Error('This PDF is password-protected. Upload an unlocked copy.'));});const doc=await Promise.race([task.promise,locked]);if(doc.numPages>200)throw Error('Use PDFs with no more than 200 pages.');for(let number=1;number<=doc.numPages;number++){pages.push({doc,number,name:file.name});const option=document.createElement('option');option.value=String(pages.length-1);option.textContent=file.name+' · page '+number;select.append(option);}}
  await render();return await answer;
- }finally{dialog.remove();for(const doc of docs)await doc.destroy();}
+ }finally{resizeObserver.disconnect();dialog.remove();for(const doc of docs)await doc.destroy();}
 }};
 })();
 
