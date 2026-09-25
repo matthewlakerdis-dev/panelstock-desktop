@@ -1,0 +1,5 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
+const ctx={window:{}};vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../cad/outline-correction.js'),'utf8'),ctx);const api=ctx.window.PanelOutlineCorrection;
+const horizontal={start:{x:0,y:50},end:{x:100,y:50}},vertical={start:{x:40,y:0},end:{x:40,y:100}};
+test('folds can meet at interior intersections and endpoints',()=>{assert.equal(api.foldIntersection(horizontal,vertical).x,40);assert.doesNotThrow(()=>api.checkFoldAngles([horizontal,vertical],[{first:0,second:1}]));assert.ok(api.foldIntersection(horizontal,{start:{x:0,y:50},end:{x:0,y:100}}));});
+test('parallel, separate, duplicate and non-perpendicular folds are rejected',()=>{assert.equal(api.foldIntersection(horizontal,{start:{x:0,y:60},end:{x:100,y:60}}),null);assert.equal(api.foldIntersection(horizontal,{start:{x:120,y:0},end:{x:120,y:100}}),null);assert.throws(()=>api.checkFoldAngles([horizontal],[{first:0,second:0}]),/intersect/);assert.throws(()=>api.checkFoldAngles([horizontal,{start:{x:0,y:0},end:{x:100,y:100}}],[{first:0,second:1}]),/90°/);});
