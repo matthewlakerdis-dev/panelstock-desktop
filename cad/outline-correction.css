@@ -2,7 +2,7 @@
 
 
 
-.trace-dimension{cursor:pointer}.trace-dimension:focus rect{stroke:#df8e21;stroke-width:3}
+.trace-dimension{cursor:pointer}.trace-dimension:focus-visible{outline:none}.trace-dimension:focus-visible text,.trace-dimension:hover text{fill:#23627c;text-decoration:underline}.trace-dimension text{font-family:Arial,sans-serif;font-weight:400}.trace-dimension-gap{pointer-events:all}
 .trace-inline-editor{box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 10px;background:#fff;border:1px solid #9cb6c3;border-radius:10px;padding:12px;box-shadow:0 3px 10px #15203322;font:16px system-ui;color:#152033}
 .trace-inline-editor strong{font-size:16px;align-self:center}.trace-inline-editor label{display:block;margin:0;font-size:14px}.trace-inline-editor .trace-measure-field{grid-column:1/-1}.trace-inline-editor.is-sloping .trace-measure-field{grid-column:auto}
 .trace-inline-editor input,.trace-inline-editor select{box-sizing:border-box;width:100%;height:34px;min-height:0;margin:4px 0 0;padding:4px 8px;font:16px system-ui;border:1px solid #d4e0e7;border-radius:6px;background:#fff;color:#152033}.trace-inline-editor input[type=number]{appearance:textfield}.trace-inline-editor input::-webkit-inner-spin-button{appearance:none}.trace-inline-editor .trace-shape{height:28px;margin:0;font-size:14px;background:#f4f8fa}.trace-inline-editor .trace-tag{margin:0}.trace-inline-editor .trace-done{height:34px;padding:4px 12px;font:16px system-ui;border:0;border-radius:6px;background:#23627c;color:white}
