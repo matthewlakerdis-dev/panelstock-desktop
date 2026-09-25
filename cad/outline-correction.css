@@ -3,3 +3,5 @@
 
 
 .trace-dimension{cursor:pointer}.trace-dimension:focus rect{stroke:#df8e21;stroke-width:3}.trace-inline-editor{box-sizing:border-box;background:#fff;border:2px solid #23627c;border-radius:12px;padding:12px;box-shadow:0 4px 12px #15203333;font:18px system-ui;color:#152033}.trace-inline-editor label{display:block;margin:8px 0}.trace-inline-editor input,.trace-inline-editor select{box-sizing:border-box;width:100%;min-height:34px;margin:4px 0;padding:4px;font:18px system-ui}.trace-inline-editor button{padding:6px 18px;font:18px system-ui}
+
+.trace-inline-editor .trace-calculate-toggle{font-size:14px;display:flex;align-items:center;gap:6px}.trace-inline-editor .trace-calculate-toggle input{width:18px;min-height:18px;margin:0}
