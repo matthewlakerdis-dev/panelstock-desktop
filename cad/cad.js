@@ -230,6 +230,31 @@ function chooseCombinedDrawings(){return new Promise(resolve=>{
  apply.onclick=()=>{if(cached)close(cached);};cancel.onclick=()=>close(null);dialog.oncancel=e=>{e.preventDefault();close(null);};
  document.body.append(dialog);update();dialog.showModal();
 });}
+function batchSummary(items){
+ const panelCounts=new Map(),lengthCounts=new Map();let stiffeners=0,unknownLengths=0;
+ for(const item of items){
+  panelCounts.set(item.name,(panelCounts.get(item.name)||0)+1);
+  const v=item.drawing.validation||{};
+  for(const plan of v.stiffeners||(v.stiffener?[v.stiffener]:[])){
+   stiffeners++;const length=plan.length??(plan.start&&plan.end?Math.hypot(plan.end[0]-plan.start[0],plan.end[1]-plan.start[1]):null);
+   if(!Number.isFinite(length)||length<=0){unknownLengths++;continue;}
+   const key=Number(length.toFixed(2));lengthCounts.set(key,(lengthCounts.get(key)||0)+1);
+  }
+ }
+ return {panels:[...panelCounts],lengths:[...lengthCounts].sort((a,b)=>a[0]-b[0]),count:items.length,stiffeners,unknownLengths};
+}
+const summaryButton=document.createElement('button');summaryButton.type='button';summaryButton.textContent='Drawing summary';$('downloadall').after(summaryButton);
+summaryButton.onclick=()=>{
+ if(busy)return;const items=panels.flatMap((p,i)=>{const drawing=i===panelIndex?result:p.result;return drawing?.dxf?[{name:p.spec?.panelId||p.name||drawing.filename,drawing}]:[];});
+ const summary=batchSummary(items),dialog=document.createElement('dialog');dialog.style.cssText='max-height:85vh;overflow:auto;width:min(560px,90vw)';
+ const title=document.createElement('h2');title.textContent=($('projectname').value.trim()||'Untitled project')+' — drawing summary';dialog.append(title);
+ const count=document.createElement('p');count.textContent=summary.count+' generated drawings · '+summary.stiffeners+' stiffeners. '+(panels.length-summary.count)+' panels not generated.';dialog.append(count);
+ const addTable=(heading,columns,rows)=>{const h=document.createElement('h3');h.textContent=heading;dialog.append(h);const table=document.createElement('table');const head=document.createElement('tr');for(const text of columns){const th=document.createElement('th');th.textContent=text;head.append(th);}table.append(head);for(const row of rows){const tr=document.createElement('tr');for(const text of row){const td=document.createElement('td');td.textContent=String(text);tr.append(td);}table.append(tr);}dialog.append(table);};
+ addTable('Panels',['Panel ID','Drawings'],summary.panels);addTable('Stiffeners',['Required length (mm)','Quantity'],summary.lengths);
+ if(summary.unknownLengths){const warning=document.createElement('p');warning.textContent=summary.unknownLengths+' stiffener lengths are unavailable. Regenerate those drawings.';dialog.append(warning);}
+ const note=document.createElement('p');note.textContent='Quantities count generated drawings in this project. Identical panel IDs are grouped; dimensions should still be reviewed.';dialog.append(note);
+ const close=document.createElement('button');close.type='button';close.textContent='Close';close.onclick=()=>dialog.close();dialog.onclose=()=>dialog.remove();dialog.append(close);document.body.append(dialog);dialog.showModal();
+};
 function combinedFilename(name){
  const clean=String(name||'').trim().replace(/\.dxf$/i,'').replace(/[<>:"/\\|?*\x00-\x1f]/g,'_').replace(/[. ]+$/g,'').slice(0,100);
  return (clean||'Untitled project')+'.dxf';
