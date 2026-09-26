@@ -51,6 +51,7 @@ function infer(points,values,folds=[],constraints={}){
  // A direct distance constraint owns its single intervening axis measurement.
  // Keep multi-edge spans fixed unless existing unknowns already identify a solution.
  for(const c of constraints.measurementConstraints||[]){
+  if(c.fold!=null)continue;
   if(!['x','y'].includes(c.axis)||!Number.isInteger(c.from)||!points[c.from])continue;
   const f=c.fold!=null?folds[c.fold]:null,targets=f?[f.from,f.to]:[c.to],paths=[];
   for(const to of targets){if(!Number.isInteger(to)||!points[to]||to===c.from)continue;
@@ -73,15 +74,16 @@ function infer(points,values,folds=[],constraints={}){
  catch(error){
   // A snapped trace is approximate. Only relax one unmarked, unlocked axis
   // when the written dimensions and fold constraints identify it uniquely.
-  if(!constraints.rightAngles?.length)throw error;
+  if(!constraints.rightAngles?.length&&!constraints.measurementConstraints?.length)throw error;
+  let baseline;try{baseline=resolve(points,prepared,folds,{...constraints,measurementConstraints:[],partial:true}).values;}catch(_){baseline=prepared;}
   const candidates=[];
-  prepared.forEach((v,i)=>{
+  baseline.forEach((v,i)=>{
    const k=v.kind||kind(points[i],points[(i+1)%points.length]);
-   if(!['horizontal','vertical'].includes(k)||v.shapeExplicit||!Number.isFinite(v.site)||v.calculatesite)return;
-   if(constraints.rightAngles.some(c=>c.edge===i)||(constraints.edgeRightAngles||[]).some(c=>c===i||c===(i+1)%points.length))return;
+   if(!['horizontal','vertical'].includes(k)||v.shapeExplicit||!Number.isFinite(v.site))return;
+   if((constraints.rightAngles||[]).some(c=>c.edge===i)||(constraints.edgeRightAngles||[]).some(c=>c===i||c===(i+1)%points.length))return;
    const major=k==='horizontal'?'width':'height',minor=k==='horizontal'?'height':'width';
    const trial=prepared.map(e=>({...e}));
-   trial[i]={...v,kind:'sloping',[major]:v.site,[minor]:null,['calculate'+minor]:true};
+   trial[i]={...v,kind:'sloping',[major]:v.site,[minor]:null,['calculate'+minor]:true};delete trial[i].calculatesite;if(prepared[i].calculatesite)trial[i]['calculate'+major]=true;
    try{
     const result=resolve(points,trial,folds,{...constraints,partial:true}),edge=result.values[i];
     if(!Number.isFinite(edge[minor])||edge[minor]<.001||edge[minor]>edge[major]*.05)return;
