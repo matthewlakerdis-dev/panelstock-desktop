@@ -54,3 +54,23 @@ test('vertical constraints validate supplied dimensions and reject invalid refer
  r.values[1].site=90;assert.throws(()=>api.infer(p,r.values,[],constraints),/conflict/);
  constraints.measurementConstraints[0].to=9;assert.throws(()=>api.infer(p,v,[],constraints),/constraint/);
 });
+
+test('reopening keeps cleared dimensions instead of restoring stale calculated values',()=>{
+ const d=api.build(pts,vals);const sections=pts.map((start,i)=>({...vals[i],start}));
+ sections[0].site=null;sections[0].manualMeasurements={site:true};
+ const r=api.restore({...d,outlineSections:sections});assert.equal(r.values[0].site,null);
+ const read=api.mergeReadMeasurements(r.values,[{site:40}]);assert.equal(read[0].site,null);
+ assert.equal(api.infer(r.points,read).values[0].site,800);
+});
+test('reopening retains calculated provenance and recalculates changed sources',()=>{
+ const p=[{x:0,y:100},{x:100,y:100},{x:100,y:0},{x:0,y:0}];
+ const v=[{site:null},{site:100},{site:40},{site:100}].map(e=>({...e,code:'B'}));
+ const first=api.infer(p,v).values,d=api.build(p,first);
+ const sections=p.map((start,i)=>({...first[i],start}));sections[2].site=60;
+ const r=api.restore({...d,outlineSections:sections});assert.equal(api.infer(r.points,r.values).values[0].site,60);
+});
+test('sketch reading records its source and preserves manual values',()=>{
+ const r=api.mergeReadMeasurements([{site:null},{site:90},{site:null,manualMeasurements:{site:true}}],[{site:40},{site:40},{site:40}]);
+ assert.equal(r[0].readMeasurements.site,40);assert.equal(r[1].site,90);assert.equal(r[2].site,null);
+});
+
