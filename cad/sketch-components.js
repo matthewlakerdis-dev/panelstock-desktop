@@ -19,7 +19,15 @@ function resolve(points,values,folds=[],constraints={}){
    if(!((axis==='y'&&ek==='vertical')||(axis==='x'&&ek==='horizontal')))continue;
    const indices=[];for(let i=f.from;i!==f.to;i=(i+1)%points.length){indices.push(i);if(indices.length>points.length)throw Error('Check fold endpoints.');}rows.push(equation(indices));
   }
-  for(const c of constraints.measurementConstraints||[]){
+  for(const original of constraints.measurementConstraints||[]){
+   let c=original;
+   if(c.fold!=null){
+    const f=folds[c.fold];
+    if(!Number.isInteger(c.fold)||!f||![f.from,f.to,c.from].every(i=>Number.isInteger(i)&&i>=0&&i<points.length)||!["x","y"].includes(c.axis))throw Error('Check the corner-to-fold constraint.');
+    c={...c,to:f.from};
+    if(c.axis===axis){const indices=[];for(let i=f.from;i!==f.to;i=(i+1)%points.length)indices.push(i);rows.push(equation(indices));}
+   }
+
    if((c.direction!=null&&![1,-1].includes(c.direction))||!['x','y'].includes(c.axis)||!Number.isInteger(c.from)||!Number.isInteger(c.to)||c.from<0||c.to<0||c.from>=points.length||c.to>=points.length||c.from===c.to||!Number.isFinite(c.value)||c.value<=0||c.value>10000)throw Error('Check the constraint measurement and its two corners.');
    if(c.axis!==axis)continue;
    const indices=[];for(let i=c.from;i!==c.to;i=(i+1)%points.length)indices.push(i);
@@ -92,6 +100,11 @@ function build(points,values,folds=[],constraints={}){
  if(!Number.isFinite(w)||!Number.isFinite(h)||w<0||h<0||w>10000||h>10000||Math.hypot(w,h)<.001||!['B','S','NT','RE','FE','CR'].includes(v.code))throw Error('Check section '+(i+1)+' written measurements and tag.');
  const dx=(v.xSign??sign(b.x-a.x))*w,dy=(v.ySign??sign(a.y-b.y))*h;x+=dx;y+=dy;return {dx,dy,code:v.code};});
  if(Math.hypot(x,y)>.001)throw Error('The written measurements leave a gap of '+Number(Math.abs(x).toFixed(3))+' mm across and '+Number(Math.abs(y).toFixed(3))+' mm vertically. Check the section measurements.');
+ for(const c of constraints.measurementConstraints||[]){if(c.fold==null)continue;
+  const f=folds[c.fold],a=ps[f?.from],b=ps[f?.to],p=ps[c.from];if(!a||!b||!p)throw Error('Check the corner-to-fold constraint.');
+  const dx=b.x-a.x,dy=b.y-a.y,length2=dx*dx+dy*dy,t=((p.x-a.x)*dx+(p.y-a.y)*dy)/length2;
+  if(!Number.isFinite(t)||t<-.000001||t>1.000001)throw Error('The perpendicular measurement falls outside its fold line.');
+ }
  return {measuredEdges:edges,measuredFolds:folds.map(f=>{if(!ps[f.from]||!ps[f.to])throw Error('Check fold endpoints.');return {start:{...ps[f.from]},end:{...ps[f.to]},startPoint:f.from,endPoint:f.to};}),rightAngles:constraints.rightAngles||[],reliefEnds:constraints.reliefEnds||[],measurementConstraints:constraints.measurementConstraints||[]};
 }
 function restore(d){
