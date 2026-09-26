@@ -47,7 +47,27 @@ function resolve(points,values,folds=[],constraints={}){
  return {values:result,notes};
 }
 function infer(points,values,folds=[],constraints={}){
- const prepared=values.map((v,i)=>{const copy={...v},k=v.kind||kind(points[i],points[(i+1)%points.length]);delete copy.inferredMeasurements;for(const [key,value] of Object.entries(v.inferredMeasurements||{}))if(copy[key]===value)copy[key]=null;for(const key of ['site','width','height'])delete copy['calculate'+key];for(const key of k==='sloping'?['width','height']:['site'])if(copy[key]==null)copy['calculate'+key]=true;return copy;});
+ const constrained=!!(constraints.measurementConstraints?.length||constraints.rightAngles?.length);
+ const prepared=values.map((v,i)=>{
+  const copy={...v},traced=kind(points[i],points[(i+1)%points.length]);
+  // Undo an earlier automatic taper before re-solving changed constraints.
+  // Explicit shape choices and manually entered slope components stay fixed.
+  if(constrained&&v.kind==='sloping'&&traced!=='sloping'&&!v.shapeExplicit){
+   const minor=traced==='horizontal'?'height':'width';
+   if(v.inferredMeasurements?.[minor]!=null&&!v.manualMeasurements?.[minor]){
+    copy.kind=traced;delete copy.width;delete copy.height;delete copy.xSign;delete copy.ySign;
+   }
+  }
+  delete copy.inferredMeasurements;
+  for(const [key,value] of Object.entries(v.inferredMeasurements||{}))if(copy[key]===value&&!v.manualMeasurements?.[key])copy[key]=null;
+  // Reader-populated values are suggestions, not user locks. Constraints
+  // own the calculation; unresolved suggestions remain blank rather than
+  // forcing a taper into a different, manually measured section.
+  if(constrained)for(const [key,value] of Object.entries(v.readMeasurements||{}))if(copy[key]===value&&!v.manualMeasurements?.[key])copy[key]=null;
+  for(const key of ['site','width','height'])delete copy['calculate'+key];
+  for(const key of copy.kind==='sloping'?['width','height']:['site'])if(copy[key]==null)copy['calculate'+key]=true;
+  return copy;
+ });
  // A direct distance constraint owns its single intervening axis measurement.
  // Keep multi-edge spans fixed unless existing unknowns already identify a solution.
  for(const c of constraints.measurementConstraints||[]){
@@ -66,12 +86,24 @@ function infer(points,values,folds=[],constraints={}){
   }
   paths.sort((a,b)=>a.count-b.count);
   if(paths.length&& !paths.some(p=>p.count===paths[0].count&&p.i!==paths[0].i)){
-   const {i,key}=paths[0];prepared[i][key]=null;prepared[i]['calculate'+key]=true;
+   const {i,key}=paths[0];if(prepared[i].manualMeasurements?.[key])continue;prepared[i][key]=null;prepared[i]['calculate'+key]=true;
   }
  }
  let solved;
  try{solved=resolve(points,prepared,folds,{...constraints,partial:true});}
  catch(error){
+  // A previously inferred slope can still be required by explicit dimensions
+  // (for example unequal end heights). Recalculate it, never reuse its value.
+  const restored=[];
+  values.forEach((v,i)=>{
+   if(v.kind!=='sloping'||prepared[i].kind==='sloping')return;
+   const trial=prepared.map(e=>({...e})),horizontal=prepared[i].kind==='horizontal',major=horizontal?'width':'height',minor=horizontal?'height':'width';
+   trial[i]={...prepared[i],kind:'sloping',[major]:prepared[i].site,[minor]:null,['calculate'+minor]:true};
+   if(prepared[i].calculatesite)trial[i]['calculate'+major]=true;delete trial[i].calculatesite;
+   try{restored.push({trial,result:resolve(points,trial,folds,{...constraints,partial:true})});}catch(_){}
+  });
+  if(restored.length===1){prepared.splice(0,prepared.length,...restored[0].trial);solved=restored[0].result;}
+  else {
   // A snapped trace is approximate. Only relax one unmarked, unlocked axis
   // when the written dimensions and fold constraints identify it uniquely.
   if(!constraints.rightAngles?.length&&!constraints.measurementConstraints?.length)throw error;
@@ -95,6 +127,7 @@ function infer(points,values,folds=[],constraints={}){
   if(candidates.length!==1)throw error;
   const chosen=candidates[0];solved=chosen.result;prepared.splice(0,prepared.length,...chosen.trial);
   solved.notes.push('Section '+(chosen.i+1)+' has a slight slope calculated from the written dimensions and marked right angles.');
+  }
  }
  solved.values.forEach((v,i)=>{const inferred={};for(const key of ['site','width','height'])if(prepared[i]['calculate'+key]&&Number.isFinite(v[key]))inferred[key]=v[key];if(Object.keys(inferred).length)v.inferredMeasurements=inferred;});
  const remaining=solved.values.reduce((n,v,i)=>n+((v.kind||kind(points[i],points[(i+1)%points.length]))==='sloping'?['width','height']:['site']).filter(key=>v[key]==null).length,0);for(const v of solved.values)for(const key of ['site','width','height'])delete v['calculate'+key];
