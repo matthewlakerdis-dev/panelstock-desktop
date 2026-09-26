@@ -243,16 +243,27 @@ function batchSummary(items){
  }
  return {panels:[...panelCounts],lengths:[...lengthCounts].sort((a,b)=>a[0]-b[0]),count:items.length,stiffeners,unknownLengths};
 }
+function printDrawingSummary(content,title){
+ const popup=window.open('','_blank','width=900,height=800');
+ if(!popup){notice('Allow pop-ups for PanelStock, then select Print summary again.');return;}
+ popup.opener=null;const doc=popup.document;doc.title=title;
+ const style=doc.createElement('style');style.textContent='@page{size:A4;margin:16mm}body{font:12pt Arial,sans-serif;color:#111;margin:24px;line-height:1.4}h2{font-size:20pt;overflow-wrap:anywhere}h3{font-size:14pt;margin-top:24px;break-after:avoid}table{width:100%;border-collapse:collapse;margin:12px 0 24px}th,td{text-align:left;padding:8px;border-bottom:1px solid #aaa;overflow-wrap:anywhere}th{background:#eee}thead{display:table-header-group}tr{break-inside:avoid}p{font-size:10pt}button{padding:10px 18px;margin-bottom:16px}@media print{body{margin:0}button{display:none}}';doc.head.append(style);
+ const heading=doc.createElement('p');heading.textContent='PanelStock · Prepared '+new Date().toLocaleString('en-AU',{timeZone:'Australia/Brisbane'})+' (Brisbane)';doc.body.append(heading);
+ for(const child of content.children){if(child.tagName==='BUTTON')continue;const copy=doc.importNode(child,true);copy.querySelectorAll('button').forEach(b=>b.remove());doc.body.append(copy);}
+ const print=doc.createElement('button');print.textContent='Print / Save as PDF';print.onclick=()=>{popup.focus();popup.print();};doc.body.prepend(print);
+ popup.focus();popup.setTimeout(()=>popup.print(),150);
+}
 const summaryButton=document.createElement('button');summaryButton.type='button';summaryButton.textContent='Drawing summary';$('downloadall').after(summaryButton);
 summaryButton.onclick=()=>{
  if(busy)return;const items=panels.flatMap((p,i)=>{const drawing=i===panelIndex?result:p.result;return drawing?.dxf?[{name:p.spec?.panelId||p.name||drawing.filename,drawing}]:[];});
  const summary=batchSummary(items),dialog=document.createElement('dialog');dialog.style.cssText='max-height:85vh;overflow:auto;width:min(560px,90vw)';
  const title=document.createElement('h2');title.textContent=($('projectname').value.trim()||'Untitled project')+' — drawing summary';dialog.append(title);
  const count=document.createElement('p');count.textContent=summary.count+' generated drawings · '+summary.stiffeners+' stiffeners. '+(panels.length-summary.count)+' panels not generated.';dialog.append(count);
- const addTable=(heading,columns,rows)=>{const h=document.createElement('h3');h.textContent=heading;dialog.append(h);const table=document.createElement('table');const head=document.createElement('tr');for(const text of columns){const th=document.createElement('th');th.textContent=text;head.append(th);}table.append(head);for(const row of rows){const tr=document.createElement('tr');for(const text of row){const td=document.createElement('td');td.textContent=String(text);tr.append(td);}table.append(tr);}dialog.append(table);};
+ const addTable=(heading,columns,rows)=>{const h=document.createElement('h3');h.textContent=heading;dialog.append(h);const table=document.createElement('table');const head=document.createElement('tr');for(const text of columns){const th=document.createElement('th');th.textContent=text;head.append(th);}const thead=document.createElement('thead');thead.append(head);table.append(thead);for(const row of rows){const tr=document.createElement('tr');for(const text of row){const td=document.createElement('td');td.textContent=String(text);tr.append(td);}table.append(tr);}dialog.append(table);};
  addTable('Panels',['Panel ID','Drawings'],summary.panels);addTable('Stiffeners',['Required length (mm)','Quantity'],summary.lengths);
  if(summary.unknownLengths){const warning=document.createElement('p');warning.textContent=summary.unknownLengths+' stiffener lengths are unavailable. Regenerate those drawings.';dialog.append(warning);}
  const note=document.createElement('p');note.textContent='Quantities count generated drawings in this project. Identical panel IDs are grouped; dimensions should still be reviewed.';dialog.append(note);
+ const print=document.createElement('button');print.type='button';print.textContent='Print summary / Save PDF';print.onclick=()=>printDrawingSummary(dialog,title.textContent);dialog.append(print);
  const close=document.createElement('button');close.type='button';close.textContent='Close';close.onclick=()=>dialog.close();dialog.onclose=()=>dialog.remove();dialog.append(close);document.body.append(dialog);dialog.showModal();
 };
 function combinedFilename(name){

@@ -1,6 +1,6 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const source=fs.readFileSync(path.join(__dirname,'../cad/cad.js'),'utf8'),c={};
-vm.runInNewContext(source.slice(source.indexOf('function batchSummary('),source.indexOf('const summaryButton=')),c);
+vm.runInNewContext(source.slice(source.indexOf('function batchSummary('),source.indexOf('function printDrawingSummary(')),c);
 test('batch summary groups panel IDs and required stiffener lengths',()=>{
  const item=(name,stiffeners)=>({name,drawing:{validation:{stiffeners}}});
  const r=c.batchSummary([item('A',[{length:1193}]),item('A',[{length:1193}]),item('B',[{start:[0,0],end:[0,639]}])]);
