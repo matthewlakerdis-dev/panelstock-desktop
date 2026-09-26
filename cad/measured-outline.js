@@ -39,8 +39,8 @@ function draw(svg,d,onPoint){
   const u=[(b[0]-a[0])/length,(b[1]-a[1])/length],n=[-u[1],u[0]],text=(Math.abs(e.dx)<.001?fmt(e.dy):Math.abs(e.dy)<.001?fmt(e.dx):fmt(e.dx)+' × '+fmt(e.dy))+' · '+e.code;
   let angle=Math.atan2(u[1],u[0])*180/Math.PI;if(angle>90)angle-=180;if(angle<-90)angle+=180;
   const textWidth=text.length*7.2+12,radians=angle*Math.PI/180,bw=Math.abs(Math.cos(radians))*textWidth+Math.abs(Math.sin(radians))*18,bh=Math.abs(Math.sin(radians))*textWidth+Math.abs(Math.cos(radians))*18;
-  let offset=30,c,rect;
-  for(let level=0;level<ps.length+1;level++){c=[(a[0]+b[0])/2+n[0]*offset,(a[1]+b[1])/2+n[1]*offset];rect=[c[0]-bw/2,c[1]-bh/2,c[0]+bw/2,c[1]+bh/2];if(!occupied.some(r=>rect[0]<r[2]+8&&rect[2]>r[0]-8&&rect[1]<r[3]+8&&rect[3]>r[1]-8))break;offset+=24;}occupied.push(rect);
+  let offset=18,c,rect;
+  for(let level=0;level<ps.length+1;level++){c=[(a[0]+b[0])/2+n[0]*offset,(a[1]+b[1])/2+n[1]*offset];rect=[c[0]-bw/2,c[1]-bh/2,c[0]+bw/2,c[1]+bh/2];if(!occupied.some(r=>rect[0]<r[2]+8&&rect[2]>r[0]-8&&rect[1]<r[3]+8&&rect[3]>r[1]-8))break;offset+=14;}occupied.push(rect);
   const start=[a[0]+n[0]*offset,a[1]+n[1]*offset],end=[b[0]+n[0]*offset,b[1]+n[1]*offset];
   const line=(a,b)=>svg.append(make('line',{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:'#334c59','stroke-width':1,'pointer-events':'none'}));
   for(const point of [a,b])line([point[0]+n[0]*5,point[1]+n[1]*5],[point[0]+n[0]*(offset+6),point[1]+n[1]*(offset+6)]);
