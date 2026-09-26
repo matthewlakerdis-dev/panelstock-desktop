@@ -40,3 +40,17 @@ test('a manually entered sloping rise is never replaced with a derived rise',()=
  const folds=[{from:2,to:7}],constraints={rightAngles:[{fold:0,end:0,edge:1}]};
  assert.throws(()=>api.infer(p,first.values,folds,constraints),/conflict/);assert.equal(first.values[2].height,230);
 });
+
+test('horizontal constraint resolves multiple missing sections and survives reopening',()=>{
+ const p=[{x:0,y:100},{x:40,y:100},{x:100,y:100},{x:100,y:0},{x:0,y:0}],v=[{kind:'horizontal',site:null},{kind:'horizontal',site:null},{kind:'vertical',site:80},{kind:'horizontal',site:300},{kind:'vertical',site:80}].map(e=>({...e,code:'B'}));
+ const constraints={measurementConstraints:[{from:0,to:1,axis:'x',value:120,direction:1}]};
+ const r=api.infer(p,v,[],constraints);assert.equal(r.values[0].site,120);assert.equal(r.values[1].site,180);
+ const d=api.build(p,r.values,[],constraints),restored=api.restore(d);assert.equal(d.measurementConstraints[0].value,120);assert.doesNotThrow(()=>api.build(restored.points,restored.values,[],{measurementConstraints:d.measurementConstraints}));
+ constraints.measurementConstraints[0].value=140;const next=api.infer(p,r.values,[],constraints);assert.equal(next.values[0].site,140);assert.equal(next.values[1].site,160);
+});
+test('vertical constraints validate supplied dimensions and reject invalid references',()=>{
+ const p=[{x:0,y:100},{x:100,y:100},{x:100,y:0},{x:0,y:0}],v=[{site:100},{site:null},{site:100},{site:null}].map(e=>({...e,code:'B'})),constraints={measurementConstraints:[{from:1,to:2,axis:'y',value:80,direction:1}]};
+ const r=api.infer(p,v,[],constraints);assert.equal(r.values[1].site,80);assert.equal(r.values[3].site,80);
+ r.values[1].site=90;assert.throws(()=>api.infer(p,r.values,[],constraints),/conflict/);
+ constraints.measurementConstraints[0].to=9;assert.throws(()=>api.infer(p,v,[],constraints),/constraint/);
+});
