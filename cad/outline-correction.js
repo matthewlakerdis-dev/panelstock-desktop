@@ -122,7 +122,7 @@ async function open(file,draft,readMeasurements){
   for(let i=0;i<count;i++){
    const a=points[i],b=points[(i+1)%points.length],v=values[i]||(values[i]={site:null,code:''}),k=v.kind||PanelSketchComponents.kind(a,b);
    v.kind=k;const x=(a.x+b.x)/2,y=(a.y+b.y)/2;
-   const fmt=n=>n==null?'?':String(Number(n.toFixed(3)));const caption=()=>k==='sloping'?fmt(v.width)+' × '+fmt(v.height):v.site==null?'Add dimension':fmt(v.site);
+   const fmt=n=>n==null?'?':String(Number(n.toFixed(3)));const caption=()=>k==='sloping'?fmt(v.width)+' × '+fmt(v.height):fmt(v.site);
    const badge=make('g',{'data-measurement':i,tabindex:0,role:'button','aria-label':'Section '+(i+1)+' measurement',class:'trace-dimension'});
    const bx=0,by=0;
    badge.append(make('rect',{x:-25,y:-13,width:50,height:26,fill:'transparent',stroke:'none',class:'trace-dimension-gap'}),make('text',{x:bx,y:by,'text-anchor':'middle','dominant-baseline':'central','font-size':14,fill:'#263c46',stroke:'#f4f8fb','stroke-width':3,'stroke-linejoin':'round','paint-order':'stroke fill'},caption()));
