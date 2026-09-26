@@ -111,3 +111,12 @@ test('generation explains unresolved values and requires an applied outline',()=
  assert.throws(()=>api.prepareGeneration({...d,correctionDraft:true}),/Apply/);
 });
 
+test('corner-to-outline-line constraints calculate perpendicular distance without adding folds',()=>{
+ const p=[{x:30,y:100},{x:100,y:100},{x:100,y:0},{x:0,y:0},{x:0,y:100}],v=[70,null,100,null,30].map(site=>({site,code:'B'}));
+ const constraints={measurementConstraints:[{from:0,edge:2,axis:'y',value:120,direction:1}]};
+ const r=api.infer(p,v,[],constraints);assert.equal(r.values[1].site,120);assert.equal(r.values[3].site,120);
+ const d=api.build(p,r.values,[],constraints);assert.equal(d.measuredFolds.length,0);assert.equal(d.measurementConstraints[0].edge,2);
+ const restored=api.restore(d);assert.doesNotThrow(()=>api.build(restored.points,restored.values,[],constraints));
+ const bad={measurementConstraints:[{from:0,edge:99,axis:'y',value:120,direction:1}]};assert.throws(()=>api.infer(p,v,[],bad),/constraint/);
+});
+
