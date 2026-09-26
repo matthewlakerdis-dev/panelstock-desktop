@@ -12,12 +12,16 @@ function resolve(points,values,folds=[],constraints={}){
    if(!Number.isFinite(v[key])||v[key]<0)throw Error('Enter section '+(i+1)+' '+key+' or choose Calculate.');
    const direction=axis==='x'?(v.xSign??sign(b.x-a.x)):(v.ySign??sign(a.y-b.y));return direction*v[key];
   });
-  if(!unknown.length)continue;
+
   const equation=indices=>[...unknown.map(u=>indices.includes(u.i)?1:0),-indices.reduce((sum,i)=>sum+(components[i]??0),0)];
   const rows=[equation(result.map((_,i)=>i))];
   for(const c of constraints.rightAngles||[]){const f=folds[c.fold],e=result[c.edge];if(!f||!e)continue;const ek=e.kind||kind(points[c.edge],points[(c.edge+1)%points.length]);
    if(!((axis==='y'&&ek==='vertical')||(axis==='x'&&ek==='horizontal')))continue;
    const indices=[];for(let i=f.from;i!==f.to;i=(i+1)%points.length){indices.push(i);if(indices.length>points.length)throw Error('Check fold endpoints.');}rows.push(equation(indices));
+  }
+  if(!unknown.length){
+   if(rows.slice(1).some(row=>Math.abs(row.at(-1))>.001))throw Error('Written measurements conflict with a marked right angle. Your entries have been kept.');
+   continue;
   }
   let r=0;const pivots=[];
   for(let col=0;col<unknown.length;col++){const pivot=rows.findIndex((row,i)=>i>=r&&Math.abs(row[col])>1e-9);if(pivot<0)continue;[rows[r],rows[pivot]]=[rows[pivot],rows[r]];const divisor=rows[r][col];rows[r]=rows[r].map(n=>n/divisor);for(let j=0;j<rows.length;j++){if(j===r)continue;const factor=rows[j][col];rows[j]=rows[j].map((n,k)=>n-factor*rows[r][k]);}pivots.push(col);r++;}
@@ -29,7 +33,32 @@ function resolve(points,values,folds=[],constraints={}){
 }
 function infer(points,values,folds=[],constraints={}){
  const prepared=values.map((v,i)=>{const copy={...v},k=v.kind||kind(points[i],points[(i+1)%points.length]);delete copy.inferredMeasurements;for(const [key,value] of Object.entries(v.inferredMeasurements||{}))if(copy[key]===value)copy[key]=null;for(const key of ['site','width','height'])delete copy['calculate'+key];for(const key of k==='sloping'?['width','height']:['site'])if(copy[key]==null)copy['calculate'+key]=true;return copy;});
- const solved=resolve(points,prepared,folds,{...constraints,partial:true});
+ let solved;
+ try{solved=resolve(points,prepared,folds,{...constraints,partial:true});}
+ catch(error){
+  // A snapped trace is approximate. Only relax one unmarked, unlocked axis
+  // when the written dimensions and fold constraints identify it uniquely.
+  if(!constraints.rightAngles?.length)throw error;
+  const candidates=[];
+  prepared.forEach((v,i)=>{
+   const k=v.kind||kind(points[i],points[(i+1)%points.length]);
+   if(!['horizontal','vertical'].includes(k)||v.shapeExplicit||!Number.isFinite(v.site)||v.calculatesite)return;
+   if(constraints.rightAngles.some(c=>c.edge===i)||(constraints.edgeRightAngles||[]).some(c=>c===i||c===(i+1)%points.length))return;
+   const major=k==='horizontal'?'width':'height',minor=k==='horizontal'?'height':'width';
+   const trial=prepared.map(e=>({...e}));
+   trial[i]={...v,kind:'sloping',[major]:v.site,[minor]:null,['calculate'+minor]:true};
+   try{
+    const result=resolve(points,trial,folds,{...constraints,partial:true}),edge=result.values[i];
+    if(!Number.isFinite(edge[minor])||edge[minor]<.001||edge[minor]>edge[major]*.05)return;
+    if(result.values.some(e=>(e.kind==='sloping'?['width','height']:['site']).some(key=>!Number.isFinite(e[key]))))return;
+    build(points,result.values,folds,constraints);
+    candidates.push({result,trial,i});
+   }catch(_){}
+  });
+  if(candidates.length!==1)throw error;
+  const chosen=candidates[0];solved=chosen.result;prepared.splice(0,prepared.length,...chosen.trial);
+  solved.notes.push('Section '+(chosen.i+1)+' has a slight slope calculated from the written dimensions and marked right angles.');
+ }
  solved.values.forEach((v,i)=>{const inferred={};for(const key of ['site','width','height'])if(prepared[i]['calculate'+key]&&Number.isFinite(v[key]))inferred[key]=v[key];if(Object.keys(inferred).length)v.inferredMeasurements=inferred;});
  const remaining=solved.values.reduce((n,v,i)=>n+((v.kind||kind(points[i],points[(i+1)%points.length]))==='sloping'?['width','height']:['site']).filter(key=>v[key]==null).length,0);for(const v of solved.values)for(const key of ['site','width','height'])delete v['calculate'+key];
  return {...solved,remaining};
