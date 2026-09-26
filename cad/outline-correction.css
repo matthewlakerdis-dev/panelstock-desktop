@@ -17,7 +17,7 @@
 
 .trace-fold-hit{cursor:crosshair}
 
-.trace-canvas-area>svg[data-tool=line] [data-fold],.trace-canvas-area>svg[data-tool=line] [data-edge],.trace-canvas-area>svg[data-tool=fold] [data-edge],.trace-canvas-area>svg[data-tool=angle] [data-corner]{pointer-events:none}
+.trace-canvas-area>svg[data-tool=line] [data-fold],.trace-canvas-area>svg[data-tool=line] [data-edge],.trace-canvas-area>svg[data-tool=angle] [data-corner]{pointer-events:none}
 .trace-canvas-area>svg[data-tool=angle] [data-corner]{opacity:.3}.trace-canvas-area>svg[data-tool=fold] [data-corner]{cursor:crosshair}.trace-canvas-area>svg[data-tool=angle] [data-edge]{cursor:crosshair}
 .trace-tools button[aria-pressed=true]{box-shadow:inset 3px 0 0 #80d8ef,0 1px 3px #16384733}.trace-tools button[data-fit]{margin-top:9px}.trace-tools button[data-fit]::before{content:'';position:absolute;top:-8px;left:4px;right:4px;border-top:1px solid #d0dce4}
 
@@ -39,4 +39,6 @@
 .trace-inline-editor .trace-shape-tools button[aria-pressed=true],.trace-inline-editor .trace-tag-tools button[aria-pressed=true]{background:#23627c;color:#fff;box-shadow:inset 0 0 0 2px #16465b}
 .trace-inline-editor .trace-shape-tools button:hover,.trace-inline-editor .trace-tag-tools button:hover{filter:brightness(.93)}
 .trace-shape-tools svg{width:22px;height:22px;min-height:0;border:0;background:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+
+.trace-canvas-area>svg[data-tool=fold] [data-edge]{pointer-events:stroke;cursor:crosshair}
 
