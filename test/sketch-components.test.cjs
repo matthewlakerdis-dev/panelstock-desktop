@@ -74,3 +74,18 @@ test('sketch reading records its source and preserves manual values',()=>{
  assert.equal(r[0].readMeasurements.site,40);assert.equal(r[1].site,90);assert.equal(r[2].site,null);
 });
 
+test('corner-to-fold distance resolves missing lengths and survives reopening',()=>{
+ const p=[{x:30,y:100},{x:100,y:100},{x:100,y:50},{x:100,y:0},{x:0,y:0},{x:0,y:50},{x:0,y:100}];
+ const v=[70,null,50,100,50,null,30].map(site=>({site,code:'B'})),folds=[{from:2,to:5}],c={measurementConstraints:[{from:0,fold:0,axis:'y',value:60,direction:1}]};
+ const r=api.infer(p,v,folds,c);assert.equal(r.values[1].site,60);assert.equal(r.values[5].site,60);
+ const d=api.build(p,r.values,folds,c),restored=api.restore({...d,outlineSections:p.map((start,i)=>({...r.values[i],start}))});
+ assert.doesNotThrow(()=>api.build(restored.points,restored.values,restored.folds,{measurementConstraints:d.measurementConstraints}));
+ const rotated=p.map(p=>({x:p.y,y:-p.x})),rc={measurementConstraints:[{from:0,fold:0,axis:'x',value:60,direction:-1}]};
+ assert.equal(api.infer(rotated,v,folds,rc).values[1].site,60);
+});
+test('corner-to-fold constraints reject invalid references and conflicting distances',()=>{
+ const p=[{x:0,y:100},{x:100,y:100},{x:100,y:50},{x:100,y:0},{x:0,y:0},{x:0,y:50}],v=[100,50,50,100,50,50].map(site=>({site,code:'B'})),folds=[{from:2,to:5}];
+ assert.throws(()=>api.infer(p,v,folds,{measurementConstraints:[{from:0,fold:9,axis:'y',value:50,direction:1}]}),/constraint/);
+ assert.throws(()=>api.infer(p,v,folds,{measurementConstraints:[{from:0,fold:0,axis:'y',value:60,direction:1}]}),/conflict/);
+});
+
