@@ -48,6 +48,26 @@ function resolve(points,values,folds=[],constraints={}){
 }
 function infer(points,values,folds=[],constraints={}){
  const prepared=values.map((v,i)=>{const copy={...v},k=v.kind||kind(points[i],points[(i+1)%points.length]);delete copy.inferredMeasurements;for(const [key,value] of Object.entries(v.inferredMeasurements||{}))if(copy[key]===value)copy[key]=null;for(const key of ['site','width','height'])delete copy['calculate'+key];for(const key of k==='sloping'?['width','height']:['site'])if(copy[key]==null)copy['calculate'+key]=true;return copy;});
+ // A direct distance constraint owns its single intervening axis measurement.
+ // Keep multi-edge spans fixed unless existing unknowns already identify a solution.
+ for(const c of constraints.measurementConstraints||[]){
+  if(!['x','y'].includes(c.axis)||!Number.isInteger(c.from)||!points[c.from])continue;
+  const f=c.fold!=null?folds[c.fold]:null,targets=f?[f.from,f.to]:[c.to],paths=[];
+  for(const to of targets){if(!Number.isInteger(to)||!points[to]||to===c.from)continue;
+   for(const [start,end] of [[c.from,to],[to,c.from]]){
+    const active=[];let count=0;
+    for(let i=start;i!==end;i=(i+1)%points.length){count++;const v=prepared[i],k=v.kind||kind(points[i],points[(i+1)%points.length]);
+     if((c.axis==='x'&&k==='vertical')||(c.axis==='y'&&k==='horizontal'))continue;
+     active.push({i,key:k==='sloping'?(c.axis==='x'?'width':'height'):'site'});
+    }
+    if(active.length===1)paths.push({...active[0],count});
+   }
+  }
+  paths.sort((a,b)=>a.count-b.count);
+  if(paths.length&& !paths.some(p=>p.count===paths[0].count&&p.i!==paths[0].i)){
+   const {i,key}=paths[0];prepared[i][key]=null;prepared[i]['calculate'+key]=true;
+  }
+ }
  let solved;
  try{solved=resolve(points,prepared,folds,{...constraints,partial:true});}
  catch(error){

@@ -51,7 +51,7 @@ test('horizontal constraint resolves multiple missing sections and survives reop
 test('vertical constraints validate supplied dimensions and reject invalid references',()=>{
  const p=[{x:0,y:100},{x:100,y:100},{x:100,y:0},{x:0,y:0}],v=[{site:100},{site:null},{site:100},{site:null}].map(e=>({...e,code:'B'})),constraints={measurementConstraints:[{from:1,to:2,axis:'y',value:80,direction:1}]};
  const r=api.infer(p,v,[],constraints);assert.equal(r.values[1].site,80);assert.equal(r.values[3].site,80);
- r.values[1].site=90;assert.throws(()=>api.infer(p,r.values,[],constraints),/conflict/);
+ r.values[1].site=90;assert.equal(api.infer(p,r.values,[],constraints).values[1].site,80);
  constraints.measurementConstraints[0].to=9;assert.throws(()=>api.infer(p,v,[],constraints),/constraint/);
 });
 
@@ -87,5 +87,16 @@ test('corner-to-fold constraints reject invalid references and conflicting dista
  const p=[{x:0,y:100},{x:100,y:100},{x:100,y:50},{x:100,y:0},{x:0,y:0},{x:0,y:50}],v=[100,50,50,100,50,50].map(site=>({site,code:'B'})),folds=[{from:2,to:5}];
  assert.throws(()=>api.infer(p,v,folds,{measurementConstraints:[{from:0,fold:9,axis:'y',value:50,direction:1}]}),/constraint/);
  assert.throws(()=>api.infer(p,v,folds,{measurementConstraints:[{from:0,fold:0,axis:'y',value:60,direction:1}]}),/conflict/);
+});
+
+test('Z2-6a constraint replaces top 280 with 283 and recalculates shoulder',()=>{
+ const p=[{x:0,y:100},{x:100,y:100},{x:419,y:100},{x:449,y:100},{x:449,y:60},{x:419,y:60},{x:380,y:60},{x:380,y:0},{x:100,y:0},{x:0,y:0}];
+ const v=[100,319,30,1090,30,39,1735,280,100,2825].map((site,i)=>({site,code:'B',kind:[3,6,9].includes(i)?'vertical':'horizontal'}));
+ v[5].inferredMeasurements={site:39};v[6].inferredMeasurements={site:1735};v[7].manualMeasurements={site:true};
+ const folds=[{from:8,to:1},{from:5,to:2}],c={rightAngles:[{fold:0,edge:1,end:1}],measurementConstraints:[{from:6,fold:0,axis:'x',value:283,direction:-1}]};
+ const r=api.infer(p,v,folds,c);assert.equal(r.values[7].site,283);assert.equal(r.values[5].site,36);assert.equal(r.values[1].site,319);assert.equal(v[7].site,280);
+ assert.doesNotThrow(()=>api.build(p,r.values,folds,c));
+ c.measurementConstraints[0].value=285;const next=api.infer(p,r.values,folds,c);assert.equal(next.values[7].site,285);assert.equal(next.values[5].site,34);
+ c.measurementConstraints.push({from:6,fold:0,axis:'x',value:284,direction:-1});assert.throws(()=>api.infer(p,next.values,folds,c),/conflict/);
 });
 
