@@ -127,7 +127,30 @@ async function open(file,draft,readMeasurements){
  }
 
  const make=(name,attrs,text)=>{const e=document.createElementNS(ns,name);for(const [k,v]of Object.entries(attrs))e.setAttribute(k,v);if(text)e.textContent=text;return e;};
- function foldList(){const list=q('[data-marked-folds]');list.replaceChildren();markedFolds.forEach((f,i)=>{const b=document.createElement('button');b.type='button';b.textContent='Fold '+(i+1)+': point '+(f.from+1)+' → '+(f.to+1);b.setAttribute('aria-pressed',String(selectedFold===i));b.onclick=()=>{constraintMode=false;constraintFirst=null;handMode=false;angleMode=false;angleFirst=null;editingSection=null;selectedFold=i;marking=true;pendingFold=null;draw();status('Click two numbered points to replace this fold, or Delete selected fold.');};list.append(b);for(const end of [0,1]){const point=end?f.to:f.from;for(const [key,caption] of [['reliefEnds','Relief at point ']]){const label=document.createElement('label');label.textContent=caption+(point+1);const select=document.createElement('select');select.append(new Option(key==='rightAngles'?'Not marked':'Automatic',''));for(const edge of [(point+points.length-1)%points.length,point])select.append(new Option('Section '+(edge+1),String(edge)));const xs=key==='rightAngles'?rightAngles:reliefEnds;select.value=String(xs.find(c=>c.fold===i&&c.end===end)?.edge??'');select.onchange=()=>{const next=(key==='rightAngles'?rightAngles:reliefEnds).filter(c=>!(c.fold===i&&c.end===end));if(select.value!=='')next.push({fold:i,end,edge:Number(select.value)});if(key==='rightAngles')rightAngles=next;else reliefEnds=next;};label.append(select);list.append(label);}}});q('[data-mark]').setAttribute('aria-pressed',String(marking));q('[data-delete-fold]').disabled=selectedFold===null;}
+ let manualOverridesOpen=false;
+ function foldList(){
+  const list=q('[data-marked-folds]');list.replaceChildren();
+  const overrides=document.createElement('details');overrides.open=manualOverridesOpen;
+  const summary=document.createElement('summary');
+  const updateSummary=()=>{summary.textContent='Manual overrides'+(reliefEnds.length?' ('+reliefEnds.length+' active)':'');};
+  updateSummary();overrides.append(summary);
+  overrides.ontoggle=()=>{manualOverridesOpen=overrides.open;};
+  const help=document.createElement('p');help.textContent='Relief is automatic. Override a fold end only when needed.';overrides.append(help);
+  markedFolds.forEach((f,i)=>{
+   const b=document.createElement('button');b.type='button';b.textContent='Fold '+(i+1)+': point '+(f.from+1)+' → '+(f.to+1);b.setAttribute('aria-pressed',String(selectedFold===i));
+   b.onclick=()=>{constraintMode=false;constraintFirst=null;handMode=false;angleMode=false;angleFirst=null;editingSection=null;selectedFold=i;marking=true;pendingFold=null;draw();status('Click two numbered points to replace this fold, or Delete selected fold.');};list.append(b);
+   for(const end of [0,1]){
+    const point=end?f.to:f.from,label=document.createElement('label');label.textContent='Fold '+(i+1)+' — relief at point '+(point+1);
+    const select=document.createElement('select');select.append(new Option('Automatic',''));
+    for(const edge of [(point+points.length-1)%points.length,point])select.append(new Option('Section '+(edge+1),String(edge)));
+    select.value=String(reliefEnds.find(c=>c.fold===i&&c.end===end)?.edge??'');
+    select.onchange=()=>{reliefEnds=reliefEnds.filter(c=>!(c.fold===i&&c.end===end));if(select.value!=='')reliefEnds.push({fold:i,end,edge:Number(select.value)});updateSummary();};
+    label.append(select);overrides.append(label);
+   }
+  });
+  if(markedFolds.length)list.append(overrides);
+  q('[data-mark]').setAttribute('aria-pressed',String(marking));q('[data-delete-fold]').disabled=selectedFold===null;
+ }
  function constraintList(){
   let list=q('[data-constraints]');if(!list){list=document.createElement('div');list.dataset.constraints='';q('.trace-values').append(list);}list.replaceChildren();
   measurementConstraints.forEach((c,i)=>{
