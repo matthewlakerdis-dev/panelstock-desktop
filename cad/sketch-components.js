@@ -70,6 +70,19 @@ function infer(points,values,folds=[],constraints={}){
  const remaining=solved.values.reduce((n,v,i)=>n+((v.kind||kind(points[i],points[(i+1)%points.length]))==='sloping'?['width','height']:['site']).filter(key=>v[key]==null).length,0);for(const v of solved.values)for(const key of ['site','width','height'])delete v['calculate'+key];
  return {...solved,remaining};
 }
+function mergeReadMeasurements(values,edges){
+ return values.map((value,i)=>{
+  const v={...value},e=edges[i]||{};
+  for(const key of ['site','width','height']){
+   if(v[key]!=null||v.manualMeasurements?.[key])continue;
+   if(Number.isFinite(e[key])&&e[key]>=(key==='site'?.001:0)&&e[key]<=10000){
+    v[key]=e[key];v.readMeasurements={...v.readMeasurements,[key]:e[key]};
+   }
+  }
+  if(!v.code&&['B','S','NT','RE','FE','CR'].includes(e.code))v.code=e.code;
+  return v;
+ });
+}
 function kind(a,b){const x=Math.abs(b.x-a.x),y=Math.abs(b.y-a.y);return y<=x*.05?'horizontal':x<=y*.05?'vertical':'sloping';}
 function build(points,values,folds=[],constraints={}){
  values=resolve(points,values,folds,constraints).values;
@@ -86,9 +99,10 @@ function restore(d){
  let x=0,y=0;const ps=d.measuredEdges.map(e=>{const p={x,y};x+=e.dx;y+=e.dy;return p;});
  const xs=ps.map(p=>p.x),ys=ps.map(p=>p.y),minX=Math.min(...xs),maxY=Math.max(...ys),scale=800/Math.max(Math.max(...xs)-minX,maxY-Math.min(...ys),1);
  const points=d.outlineSections?.length===ps.length?d.outlineSections.map(s=>({...s.start})):ps.map(p=>({x:100+(p.x-minX)*scale,y:100+(maxY-p.y)*scale}));
- const values=d.measuredEdges.map((e,i)=>({...d.outlineSections?.[i],xSign:sign(e.dx),ySign:sign(e.dy),code:e.code,kind:e.dx===0?'vertical':e.dy===0?'horizontal':'sloping',site:e.dx===0?Math.abs(e.dy):Math.abs(e.dx),width:Math.abs(e.dx),height:Math.abs(e.dy)}));
+ const values=d.measuredEdges.map((e,i)=>({xSign:sign(e.dx),ySign:sign(e.dy),code:e.code,kind:e.dx===0?'vertical':e.dy===0?'horizontal':'sloping',site:e.dx===0?Math.abs(e.dy):Math.abs(e.dx),width:Math.abs(e.dx),height:Math.abs(e.dy),...d.outlineSections?.[i]}));
  const folds=(d.measuredFolds||[]).map(f=>({from:Number.isInteger(f.startPoint)?f.startPoint:ps.findIndex(p=>Math.hypot(p.x-f.start.x,p.y-f.start.y)<.001),to:Number.isInteger(f.endPoint)?f.endPoint:ps.findIndex(p=>Math.hypot(p.x-f.end.x,p.y-f.end.y)<.001)}));
  return {points,values,folds};
 }
-window.PanelSketchComponents={kind,build,restore,resolve,infer};
+window.PanelSketchComponents={kind,build,restore,resolve,infer,mergeReadMeasurements};
 })();
+
