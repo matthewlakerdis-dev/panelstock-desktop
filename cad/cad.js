@@ -29,7 +29,12 @@ function edgeRow(edge,index){const tr=document.createElement('tr');tr.dataset.se
  const td=document.createElement('td'),remove=document.createElement('button');remove.className='remove-edge';remove.setAttribute('aria-label','Remove edge '+(index+1));remove.title='Remove edge';remove.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6"/></svg>';remove.onclick=()=>{spec.edges.splice(index,1);recalculateOutline(spec);renderSpec();};td.append(remove);tr.append(td);return tr;}
 function recalculateOutline(draft){
  if(draft.correctionDraft){draft.unsupported=true;draft.edges=[];return false;}
- if(draft.measuredEdges){draft.calculationError=PanelMeasuredOutline.validate(draft).join(" ");return true;}
+ if(draft.measuredEdges){
+  const oldRestriction='Measured diagonal outlines currently support horizontal internal folds.',oldNote='Fold marks saved; machining mixed or angled fold orientations is not yet supported.';
+  const errors=PanelMeasuredOutline.validate(draft);
+  if(!errors.length&&draft.calculationError===oldRestriction&&(draft.questions||[]).every(q=>q===oldNote||q==='Review the written measurements and marked folds before generating.')){draft.unsupported=false;draft.questions=(draft.questions||[]).filter(q=>q!==oldNote);}
+  draft.validationErrors=errors;draft.calculationError=errors.join(' ');return true;
+ }
  const legacyFoldNote='Vertical or diagonal folds are marked and saved. Their deductions and machining geometry still need review before generation.';
  if(draft.unsupported&&draft.directionSource==='manual-sketch-trace'&&(draft.questions||[]).includes(legacyFoldNote)&&draft.foldLines?.length&&draft.foldLines.every(f=>Math.abs(f.start.x-f.end.x)<.001&&Math.abs(f.start.y-f.end.y)>.001)&&!(draft.siteFolds||[]).length){
   const migrated=structuredClone(draft);migrated.unsupported=false;
@@ -114,7 +119,7 @@ function renderQuestions(){
   for(const item of items){const p=document.createElement('p');p.textContent=item;$('questions').append(p);}
  }
 }
-function renderSpec(){PanelMeasuredOutline.show(spec);if(spec.measuredEdges){invalidate();$("panelid").value=spec.panelId||"";$("edges").replaceChildren();renderQuestions();return;}recalculateOutline(spec);invalidate();$('panelid').value=spec.panelId||'';$('folds').value=(spec.siteFolds||[]).join(', ');$('folds').setAttribute('aria-label','Site fold heights from bottom (mm)');const label=document.querySelector('label[for=folds]');if(label)label.textContent='Site fold heights from bottom (mm)';$('edges').replaceChildren(...spec.edges.map(edgeRow));renderQuestions();}
+function renderSpec(){if(spec.measuredEdges)recalculateOutline(spec);PanelMeasuredOutline.show(spec);if(spec.measuredEdges){invalidate();$("panelid").value=spec.panelId||"";$("edges").replaceChildren();renderQuestions();return;}recalculateOutline(spec);invalidate();$('panelid').value=spec.panelId||'';$('folds').value=(spec.siteFolds||[]).join(', ');$('folds').setAttribute('aria-label','Site fold heights from bottom (mm)');const label=document.querySelector('label[for=folds]');if(label)label.textContent='Site fold heights from bottom (mm)';$('edges').replaceChildren(...spec.edges.map(edgeRow));renderQuestions();}
 function example(){return {panelId:'Z3-130',edges:[['Bottom','right','NT',700,698],['Lower right','up','B',300,298],['Right shoulder','left','S',150,150],['Right stem','up','RE',200,200],['Top','left','RE',400,398],['Left stem','down','RE',200,200],['Left shoulder','left','S',150,150],['Lower left','down','B',300,298]].map(([name,direction,code,site,finished])=>({name,direction,code,site,finished})),folds:[],questions:[],unsupported:false};}
 function collect(){if(!spec)throw Error('Load a sketch or start a panel first.');return {...spec,panelId:$('panelid').value.trim(),reviewed:$('confirmed').checked};}
 function download(data,type,filename){const url=URL.createObjectURL(new Blob([data],{type}));const a=document.createElement('a');a.href=url;a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}

@@ -28,8 +28,9 @@ function resolve(points,values,folds=[],constraints={}){
  return {values:result,notes};
 }
 function infer(points,values,folds=[],constraints={}){
- const prepared=values.map((v,i)=>{const copy={...v},k=v.kind||kind(points[i],points[(i+1)%points.length]);for(const key of ['site','width','height'])delete copy['calculate'+key];for(const key of k==='sloping'?['width','height']:['site'])if(v[key]==null)copy['calculate'+key]=true;return copy;});
+ const prepared=values.map((v,i)=>{const copy={...v},k=v.kind||kind(points[i],points[(i+1)%points.length]);delete copy.inferredMeasurements;for(const [key,value] of Object.entries(v.inferredMeasurements||{}))if(copy[key]===value)copy[key]=null;for(const key of ['site','width','height'])delete copy['calculate'+key];for(const key of k==='sloping'?['width','height']:['site'])if(copy[key]==null)copy['calculate'+key]=true;return copy;});
  const solved=resolve(points,prepared,folds,{...constraints,partial:true});
+ solved.values.forEach((v,i)=>{const inferred={};for(const key of ['site','width','height'])if(prepared[i]['calculate'+key]&&Number.isFinite(v[key]))inferred[key]=v[key];if(Object.keys(inferred).length)v.inferredMeasurements=inferred;});
  const remaining=solved.values.reduce((n,v,i)=>n+((v.kind||kind(points[i],points[(i+1)%points.length]))==='sloping'?['width','height']:['site']).filter(key=>v[key]==null).length,0);for(const v of solved.values)for(const key of ['site','width','height'])delete v['calculate'+key];
  return {...solved,remaining};
 }
