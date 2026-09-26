@@ -231,17 +231,18 @@ function chooseCombinedDrawings(){return new Promise(resolve=>{
  document.body.append(dialog);update();dialog.showModal();
 });}
 function batchSummary(items){
- const panelCounts=new Map(),lengthCounts=new Map();let stiffeners=0,unknownLengths=0;
+ const panelCounts=new Map(),lengthCounts=new Map();let stiffeners=0,unknownLengths=0;const tags=[];let missingTags=0;
  for(const item of items){
   panelCounts.set(item.name,(panelCounts.get(item.name)||0)+1);
   const v=item.drawing.validation||{};
+  if(!Array.isArray(v.fabricationTags))missingTags++;else for(const tag of v.fabricationTags)tags.push([item.name,tag.edge,tag.type,tag.length,tag.quantity]);
   for(const plan of v.stiffeners||(v.stiffener?[v.stiffener]:[])){
    stiffeners++;const length=plan.length??(plan.start&&plan.end?Math.hypot(plan.end[0]-plan.start[0],plan.end[1]-plan.start[1]):null);
    if(!Number.isFinite(length)||length<=0){unknownLengths++;continue;}
    const key=Number(length.toFixed(2));lengthCounts.set(key,(lengthCounts.get(key)||0)+1);
   }
  }
- return {panels:[...panelCounts],lengths:[...lengthCounts].sort((a,b)=>a[0]-b[0]),count:items.length,stiffeners,unknownLengths};
+ return {panels:[...panelCounts],lengths:[...lengthCounts].sort((a,b)=>a[0]-b[0]),count:items.length,stiffeners,unknownLengths,tags,missingTags};
 }
 function printDrawingSummary(content,title){
  const popup=window.open('','_blank','width=900,height=800');
@@ -260,6 +261,8 @@ summaryButton.onclick=()=>{
  const title=document.createElement('h2');title.textContent=($('projectname').value.trim()||'Untitled project')+' — drawing summary';dialog.append(title);
  const count=document.createElement('p');count.textContent=summary.count+' generated drawings · '+summary.stiffeners+' stiffeners. '+(panels.length-summary.count)+' panels not generated.';dialog.append(count);
  const addTable=(heading,columns,rows)=>{const h=document.createElement('h3');h.textContent=heading;dialog.append(h);const table=document.createElement('table');const head=document.createElement('tr');for(const text of columns){const th=document.createElement('th');th.textContent=text;head.append(th);}const thead=document.createElement('thead');thead.append(head);table.append(thead);for(const row of rows){const tr=document.createElement('tr');for(const text of row){const td=document.createElement('td');td.textContent=String(text);tr.append(td);}table.append(tr);}dialog.append(table);};
+ addTable('Physical fabrication tags',['Panel ID','Section','Type','Cut length (mm)','Quantity'],summary.tags);
+ const tagNote=document.createElement('p');tagNote.textContent='B/S tag lengths include 5 mm beyond the outer edge of each end hole. Separate pieces are listed for uninterrupted spans with holes.'+(summary.missingTags?' '+summary.missingTags+' drawings need regenerating to calculate their tags.':'');dialog.append(tagNote);
  addTable('Panels',['Panel ID','Drawings'],summary.panels);addTable('Stiffeners',['Required length (mm)','Quantity'],summary.lengths);
  if(summary.unknownLengths){const warning=document.createElement('p');warning.textContent=summary.unknownLengths+' stiffener lengths are unavailable. Regenerate those drawings.';dialog.append(warning);}
  const note=document.createElement('p');note.textContent='Quantities count generated drawings in this project. Identical panel IDs are grouped; dimensions should still be reviewed.';dialog.append(note);
