@@ -19,13 +19,20 @@ function resolve(points,values,folds=[],constraints={}){
    if(!((axis==='y'&&ek==='vertical')||(axis==='x'&&ek==='horizontal')))continue;
    const indices=[];for(let i=f.from;i!==f.to;i=(i+1)%points.length){indices.push(i);if(indices.length>points.length)throw Error('Check fold endpoints.');}rows.push(equation(indices));
   }
+  for(const c of constraints.measurementConstraints||[]){
+   if((c.direction!=null&&![1,-1].includes(c.direction))||!['x','y'].includes(c.axis)||!Number.isInteger(c.from)||!Number.isInteger(c.to)||c.from<0||c.to<0||c.from>=points.length||c.to>=points.length||c.from===c.to||!Number.isFinite(c.value)||c.value<=0||c.value>10000)throw Error('Check the constraint measurement and its two corners.');
+   if(c.axis!==axis)continue;
+   const indices=[];for(let i=c.from;i!==c.to;i=(i+1)%points.length)indices.push(i);
+   const row=equation(indices),a=points[c.from],b=points[c.to];
+   row[row.length-1]+=(c.direction??sign(axis==='x'?b.x-a.x:a.y-b.y))*c.value;rows.push(row);
+  }
   if(!unknown.length){
-   if(rows.slice(1).some(row=>Math.abs(row.at(-1))>.001))throw Error('Written measurements conflict with a marked right angle. Your entries have been kept.');
+   if(rows.slice(1).some(row=>Math.abs(row.at(-1))>.001))throw Error('Written measurements conflict with a marked right angle or constraint measurement. Your entries have been kept.');
    continue;
   }
   let r=0;const pivots=[];
   for(let col=0;col<unknown.length;col++){const pivot=rows.findIndex((row,i)=>i>=r&&Math.abs(row[col])>1e-9);if(pivot<0)continue;[rows[r],rows[pivot]]=[rows[pivot],rows[r]];const divisor=rows[r][col];rows[r]=rows[r].map(n=>n/divisor);for(let j=0;j<rows.length;j++){if(j===r)continue;const factor=rows[j][col];rows[j]=rows[j].map((n,k)=>n-factor*rows[r][k]);}pivots.push(col);r++;}
-  if(rows.some(row=>row.slice(0,-1).every(n=>Math.abs(n)<1e-8)&&Math.abs(row.at(-1))>.001))throw Error('Written measurements conflict with a marked right angle. Your entries have been kept.');
+  if(rows.some(row=>row.slice(0,-1).every(n=>Math.abs(n)<1e-8)&&Math.abs(row.at(-1))>.001))throw Error('Written measurements conflict with a marked right angle or constraint measurement. Your entries have been kept.');
   if(pivots.length!==unknown.length&&!constraints.partial)throw Error('More than one missing '+(axis==='x'?'across':'rise/drop')+' measurement remains. Enter another written dimension or mark the fold and its 90° junction.');
   pivots.forEach((col,j)=>{if(rows[j].slice(0,-1).some((n,k)=>k!==col&&Math.abs(n)>1e-8))return;const {i,key}=unknown[col],n=rows[j].at(-1),a=points[i],b=points[(i+1)%points.length];if(Math.abs(n)>10000)throw Error('Calculated measurement exceeds 10000 mm.');if(key==='site'&&(Math.abs(n)<.001||sign(n)!==sign(axis==='x'?b.x-a.x:a.y-b.y)))throw Error('Section '+(i+1)+' cannot be calculated without reversing or collapsing the traced line. Check the supplied dimensions.');result[i][key]=Math.abs(n);result[i][axis==='x'?'xSign':'ySign']=sign(n);notes.push('Section '+(i+1)+' '+key+': '+Number(Math.abs(n).toFixed(3))+' mm, calculated from the other measurements'+(rows.length>1?' and marked right angles':'')+'.');});
  }
@@ -72,7 +79,7 @@ function build(points,values,folds=[],constraints={}){
  if(!Number.isFinite(w)||!Number.isFinite(h)||w<0||h<0||w>10000||h>10000||Math.hypot(w,h)<.001||!['B','S','NT','RE','FE','CR'].includes(v.code))throw Error('Check section '+(i+1)+' written measurements and tag.');
  const dx=(v.xSign??sign(b.x-a.x))*w,dy=(v.ySign??sign(a.y-b.y))*h;x+=dx;y+=dy;return {dx,dy,code:v.code};});
  if(Math.hypot(x,y)>.001)throw Error('The written measurements leave a gap of '+Number(Math.abs(x).toFixed(3))+' mm across and '+Number(Math.abs(y).toFixed(3))+' mm vertically. Check the section measurements.');
- return {measuredEdges:edges,measuredFolds:folds.map(f=>{if(!ps[f.from]||!ps[f.to])throw Error('Check fold endpoints.');return {start:{...ps[f.from]},end:{...ps[f.to]},startPoint:f.from,endPoint:f.to};}),rightAngles:constraints.rightAngles||[],reliefEnds:constraints.reliefEnds||[]};
+ return {measuredEdges:edges,measuredFolds:folds.map(f=>{if(!ps[f.from]||!ps[f.to])throw Error('Check fold endpoints.');return {start:{...ps[f.from]},end:{...ps[f.to]},startPoint:f.from,endPoint:f.to};}),rightAngles:constraints.rightAngles||[],reliefEnds:constraints.reliefEnds||[],measurementConstraints:constraints.measurementConstraints||[]};
 }
 function restore(d){
  if(!d?.measuredEdges)return null;
