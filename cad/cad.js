@@ -163,8 +163,8 @@ function chooseCombinedDrawings(){return new Promise(resolve=>{
  const entries=[];
  panels.forEach((panel,i)=>{
   const drawing=i===panelIndex?result:panel.result;
-  const row=document.createElement('label');row.style.cssText='display:flex;align-items:center;gap:10px;padding:10px 0';
-  const input=document.createElement('input');input.type='checkbox';input.checked=!!drawing?.dxf;input.disabled=!drawing?.dxf;input.style.width='auto';
+  const row=document.createElement('label');row.style.cssText='display:flex;align-items:center;gap:8px;padding:6px 0;margin:0;min-height:32px;line-height:20px';
+  const input=document.createElement('input');input.type='checkbox';input.checked=!!drawing?.dxf;input.disabled=!drawing?.dxf;input.style.cssText='width:16px;height:16px;min-height:0;padding:0;margin:0;flex:0 0 16px';
   const caption=document.createElement('span');caption.textContent=(i+1)+'. '+(panel.spec?.panelId||drawing?.filename||panel.name||'Panel')+(drawing?.dxf?'':' — generate this drawing first');
   row.append(input,caption);list.append(row);if(drawing?.dxf)entries.push({input,drawing});input.onchange=update;
  });
@@ -176,7 +176,13 @@ function chooseCombinedDrawings(){return new Promise(resolve=>{
  apply.onclick=()=>close(entries.filter(e=>e.input.checked).map(e=>e.drawing));cancel.onclick=()=>close(null);dialog.oncancel=e=>{e.preventDefault();close(null);};
  document.body.append(dialog);update();dialog.showModal();
 });}
-$('downloadall').onclick=()=>run(async()=>{if(!generatedDrawings().length)throw Error('Generate a drawing first.');const drawings=await chooseCombinedDrawings();if(!drawings){notice('Combined download cancelled.');return;}if(!drawings.length)return;const combined=await api('/cad/generate',{drawings:drawings.map(r=>r.dxf)});download(combined.dxf,'application/dxf',combined.filename);notice(combined.panelCount+' selected drawings downloaded in one DXF.');});
+function combinedPayload(drawings){
+  if(drawings.length>30)throw Error('Choose no more than 30 drawings for one combined download.');
+  const payload={drawings:drawings.map(r=>r.dxf)};
+  if(new TextEncoder().encode(JSON.stringify(payload)).length>10*1024*1024)throw Error('These drawings are too large for one combined download. Select fewer drawings and try again.');
+  return payload;
+}
+$('downloadall').onclick=()=>run(async()=>{if(!generatedDrawings().length)throw Error('Generate a drawing first.');const drawings=await chooseCombinedDrawings();if(!drawings){notice('Combined download cancelled.');return;}if(!drawings.length)return;notice('Combining selected drawings…');const combined=await api('/cad/generate',combinedPayload(drawings));download(combined.dxf,'application/dxf',combined.filename);notice(combined.panelCount+' selected drawings downloaded in one DXF.');});
 
 $('save').onclick=()=>{try{download(JSON.stringify({...collect(),reviewed:false},null,2),'application/json',($('panelid').value.replace(/[^a-z0-9_-]/gi,'_')||'panel')+'-draft.json');notice('Draft downloaded.');}catch(e){notice(e.message);}};
 $('import').onchange=()=>run(async()=>{const file=$('import').files[0];if(!file||file.size>128*1024)throw Error('Choose a panel draft smaller than 128 KB.');const data=JSON.parse(await file.text());if(data.correctionDraft?(!Array.isArray(data.outlineSections)||data.outlineSections.length>32||!data.outlineSections.every(s=>s?.start&&Number.isFinite(s.start.x)&&Number.isFinite(s.start.y))):data.measuredEdges?PanelMeasuredOutline.validate(data).length:(!Array.isArray(data.edges)||data.edges.length<4||data.edges.length>32||!data.edges.every(e=>e&&codes.includes(e.code)&&directions.includes(e.direction))))throw Error('Invalid panel draft.');addPanel(data,file.name);notice('Draft loaded. Review it before generating.');});
