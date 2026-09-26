@@ -100,3 +100,14 @@ test('Z2-6a constraint replaces top 280 with 283 and recalculates shoulder',()=>
  c.measurementConstraints.push({from:6,fold:0,axis:'x',value:284,direction:-1});assert.throws(()=>api.infer(p,next.values,folds,c),/conflict/);
 });
 
+test('generation calculates missing measurements without reading the sketch',()=>{
+ const d=api.build(pts,vals),sections=pts.map((start,i)=>({...vals[i],start}));sections[0].site=null;
+ const request=api.prepareGeneration({...d,panelId:'TEST',reviewed:true,outlineSections:sections});
+ assert.equal(request.measuredEdges[0].dx,800);assert.equal(request.outlineSections[0].inferredMeasurements.site,800);assert.equal(sections[0].site,null);assert.equal(request.reviewed,true);
+});
+test('generation explains unresolved values and requires an applied outline',()=>{
+ const d=api.build(pts,vals),sections=pts.map((start,i)=>({...vals[i],start}));sections[0].site=null;sections[3].site=null;
+ assert.throws(()=>api.prepareGeneration({...d,outlineSections:sections}),/another dimension or constraint/);
+ assert.throws(()=>api.prepareGeneration({...d,correctionDraft:true}),/Apply/);
+});
+

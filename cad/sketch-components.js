@@ -111,6 +111,15 @@ function mergeReadMeasurements(values,edges){
   return v;
  });
 }
+function prepareGeneration(draft){
+ if(draft.correctionDraft)throw Error('Apply the corrected outline before generating.');
+ if(!draft.measuredEdges||!draft.outlineSections?.length)return draft;
+ const points=draft.outlineSections.map(s=>({...s.start})),values=draft.outlineSections.map(s=>({...s}));
+ const folds=draft.markedFolds||restore(draft).folds;
+ const solved=infer(points,values,folds,draft);
+ if(solved.remaining)throw Error(solved.remaining+' measurements need another dimension or constraint before generating.');
+ return {...draft,...build(points,solved.values,folds,draft),outlineSections:points.map((start,i)=>({...solved.values[i],start})),calculationError:''};
+}
 function kind(a,b){const x=Math.abs(b.x-a.x),y=Math.abs(b.y-a.y);return y<=x*.05?'horizontal':x<=y*.05?'vertical':'sloping';}
 function build(points,values,folds=[],constraints={}){
  values=resolve(points,values,folds,constraints).values;
@@ -136,6 +145,6 @@ function restore(d){
  const folds=(d.measuredFolds||[]).map(f=>({from:Number.isInteger(f.startPoint)?f.startPoint:ps.findIndex(p=>Math.hypot(p.x-f.start.x,p.y-f.start.y)<.001),to:Number.isInteger(f.endPoint)?f.endPoint:ps.findIndex(p=>Math.hypot(p.x-f.end.x,p.y-f.end.y)<.001)}));
  return {points,values,folds};
 }
-window.PanelSketchComponents={kind,build,restore,resolve,infer,mergeReadMeasurements};
+window.PanelSketchComponents={kind,build,restore,resolve,infer,mergeReadMeasurements,prepareGeneration};
 })();
 
