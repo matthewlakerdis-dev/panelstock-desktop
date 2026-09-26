@@ -29,11 +29,24 @@ function validate(d){
 function draw(svg,d,onPoint){
  const ns='http://www.w3.org/2000/svg',make=(tag,attrs,text)=>{const e=document.createElementNS(ns,tag);Object.entries(attrs).forEach(([k,v])=>e.setAttribute(k,v));if(text!==undefined)e.textContent=text;return e;};
  svg.replaceChildren();const ps=points(d);if(!ps.length||ps.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)))return;
- const xs=ps.map(p=>p.x),ys=ps.map(p=>p.y),x0=Math.min(...xs),y0=Math.min(...ys),w=Math.max(...xs)-x0,h=Math.max(...ys)-y0,scale=Math.min(620/Math.max(w,1),440/Math.max(h,1));
- const map=p=>[60+(p.x-x0)*scale,490-(p.y-y0)*scale];svg.setAttribute('viewBox','0 0 760 550');
+ const xs=ps.map(p=>p.x),ys=ps.map(p=>p.y),x0=Math.min(...xs),y0=Math.min(...ys),w=Math.max(...xs)-x0,h=Math.max(...ys)-y0,height=Math.max(550,ps.length*26+80),scale=Math.min(340/Math.max(w,1),(height-100)/Math.max(h,1));
+ const left=(760-w*scale)/2,bottom=(height+h*scale)/2,map=p=>[left+(p.x-x0)*scale,bottom-(p.y-y0)*scale];svg.setAttribute('viewBox','0 0 760 '+height);
  svg.append(make('polygon',{points:ps.map(p=>map(p).join(',')).join(' '),fill:'#e6f0f3',stroke:'#2d6074','stroke-width':2}));
  for(const f of d.measuredFolds||[]){if(!f.start||!f.end)continue;const a=map(f.start),b=map(f.end);svg.append(make('line',{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:'#ba7728','stroke-width':2,'stroke-dasharray':'8 5'}));}
- ps.forEach((p,i)=>{const [x,y]=map(p),q=map(ps[(i+1)%ps.length]);svg.append(make('text',{x:(x+q[0])/2+10,y:(y+q[1])/2-10,fill:'#254b5d','font-size':14},'E'+(i+1)+' '+d.measuredEdges[i].code));const g=make('g',{role:'button',tabindex:0,'aria-label':'Point '+(i+1)});g.append(make('circle',{cx:x,cy:y,r:7,fill:'white',stroke:'#2d6074'}),make('text',{x:x+9,y:y-7,'font-size':13},i+1));g.onclick=()=>onPoint?.(i);g.onkeydown=e=>{if(e.key==='Enter')onPoint?.(i);};svg.append(g);});
+ const fmt=n=>String(Number(Math.abs(n).toFixed(2))),labels=ps.map((p,i)=>{const a=map(p),b=map(ps[(i+1)%ps.length]),e=d.measuredEdges[i],x=(a[0]+b[0])/2,y=(a[1]+b[1])/2;return {x,y,side:x<380?-1:1,text:(Math.abs(e.dx)<.001?fmt(e.dy):Math.abs(e.dy)<.001?fmt(e.dx):fmt(e.dx)+' × '+fmt(e.dy))+' · '+e.code};});
+ for(const side of [-1,1]){
+  const group=labels.filter(l=>l.side===side).sort((a,b)=>a.y-b.y);let previous=12;
+  for(const l of group){l.labelY=Math.max(l.y,previous+26);previous=l.labelY;}
+  if(group.length){const excess=Math.max(0,group.at(-1).labelY-(height-24));for(const l of group)l.labelY-=excess;}
+  for(const l of group){const x=side<0?left-28:left+w*scale+28;
+   svg.append(make('polyline',{points:[[l.x,l.y],[x-side*12,l.labelY],[x,l.labelY]].map(p=>p.join(',')).join(' '),fill:'none',stroke:'#91a8b4','stroke-width':1,'pointer-events':'none'}));
+   svg.append(make('text',{x:x+side*6,y:l.labelY,'text-anchor':side<0?'end':'start','dominant-baseline':'middle',fill:'#254b5d','font-size':14},l.text));
+  }
+ }
+ ps.forEach((p,i)=>{const [x,y]=map(p),g=make('g',onPoint?{role:'button',tabindex:0,'aria-label':'Point '+(i+1)}:{}),number=make('text',{x:x+8,y:y-9,'font-size':13,fill:'#14394a',visibility:'hidden'},i+1);
+  g.append(make('title',{},'Point '+(i+1)),make('circle',{cx:x,cy:y,r:10,fill:'transparent'}),make('circle',{cx:x,cy:y,r:3,fill:'white',stroke:'#2d6074'}),number);
+  const select=()=>{svg.querySelectorAll('[data-point-number]').forEach(e=>e.setAttribute('visibility','hidden'));number.setAttribute('visibility','visible');onPoint?.(i);};number.setAttribute('data-point-number',i);g.onclick=select;g.onfocus=()=>number.setAttribute('visibility','visible');g.onblur=()=>number.setAttribute('visibility','hidden');g.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select();}};svg.append(g);
+ });
 }
 function legacyFolds(d){
  if(d?.foldLines?.length)return structuredClone(d.foldLines);
@@ -66,3 +79,4 @@ async function open(original,file){return new Promise(resolve=>{
 function show(d){let host=document.getElementById('measured-panel-view');if(!host){host=document.createElement('div');host.id='measured-panel-view';}const table=document.querySelector('.tablewrap');const anchor=table.closest('.edge-details')||table;anchor.before(host);document.body.classList.toggle('has-measured-outline',!!d?.measuredEdges);host.hidden=!d?.measuredEdges;if(host.hidden)return;host.replaceChildren();const title=document.createElement('h3');title.textContent='Measured panel outline';const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.style.cssText='width:100%;max-height:620px;background:#f7fafc';host.append(title,svg);draw(svg,d);const note=document.createElement('p');note.textContent='Horizontal and vertical measurements define the shape. Finished dimensions are calculated in the generated preview.';host.append(note);}
 window.PanelMeasuredOutline={points,resolveFolds,splitEdge,validate,fromDraft,open,show};
 })();
+
