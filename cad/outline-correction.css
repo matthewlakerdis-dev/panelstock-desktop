@@ -42,3 +42,8 @@
 
 .trace-canvas-area>svg[data-tool=fold] [data-edge]{pointer-events:stroke;cursor:crosshair}
 
+.trace-measure-source{display:block;font-size:12px;font-weight:400;color:#526675;line-height:18px}
+.trace-conflict{padding:12px;border-left:4px solid #c53030;background:#fff3f3;color:#842424;margin-top:10px}
+.trace-conflict p{margin:0 0 8px}
+.trace-conflict-constraint{border-left:4px solid #c53030;padding-left:8px;background:#fff3f3}
+

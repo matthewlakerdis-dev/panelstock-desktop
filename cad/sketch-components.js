@@ -1,6 +1,13 @@
 /* Written dimensions determine size; traced points determine travel only. */
 (()=>{'use strict';
 const sign=n=>n<0?-1:1;
+function measurementSource(v,key){
+ if(v[key]==null)return 'Missing';
+ if(v.manualMeasurements?.[key])return 'Entered';
+ if(v.inferredMeasurements?.[key]===v[key])return 'Calculated';
+ if(v.readMeasurements?.[key]===v[key])return 'Read from sketch';
+ return 'Saved measurement';
+}
 function resolve(points,values,folds=[],constraints={}){
  const result=values.map(v=>({...v})),notes=[];
  for(const axis of ['x','y']){
@@ -15,32 +22,39 @@ function resolve(points,values,folds=[],constraints={}){
 
   const equation=indices=>[...unknown.map(u=>indices.includes(u.i)?1:0),-indices.reduce((sum,i)=>sum+(components[i]??0),0)];
   const rows=[equation(result.map((_,i)=>i))];
+  const sources=[{edges:result.map((_,i)=>i),folds:[],constraints:[]}];
+  const conflict=index=>{
+   const detail=sources[index],sections=[...new Set(detail.edges)].sort((a,b)=>a-b),cs=[...new Set(detail.constraints)],fs=[...new Set(detail.folds)];
+   const names=[...cs.map(i=>'constraint '+(i+1)),...fs.map(i=>'fold '+(i+1)+' right angle')];
+   const error=Error('Written measurements conflict in the '+(axis==='x'?'horizontal':'vertical')+' direction'+(names.length?' with '+names.join(', '):' when closing the outline')+'. Check sections '+sections.map(i=>i+1).join(', ')+'. Your entries have been kept.');
+   error.conflict={axis,edges:sections,folds:fs,constraints:cs};return error;
+  };
   for(const c of constraints.rightAngles||[]){const f=folds[c.fold],e=result[c.edge];if(!f||!e)continue;const ek=e.kind||kind(points[c.edge],points[(c.edge+1)%points.length]);
    if(!((axis==='y'&&ek==='vertical')||(axis==='x'&&ek==='horizontal')))continue;
-   const indices=[];for(let i=f.from;i!==f.to;i=(i+1)%points.length){indices.push(i);if(indices.length>points.length)throw Error('Check fold endpoints.');}rows.push(equation(indices));
+   const indices=[];for(let i=f.from;i!==f.to;i=(i+1)%points.length){indices.push(i);if(indices.length>points.length)throw Error('Check fold endpoints.');}rows.push(equation(indices));sources.push({edges:[...indices,c.edge],folds:[c.fold],constraints:[]});
   }
-  for(const original of constraints.measurementConstraints||[]){
+  for(const [ci,original] of (constraints.measurementConstraints||[]).entries()){
    let c=original;
    if(c.fold!=null||c.edge!=null){
     const f=c.edge!=null?{from:c.edge,to:(c.edge+1)%points.length}:folds[c.fold];
     if(!Number.isInteger(c.edge??c.fold)||!f||![f.from,f.to,c.from].every(i=>Number.isInteger(i)&&i>=0&&i<points.length)||!["x","y"].includes(c.axis))throw Error('Check the corner-to-line constraint.');
     c={...c,to:f.from};
-    if(c.axis===axis){const indices=[];for(let i=f.from;i!==f.to;i=(i+1)%points.length)indices.push(i);rows.push(equation(indices));}
+    if(c.axis===axis){const indices=[];for(let i=f.from;i!==f.to;i=(i+1)%points.length)indices.push(i);rows.push(equation(indices));sources.push({edges:indices,folds:c.fold!=null?[c.fold]:[],constraints:[ci]});}
    }
 
    if((c.direction!=null&&![1,-1].includes(c.direction))||!['x','y'].includes(c.axis)||!Number.isInteger(c.from)||!Number.isInteger(c.to)||c.from<0||c.to<0||c.from>=points.length||c.to>=points.length||c.from===c.to||!Number.isFinite(c.value)||c.value<=0||c.value>10000)throw Error('Check the constraint measurement and its two corners.');
    if(c.axis!==axis)continue;
    const indices=[];for(let i=c.from;i!==c.to;i=(i+1)%points.length)indices.push(i);
    const row=equation(indices),a=points[c.from],b=points[c.to];
-   row[row.length-1]+=(c.direction??sign(axis==='x'?b.x-a.x:a.y-b.y))*c.value;rows.push(row);
+   row[row.length-1]+=(c.direction??sign(axis==='x'?b.x-a.x:a.y-b.y))*c.value;rows.push(row);sources.push({edges:indices,folds:[],constraints:[ci]});
   }
   if(!unknown.length){
-   if(rows.slice(1).some(row=>Math.abs(row.at(-1))>.001))throw Error('Written measurements conflict with a marked right angle or constraint measurement. Your entries have been kept.');
+   const bad=rows.findIndex((row,i)=>i>0&&Math.abs(row.at(-1))>.001);if(bad>=0)throw conflict(bad);
    continue;
   }
   let r=0;const pivots=[];
-  for(let col=0;col<unknown.length;col++){const pivot=rows.findIndex((row,i)=>i>=r&&Math.abs(row[col])>1e-9);if(pivot<0)continue;[rows[r],rows[pivot]]=[rows[pivot],rows[r]];const divisor=rows[r][col];rows[r]=rows[r].map(n=>n/divisor);for(let j=0;j<rows.length;j++){if(j===r)continue;const factor=rows[j][col];rows[j]=rows[j].map((n,k)=>n-factor*rows[r][k]);}pivots.push(col);r++;}
-  if(rows.some(row=>row.slice(0,-1).every(n=>Math.abs(n)<1e-8)&&Math.abs(row.at(-1))>.001))throw Error('Written measurements conflict with a marked right angle or constraint measurement. Your entries have been kept.');
+  for(let col=0;col<unknown.length;col++){const pivot=rows.findIndex((row,i)=>i>=r&&Math.abs(row[col])>1e-9);if(pivot<0)continue;[rows[r],rows[pivot]]=[rows[pivot],rows[r]];[sources[r],sources[pivot]]=[sources[pivot],sources[r]];const divisor=rows[r][col];rows[r]=rows[r].map(n=>n/divisor);for(let j=0;j<rows.length;j++){if(j===r)continue;const factor=rows[j][col];if(Math.abs(factor)>1e-9)for(const key of ['edges','folds','constraints'])sources[j][key]=[...new Set([...sources[j][key],...sources[r][key]])];rows[j]=rows[j].map((n,k)=>n-factor*rows[r][k]);}pivots.push(col);r++;}
+  const bad=rows.findIndex(row=>row.slice(0,-1).every(n=>Math.abs(n)<1e-8)&&Math.abs(row.at(-1))>.001);if(bad>=0)throw conflict(bad);
   if(pivots.length!==unknown.length&&!constraints.partial)throw Error('More than one missing '+(axis==='x'?'across':'rise/drop')+' measurement remains. Enter another written dimension or mark the fold and its 90° junction.');
   pivots.forEach((col,j)=>{if(rows[j].slice(0,-1).some((n,k)=>k!==col&&Math.abs(n)>1e-8))return;const {i,key}=unknown[col],n=rows[j].at(-1),a=points[i],b=points[(i+1)%points.length];if(Math.abs(n)>10000)throw Error('Calculated measurement exceeds 10000 mm.');if(key==='site'&&(Math.abs(n)<.001||sign(n)!==sign(axis==='x'?b.x-a.x:a.y-b.y)))throw Error('Section '+(i+1)+' cannot be calculated without reversing or collapsing the traced line. Check the supplied dimensions.');result[i][key]=Math.abs(n);result[i][axis==='x'?'xSign':'ySign']=sign(n);notes.push('Section '+(i+1)+' '+key+': '+Number(Math.abs(n).toFixed(3))+' mm, calculated from the other measurements'+(rows.length>1?' and marked right angles':'')+'.');});
  }
@@ -180,6 +194,6 @@ function restore(d){
  const folds=(d.measuredFolds||[]).map(f=>({from:Number.isInteger(f.startPoint)?f.startPoint:ps.findIndex(p=>Math.hypot(p.x-f.start.x,p.y-f.start.y)<.001),to:Number.isInteger(f.endPoint)?f.endPoint:ps.findIndex(p=>Math.hypot(p.x-f.end.x,p.y-f.end.y)<.001)}));
  return {points,values,folds};
 }
-window.PanelSketchComponents={kind,build,restore,resolve,infer,mergeReadMeasurements,prepareGeneration};
+window.PanelSketchComponents={measurementSource,kind,build,restore,resolve,infer,mergeReadMeasurements,prepareGeneration};
 })();
 
