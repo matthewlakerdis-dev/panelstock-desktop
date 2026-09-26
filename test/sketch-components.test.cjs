@@ -6,7 +6,7 @@ const vals=[{site:800,kind:'horizontal',code:'B'},{site:400,kind:'vertical',code
 test('standard trace retains slopes and uses written projected dimensions',()=>{assert.doesNotThrow(()=>c.window.PanelOutlineCorrection.directions(pts,true));const d=api.build(pts,vals);assert.equal(d.measuredEdges[2].dx,-200);assert.equal(d.measuredEdges[2].dy,300);});
 test('non-scale sketch pixels do not change millimetres',()=>{const d=api.build(pts,vals),p=pts.map(p=>({x:p.x*.4,y:p.y*.8}));assert.equal(JSON.stringify(api.build(p,vals)),JSON.stringify(d));});
 test('missing sloping dimension and unclosed outline require correction',()=>{assert.throws(()=>api.build(pts,vals.map((v,i)=>i===2?{...v,height:null}:v)),/section 3/);assert.throws(()=>api.build(pts,vals.map((v,i)=>i===2?{...v,height:310}:v)),/gap/);});
-test('reopening preserves dimensions, fold endpoints and each separate tag',()=>{const d=api.build(pts,vals,[{from:2,to:4}],{rightAngles:[{fold:0,end:0,edge:1}]});const r=api.restore({...d,outlineSections:pts.map(start=>({start}))});const saved=api.build(r.points,r.values,r.folds,{rightAngles:d.rightAngles});assert.equal(JSON.stringify(saved),JSON.stringify(d));r.values[2].code='S';const edited=api.build(r.points,r.values,r.folds);assert.equal(edited.measuredEdges[2].dy,300);assert.equal(edited.measuredFolds.length,1);});
+test('reopening preserves dimensions, fold endpoints and each separate tag',()=>{const d=api.build(pts,vals,[{from:3,to:4}],{rightAngles:[{fold:0,end:1,edge:4}]});const r=api.restore({...d,outlineSections:pts.map(start=>({start}))});const saved=api.build(r.points,r.values,r.folds,{rightAngles:d.rightAngles});assert.equal(JSON.stringify(saved),JSON.stringify(d));r.values[2].code='S';const edited=api.build(r.points,r.values,r.folds);assert.equal(edited.measuredEdges[2].dy,300);assert.equal(edited.measuredFolds.length,1);});
 function calculationFixture(){return {p:[{x:0,y:900},{x:1000,y:900},{x:1000,y:260},{x:900,y:60},{x:980,y:60},{x:980,y:0},{x:0,y:0},{x:0,y:260}],v:[{kind:'sloping',width:1000,height:null,calculateheight:true},{kind:'vertical',site:620},{kind:'sloping',width:null,height:200,calculatewidth:true},{kind:'horizontal',site:80},{kind:'vertical',site:60},{kind:'horizontal',site:980},{kind:'vertical',site:260},{kind:'vertical',site:640}].map(v=>({...v,code:'B'}))};}
 test('explicit Calculate finds missing across and shallow rise without pixel scaling',()=>{const {p,v}=calculationFixture(),before=JSON.stringify(v),r=api.resolve(p,v);assert.equal(r.values[0].height,20);assert.equal(r.values[2].width,100);assert.equal(JSON.stringify(v),before);assert.doesNotThrow(()=>api.build(p,r.values));});
 test('two missing rises require a constraint and a marked right angle resolves both',()=>{const {p,v}=calculationFixture();v[2].calculateheight=true;assert.throws(()=>api.resolve(p,v),/More than one missing/);const r=api.resolve(p,v,[{from:2,to:7}],{rightAngles:[{fold:0,end:0,edge:1}]});assert.equal(r.values[0].height,20);assert.equal(r.values[2].height,200);});
@@ -18,3 +18,25 @@ test('legacy calculation flags never overwrite a supplied value during inference
 test('inferred normal lengths update when supplied dimensions change',()=>{const p=[{x:0,y:100},{x:100,y:100},{x:100,y:0},{x:0,y:0}],v=[{site:320},{site:null},{site:null},{site:180}].map(v=>({...v,code:'B'}));const first=api.infer(p,v);first.values[0].site=450;first.values[3].site=210;const next=api.infer(p,first.values);assert.equal(next.values[2].site,450);assert.equal(next.values[1].site,210);next.values[2].site=460;assert.equal(api.infer(p,next.values).values[2].site,460);});
 test('derived lengths become blank again if their source is cleared',()=>{const p=[{x:0,y:100},{x:100,y:100},{x:100,y:0},{x:0,y:0}],v=[{site:320},{site:null},{site:null},{site:180}].map(v=>({...v,code:'B'}));const first=api.infer(p,v);first.values[0].site=null;const next=api.infer(p,first.values);assert.equal(next.values[0].site,null);assert.equal(next.values[2].site,null);assert.equal(next.values[1].site,180);});
 
+test('adding fold angles recalculates derived rise and uniquely resolves a shallow snapped edge',()=>{
+ const {p,v}=calculationFixture();v[0]={kind:'horizontal',site:1000,code:'B'};v[2].height=null;
+ const first=api.infer(p,v);assert.equal(first.values[2].height,220);
+ const folds=[{from:2,to:7}],constraints={rightAngles:[{fold:0,end:0,edge:1}]};
+ const next=api.infer(p,first.values,folds,constraints);
+ assert.equal(next.values[0].kind,'sloping');assert.equal(next.values[0].width,1000);assert.equal(next.values[0].height,20);assert.equal(next.values[2].height,200);
+ assert.equal(first.values[0].kind,'horizontal');assert.equal(first.values[2].height,220);
+ const repeated=api.infer(p,next.values,folds,constraints);assert.equal(repeated.values[0].height,20);assert.equal(repeated.values[2].height,200);
+ assert.doesNotThrow(()=>api.build(p,repeated.values,folds,constraints));
+});
+test('explicit section direction and marked outline corners cannot be relaxed',()=>{
+ const {p,v}=calculationFixture();v[0]={kind:'horizontal',site:1000,code:'B'};v[2].height=null;
+ const first=api.infer(p,v),folds=[{from:2,to:7}],constraints={rightAngles:[{fold:0,end:0,edge:1}]};
+ assert.throws(()=>api.infer(p,first.values,folds,{...constraints,edgeRightAngles:[0]}),/conflict/);
+ first.values[0].shapeExplicit=true;assert.throws(()=>api.infer(p,first.values,folds,constraints),/conflict/);
+});
+test('a manually entered sloping rise is never replaced with a derived rise',()=>{
+ const {p,v}=calculationFixture();v[0]={kind:'horizontal',site:1000,code:'B'};v[2].height=null;
+ const first=api.infer(p,v);first.values[2].height=230;
+ const folds=[{from:2,to:7}],constraints={rightAngles:[{fold:0,end:0,edge:1}]};
+ assert.throws(()=>api.infer(p,first.values,folds,constraints),/conflict/);assert.equal(first.values[2].height,230);
+});
