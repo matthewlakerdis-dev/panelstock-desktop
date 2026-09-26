@@ -17,7 +17,8 @@ function validate(d){
  const ps=points(d),x=edges.reduce((s,e)=>s+e.dx,0),y=edges.reduce((s,e)=>s+e.dy,0);
  if(Math.hypot(x,y)>.001)errors.push('Outline gap: '+Number(x.toFixed(3))+' mm horizontal, '+Number(y.toFixed(3))+' mm vertical.');
  if(ps.reduce((s,p,i)=>{const q=ps[(i+1)%ps.length];return s+p.x*q.y-q.x*p.y;},0)<=0)errors.push('Trace counterclockwise, starting towards the right along the bottom.');
- (d.measuredFolds||[]).forEach((f,i)=>{if(!f.start||!f.end||![f.start.x,f.start.y,f.end.x,f.end.y].every(good)||Math.hypot(f.end.x-f.start.x,f.end.y-f.start.y)<.001)errors.push('Check fold '+(i+1)+' endpoints.');else if(Math.abs(f.start.y-f.end.y)>.001)errors.push('Measured diagonal outlines currently support horizontal internal folds.');});
+ (d.measuredFolds||[]).forEach((f,i)=>{if(!f.start||!f.end||![f.start.x,f.start.y,f.end.x,f.end.y].every(good)||Math.hypot(f.end.x-f.start.x,f.end.y-f.start.y)<.001)errors.push('Check fold '+(i+1)+' endpoints.');else if(Math.abs(f.start.y-f.end.y)>.001&&Math.abs(f.start.x-f.end.x)>.001)errors.push('Measured outlines support parallel horizontal or vertical internal folds.');});
+ if((d.measuredFolds||[]).some(f=>f.start&&f.end&&Math.abs(f.start.x-f.end.x)>.001)&&(d.measuredFolds||[]).some(f=>f.start&&f.end&&Math.abs(f.start.y-f.end.y)>.001))errors.push('Measured outlines support parallel horizontal or vertical internal folds.');
  for(const c of d.rightAngles||[]){const f=d.measuredFolds?.[c.fold],e=edges[c.edge];if(!f||!e||![0,1].includes(c.end)){errors.push('Check the marked 90° junction.');continue;}
  const a=ps[c.edge],b=ps[(c.edge+1)%ps.length],p=c.end?f.end:f.start,v={x:f.end.x-f.start.x,y:f.end.y-f.start.y};
  const length=Math.hypot(e.dx,e.dy),t=((p.x-a.x)*e.dx+(p.y-a.y)*e.dy)/(length*length);
