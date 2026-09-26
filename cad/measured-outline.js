@@ -33,16 +33,25 @@ function draw(svg,d,onPoint){
  const left=(760-w*scale)/2,bottom=(height+h*scale)/2,map=p=>[left+(p.x-x0)*scale,bottom-(p.y-y0)*scale];svg.setAttribute('viewBox','0 0 760 '+height);
  svg.append(make('polygon',{points:ps.map(p=>map(p).join(',')).join(' '),fill:'#e6f0f3',stroke:'#2d6074','stroke-width':2}));
  for(const f of d.measuredFolds||[]){if(!f.start||!f.end)continue;const a=map(f.start),b=map(f.end);svg.append(make('line',{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:'#ba7728','stroke-width':2,'stroke-dasharray':'8 5'}));}
- const fmt=n=>String(Number(Math.abs(n).toFixed(2))),labels=ps.map((p,i)=>{const a=map(p),b=map(ps[(i+1)%ps.length]),e=d.measuredEdges[i],x=(a[0]+b[0])/2,y=(a[1]+b[1])/2;return {x,y,side:x<380?-1:1,text:(Math.abs(e.dx)<.001?fmt(e.dy):Math.abs(e.dy)<.001?fmt(e.dx):fmt(e.dx)+' × '+fmt(e.dy))+' · '+e.code};});
+ const fmt=n=>String(Number(Math.abs(n).toFixed(2))),labels=ps.map((p,i)=>{const a=map(p),b=map(ps[(i+1)%ps.length]),e=d.measuredEdges[i],x=(a[0]+b[0])/2,y=(a[1]+b[1])/2;return {a,b,x,y,side:x<380?-1:1,text:(Math.abs(e.dx)<.001?fmt(e.dy):Math.abs(e.dy)<.001?fmt(e.dx):fmt(e.dx)+' × '+fmt(e.dy))+' · '+e.code};});
  for(const side of [-1,1]){
   const group=labels.filter(l=>l.side===side).sort((a,b)=>a.y-b.y);let previous=12;
   for(const l of group){l.labelY=Math.max(l.y,previous+26);previous=l.labelY;}
   if(group.length){const excess=Math.max(0,group.at(-1).labelY-(height-24));for(const l of group)l.labelY-=excess;}
   for(const l of group){const x=side<0?left-28:left+w*scale+28;
-   svg.append(make('polyline',{points:[[l.x,l.y],[x-side*12,l.labelY],[x,l.labelY]].map(p=>p.join(',')).join(' '),fill:'none',stroke:'#91a8b4','stroke-width':1,'pointer-events':'none'}));
-   svg.append(make('text',{x:x+side*6,y:l.labelY,'text-anchor':side<0?'end':'start','dominant-baseline':'middle',fill:'#254b5d','font-size':14},l.text));
+   svg.append(make('polyline',{points:[[l.x,l.y],[x-side*12,l.labelY],[x,l.labelY]].map(p=>p.join(',')).join(' '),fill:'none',stroke:'#607f90','stroke-width':1.5,'pointer-events':'none'}));
+   const edge=make('line',{x1:l.a[0],y1:l.a[1],x2:l.b[0],y2:l.b[1],stroke:'#007b9e','stroke-width':5,opacity:0,'pointer-events':'none'});
+   const label=make('text',{x:x+side*6,y:l.labelY,'text-anchor':side<0?'end':'start','dominant-baseline':'middle',fill:'#173f52','font-size':16,'font-weight':600,tabindex:0,role:'button','aria-label':l.text+'. Highlight matching edge',stroke:'#f7fafc','stroke-width':4,'paint-order':'stroke fill'},l.text);
+   svg.append(make('circle',{cx:l.x,cy:l.y,r:2.5,fill:'#607f90'}),edge,label);
+   label.onmouseenter=label.onfocus=()=>edge.setAttribute('opacity',1);label.onmouseleave=label.onblur=()=>edge.setAttribute('opacity',0);label.onclick=()=>edge.setAttribute('opacity',edge.getAttribute('opacity')==='1'?0:1);
+
   }
  }
+ const orientation={right:0,down:90,left:180,up:270},angle=orientation[d.panelDirection]??0;
+ const identity=make('g',{transform:'translate(380 '+(height/2)+') rotate('+angle+')','pointer-events':'none'});
+ identity.append(make('text',{x:0,y:-10,'text-anchor':'middle','font-size':22,'font-weight':700,fill:'#173f52',stroke:'#e6f0f3','stroke-width':4,'paint-order':'stroke fill'},d.panelId||''));
+ if(d.panelDirection in orientation)identity.append(make('path',{d:'M-35 12H35M23 2L35 12L23 22',fill:'none',stroke:'#23627c','stroke-width':3,'stroke-linecap':'round','stroke-linejoin':'round'}));
+ svg.append(identity);
  ps.forEach((p,i)=>{const [x,y]=map(p),g=make('g',onPoint?{role:'button',tabindex:0,'aria-label':'Point '+(i+1)}:{}),number=make('text',{x:x+8,y:y-9,'font-size':13,fill:'#14394a',visibility:'hidden'},i+1);
   g.append(make('title',{},'Point '+(i+1)),make('circle',{cx:x,cy:y,r:10,fill:'transparent'}),make('circle',{cx:x,cy:y,r:3,fill:'white',stroke:'#2d6074'}),number);
   const select=()=>{svg.querySelectorAll('[data-point-number]').forEach(e=>e.setAttribute('visibility','hidden'));number.setAttribute('visibility','visible');onPoint?.(i);};number.setAttribute('data-point-number',i);g.onclick=select;g.onfocus=()=>number.setAttribute('visibility','visible');g.onblur=()=>number.setAttribute('visibility','hidden');g.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select();}};svg.append(g);
@@ -76,7 +85,21 @@ async function open(original,file){return new Promise(resolve=>{
  q('[data-apply]').onclick=()=>{resolveFolds(d);const errors=validate(d);if(errors.length){q('[data-status]').textContent=errors.join(' ');return;}d.panelId=q('[data-id]').value.trim();d.panelDirection=q('[data-arrow]').value;d.reviewed=false;finish(d);};
  edgeFields();foldFields();update();dialog.showModal();
 });}
-function show(d){let host=document.getElementById('measured-panel-view');if(!host){host=document.createElement('div');host.id='measured-panel-view';}const table=document.querySelector('.tablewrap');const anchor=table.closest('.edge-details')||table;anchor.before(host);document.body.classList.toggle('has-measured-outline',!!d?.measuredEdges);host.hidden=!d?.measuredEdges;if(host.hidden)return;host.replaceChildren();const title=document.createElement('h3');title.textContent='Measured panel outline';const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.style.cssText='width:100%;max-height:620px;background:#f7fafc';host.append(title,svg);draw(svg,d);const note=document.createElement('p');note.textContent='Horizontal and vertical measurements define the shape. Finished dimensions are calculated in the generated preview.';host.append(note);}
+function addPreviewZoom(host,svg){
+ const initial=svg.getAttribute('viewBox').split(' ').map(Number),controls=document.createElement('div');controls.style.cssText='display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0';
+ const status=document.createElement('span');status.textContent='100%';status.setAttribute('aria-live','polite');
+ let view=[...initial],drag=null;
+ const paint=()=>{svg.setAttribute('viewBox',view.join(' '));status.textContent=Math.round(initial[2]/view[2]*100)+'%';};
+ const zoom=(factor,cx=view[0]+view[2]/2,cy=view[1]+view[3]/2)=>{const width=Math.max(initial[2]/8,Math.min(initial[2],view[2]/factor)),ratio=width/view[2];view=[cx-(cx-view[0])*ratio,cy-(cy-view[1])*ratio,width,view[3]*ratio];paint();};
+ for(const [label,action]of [['Zoom in',()=>zoom(1.3)],['Zoom out',()=>zoom(1/1.3)],['Fit panel',()=>{view=[...initial];paint();}]]){const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=action;controls.append(button);}controls.append(status);host.insertBefore(controls,svg);
+ svg.style.touchAction='none';svg.style.cursor='grab';
+ svg.addEventListener('wheel',e=>{if(!e.ctrlKey)return;e.preventDefault();const p=new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());zoom(e.deltaY<0?1.15:1/1.15,p.x,p.y);},{passive:false});
+ svg.addEventListener('pointerdown',e=>{if(e.button!==0||e.target.closest('[role=button]'))return;drag={x:e.clientX,y:e.clientY,view:[...view],inverse:svg.getScreenCTM().inverse()};svg.setPointerCapture(e.pointerId);svg.style.cursor='grabbing';});
+ svg.addEventListener('pointermove',e=>{if(!drag)return;const a=new DOMPoint(drag.x,drag.y).matrixTransform(drag.inverse),b=new DOMPoint(e.clientX,e.clientY).matrixTransform(drag.inverse);view=[drag.view[0]+a.x-b.x,drag.view[1]+a.y-b.y,...drag.view.slice(2)];paint();});
+ const stop=()=>{drag=null;svg.style.cursor='grab';};svg.addEventListener('pointerup',stop);svg.addEventListener('pointercancel',stop);
+ const hint=document.createElement('p');hint.className='small';hint.textContent='Zoom with the buttons or Ctrl + scroll. Drag to pan. Hover or select a dimension to highlight its edge.';host.append(hint);
+}
+function show(d){let host=document.getElementById('measured-panel-view');if(!host){host=document.createElement('div');host.id='measured-panel-view';}const table=document.querySelector('.tablewrap');const anchor=table.closest('.edge-details')||table;anchor.before(host);document.body.classList.toggle('has-measured-outline',!!d?.measuredEdges);host.hidden=!d?.measuredEdges;if(host.hidden)return;host.replaceChildren();const title=document.createElement('h3');title.textContent='Measured panel outline';const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.style.cssText='width:100%;max-height:620px;background:#f7fafc';host.append(title,svg);draw(svg,d);addPreviewZoom(host,svg);const note=document.createElement('p');note.textContent='Horizontal and vertical measurements define the shape. Finished dimensions are calculated in the generated preview.';host.append(note);}
 window.PanelMeasuredOutline={points,resolveFolds,splitEdge,validate,fromDraft,open,show};
 })();
 
