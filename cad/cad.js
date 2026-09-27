@@ -34,11 +34,17 @@ async function saveProject(){
  catch(error){if(projectOwner()===owner){projectDirty=true;$('projectstatus').textContent='Could not save this project. Browser storage may be full or unavailable. Keep this page open and download your drafts and drawings.';}throw error;}
 }
 function pickProject(items){return new Promise(resolve=>{
- const dialog=document.createElement('dialog'),title=document.createElement('h2');title.textContent='Open saved project';dialog.append(title);
- const select=document.createElement('select');select.size=Math.min(8,items.length);select.setAttribute('aria-label','Saved projects');
- items.forEach((p,i)=>select.append(new Option(p.name+' — '+p.panels.length+' panels — '+new Date(p.updatedAt).toLocaleString(),String(i))));select.value='0';dialog.append(select);
- const open=document.createElement('button');open.textContent='Open';open.type='button';const cancel=document.createElement('button');cancel.textContent='Cancel';cancel.type='button';dialog.append(open,cancel);
- const close=value=>{dialog.close();dialog.remove();resolve(value);};open.onclick=()=>close(items[Number(select.value)]);cancel.onclick=()=>close(null);dialog.oncancel=e=>{e.preventDefault();close(null);};document.body.append(dialog);dialog.showModal();
+ const dialog=document.createElement('dialog');dialog.className='project-picker';dialog.setAttribute('aria-labelledby','project-picker-title');
+ const header=document.createElement('header');header.className='project-picker-header';
+ const eyebrow=document.createElement('p');eyebrow.className='project-picker-eyebrow';eyebrow.textContent='YOUR WORKSPACE';
+ const title=document.createElement('h2');title.id='project-picker-title';title.textContent='Open saved project';
+ const description=document.createElement('p');description.textContent='Continue from where you left off. Projects are saved in this browser.';header.append(eyebrow,title,description);dialog.append(header);
+ const list=document.createElement('div');list.className='project-picker-list';list.setAttribute('role','group');list.setAttribute('aria-label','Saved projects');let selected=0;
+ items.forEach((p,i)=>{const card=document.createElement('label');card.className='project-picker-card';const radio=document.createElement('input');radio.type='radio';radio.name='saved-project';radio.value=String(i);radio.checked=i===0;radio.onchange=()=>{selected=i;};
+ const details=document.createElement('span');details.className='project-picker-details';const name=document.createElement('strong');name.textContent=p.name;
+ const meta=document.createElement('span');meta.textContent=p.panels.length+' panel'+(p.panels.length===1?'':'s')+' · Saved '+new Date(p.updatedAt).toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});details.append(name,meta);card.append(radio,details);list.append(card);});dialog.append(list);
+ const footer=document.createElement('footer');footer.className='project-picker-footer';const open=document.createElement('button');open.textContent='Open project';open.className='primary';open.type='button';open.disabled=!items.length;const cancel=document.createElement('button');cancel.textContent='Cancel';cancel.type='button';footer.append(cancel,open);dialog.append(footer);
+ const close=value=>{dialog.close();dialog.remove();resolve(value);};open.onclick=()=>close(items[selected]);cancel.onclick=()=>close(null);dialog.oncancel=e=>{e.preventDefault();close(null);};document.body.append(dialog);dialog.showModal();
 });}
 $('saveproject').onclick=()=>run(()=>saveProject());
 $('openproject').onclick=()=>run(async()=>{
@@ -258,26 +264,37 @@ function printDrawingSummary(content,title){
  const popup=window.open('','_blank','width=900,height=800');
  if(!popup){notice('Allow pop-ups for PanelStock, then select Print summary again.');return;}
  popup.opener=null;const doc=popup.document;doc.title=title;
- const style=doc.createElement('style');style.textContent='@page{size:A4;margin:16mm}body{font:12pt Arial,sans-serif;color:#111;margin:24px;line-height:1.4}h2{font-size:20pt;overflow-wrap:anywhere}h3{font-size:14pt;margin-top:24px;break-after:avoid}table{width:100%;border-collapse:collapse;margin:12px 0 24px}th,td{text-align:left;padding:8px;border-bottom:1px solid #aaa;overflow-wrap:anywhere}th{background:#eee}thead{display:table-header-group}tr{break-inside:avoid}p{font-size:10pt}button{padding:10px 18px;margin-bottom:16px}@media print{body{margin:0}button{display:none}}';doc.head.append(style);
+ const style=doc.createElement('style');style.textContent='@page{size:A4;margin:16mm}body{font:12pt Arial,sans-serif;color:#111;margin:24px;line-height:1.4}h2{font-size:20pt;overflow-wrap:anywhere}h3{font-size:14pt;margin-top:24px;break-after:avoid}table{width:100%;border-collapse:collapse;margin:12px 0 24px}th,td{text-align:left;padding:8px;border-bottom:1px solid #aaa;overflow-wrap:anywhere}th{background:#eee}thead{display:table-header-group}tr{break-inside:avoid}p{font-size:10pt}button{padding:10px 18px;margin-bottom:16px}.summary-eyebrow{font-size:9pt;letter-spacing:2px}.summary-project{font-size:13pt}.summary-stats{display:flex;gap:32px;margin:20px 0}.summary-stats strong{font-size:20pt;display:block}.summary-stats span{font-size:10pt}.summary-number{text-align:right;font-variant-numeric:tabular-nums}.summary-warning{border-left:3px solid #777;padding:8px}.summary-note{color:#555}.summary-section{margin-top:24px}@media print{body{margin:0}button{display:none}}';doc.head.append(style);
  const heading=doc.createElement('p');heading.textContent='PanelStock · Prepared '+new Date().toLocaleString('en-AU',{timeZone:'Australia/Brisbane'})+' (Brisbane)';doc.body.append(heading);
- for(const child of content.children){if(child.tagName==='BUTTON')continue;const copy=doc.importNode(child,true);copy.querySelectorAll('button').forEach(b=>b.remove());doc.body.append(copy);}
+ for(const child of content.children){if(child.tagName==='BUTTON'||child.classList.contains('summary-footer'))continue;const copy=doc.importNode(child,true);copy.querySelectorAll('button').forEach(b=>b.remove());doc.body.append(copy);}
  const print=doc.createElement('button');print.textContent='Print / Save as PDF';print.onclick=()=>{popup.focus();popup.print();};doc.body.prepend(print);
  popup.focus();popup.setTimeout(()=>popup.print(),150);
 }
 const summaryButton=document.createElement('button');summaryButton.type='button';summaryButton.textContent='Drawing summary';$('downloadall').after(summaryButton);
 summaryButton.onclick=()=>{
  if(busy)return;const items=panels.flatMap((p,i)=>{const drawing=i===panelIndex?result:p.result;return drawing?.dxf?[{name:p.spec?.panelId||p.name||drawing.filename,drawing}]:[];});
- const summary=batchSummary(items),dialog=document.createElement('dialog');dialog.style.cssText='max-height:85vh;overflow:auto;width:min(560px,90vw)';
- const title=document.createElement('h2');title.textContent=($('projectname').value.trim()||'Untitled project')+' — drawing summary';dialog.append(title);
- const count=document.createElement('p');count.textContent=summary.count+' generated drawings · '+summary.stiffeners+' stiffeners. '+(panels.length-summary.count)+' panels not generated.';dialog.append(count);
- const addTable=(heading,columns,rows)=>{const h=document.createElement('h3');h.textContent=heading;dialog.append(h);const table=document.createElement('table');const head=document.createElement('tr');for(const text of columns){const th=document.createElement('th');th.textContent=text;head.append(th);}const thead=document.createElement('thead');thead.append(head);table.append(thead);for(const row of rows){const tr=document.createElement('tr');for(const text of row){const td=document.createElement('td');td.textContent=String(text);tr.append(td);}table.append(tr);}dialog.append(table);};
- addTable('Physical fabrication tags',['Panel ID','Section','Type','Cut length (mm)','Quantity'],summary.tags);
- const tagNote=document.createElement('p');tagNote.textContent='B/S tag lengths include 5 mm beyond the outer edge of each end hole. Separate pieces are listed for uninterrupted spans with holes.'+(summary.missingTags?' '+summary.missingTags+' drawings need regenerating to calculate their tags.':'');dialog.append(tagNote);
- addTable('Panels',['Panel ID','Drawings'],summary.panels);addTable('Stiffeners',['Required length (mm)','Quantity'],summary.lengths);
- if(summary.unknownLengths){const warning=document.createElement('p');warning.textContent=summary.unknownLengths+' stiffener lengths are unavailable. Regenerate those drawings.';dialog.append(warning);}
- const note=document.createElement('p');note.textContent='Tag and stiffener cut lengths are rounded up to the next 5 mm. Quantities count generated drawings in this project. Identical panel IDs are grouped; dimensions should still be reviewed.';dialog.append(note);
- const print=document.createElement('button');print.type='button';print.textContent='Print summary / Save PDF';print.onclick=()=>printDrawingSummary(dialog,title.textContent);dialog.append(print);
- const close=document.createElement('button');close.type='button';close.textContent='Close';close.onclick=()=>dialog.close();dialog.onclose=()=>dialog.remove();dialog.append(close);document.body.append(dialog);dialog.showModal();
+ const summary=batchSummary(items),dialog=document.createElement('dialog');dialog.className='drawing-summary';dialog.setAttribute('aria-labelledby','drawing-summary-title');
+ const header=document.createElement('header');header.className='summary-header';
+ const eyebrow=document.createElement('p');eyebrow.className='summary-eyebrow';eyebrow.textContent='FABRICATION';header.append(eyebrow);
+ const title=document.createElement('h2');title.id='drawing-summary-title';title.textContent='Drawing summary';header.append(title);
+ const project=document.createElement('p');project.className='summary-project';project.textContent=$('projectname').value.trim()||'Untitled project';header.append(project);dialog.append(header);
+ const body=document.createElement('div');body.className='summary-body';dialog.append(body);
+ const stats=document.createElement('div');stats.className='summary-stats';
+ for(const [value,label] of [[summary.count,'Drawings'],[summary.tags.reduce((n,t)=>n+Number(t[4]||0),0),'Tag pieces'],[summary.stiffeners,'Stiffeners']]){const card=document.createElement('div'),number=document.createElement('strong'),caption=document.createElement('span');number.textContent=value;caption.textContent=label;card.append(number,caption);stats.append(card);}body.append(stats);
+ const warning=text=>{const p=document.createElement('p');p.className='summary-warning';p.textContent=text;body.append(p);};
+ if(panels.length>summary.count)warning((panels.length-summary.count)+' panels have not been generated and are not included.');
+ if(summary.missingTags)warning('Regenerate '+summary.missingTags+' drawing'+(summary.missingTags===1?'':'s')+' to include their fabrication tags.');
+ if(summary.unknownLengths)warning(summary.unknownLengths+' stiffener lengths are unavailable. Regenerate those drawings.');
+ const addTable=(heading,columns,rows,numeric=[])=>{const section=document.createElement('section');section.className='summary-section';const h=document.createElement('h3');h.textContent=heading;section.append(h);if(!rows.length){const empty=document.createElement('p');empty.textContent='No '+heading.toLowerCase()+' to list.';section.append(empty);}else{const wrap=document.createElement('div');wrap.className='summary-table-wrap';const table=document.createElement('table'),head=document.createElement('tr');for(const [i,text] of columns.entries()){const th=document.createElement('th');th.scope='col';th.textContent=text;if(numeric.includes(i))th.className='summary-number';head.append(th);}const thead=document.createElement('thead');thead.append(head);table.append(thead);const tbody=document.createElement('tbody');for(const row of rows){const tr=document.createElement('tr');for(const [i,text] of row.entries()){const td=document.createElement('td');td.textContent=String(text);if(numeric.includes(i))td.className='summary-number';tr.append(td);}tbody.append(tr);}table.append(tbody);wrap.append(table);section.append(wrap);}body.append(section);return section;};
+ const tags=addTable('Fabrication tags',['Panel ID','Section','Type','Cut length (mm)','Qty'],summary.tags,[1,3,4]);
+ const tagNote=document.createElement('p');tagNote.className='summary-note';tagNote.textContent='B/S tags include 5 mm beyond each end hole. Separate pieces are listed for each uninterrupted span.';tags.append(tagNote);
+ const grid=document.createElement('div');grid.className='summary-grid';body.append(grid);
+ grid.append(addTable('Stiffeners',['Cut length (mm)','Qty'],summary.lengths,[0,1]),addTable('Panels',['Panel ID','Drawings'],summary.panels,[1]));
+ const note=document.createElement('p');note.className='summary-note';note.textContent='Cut lengths rounded up to 5 mm. Quantities are based on generated drawings; matching panel IDs are grouped. Review dimensions before fabrication.';body.append(note);
+ const footer=document.createElement('footer');footer.className='summary-footer';
+ const print=document.createElement('button');print.type='button';print.className='primary';print.textContent='Print / Save PDF';print.onclick=()=>printDrawingSummary(dialog,project.textContent+' — drawing summary');
+ const close=document.createElement('button');close.type='button';close.textContent='Close';close.onclick=()=>dialog.close();dialog.onclose=()=>dialog.remove();footer.append(close,print);dialog.append(footer);document.body.append(dialog);dialog.showModal();
+
 };
 function combinedFilename(name){
  const clean=String(name||'').trim().replace(/\.dxf$/i,'').replace(/[<>:"/\\|?*\x00-\x1f]/g,'_').replace(/[. ]+$/g,'').slice(0,100);
