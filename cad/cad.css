@@ -112,3 +112,10 @@ dialog.panel-finder{width:min(760px,calc(100vw - 32px))}
 .panel-finder .panel-finder-badge.is-ready{color:#216443;background:#e8f5ed}.panel-finder .panel-finder-badge.needs-review{color:#8b5e20;background:#fff4df}
 .panel-finder .project-picker-header{background:#fff}.panel-finder .project-picker-footer{flex-shrink:0}
 @media(max-width:480px){.panel-finder .project-picker-list{padding:14px}.panel-finder button.panel-finder-item{padding:12px;gap:6px 8px}}
+/* Compact panel finder: identity and status share one row. */
+.panel-finder button.panel-finder-item{grid-template-columns:minmax(90px,1fr) auto auto;grid-template-rows:auto;min-height:0;padding:10px 14px;gap:3px 12px;border-radius:8px}
+.panel-finder .panel-finder-item .panel-finder-meta{grid-column:auto;font-size:11px}
+.panel-finder .panel-finder-item .panel-finder-badge{padding:2px 7px}
+.panel-finder .panel-finder-item .panel-finder-source{grid-column:1/-1;font-size:10px;line-height:1.3}
+.panel-finder .panel-finder-item .panel-finder-reason{grid-column:1/-1;color:#8b5e20;font-size:11px;line-height:1.4}
+@media(max-width:600px){.panel-finder button.panel-finder-item{grid-template-columns:minmax(0,1fr) auto}.panel-finder .panel-finder-item .panel-finder-meta{grid-column:1;grid-row:2}.panel-finder .panel-finder-item .panel-finder-badge{grid-column:2;grid-row:1}}

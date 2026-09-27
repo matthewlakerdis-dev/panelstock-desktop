@@ -29,14 +29,21 @@ function validate(d){
 function draw(svg,d,onPoint){
  const ns='http://www.w3.org/2000/svg',make=(tag,attrs,text)=>{const e=document.createElementNS(ns,tag);Object.entries(attrs).forEach(([k,v])=>e.setAttribute(k,v));if(text!==undefined)e.textContent=text;return e;};
  svg.replaceChildren();const ps=points(d);if(!ps.length||ps.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)))return;
- const xs=ps.map(p=>p.x),ys=ps.map(p=>p.y),x0=Math.min(...xs),y0=Math.min(...ys),w=Math.max(...xs)-x0,h=Math.max(...ys)-y0,height=Math.max(550,ps.length*26+80),scale=Math.min(340/Math.max(w,1),(height-100)/Math.max(h,1));
+ const xs=ps.map(p=>p.x),ys=ps.map(p=>p.y),x0=Math.min(...xs),y0=Math.min(...ys),w=Math.max(...xs)-x0,h=Math.max(...ys)-y0,height=Math.max(550,ps.length*26+80),scale=Math.min(540/Math.max(w,1),(height-100)/Math.max(h,1));
  const left=(760-w*scale)/2,bottom=(height+h*scale)/2,map=p=>[left+(p.x-x0)*scale,bottom-(p.y-y0)*scale];svg.setAttribute('viewBox','0 0 760 '+height);
  svg.append(make('polygon',{points:ps.map(p=>map(p).join(',')).join(' '),fill:'#e6f0f3',stroke:'#2d6074','stroke-width':2}));
  for(const f of d.measuredFolds||[]){if(!f.start||!f.end)continue;const a=map(f.start),b=map(f.end);svg.append(make('line',{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:'#ba7728','stroke-width':2,'stroke-dasharray':'8 5'}));}
- const fmt=n=>String(Number(Math.abs(n).toFixed(2))),occupied=[];
+ const fmt=n=>String(Number(Math.abs(n).toFixed(2))),occupied=[],details=[];
  ps.forEach((p,i)=>{
   const a=map(p),b=map(ps[(i+1)%ps.length]),e=d.measuredEdges[i],length=Math.hypot(b[0]-a[0],b[1]-a[1]);if(!length)return;
   const u=[(b[0]-a[0])/length,(b[1]-a[1])/length],n=[-u[1],u[0]],text=(Math.abs(e.dx)<.001?fmt(e.dy):Math.abs(e.dy)<.001?fmt(e.dx):fmt(e.dx)+' × '+fmt(e.dy))+' · '+e.code;
+  // Small sections use keyed callouts instead of overlapping dimension arrows.
+  if(length<text.length*7.2+40){
+   const key=String.fromCharCode(65+details.length),c=[(a[0]+b[0])/2+n[0]*14,(a[1]+b[1])/2+n[1]*14];
+   details.push(key+'  '+text+' mm');
+   svg.append(make('circle',{cx:c[0],cy:c[1],r:10,fill:'#fff',stroke:'#547b8c','stroke-width':1}),make('text',{x:c[0],y:c[1],'text-anchor':'middle','dominant-baseline':'middle','font-size':11,'font-weight':700,fill:'#173f52'},key));
+   occupied.push([c[0]-12,c[1]-12,c[0]+12,c[1]+12]);return;
+  }
   let angle=Math.atan2(u[1],u[0])*180/Math.PI;if(angle>90)angle-=180;if(angle<-90)angle+=180;
   const textWidth=text.length*7.2+12,radians=angle*Math.PI/180,bw=Math.abs(Math.cos(radians))*textWidth+Math.abs(Math.sin(radians))*18,bh=Math.abs(Math.sin(radians))*textWidth+Math.abs(Math.cos(radians))*18;
   let offset=18,c,rect;
@@ -50,15 +57,14 @@ function draw(svg,d,onPoint){
   const edge=make('line',{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:'#007b9e','stroke-width':4,opacity:0,'pointer-events':'none'}),label=make('text',{x:0,y:0,transform:'translate('+c.join(' ')+') rotate('+angle+')','text-anchor':'middle','dominant-baseline':'middle','font-size':13,fill:'#173f52',stroke:'#f7fafc','stroke-width':4,'paint-order':'stroke fill',tabindex:0,role:'button','aria-label':text+'. Highlight matching edge'},text);
   svg.append(edge,label);label.onmouseenter=label.onfocus=()=>edge.setAttribute('opacity',1);label.onmouseleave=label.onblur=()=>edge.setAttribute('opacity',0);label.onclick=()=>edge.setAttribute('opacity',edge.getAttribute('opacity')==='1'?0:1);
  });
- const orientation={right:0,down:90,left:180,up:270},angle=orientation[d.panelDirection]??0;
- const identity=make('g',{transform:'translate(380 '+(height/2)+') rotate('+angle+') scale(0.6)','pointer-events':'none'});
- identity.append(make('text',{x:0,y:-10,'text-anchor':'middle','font-size':22,'font-weight':700,fill:'#173f52',stroke:'#e6f0f3','stroke-width':4,'paint-order':'stroke fill'},d.panelId||''));
- if(d.panelDirection in orientation)identity.append(make('path',{d:'M-35 12H35M23 2L35 12L23 22',fill:'none',stroke:'#23627c','stroke-width':3,'stroke-linecap':'round','stroke-linejoin':'round'}));
- svg.append(identity);
  ps.forEach((p,i)=>{const [x,y]=map(p),g=make('g',onPoint?{role:'button',tabindex:0,'aria-label':'Point '+(i+1)}:{}),number=make('text',{x:x+8,y:y-9,'font-size':13,fill:'#14394a',visibility:'hidden'},i+1);
   g.append(make('title',{},'Point '+(i+1)),make('circle',{cx:x,cy:y,r:10,fill:'transparent'}),make('circle',{cx:x,cy:y,r:3,fill:'white',stroke:'#2d6074'}),number);
   const select=()=>{svg.querySelectorAll('[data-point-number]').forEach(e=>e.setAttribute('visibility','hidden'));number.setAttribute('visibility','visible');onPoint?.(i);};number.setAttribute('data-point-number',i);g.onclick=select;g.onfocus=()=>number.setAttribute('visibility','visible');g.onblur=()=>number.setAttribute('visibility','hidden');g.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select();}};svg.append(g);
  });
+ const drawingBounds=svg.getBBox(),legendY=drawingBounds.y+drawingBounds.height+32;
+ const arrows={right:'→',left:'←',up:'↑',down:'↓'};
+ svg.append(make('text',{x:drawingBounds.x,y:legendY,'font-size':13,'font-weight':700,fill:'#173f52'},[d.panelId,arrows[d.panelDirection]].filter(Boolean).join('  ')));
+ details.forEach((text,i)=>svg.append(make('text',{x:drawingBounds.x+(i%3)*180,y:legendY+26+Math.floor(i/3)*24,'font-size':12,fill:'#334c59'},text)));
  const bounds=svg.getBBox();svg.setAttribute('viewBox',[bounds.x-24,bounds.y-24,bounds.width+48,bounds.height+48].join(' '));
 }
 function legacyFolds(d){
@@ -103,6 +109,6 @@ function addPreviewZoom(host,svg){
  const stop=()=>{drag=null;svg.style.cursor='grab';};svg.addEventListener('pointerup',stop);svg.addEventListener('pointercancel',stop);
  const hint=document.createElement('p');hint.className='small';hint.textContent='Zoom with the buttons or Ctrl + scroll. Drag to pan. Hover or select a dimension to highlight its edge.';host.append(hint);
 }
-function show(d){let host=document.getElementById('measured-panel-view');if(!host){host=document.createElement('div');host.id='measured-panel-view';}const table=document.querySelector('.tablewrap');const anchor=table.closest('.edge-details')||table;anchor.before(host);document.body.classList.toggle('has-measured-outline',!!d?.measuredEdges);host.hidden=!d?.measuredEdges;if(host.hidden)return;host.replaceChildren();const title=document.createElement('h3');title.textContent='Measured panel outline';const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.style.cssText='width:100%;max-height:620px;background:#f7fafc';host.append(title,svg);draw(svg,d);addPreviewZoom(host,svg);const note=document.createElement('p');note.textContent='Horizontal and vertical measurements define the shape. Finished dimensions are calculated in the generated preview.';host.append(note);const comparison=document.createElement('div');comparison.className='panel-comparison measured-comparison';const drawing=document.createElement('div');drawing.className='measured-comparison-drawing';while(host.firstChild)drawing.append(host.firstChild);comparison.append(drawing);host.append(comparison);}
+function show(d){let host=document.getElementById('measured-panel-view');if(!host){host=document.createElement('div');host.id='measured-panel-view';}const table=document.querySelector('.tablewrap');const anchor=table.closest('.edge-details')||table;anchor.before(host);document.body.classList.toggle('has-measured-outline',!!d?.measuredEdges);host.hidden=!d?.measuredEdges;if(host.hidden)return;host.replaceChildren();const title=document.createElement('h3');title.textContent='Proposed sketch';title.className='proposed-sketch-title';const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.style.cssText='width:100%;max-height:620px;background:#f7fafc';host.append(title,svg);draw(svg,d);addPreviewZoom(host,svg);const note=document.createElement('p');note.textContent='Horizontal and vertical measurements define the shape. Finished dimensions are calculated in the generated preview.';host.append(note);const comparison=document.createElement('div');comparison.className='panel-comparison measured-comparison';const drawing=document.createElement('div');drawing.className='measured-comparison-drawing';while(host.firstChild)drawing.append(host.firstChild);comparison.append(drawing);host.append(comparison);}
 window.PanelMeasuredOutline={points,resolveFolds,splitEdge,validate,fromDraft,open,show};
 })();

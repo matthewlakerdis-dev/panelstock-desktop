@@ -6,7 +6,7 @@ const summary=document.createElement('summary');summary.textContent='Show all ed
 table.before(details);details.append(summary,table);
 const host=document.createElement('div');host.className='visual-editor';details.before(host);
 host.innerHTML='<div class="drawing-space"><div class="drawing-heading"><div><span class="editor-eyebrow">PANEL WORKSPACE</span><strong>Edit your panel</strong></div><span class="editor-hint">Select a dimension or edge to edit</span></div><div class="drawing-canvas"><svg viewBox="0 0 760 540" aria-label="Interactive site outline"></svg><div class="edge-inspector" hidden><div class="inspector-heading"><h3>Selected edge</h3><button type="button" class="close-editor" aria-label="Close edge editor">×</button></div><div class="edge-controls"></div><p class="small">Changes update the outline automatically.</p></div></div><div class="drawing-footer"><p class="drawing-status" role="status"></p><span>Site · Finished (mm)</span></div><div class="edge-picker" hidden></div></div>';
-const comparison=document.createElement('div');comparison.className='panel-comparison';const drawingCanvas=host.querySelector('.drawing-canvas');drawingCanvas.before(comparison);comparison.append(drawingCanvas);
+const comparison=document.createElement('div');comparison.className='panel-comparison';const drawingCanvas=host.querySelector('.drawing-canvas');drawingCanvas.before(comparison);const proposed=document.createElement('div');proposed.className='proposed-sketch';const proposedHeading=document.createElement('div');proposedHeading.className='sketch-reference-heading';proposedHeading.innerHTML='<div><strong>Proposed sketch</strong><small>Panel dimensions and folds</small></div>';proposed.append(proposedHeading,drawingCanvas);comparison.append(proposed);
 const reference=document.createElement('aside');reference.className='panel-sketch-reference';reference.hidden=true;reference.innerHTML='<div class="sketch-reference-heading"><div><strong>Original sketch</strong><small></small></div><div class="sketch-reference-tools"><button type="button" data-zoom="out" aria-label="Zoom out sketch">−</button><button type="button" data-zoom="fit">Fit</button><button type="button" data-zoom="in" aria-label="Zoom in sketch">+</button></div></div><div class="sketch-reference-scroll"><img alt="Original sketch for the selected panel"></div>';comparison.append(reference);
 const sketchImage=reference.querySelector('img');let sketchFile=null,sketchUrl=null,sketchZoom=1;
 function zoomSketch(value){sketchZoom=Math.max(1,Math.min(4,value));sketchImage.style.width=(sketchZoom*100)+'%';}
@@ -132,3 +132,6 @@ document.getElementById('folds').addEventListener('input',()=>render(false));
 new MutationObserver(()=>{editing=false;render(true);}).observe(rows,{childList:true});
 render();
 })();
+
+
+
