@@ -483,8 +483,8 @@ function sortPanelRows(rows,order){
  return [...rows].sort((a,b)=>order==='id'?String(a.p.spec?.panelId||a.p.name||'').localeCompare(String(b.p.spec?.panelId||b.p.name||''),undefined,{numeric:true,sensitivity:'base'})||a.index-b.index:order==='attention'?(Number(b.reasons.length>0)-Number(a.reasons.length>0))||a.index-b.index:a.index-b.index);
 }
 function filterPanelRows(rows,query,status){
- const term=String(query||'').trim().toLowerCase();
- return rows.filter(row=>(!term||[row.p.spec?.panelId,row.p.name,row.p.file?.name].some(value=>String(value||'').toLowerCase().includes(term)))&&(status==='all'||(status==='generated'&&!!row.p.result?.dxf)||(status==='attention'&&row.reasons.length>0)||(status==='ready'&&row.reasons.length===0)));
+ const term=String(query||'').trim().toLowerCase(),compact=value=>String(value||'').toLowerCase().replace(/[\s_-]+/g,''),idTerm=compact(term);
+ return rows.filter(row=>(!term||([row.p.spec?.panelId,row.p.name,row.p.file?.name].some(value=>String(value||'').toLowerCase().includes(term))||(!!idTerm&&compact(row.p.spec?.panelId).includes(idTerm))))&&(status==='all'||(status==='generated'&&!!row.p.result?.dxf)||(status==='attention'&&row.reasons.length>0)||(status==='ready'&&row.reasons.length===0)));
 }
 const findPanelsButton=document.createElement('button');findPanelsButton.type='button';projectIcon(findPanelsButton,'Find panel','M21 21l-5-5M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z');navigator.append($('correctoutline'),findPanelsButton,sourcePdfButton);
 const panelFinderPreferences=new Map();
