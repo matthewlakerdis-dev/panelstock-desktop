@@ -41,7 +41,22 @@ projectIcon(backupButton,'Download backup','M12 3v12m-4-4 4 4 4-4M4 16v5h16v-5')
 projectIcon(restoreButton,'Restore backup','M12 16V4m-4 4 4-4 4 4M4 16v5h16v-5');
 const sourcePdfButton=document.createElement('button');sourcePdfButton.type='button';sourcePdfButton.hidden=true;
 projectIcon(sourcePdfButton,'Download original PDF','M14 2H4v20h16V8l-6-6ZM14 2v6h6M12 11v7m-3-3 3 3 3-3');navigator.append(sourcePdfButton);
-function updateSourcePdfButton(){const panel=panels[panelIndex];sourcePdfButton.hidden=!panel?.sourcePdf;sourcePdfButton.title=panel?.sourcePdf?'Download original PDF: '+(panel.sourcePdfName||panel.sourcePdf.name||'Original.pdf'):'Download original PDF';}
+const projectPdfBox=document.createElement('section');projectPdfBox.className='project-pdf-source';projectPdfBox.hidden=true;
+const projectPdfTitle=document.createElement('strong'),projectPdfHint=document.createElement('p'),projectPdfPreview=document.createElement('iframe'),highlightPdfButton=document.createElement('button');
+projectPdfPreview.title='Original project PDF';highlightPdfButton.type='button';highlightPdfButton.textContent='Highlight panels';highlightPdfButton.className='primary';projectPdfHint.textContent='Your saved PDF is loaded. Highlight panels to draw selection boxes and add more sketches.';projectPdfBox.append(projectPdfTitle,projectPdfHint,projectPdfPreview,highlightPdfButton);$('file').closest('label').after(projectPdfBox);
+let displayedProjectPdf=null,projectPdfUrl=null;
+function updateProjectPdf(){
+ const panel=panels[panelIndex]?.sourcePdf?panels[panelIndex]:panels.find(p=>p.sourcePdf),file=panel?.sourcePdf||null;
+ highlightPdfButton.disabled=busy||panels.length>=30;projectPdfBox.hidden=!file;
+ if(file===displayedProjectPdf)return;displayedProjectPdf=file;
+ projectPdfPreview.removeAttribute('src');if(projectPdfUrl)URL.revokeObjectURL(projectPdfUrl);projectPdfUrl=null;
+ if(file){projectPdfTitle.textContent=panel.sourcePdfName||file.name||'Original PDF';projectPdfUrl=URL.createObjectURL(file);projectPdfPreview.src=projectPdfUrl;}
+}
+highlightPdfButton.onclick=async()=>{if(busy||!displayedProjectPdf)return;const file=displayedProjectPdf;let added=false;await run(async()=>{
+ const selected=await PanelPdfSelection.open([file],30-panels.length);if(!selected.length)return;
+ rememberPanel();const first=panels.length;selected.forEach(sketch=>panels.push({file:sketch,sourcePdf:sketch.sourcePdf,sourcePdfName:sketch.sourcePdf?.name,name:sketch.name,spec:null,result:null,reviewed:false}));panelIndex=-1;selectPanel(first);queueProjectSave();added=true;
+ });if(added)$('analyse').click();};
+function updateSourcePdfButton(){const panel=panels[panelIndex];sourcePdfButton.hidden=!panel?.sourcePdf;sourcePdfButton.title=panel?.sourcePdf?'Download original PDF: '+(panel.sourcePdfName||panel.sourcePdf.name||'Original.pdf'):'Download original PDF';updateProjectPdf();}
 sourcePdfButton.onclick=()=>{const panel=panels[panelIndex];if(panel?.sourcePdf)download(panel.sourcePdf,'application/pdf',panel.sourcePdfName||panel.sourcePdf.name||'Original.pdf');};
 const projectHistoryButton=document.createElement('button');projectHistoryButton.type='button';projectIcon(projectHistoryButton,'Project version history','M3 11a9 9 0 1 1 2.7 7M3 4v7h7M12 7v5l3 2');projectBar.querySelector('.row').append(projectHistoryButton);
 projectHistoryButton.onclick=()=>run(async()=>{await saveProject();if(projectId)await showProjectHistory({projectId,name:projectName},projectOwner());else notice('Save a project before opening its history.');});
