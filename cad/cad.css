@@ -127,3 +127,9 @@ dialog.panel-finder{width:min(760px,calc(100vw - 32px))}
 .panel-attention-actions{flex:none;padding:0 12px 8px;font-size:12px}.panel-attention-actions summary{cursor:pointer;color:#8b5e20;padding:6px 0}.panel-attention-actions button{display:block;width:100%;height:auto;white-space:normal;text-align:left;padding:8px 10px;margin-top:6px;font-size:12px}
 
 .panel-number-jump{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;margin-top:12px}.panel-number-jump label{font-size:12px}.panel-number-jump input{width:110px;min-width:0}.panel-number-jump span{font-size:12px;color:#8b5e20;align-self:center}
+
+.panel-finder .panel-finder-controls{grid-template-columns:minmax(0,2fr) minmax(130px,1fr) minmax(150px,1fr);gap:12px}
+.panel-finder-tools{margin-top:12px;font-size:12px}.panel-finder-tools summary{cursor:pointer;color:#356477;padding:4px 0}.panel-finder-tool-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.panel-finder-tool-actions button{font-size:12px;padding:7px 12px;height:auto;min-height:34px}
+.panel-finder #panel-finder-keyboard-help{margin:8px 0 0;font-size:11px}
+@media(max-width:700px){.panel-finder .panel-finder-controls{grid-template-columns:1fr 1fr}.panel-finder .panel-finder-controls>label:first-child{grid-column:1/-1}}
+@media(max-width:420px){.panel-finder .panel-finder-controls{grid-template-columns:1fr}}
