@@ -44,16 +44,16 @@ projectIcon(sourcePdfButton,'Download original PDF','M14 2H4v20h16V8l-6-6ZM14 2v
 const projectPdfBox=document.createElement('section');projectPdfBox.className='project-pdf-source';projectPdfBox.hidden=true;
 const projectPdfTitle=document.createElement('strong'),projectPdfHint=document.createElement('p'),projectPdfPreview=document.createElement('iframe'),highlightPdfButton=document.createElement('button');
 projectPdfPreview.title='Project sketch preview';highlightPdfButton.type='button';highlightPdfButton.className='primary';projectIcon(highlightPdfButton,'Highlight panels','M8 3H3v5M16 3h5v5M21 16v5h-5M8 21H3v-5M7 7h10v10H7V7Z');projectPdfHint.textContent='Your file is loaded. Highlight panels to draw selection boxes and add more sketches.';projectPdfBox.append(projectPdfTitle,projectPdfHint,projectPdfPreview,highlightPdfButton);$('file').closest('label').after(projectPdfBox);
-let displayedProjectPdf=null,projectPdfUrl=null;
+let displayedProjectPdf=null,projectPdfUrl=null,uploadedSketchFiles=[];
 function updateProjectPdf(){
- const panel=panels[panelIndex]?.sourcePdf||panels[panelIndex]?.file?panels[panelIndex]:panels.find(p=>p.sourcePdf||p.file),file=panel?.sourcePdf||panel?.file||null;
+ const panel=panels[panelIndex]?.sourcePdf||panels[panelIndex]?.file?panels[panelIndex]:panels.find(p=>p.sourcePdf||p.file),file=uploadedSketchFiles[0]||panel?.sourcePdf||panel?.file||null;
  highlightPdfButton.disabled=busy||!file||panels.length>=30;projectPdfBox.hidden=false;projectPdfBox.classList.toggle('empty',!file);projectPdfBox.title=file?'':'Upload a PDF or image first to highlight panels.';highlightPdfButton.title=file?'Draw boxes around panels to add them':'Upload a PDF or image first to highlight panels.';projectPdfPreview.hidden=!file;projectPdfHint.textContent=file?'Your file is loaded. Highlight panels to draw selection boxes and add more sketches.':'Upload a PDF or image to highlight the panels you want to add.';if(!file)projectPdfTitle.textContent='Highlight panels';
  if(file===displayedProjectPdf)return;displayedProjectPdf=file;
  projectPdfPreview.removeAttribute('src');if(projectPdfUrl)URL.revokeObjectURL(projectPdfUrl);projectPdfUrl=null;
- if(file){projectPdfTitle.textContent=panel.sourcePdfName||file.name||'Original PDF';projectPdfUrl=URL.createObjectURL(file);projectPdfPreview.src=projectPdfUrl;}
+ if(file){projectPdfTitle.textContent=file.name||panel?.sourcePdfName||'Original file';projectPdfUrl=URL.createObjectURL(file);projectPdfPreview.src=projectPdfUrl;}
 }
 highlightPdfButton.onclick=async()=>{if(busy||!displayedProjectPdf)return;const file=displayedProjectPdf;let added=false;await run(async()=>{
- const selected=await PanelPdfSelection.open([file],30-panels.length);if(!selected.length)return;
+ const selected=await PanelPdfSelection.open(uploadedSketchFiles.length?uploadedSketchFiles:[file],30-panels.length);if(!selected.length)return;
  rememberPanel();const first=panels.length;selected.forEach(sketch=>panels.push({file:sketch,sourcePdf:sketch.sourcePdf,sourcePdfName:sketch.sourcePdf?.name,name:sketch.name,spec:null,result:null,reviewed:false}));panelIndex=-1;selectPanel(first);queueProjectSave();added=true;
  });if(added)$('analyse').click();};
 function updateSourcePdfButton(){const panel=panels[panelIndex];sourcePdfButton.hidden=!panel?.sourcePdf;sourcePdfButton.title=panel?.sourcePdf?'Download original PDF: '+(panel.sourcePdfName||panel.sourcePdf.name||'Original.pdf'):'Download original PDF';updateProjectPdf();}
@@ -179,7 +179,7 @@ $('openproject').onclick=()=>run(async()=>{
  return;
  }
 });
-function applyOpenedProject(saved,id){panels.length=0;panels.push(...saved.panels);panelIndex=-1;spec=null;result=null;projectId=id;projectName=saved.name;$('projectname').value=projectName;projectRevision++;projectDirty=false;selectPanel(Math.max(0,Math.min(saved.index||0,panels.length-1)));}
+function applyOpenedProject(saved,id){uploadedSketchFiles=[];panels.length=0;panels.push(...saved.panels);panelIndex=-1;spec=null;result=null;projectId=id;projectName=saved.name;$('projectname').value=projectName;projectRevision++;projectDirty=false;selectPanel(Math.max(0,Math.min(saved.index||0,panels.length-1)));}
 async function showProjectHistory(item,owner){
  const request=(...args)=>{if(projectOwner()!==owner)throw Error('Your account changed.');return api(...args);},base='/cad/projects/'+item.projectId;
  const history=await request(base+'/versions');
@@ -204,7 +204,7 @@ function previewProjectVersion(data,version){return new Promise(resolve=>{
  for(const panel of data.panels){const section=document.createElement('section');const heading=document.createElement('h3');heading.textContent=panel.spec?.panelId||panel.name||'Panel';section.append(heading);if(panel.result?.svg){const image=document.createElement('img'),url=URL.createObjectURL(new Blob([panel.result.svg],{type:'image/svg+xml'}));urls.push(url);image.src=url;image.alt=heading.textContent+' saved drawing';image.style.cssText='width:100%;max-height:440px;object-fit:contain';section.append(image);}else{const text=document.createElement('p');text.textContent='Sketch saved; drawing not generated.';section.append(text);}list.append(section);}dialog.append(list);const footer=document.createElement('footer');footer.className='project-picker-footer';const close=document.createElement('button');close.textContent='Close preview';footer.append(close);dialog.append(footer);const finish=()=>{urls.forEach(url=>URL.revokeObjectURL(url));dialog.close();dialog.remove();resolve();};close.onclick=finish;dialog.oncancel=e=>{e.preventDefault();finish();};document.body.append(dialog);dialog.showModal();
 });}
 $('newproject').onclick=()=>run(async()=>{
- await saveProject();panels.length=0;panelIndex=-1;spec=null;result=null;projectId=null;projectName='Untitled project';quantityInput.value='1';$('projectname').value=projectName;projectRevision++;projectDirty=false;
+ await saveProject();uploadedSketchFiles=[];panels.length=0;panelIndex=-1;spec=null;result=null;projectId=null;projectName='Untitled project';quantityInput.value='1';$('projectname').value=projectName;projectRevision++;projectDirty=false;
  PanelMeasuredOutline.show(null);invalidate();$('edges').replaceChildren();$('panelid').value='';$('questions').replaceChildren();updateNavigator();notice('New project ready. Add a sketch to begin.');$('projectstatus').textContent='Projects save to your account, with a copy kept on this device.';
 });
 $('workspace').addEventListener('input',queueProjectSave);$('workspace').addEventListener('change',queueProjectSave);
@@ -238,7 +238,7 @@ function renderDrawingChecks(drawing){
 }
 function invalidate(){const errorBox=$('generation-error');if(errorBox)errorBox.hidden=true;version++;result=null;updateNavigator();$('download').disabled=true;$('confirmed').checked=false;$('preview').hidden=true;$('validation').textContent='Generate a new preview after reviewing your changes.';}
 async function api(path,body){const token=session?.token;const response=await fetch(API+path,{method:body?'POST':'GET',headers:{...(token?{Authorization:'Bearer '+token}:{}),...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),cache:'no-store',signal:AbortSignal.timeout(95000)});const data=await response.json();if(response.status===401){session=null;sessionStorage.removeItem(KEY);showSession();}if(!response.ok){const error=Error(data.error||'Request failed');error.conflict=data.conflict===true;error.status=response.status;throw error;}return data;}
-function showSession(){if(!session){clearTimeout(projectTimer);projectId=null;projectDirty=false;$('projectname').value='Untitled project';PanelMeasuredOutline.show(null);panels.length=0;panelIndex=-1;updateNavigator();spec=null;invalidate();$('edges').replaceChildren();$('panelid').value='';$('folds').value='';$('questions').replaceChildren();if(previewURL){URL.revokeObjectURL(previewURL);previewURL=null;}}$('login').hidden=!!session;$('workspace').hidden=!session;$('signout').hidden=!session;$('account').textContent=session?.username||'';}
+function showSession(){if(!session){uploadedSketchFiles=[];clearTimeout(projectTimer);projectId=null;projectDirty=false;$('projectname').value='Untitled project';PanelMeasuredOutline.show(null);panels.length=0;panelIndex=-1;updateNavigator();spec=null;invalidate();$('edges').replaceChildren();$('panelid').value='';$('folds').value='';$('questions').replaceChildren();if(previewURL){URL.revokeObjectURL(previewURL);previewURL=null;}}$('login').hidden=!!session;$('workspace').hidden=!session;$('signout').hidden=!session;$('account').textContent=session?.username||'';}
 async function run(action){if(busy)return;busy=true;for(const b of document.querySelectorAll('button'))b.disabled=true;notice('Working…');try{await action();}catch(e){notice(e.name==='TimeoutError'?'This request timed out. Please retry.':e.message||'Could not reach the server.');}finally{busy=false;for(const b of document.querySelectorAll('button'))b.disabled=false;$('download').disabled=!result;updateNavigator();queueProjectSave();}}
 function edgeRow(edge,index){const tr=document.createElement('tr');tr.dataset.sections=JSON.stringify(edge.sections||[]);const name=document.createElement('input');name.value=edge.name||'Edge '+(index+1);name.maxLength=60;name.setAttribute('aria-label','Edge name');
  const fields=[name,...[directions,codes].map((options,j)=>{const select=document.createElement('select');select.setAttribute('aria-label',j?'Edge type':'Edge direction');for(const option of options){const el=document.createElement('option');el.value=option;el.textContent=option;select.append(el);}select.value=edge[j?'code':'direction'];return select;}),...['site','finished'].map(key=>{const input=document.createElement('input');input.type='number';input.min='.001';input.max='10000';input.step='any';input.value=edge[key]??'';input.setAttribute('aria-label',key+' length in mm');return input;})];
@@ -352,18 +352,10 @@ $('correctoutline').onclick=()=>{if(busy)return;const file=panels[panelIndex]?.f
 $('correctionsketch').onchange=()=>{const file=$('correctionsketch').files[0];$('correctionsketch').value='';if(file)run(async()=>{if(!['image/png','image/jpeg'].includes(file.type)||file.size>6*1024*1024)throw Error('Choose a PNG or JPEG sketch up to 6 MB.');await correctOutline(file);});};
 $('file').multiple=true;
 const uploadFileButton=document.createElement('button');uploadFileButton.type='button';uploadFileButton.className='project-upload-button';uploadFileButton.textContent='Upload file';uploadFileButton.setAttribute('aria-label','Upload PDF or sketch image');uploadFileButton.onclick=()=>{if(!busy)$('file').click();};const fileLabel=$('file').closest('label');fileLabel.hidden=true;fileLabel.before(uploadFileButton);
-$('file').onchange=async()=>{if(busy)return;const files=[...$('file').files];if(!files.length)return;let readSelection=false;await run(async()=>{
- const pdfs=[],additions=[];
- for(const file of files){
-  const pdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name);
-  if(!pdf&&!['image/png','image/jpeg'].includes(file.type))throw Error('Choose PDF, PNG or JPEG files.');
-  if(file.size>(pdf?25:6)*1024*1024)throw Error(file.name+': maximum '+(pdf?25:6)+' MB per file.');
-  pdfs.push(file);
- }
- if(panels.length+additions.length>30)throw Error('Use up to 30 panels in one workspace.');
- if(pdfs.length){const selected=await PanelPdfSelection.open(pdfs,30-panels.length-additions.length);if(!selected.length){notice('Panel selection cancelled.');return;}additions.push(...selected);readSelection=true;}
- rememberPanel();const first=panels.length;additions.forEach(file=>panels.push({file,sourcePdf:file.sourcePdf,sourcePdfName:file.sourcePdf?.name,name:file.name,spec:null,result:null,reviewed:false}));panelIndex=-1;selectPanel(first);notice(additions.length+' panels selected. Reading sketches…');
- });$('file').value='';if(readSelection)$('analyse').click();};
+$('file').onchange=async()=>{if(busy)return;const files=[...$('file').files];if(!files.length)return;await run(async()=>{
+ for(const file of files){const pdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name);if(!pdf&&!['image/png','image/jpeg'].includes(file.type))throw Error('Choose PDF, PNG or JPEG files.');if(file.size>(pdf?25:6)*1024*1024)throw Error(file.name+': maximum '+(pdf?25:6)+' MB per file.');}
+ uploadedSketchFiles=files;updateProjectPdf();notice(files.length===1?'File loaded. Click Highlight panels when ready.':files.length+' files loaded. Click Highlight panels when ready.');
+ });$('file').value='';};
 $('analyse').hidden=true;
 $('analyse').onclick=()=>run(async()=>{rememberPanel();const pending=panels.filter(p=>p.file&&!p.spec);if(!pending.length)throw Error('Choose one or more new sketch files first.');let completed=0,failed=0;
  for(const p of pending){if(!session)break;notice('Reading '+(completed+failed+1)+' of '+pending.length+': '+p.name);try{const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=reject;reader.readAsDataURL(p.file);});const response=await api('/cad/analyse',{filename:p.file.name,mime:p.file.type,data});p.spec=response.spec;p.error=null;p.message='Sketch read. Review dimensions and edge types.';completed++;}catch(e){if(!session)throw e;p.error=e.name==='TimeoutError'?'This request timed out. Upload the sketch again and highlight the panel to retry.':e.message||'Could not read this sketch. Upload the sketch again and highlight the panel to retry.';p.message=p.error;failed++;}}
