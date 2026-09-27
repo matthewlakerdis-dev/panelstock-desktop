@@ -39,6 +39,10 @@ quantityInput.onchange=()=>{const value=Number(quantityInput.value);if(!Number.i
 const backupButton=document.createElement('button');backupButton.type='button';backupButton.textContent='Download backup';const restoreButton=document.createElement('button');restoreButton.type='button';restoreButton.textContent='Restore backup';const backupInput=document.createElement('input');backupInput.type='file';backupInput.accept='.json,application/json';backupInput.hidden=true;projectBar.querySelector('.row').append(backupButton,restoreButton);projectBar.append(backupInput);
 projectIcon(backupButton,'Download backup','M12 3v12m-4-4 4 4 4-4M4 16v5h16v-5');
 projectIcon(restoreButton,'Restore backup','M12 16V4m-4 4 4-4 4 4M4 16v5h16v-5');
+const sourcePdfButton=document.createElement('button');sourcePdfButton.type='button';sourcePdfButton.hidden=true;
+projectIcon(sourcePdfButton,'Download original PDF','M14 2H4v20h16V8l-6-6ZM14 2v6h6M12 11v7m-3-3 3 3 3-3');navigator.append(sourcePdfButton);
+function updateSourcePdfButton(){const panel=panels[panelIndex];sourcePdfButton.hidden=!panel?.sourcePdf;sourcePdfButton.title=panel?.sourcePdf?'Download original PDF: '+(panel.sourcePdfName||panel.sourcePdf.name||'Original.pdf'):'Download original PDF';}
+sourcePdfButton.onclick=()=>{const panel=panels[panelIndex];if(panel?.sourcePdf)download(panel.sourcePdf,'application/pdf',panel.sourcePdfName||panel.sourcePdf.name||'Original.pdf');};
 backupButton.onclick=()=>run(async()=>{if(!panels.length)throw Error('Add a panel before downloading a backup.');rememberPanel();const data=PanelCadProjects.snapshot(panels,panelIndex,$('projectname').value);const text=await PanelCadProjects.backup(data);if(new Blob([text]).size>150*1024*1024)throw Error('This project exceeds the 150 MB backup limit.');download(text,'application/json',combinedFilename(data.name).replace(/\.dxf$/i,'-backup.json'));notice('Project backup downloaded, including sketches and generated drawings.');});
 restoreButton.onclick=()=>{backupInput.value='';backupInput.click();};
 backupInput.onchange=()=>run(async()=>{const file=backupInput.files[0];if(!file)return;if(file.size>150*1024*1024)throw Error('Choose a project backup smaller than 150 MB.');const data=PanelCadProjects.restore(await file.text());await saveProject();const owner=projectOwner();if(!owner)throw Error('Sign in before restoring a project.');const id=crypto.randomUUID();data.name=(data.name+' (restored)').slice(0,100);await PanelCadProjects.save(owner,id,data);panels.length=0;panels.push(...data.panels);panelIndex=-1;spec=null;result=null;projectId=id;projectName=data.name;$('projectname').value=projectName;projectRevision++;projectDirty=false;selectPanel(data.index);notice('Backup restored as a separate project. Review fabrication readiness before downloading drawings.');});
@@ -152,7 +156,7 @@ $('workspace').addEventListener('input',queueProjectSave);$('workspace').addEven
 window.addEventListener('beforeunload',e=>{if(projectDirty){e.preventDefault();e.returnValue='';}});
 
 function generatedDrawings(){return panels.map((p,i)=>i===panelIndex?result:p.result).filter(r=>r?.dxf);}
-function updateNavigator(){if($('downloadall')){$('downloadall').disabled=busy||!generatedDrawings().length;$('downloadall').textContent='Combine drawings ('+generatedDrawings().length+')';} $('panelcount').textContent=panels.length?'Panel '+(panelIndex+1)+' of '+panels.length:'No panels';$('panelsource').textContent=panels[panelIndex]?.name||'';$('previouspanel').disabled=busy||panelIndex<=0;$('nextpanel').disabled=busy||panelIndex>=panels.length-1;}
+function updateNavigator(){updateSourcePdfButton();if($('downloadall')){$('downloadall').disabled=busy||!generatedDrawings().length;$('downloadall').textContent='Combine drawings ('+generatedDrawings().length+')';} $('panelcount').textContent=panels.length?'Panel '+(panelIndex+1)+' of '+panels.length:'No panels';$('panelsource').textContent=panels[panelIndex]?.name||'';$('previouspanel').disabled=busy||panelIndex<=0;$('nextpanel').disabled=busy||panelIndex>=panels.length-1;}
 function rememberPanel(){if(panelIndex<0)return;const p=panels[panelIndex];if(spec)spec.panelId=$('panelid').value.trim();Object.assign(p,{spec,result,reviewed:$('confirmed').checked,message:$('notice').textContent});}
 function selectPanel(index){if(index<0||index>=panels.length)return;rememberPanel();panelIndex=index;const p=panels[index];spec=p.spec||null;
  if(previewURL){URL.revokeObjectURL(previewURL);previewURL=null;}
@@ -302,7 +306,7 @@ $('file').onchange=async()=>{if(busy)return;const files=[...$('file').files];if(
  }
  if(panels.length+additions.length>30)throw Error('Use up to 30 panels in one workspace.');
  if(pdfs.length){const selected=await PanelPdfSelection.open(pdfs,30-panels.length-additions.length);if(!selected.length){notice('PDF selection cancelled.');return;}additions.push(...selected);readSelection=true;}
- rememberPanel();const first=panels.length;additions.forEach(file=>panels.push({file,name:file.name,spec:null,result:null,reviewed:false}));panelIndex=-1;selectPanel(first);notice(additions.length+' panels added. Select Read sketches.');
+ rememberPanel();const first=panels.length;additions.forEach(file=>panels.push({file,sourcePdf:file.sourcePdf,sourcePdfName:file.sourcePdf?.name,name:file.name,spec:null,result:null,reviewed:false}));panelIndex=-1;selectPanel(first);notice(additions.length+' panels added. Select Read sketches.');
  });$('file').value='';if(readSelection)$('analyse').click();};
 $('analyse').textContent='Read sketches';
 $('analyse').onclick=()=>run(async()=>{rememberPanel();const pending=panels.filter(p=>p.file&&!p.spec);if(!pending.length)throw Error('Choose one or more new sketch files first.');let completed=0,failed=0;

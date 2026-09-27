@@ -75,4 +75,5 @@ dialog.project-picker[open]{display:flex;flex-direction:column}
 .project-retry[hidden]{display:none}
 .project-icon-button{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;min-width:44px;padding:10px;flex:none}
 .project-icon-button svg{display:block;flex:none}
+.project-icon-button[hidden]{display:none}
 .project-icon-button:focus-visible{outline:3px solid #82b4c6;outline-offset:2px}
