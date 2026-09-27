@@ -153,7 +153,7 @@ details.addEventListener('toggle',()=>render(true));
 document.getElementById('folds').addEventListener('input',()=>render(false));
 new MutationObserver(()=>{editing=false;render(true);}).observe(rows,{childList:true});
 render();
-panelPreviewZoom=window.PanelMeasuredOutline.addPreviewZoom(drawingCanvas,svg);
+panelPreviewZoom=window.PanelMeasuredOutline.addPreviewZoom(drawingCanvas,svg,proposedHeading);
 })();
 
 
