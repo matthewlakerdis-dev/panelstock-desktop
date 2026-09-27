@@ -148,3 +148,13 @@ dialog.panel-finder{width:min(760px,calc(100vw - 32px))}
 .panel-finder .panel-number-jump>span{grid-column:1/-1;max-width:230px;font-size:11px}
 .panel-finder .panel-number-jump>span:empty{display:none}
 @media(max-width:600px){.panel-finder .panel-finder-tools[open]{grid-template-columns:1fr;gap:10px}.panel-finder .panel-number-jump{grid-template-columns:minmax(0,1fr) auto}.panel-finder .panel-finder-tool-actions button{flex:1}}
+
+.project-save-status-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px}
+.project-save-status-row #projectstatus{margin:0;flex:1 1 280px;min-width:0;line-height:1.5;padding:10px 12px;border:1px solid transparent}
+.project-save-status-row .project-retry{margin:0;min-height:38px;height:auto;padding:8px 12px}
+#projectstatus[data-state]::before{content:'';display:block;flex:0 0 8px;width:8px;height:8px;border-radius:50%;background:currentColor}
+#projectstatus[data-state=saving]::before,#projectstatus[data-state=retrying]::before{flex-basis:12px;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;background:transparent;animation:project-save-spin 1s linear infinite}
+#projectstatus[data-state=saved]{border-color:#cce7d6}
+#projectstatus[data-state=error]{border-color:#f0ccc6}
+@keyframes project-save-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){#projectstatus::before{animation:none!important}}
