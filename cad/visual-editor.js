@@ -52,11 +52,12 @@ function measurementErrors(all){
  return {bad,messages:[...new Set(messages)]};
 }
 function choose(i){selected=i;editing=true;render(true);controls.querySelector('input[type=number]')?.focus();}
+let panelPreviewZoom=null;
 function render(rebuild=true){
  const all=fields();selected=Math.max(0,Math.min(selected,all.length-1));svg.replaceChildren();picker.replaceChildren();
  if(rebuild)controls.replaceChildren();
- if(!all.length){inspector.hidden=true;svg.setAttribute('viewBox','0 0 760 540');svg.style.aspectRatio='760 / 540';svg.append(el('text',{x:380,y:270,'text-anchor':'middle','dominant-baseline':'middle',fill:'#64748b','font-size':20,'font-weight':600,'letter-spacing':1.5},'NO FILE UPLOADED'));status.textContent='Load a sketch or start a rectangle to begin.';return;}
- if(all.some(f=>!['right','up','left','down'].includes(f[1].value))){svg.setAttribute('viewBox','0 0 760 540');svg.append(el('text',{x:380,y:270,'text-anchor':'middle',fill:'#b45309','font-size':18},'Outline could not be traced. Review edge directions or read the sketch again.'));status.textContent='Missing edge directions — no outline drawn.';inspector.hidden=true;return;}
+ if(!all.length){inspector.hidden=true;svg.setAttribute('viewBox','0 0 760 540');panelPreviewZoom?.reset();svg.style.aspectRatio='760 / 540';svg.append(el('text',{x:380,y:270,'text-anchor':'middle','dominant-baseline':'middle',fill:'#64748b','font-size':20,'font-weight':600,'letter-spacing':1.5},'NO FILE UPLOADED'));status.textContent='Load a sketch or start a rectangle to begin.';return;}
+ if(all.some(f=>!['right','up','left','down'].includes(f[1].value))){svg.setAttribute('viewBox','0 0 760 540');panelPreviewZoom?.reset();svg.append(el('text',{x:380,y:270,'text-anchor':'middle',fill:'#b45309','font-size':18},'Outline could not be traced. Review edge directions or read the sketch again.'));status.textContent='Missing edge directions — no outline drawn.';inspector.hidden=true;return;}
  const errors=measurementErrors(all);
  let x=0,y=0,complete=true;const vectors={right:[1,0],up:[0,1],left:[-1,0],down:[0,-1]};
  const points=[[0,0]],segments=[];
@@ -137,7 +138,7 @@ function render(rebuild=true){
    }
   }
  }
- const contentBounds=svg.getBBox();if(contentBounds.width>0&&contentBounds.height>0){extent={left:contentBounds.x-32,top:contentBounds.y-32,right:contentBounds.x+contentBounds.width+32,bottom:contentBounds.y+contentBounds.height+32};}svg.setAttribute('preserveAspectRatio','xMidYMid meet');const viewWidth=extent.right-extent.left,viewHeight=extent.bottom-extent.top;svg.setAttribute('viewBox',[extent.left,extent.top,viewWidth,viewHeight].join(' '));svg.style.aspectRatio=viewWidth+' / '+viewHeight;
+ const contentBounds=svg.getBBox();if(contentBounds.width>0&&contentBounds.height>0){extent={left:contentBounds.x-32,top:contentBounds.y-32,right:contentBounds.x+contentBounds.width+32,bottom:contentBounds.y+contentBounds.height+32};}svg.setAttribute('preserveAspectRatio','xMidYMid meet');const viewWidth=extent.right-extent.left,viewHeight=extent.bottom-extent.top;svg.setAttribute('viewBox',[extent.left,extent.top,viewWidth,viewHeight].join(' '));svg.style.aspectRatio=viewWidth+' / '+viewHeight;panelPreviewZoom?.reset();
  if(editing&&rebuild&&labelBoxes[selected]){const anchor=labelBoxes[selected];inspector.style.left=Math.max(2,Math.min(58,(anchor.x-extent.left)/viewWidth*100-12))+'%';inspector.style.top=Math.max(3,Math.min(30,(anchor.y-extent.top)/viewHeight*100-8))+'%';}
  inspector.hidden=!editing;
  status.textContent=!complete?'Enter missing site lengths. The outline uses placeholder lengths until all measurements are supplied.':closed?'Site outline closes · Dimensions in mm':'Outline is open — check lengths and directions.';
@@ -152,4 +153,8 @@ details.addEventListener('toggle',()=>render(true));
 document.getElementById('folds').addEventListener('input',()=>render(false));
 new MutationObserver(()=>{editing=false;render(true);}).observe(rows,{childList:true});
 render();
+panelPreviewZoom=window.PanelMeasuredOutline.addPreviewZoom(drawingCanvas,svg);
 })();
+
+
+
