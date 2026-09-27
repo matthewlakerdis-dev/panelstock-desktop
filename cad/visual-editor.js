@@ -13,7 +13,7 @@ const sketchScroll=reference.querySelector('.sketch-reference-scroll');
 const sketchZoomStatus=document.createElement('span');sketchZoomStatus.className='sketch-zoom-status';sketchZoomStatus.setAttribute('role','status');sketchZoomStatus.setAttribute('aria-live','polite');reference.querySelector('.sketch-reference-tools').prepend(sketchZoomStatus);
 const sketchHelp=document.createElement('p');sketchHelp.className='sketch-reference-help';sketchHelp.textContent='Focus the sketch: + / − to zoom, arrow keys to scroll, 0 to fit.';sketchScroll.before(sketchHelp);
 sketchScroll.tabIndex=0;sketchScroll.setAttribute('role','region');sketchScroll.setAttribute('aria-label','Original sketch. Plus and minus to zoom, arrow keys to scroll, zero to fit.');
-function zoomSketch(value){sketchZoom=Math.max(1,Math.min(4,value));sketchImage.style.width=(sketchZoom*100)+'%';sketchZoomStatus.textContent=Math.round(sketchZoom*100)+'%';sketchZoomStatus.setAttribute('aria-label','Original sketch zoom '+Math.round(sketchZoom*100)+' percent');reference.querySelector('[data-zoom="out"]').disabled=sketchZoom<=1;reference.querySelector('[data-zoom="in"]').disabled=sketchZoom>=4;if(sketchZoom===1){sketchScroll.scrollTop=0;sketchScroll.scrollLeft=0;}}
+function zoomSketch(value){const before=sketchImage.getBoundingClientRect(),viewport=sketchScroll.getBoundingClientRect(),cx=viewport.left+sketchScroll.clientLeft+sketchScroll.clientWidth/2,cy=viewport.top+sketchScroll.clientTop+sketchScroll.clientHeight/2;const anchor=before.width&&before.height?[(cx-before.left)/before.width,(cy-before.top)/before.height]:null;sketchZoom=Math.max(1,Math.min(4,value));sketchImage.style.width=(sketchZoom*100)+'%';sketchZoomStatus.textContent=Math.round(sketchZoom*100)+'%';sketchZoomStatus.setAttribute('aria-label','Original sketch zoom '+Math.round(sketchZoom*100)+' percent');reference.querySelector('[data-zoom="out"]').disabled=sketchZoom<=1;reference.querySelector('[data-zoom="in"]').disabled=sketchZoom>=4;if(sketchZoom===1){sketchScroll.scrollTop=0;sketchScroll.scrollLeft=0;}else if(anchor){const after=sketchImage.getBoundingClientRect();sketchScroll.scrollLeft+=after.left+anchor[0]*after.width-cx;sketchScroll.scrollTop+=after.top+anchor[1]*after.height-cy;}}
 sketchScroll.addEventListener('keydown',e=>{if(e.ctrlKey||e.metaKey||e.altKey||e.isComposing)return;if(e.key==='+'||e.key==='='){e.preventDefault();zoomSketch(sketchZoom+.25);}else if(e.key==='-'){e.preventDefault();zoomSketch(sketchZoom-.25);}else if(e.key==='0'){e.preventDefault();zoomSketch(1);}});
 zoomSketch(1);
 reference.querySelectorAll('[data-zoom]').forEach(button=>button.onclick=()=>zoomSketch(button.dataset.zoom==='fit'?1:sketchZoom+(button.dataset.zoom==='in'?.25:-.25)));
@@ -138,6 +138,3 @@ document.getElementById('folds').addEventListener('input',()=>render(false));
 new MutationObserver(()=>{editing=false;render(true);}).observe(rows,{childList:true});
 render();
 })();
-
-
-
