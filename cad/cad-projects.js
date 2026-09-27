@@ -25,8 +25,20 @@ async function transaction(mode,action){const db=await open();try{return await n
 async function save(owner,id,data){if(!owner||!id)throw Error('Sign in before saving a project.');await transaction('readwrite',s=>s.put({...data,id:owner+'|'+id,owner,projectId:id}));}
 async function list(owner){return (await transaction('readonly',s=>s.getAll())).filter(p=>p.owner===owner).sort((a,b)=>b.updatedAt-a.updatedAt);}
 function mergeSaved(remote,local){
- const device=new Map(local.map(p=>[p.projectId,p]));
- return [...remote.map(p=>{const localCopy=device.get(p.projectId);device.delete(p.projectId);return {...p,localCopy};}),...device.values()];
+ const groups=new Map(),names=new Map(remote.map(p=>[p.projectId,p.name]));
+ for(const p of [...remote,...local]){const name=baseOrderName(names.get(p.projectId)||p.name),normalized=name.replace(/\s+/g,' ').toLowerCase(),key=!normalized||normalized==='untitled project'?p.projectId:normalized;if(!groups.has(key))groups.set(key,{name,copies:[],deviceCopies:[]});groups.get(key)[p.cloud?'copies':'deviceCopies'].push(p);}
+ return [...groups.values()].map(group=>{group.copies.sort((a,b)=>b.updatedAt-a.updatedAt);group.deviceCopies.sort((a,b)=>b.updatedAt-a.updatedAt);const newest=group.copies[0]||group.deviceCopies[0];return {...newest,...group,localCopy:group.deviceCopies[0]};}).sort((a,b)=>b.updatedAt-a.updatedAt);
+}
+function baseOrderName(name){return String(name||'').trim().replace(/(?:\s*\((?:device copy|copy|restored)\))+$/i,'').trim();}
+async function combineCopies(group,request,progress=()=>{}){
+ let current=group.copies[0],id=current?.projectId||group.deviceCopies[0].projectId,revision=current?.revision||0;
+ if(group.copies.length>1||(current&&current.name!==group.name)){const merged=await request('/cad/projects/'+id+'/merge',{revision,sources:group.copies.slice(1).map(p=>({projectId:p.projectId,revision:p.revision}))});revision=merged.revision;}
+ for(const local of [...group.deviceCopies].sort((a,b)=>a.updatedAt-b.updatedAt)){
+  if(current&&local.importedTo===id&&local.importedAt===local.updatedAt)continue;
+  const data=snapshot(local.panels,local.index,group.name);data.updatedAt=local.updatedAt;
+  const response=await saveCloud(data,id,revision,request,progress,{importCopy:true});revision=response.revision;
+ }
+ return {projectId:id,revision,cloud:true,name:group.name};
 }
 async function remove(owner,id){if(!owner||!id)throw Error('Sign in before deleting a project.');await transaction('readwrite',s=>s.delete(owner+'|'+id));}
 async function backup(data){
@@ -72,10 +84,11 @@ async function packCloud(data){
  if(total+metadataSize>CLOUD_LIMIT)throw Error('Account projects must be 100 MB or smaller.');
  return {manifest,chunks,size:total+metadataSize};
 }
-async function saveCloud(data,id,revision,request,progress=()=>{}){
+async function saveCloud(data,id,revision,request,progress=()=>{},options={}){
  progress('Preparing project…');const packed=await packCloud(data),base='/cad/projects/'+id;
  cloudClientId||=crypto.randomUUID();
- const prepared=await request(base+'/prepare',{revision,manifest:packed.manifest,clientId:cloudClientId});if(prepared.saved)return prepared;let completed=0;
+ const imported=options.importCopy?{importId:await hashBytes(new TextEncoder().encode(JSON.stringify(packed.manifest))),sourceUpdatedAt:data.updatedAt||0}:{};
+ const prepared=await request(base+'/prepare',{revision,manifest:packed.manifest,clientId:cloudClientId,...imported});if(prepared.saved)return prepared;let completed=0;
  for(const hash of prepared.missing){
   const part=packed.chunks.get(hash);if(!part)throw Error('The project save response was invalid. Retry saving.');
   progress('Saving changed files '+(++completed)+' of '+prepared.missing.length+'…');
@@ -108,5 +121,5 @@ async function restoreCloud(response,id,request){
  attachOriginals(data,originals);
  return snapshot(data.panels,Number.isInteger(data.index)?Math.max(0,Math.min(data.index,data.panels.length-1)):0,data.name);
 }
-window.PanelCadProjects={ownerKey,snapshot,save,list,mergeSaved,remove,backup,restore,packCloud,saveCloud,restoreCloud};
+window.PanelCadProjects={ownerKey,snapshot,save,list,mergeSaved,combineCopies,baseOrderName,remove,backup,restore,packCloud,saveCloud,restoreCloud};
 })();
