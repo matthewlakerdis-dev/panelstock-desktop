@@ -87,3 +87,7 @@ dialog.project-picker[open]{display:flex;flex-direction:column}
 .project-pdf-source>strong{display:block;overflow-wrap:anywhere}
 .project-pdf-source>p{font-size:13px;line-height:1.5;color:#64748b}
 .project-pdf-source>iframe{display:block;width:100%;height:360px;border:1px solid #dce5eb;border-radius:6px;background:#fff;margin:12px 0}
+
+.project-pdf-source.empty{background:#f1f3f5;color:#84909c;border-color:#e2e6ea}
+.project-pdf-source>iframe[hidden]{display:none}
+.project-pdf-source.empty button{opacity:.45;cursor:not-allowed}
