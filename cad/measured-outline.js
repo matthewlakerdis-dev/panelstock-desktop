@@ -32,6 +32,15 @@ function dimensionPlacement(a,b,offset=26){
  const shift=p=>[p[0]+normal[0]*offset,p[1]+normal[1]*offset];
  return {start:shift(a),end:shift(b),center:shift([(a[0]+b[0])/2,(a[1]+b[1])/2])};
 }
+function bindDimensionHighlight(label,edge){
+ let selected=false,hovered=false,focused=false;
+ const paint=()=>{edge.setAttribute('opacity',selected||hovered||focused?1:0);label.setAttribute('aria-pressed',String(selected));};
+ label.onmouseenter=()=>{hovered=true;paint();};label.onmouseleave=()=>{hovered=false;paint();};
+ label.onfocus=()=>{focused=true;paint();};label.onblur=()=>{focused=false;paint();};
+ label.onclick=()=>{selected=!selected;paint();};
+ label.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();label.onclick();}else if(e.key==='Escape'){selected=false;paint();}};
+ paint();
+}
 function draw(svg,d,onPoint){
  const ns='http://www.w3.org/2000/svg',make=(tag,attrs,text)=>{const e=document.createElementNS(ns,tag);Object.entries(attrs).forEach(([k,v])=>e.setAttribute(k,v));if(text!==undefined)e.textContent=text;return e;};
  svg.replaceChildren();svg.dimensionPainters=[];svg.style.userSelect='none';svg.style.webkitUserSelect='none';svg.setAttribute('text-rendering','geometricPrecision');const ps=points(d);if(!ps.length||ps.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)))return;
@@ -73,7 +82,7 @@ function draw(svg,d,onPoint){
    }
   };svg.dimensionPainters.push(paintDimension);paintDimension(1);
   const edge=make('line',{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:'#007b9e','stroke-width':4,opacity:0,'pointer-events':'none'}),label=make('text',{'data-dimension-label':'',x:0,y:0,transform:'translate('+c.join(' ')+') rotate('+angle+')','text-anchor':'middle','dominant-baseline':'middle','font-size':14,'font-weight':500,fill:'#173f52',stroke:'#f7fafc','stroke-width':2,'paint-order':'stroke fill',tabindex:0,role:'button','aria-label':text+'. Highlight matching edge'},text);
-  svg.append(edge);dimensionLabels.push(label);label.onmouseenter=label.onfocus=()=>edge.setAttribute('opacity',1);label.onmouseleave=label.onblur=()=>edge.setAttribute('opacity',0);label.onclick=()=>edge.setAttribute('opacity',edge.getAttribute('opacity')==='1'?0:1);label.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();label.onclick();}};
+  svg.append(edge);dimensionLabels.push(label);bindDimensionHighlight(label,edge);
  });
  ps.forEach((p,i)=>{const [x,y]=map(p),g=make('g',onPoint?{role:'button',tabindex:0,'aria-label':'Point '+(i+1)}:{}),number=make('text',{x:x+8,y:y-9,'font-size':13,fill:'#14394a',visibility:'hidden'},i+1);
   g.append(make('title',{},'Point '+(i+1)),make('circle',{cx:x,cy:y,r:10,fill:'transparent'}),make('circle',{cx:x,cy:y,r:3,fill:'white',stroke:'#2d6074'}),number);
