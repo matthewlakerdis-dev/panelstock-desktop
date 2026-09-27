@@ -12,6 +12,14 @@ const projectBar=document.createElement('section');projectBar.innerHTML='<div cl
 $('workspace').prepend(projectBar);
 let projectRetryTimer=null,projectRetryAttempt=0;
 const retrySaveButton=document.createElement('button');retrySaveButton.type='button';retrySaveButton.textContent='Retry save';retrySaveButton.hidden=true;retrySaveButton.className='project-retry';$('projectstatus').after(retrySaveButton);
+function accountSaveErrorMessage(error){
+ const message=String(error?.message||'Unknown error');
+ if(message==='Invalid original PDFs.')return 'The original-file list was rejected. Reload the app and retry saving; if it persists, download a backup.';
+ if(/100 MB/.test(message))return 'This project exceeds the 100 MB account-save limit. Download a backup before splitting it into smaller projects.';
+ if(/Invalid original PDF reference/.test(message))return 'A panel has a missing original-file link. Download a backup before changing its source file.';
+ if(/Failed to fetch|NetworkError|network request failed/i.test(message))return 'Could not reach account storage. Check your connection and retry.';
+ return message;
+}
 function projectSaveStatus(state,text){$('projectstatus').dataset.state=state;$('projectstatus').textContent=text;retrySaveButton.hidden=!['offline','error','retrying'].includes(state);}
 function retryProjectSave(owner,id,delay){
  clearTimeout(projectRetryTimer);projectRetryTimer=setTimeout(()=>{
@@ -96,7 +104,7 @@ async function saveProject(){
   projectDirty=true;const offline=error.offline||window.navigator.onLine===false;
   const canRetry=localSaved&&!offline&&(!error.status||error.status===429||error.status>=500)&&projectRetryAttempt<5;
   const delay=Math.min(30000,2000*2**projectRetryAttempt);
-  projectSaveStatus(offline?'offline':canRetry?'retrying':'error',offline?(localSaved?'Offline — saved on this device. Account saving resumes when you reconnect.':'Offline — could not save on this device. Keep this page open and download a backup.'):'Account save failed: '+error.message+(localSaved?' Saved on this device.':' Keep this page open and download a backup.')+(canRetry?' Retrying in '+delay/1000+' seconds.':''));
+  projectSaveStatus(offline?'offline':canRetry?'retrying':'error',offline?(localSaved?'Offline — saved on this device. Account saving resumes when you reconnect.':'Offline — could not save on this device. Keep this page open and download a backup.'):'Account save failed: '+accountSaveErrorMessage(error)+(localSaved?' Saved on this device.':' Keep this page open and download a backup.')+(canRetry?' Retrying in '+delay/1000+' seconds.':''));
   if(canRetry){projectRetryAttempt++;retryProjectSave(owner,id,delay);}
  }throw error;}
 }
