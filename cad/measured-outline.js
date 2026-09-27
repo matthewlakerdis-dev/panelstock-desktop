@@ -37,13 +37,6 @@ function draw(svg,d,onPoint){
  ps.forEach((p,i)=>{
   const a=map(p),b=map(ps[(i+1)%ps.length]),e=d.measuredEdges[i],length=Math.hypot(b[0]-a[0],b[1]-a[1]);if(!length)return;
   const u=[(b[0]-a[0])/length,(b[1]-a[1])/length],n=[-u[1],u[0]],text=(Math.abs(e.dx)<.001?fmt(e.dy):Math.abs(e.dy)<.001?fmt(e.dx):fmt(e.dx)+' × '+fmt(e.dy))+' · '+e.code;
-  // Short sections show their measurements directly at the edge midpoint.
-  if(length<text.length*8+40){
-   const c=[(a[0]+b[0])/2,(a[1]+b[1])/2];
-   let angle=Math.atan2(u[1],u[0])*180/Math.PI;if(angle>90)angle-=180;if(angle<-90)angle+=180;
-   const label=make('text',{'data-edge-measurement':'',transform:'translate('+c.join(' ')+') rotate('+angle+')','text-anchor':'middle','dominant-baseline':'middle','font-size':12,'font-weight':500,fill:'#173f52',stroke:'#f7fafc','stroke-width':4,'paint-order':'stroke fill'},text);
-   svg.append(label);occupied.push([c[0]-12,c[1]-12,c[0]+12,c[1]+12]);return;
-  }
   let angle=Math.atan2(u[1],u[0])*180/Math.PI;if(angle>90)angle-=180;if(angle<-90)angle+=180;
   const textWidth=text.length*8+12,radians=angle*Math.PI/180,bw=Math.abs(Math.cos(radians))*textWidth+Math.abs(Math.sin(radians))*18,bh=Math.abs(Math.sin(radians))*textWidth+Math.abs(Math.cos(radians))*18;
   let offset=18,c,rect;

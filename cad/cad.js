@@ -478,7 +478,7 @@ function filterPanelRows(rows,query,status){
  const term=String(query||'').trim().toLowerCase();
  return rows.filter(row=>(!term||[row.p.spec?.panelId,row.p.name,row.p.file?.name].some(value=>String(value||'').toLowerCase().includes(term)))&&(status==='all'||(status==='generated'&&!!row.p.result?.dxf)||(status==='attention'&&row.reasons.length>0)));
 }
-const findPanelsButton=document.createElement('button');findPanelsButton.type='button';projectIcon(findPanelsButton,'Find panel','M21 21l-5-5M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z');navigator.append(findPanelsButton);
+const findPanelsButton=document.createElement('button');findPanelsButton.type='button';projectIcon(findPanelsButton,'Find panel','M21 21l-5-5M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z');navigator.append(findPanelsButton);navigator.append($('correctoutline'));
 findPanelsButton.onclick=()=>{
  if(busy)return;rememberPanel();
  const rows=panels.map((p,index)=>{let issues=[];try{if(p.spec)issues=currentIssues(structuredClone(p.spec));}catch{issues=['Review geometry.'];}return {p,index,reasons:fabricationReadiness(p,issues)};});
