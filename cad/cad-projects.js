@@ -24,6 +24,10 @@ function open(){return new Promise((resolve,reject)=>{const r=indexedDB.open('pa
 async function transaction(mode,action){const db=await open();try{return await new Promise((resolve,reject)=>{const tx=db.transaction('projects',mode),r=action(tx.objectStore('projects'));tx.oncomplete=()=>resolve(r.result);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||Error('Project save interrupted.'));});}finally{db.close();}}
 async function save(owner,id,data){if(!owner||!id)throw Error('Sign in before saving a project.');await transaction('readwrite',s=>s.put({...data,id:owner+'|'+id,owner,projectId:id}));}
 async function list(owner){return (await transaction('readonly',s=>s.getAll())).filter(p=>p.owner===owner).sort((a,b)=>b.updatedAt-a.updatedAt);}
+function mergeSaved(remote,local){
+ const device=new Map(local.map(p=>[p.projectId,p]));
+ return [...remote.map(p=>{const localCopy=device.get(p.projectId);device.delete(p.projectId);return {...p,localCopy};}),...device.values()];
+}
 async function remove(owner,id){if(!owner||!id)throw Error('Sign in before deleting a project.');await transaction('readwrite',s=>s.delete(owner+'|'+id));}
 async function backup(data){
  const clean=snapshot(data.panels,data.index,data.name);
@@ -104,5 +108,5 @@ async function restoreCloud(response,id,request){
  attachOriginals(data,originals);
  return snapshot(data.panels,Number.isInteger(data.index)?Math.max(0,Math.min(data.index,data.panels.length-1)):0,data.name);
 }
-window.PanelCadProjects={ownerKey,snapshot,save,list,remove,backup,restore,packCloud,saveCloud,restoreCloud};
+window.PanelCadProjects={ownerKey,snapshot,save,list,mergeSaved,remove,backup,restore,packCloud,saveCloud,restoreCloud};
 })();

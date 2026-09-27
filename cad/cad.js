@@ -90,12 +90,12 @@ function pickProject(items){return new Promise(resolve=>{
  const title=document.createElement('h2');title.id='project-picker-title';title.textContent='Open saved project';
  const description=document.createElement('p');description.textContent='Open an account project from any device, or a copy saved on this device.';header.append(eyebrow,title,description);dialog.append(header);
  const list=document.createElement('div');list.className='project-picker-list';list.setAttribute('role','group');list.setAttribute('aria-label','Saved projects');let selected=0;
- items.forEach((p,i)=>{const card=document.createElement('label');card.className='project-picker-card';const radio=document.createElement('input');radio.type='radio';radio.name='saved-project';radio.value=String(i);radio.checked=i===0;radio.onchange=()=>{selected=i;};
+ items.forEach((p,i)=>{const card=document.createElement('label');card.className='project-picker-card';const radio=document.createElement('input');radio.type='radio';radio.name='saved-project';radio.value=String(i);radio.checked=i===0;radio.onchange=()=>{selected=i;deviceCopyButton.disabled=!items[selected]?.localCopy;};
  const details=document.createElement('span');details.className='project-picker-details';const name=document.createElement('strong');name.textContent=p.name;
- const meta=document.createElement('span');meta.textContent=(p.cloud?'Account · ':'This device · ')+(p.panelCount??p.panels.length)+' panel'+((p.panelCount??p.panels.length)===1?'':'s')+' · Saved '+new Date(p.updatedAt).toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});details.append(name,meta);card.append(radio,details);list.append(card);});dialog.append(list);
+ const meta=document.createElement('span');meta.textContent=(p.cloud?'Account · ':'This device · ')+(p.panelCount??p.panels.length)+' panel'+((p.panelCount??p.panels.length)===1?'':'s')+' · Saved '+new Date(p.updatedAt).toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});if(p.localCopy&&p.localCopy.updatedAt>p.updatedAt)meta.textContent+=' · A newer device copy is available';details.append(name,meta);card.append(radio,details);list.append(card);});dialog.append(list);
  const footer=document.createElement('footer');footer.className='project-picker-footer';const open=document.createElement('button');open.textContent='Open project';open.className='primary';open.type='button';open.disabled=!items.length;const cancel=document.createElement('button');cancel.textContent='Cancel';cancel.type='button';footer.append(cancel,open);dialog.append(footer);
  const close=value=>{dialog.close();dialog.remove();resolve(value);};
- const actions=document.createElement('div');actions.className='project-management-actions';
+ const actions=document.createElement('div');actions.className='project-management-actions';const deviceCopyButton=document.createElement('button');deviceCopyButton.type='button';deviceCopyButton.textContent='Open device copy';deviceCopyButton.disabled=!items[selected]?.localCopy;deviceCopyButton.onclick=()=>close({action:'openlocal',item:items[selected].localCopy});if(items.some(p=>p.localCopy))actions.append(deviceCopyButton);
  for(const [action,label] of [['rename','Rename'],['duplicate','Duplicate'],['delete','Delete']]){const button=document.createElement('button');button.type='button';button.textContent=label;button.disabled=!items.length;if(action==='delete')button.className='danger';button.onclick=()=>close({action,item:items[selected]});actions.append(button);}footer.before(actions);
  open.onclick=()=>close({action:'open',item:items[selected]});cancel.onclick=()=>close(null);dialog.oncancel=e=>{e.preventDefault();close(null);};document.body.append(dialog);dialog.showModal();
 });}
@@ -136,9 +136,9 @@ $('openproject').onclick=()=>run(async()=>{
  while(owner===projectOwner()){
  const local=await PanelCadProjects.list(owner);let remote=[];
  try{remote=(await api('/cad/projects')).projects.map(p=>({...p,cloud:true}));}catch{notice('Account projects are unavailable. Showing this device’s copies.');}
- const items=[...remote,...local];if(!items.length){notice('No saved projects yet.');return;}
+ const items=PanelCadProjects.mergeSaved(remote,local);if(!items.length){notice('No saved projects yet.');return;}
  const choice=await pickProject(items);if(!choice||owner!==projectOwner())return;
- if(choice.action!=='open'){try{await manageSavedProject(choice.action,choice.item,owner);}catch(error){notice(error.conflict?'This project changed on another device. The list has been refreshed; choose it again.':error.message);}continue;}
+ if(!['open','openlocal'].includes(choice.action)){try{await manageSavedProject(choice.action,choice.item,owner);}catch(error){notice(error.conflict?'This project changed on another device. The list has been refreshed; choose it again.':error.message);}continue;}
  let saved=choice.item;
  if(saved.cloud){const id=saved.projectId,request=(...args)=>{if(projectOwner()!==owner)throw Error('Your account changed while opening the project.');return api(...args);},response=await request('/cad/projects/'+id);saved={...await PanelCadProjects.restoreCloud(response,id,request),projectId:id};cloudRevisions.set(owner+'|'+id,response.revision);}
  else {saved={...saved,projectId:crypto.randomUUID(),name:(saved.name+' (device copy)').slice(0,100)};}

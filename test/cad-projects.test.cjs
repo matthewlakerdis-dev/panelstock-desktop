@@ -17,4 +17,4 @@ test('failed saves reject so the UI cannot report a successful save',async()=>{
  fail=true;try{await assert.rejects(api.save('owner-a','1',api.snapshot([],0,'failed')),/Storage full/);}finally{fail=false;}
  assert.equal((await api.list('owner-a'))[0].name,'Job A');
 });
-
+test('project picker groups account and device copies by ID without discarding recovery data',()=>{const remote=[{projectId:'a',name:'Job',updatedAt:1,cloud:true}],local=[{projectId:'a',name:'Job',updatedAt:2,panels:[{draft:'new'}]},{projectId:'b',name:'Job',updatedAt:3,panels:[]}];const merged=api.mergeSaved(remote,local);assert.equal(merged.length,2);assert.equal(merged[0].cloud,true);assert.equal(merged[0].localCopy.panels[0].draft,'new');assert.equal(merged[1].projectId,'b');assert.equal(api.mergeSaved([],local).length,2);});
