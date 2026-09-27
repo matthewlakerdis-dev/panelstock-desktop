@@ -59,4 +59,8 @@ dialog.project-picker[open]{display:flex;flex-direction:column}
 .panel-finder .project-picker-footer{align-items:center;justify-content:space-between}
 .panel-finder .project-picker-footer>span{font-size:12px;color:#64748b}
 @media(max-width:560px){.panel-finder .panel-finder-controls{grid-template-columns:1fr}}
+.measurement-audit{margin-top:18px;border:1px solid #dbe3e8;border-radius:10px;padding:14px;background:#fff}
+.measurement-audit summary{cursor:pointer;font-weight:600;color:#155e75}
+.measurement-audit td:not(:first-child){font-variant-numeric:tabular-nums;white-space:nowrap}
+.measurement-audit .measurement-mismatch{background:#fff1ee;color:#9b2c20}
 
