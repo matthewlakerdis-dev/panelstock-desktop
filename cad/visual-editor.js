@@ -46,6 +46,8 @@ function render(rebuild=true){
  const closed=complete&&Math.hypot(x,y)<.001;
  if(closed)svg.append(el('polygon',{points:points.map(p=>map(p).join(',')).join(' '),fill:'#e6f0f3',stroke:'none'}));
  const foldValues=document.getElementById('folds').value.trim();
+ let markedLines=[];try{markedLines=JSON.parse(document.getElementById('folds').dataset.foldLines||'[]');}catch{}
+ if(closed)for(const fold of markedLines){if(!fold.start||!fold.end)continue;const a=map([fold.start.x,fold.start.y]),b=map([fold.end.x,fold.end.y]);svg.append(el('line',{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:'#b96c26','stroke-width':2,'stroke-dasharray':'7 5'}));}
  if(closed&&foldValues)foldValues.split(',').map(Number).filter(n=>Number.isFinite(n)&&n>0&&n<h).forEach(n=>{
   const level=minY+n;if(markedLines.some(f=>Math.abs(f.start.y-level)<.001&&Math.abs(f.end.y-level)<.001))return;const intersections=segments.filter(s=>level>Math.min(s.a[1],s.b[1])&&level<Math.max(s.a[1],s.b[1])).map(s=>s.a[0]).sort((a,b)=>a-b);
   for(let i=0;i+1<intersections.length;i+=2){const a=map([intersections[i],level]),b=map([intersections[i+1],level]);svg.append(el('line',{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:'#b96c26','stroke-width':2,'stroke-dasharray':'7 5'}));}
