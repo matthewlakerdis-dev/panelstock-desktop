@@ -17,3 +17,5 @@
 .sketch-reference-tools{align-items:center;flex-wrap:wrap;justify-content:flex-end}.sketch-zoom-status{font-size:12px;color:#64748b;min-width:4ch;text-align:right;font-variant-numeric:tabular-nums}
 
 .sketch-reference-scroll{cursor:grab}.sketch-reference-scroll.is-panning{cursor:grabbing;user-select:none}.sketch-reference-scroll img{user-select:none;-webkit-user-select:none}
+
+.sketch-navigation-help{margin:10px 16px;font-size:12px;color:#64748b}.sketch-navigation-help summary{cursor:pointer;color:#2c5d70}.sketch-navigation-help summary:focus-visible{outline:2px solid #087e8b;outline-offset:3px}.sketch-navigation-help>p{margin:8px 0;line-height:1.5}
