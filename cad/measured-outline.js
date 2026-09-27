@@ -40,12 +40,7 @@ function draw(svg,d,onPoint){
   // Small sections use keyed callouts instead of overlapping dimension arrows.
   if(length<text.length*8+40){
    const key=String.fromCharCode(65+details.length),mid=[(a[0]+b[0])/2,(a[1]+b[1])/2];
-   let c,rect;
-   for(let level=0;level<ps.length*3+1;level++){
-    const distance=20+level*26;c=[mid[0]+n[0]*distance,mid[1]+n[1]*distance];rect=[c[0]-12,c[1]-12,c[0]+12,c[1]+12];
-    if(!occupied.some(r=>rect[0]<r[2]+8&&rect[2]>r[0]-8&&rect[1]<r[3]+8&&rect[3]>r[1]-8))break;
-   }
-   svg.append(make('line',{x1:mid[0],y1:mid[1],x2:c[0],y2:c[1],stroke:'#547b8c','stroke-width':1,'pointer-events':'none'}));
+   const c=mid;
    details.push(key+'  '+text+' mm');
    svg.append(make('circle',{'data-callout-circle':'',cx:c[0],cy:c[1],r:10,fill:'#fff',stroke:'#547b8c','stroke-width':1}),make('text',{'data-callout-letter':'',x:c[0],y:c[1],'text-anchor':'middle','dominant-baseline':'middle','font-size':11,'font-weight':700,fill:'#173f52'},key));
    occupied.push([c[0]-12,c[1]-12,c[0]+12,c[1]+12]);return;
@@ -118,3 +113,4 @@ function addPreviewZoom(host,svg){
 function show(d){let host=document.getElementById('measured-panel-view');if(!host){host=document.createElement('div');host.id='measured-panel-view';}const table=document.querySelector('.tablewrap');const anchor=table.closest('.edge-details')||table;anchor.before(host);document.body.classList.toggle('has-measured-outline',!!d?.measuredEdges);host.hidden=!d?.measuredEdges;if(host.hidden)return;host.replaceChildren();const title=document.createElement('h3');title.textContent='Proposed sketch';title.className='proposed-sketch-title';const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.style.cssText='width:100%;max-height:620px;background:#f7fafc';host.append(title,svg);draw(svg,d);addPreviewZoom(host,svg);const note=document.createElement('p');note.textContent='Horizontal and vertical measurements define the shape. Finished dimensions are calculated in the generated preview.';host.append(note);const comparison=document.createElement('div');comparison.className='panel-comparison measured-comparison';const drawing=document.createElement('div');drawing.className='measured-comparison-drawing';while(host.firstChild)drawing.append(host.firstChild);comparison.append(drawing);host.append(comparison);}
 window.PanelMeasuredOutline={points,resolveFolds,splitEdge,validate,fromDraft,open,show};
 })();
+
