@@ -121,3 +121,5 @@ dialog.panel-finder{width:min(760px,calc(100vw - 32px))}
 @media(max-width:600px){.panel-finder button.panel-finder-item{grid-template-columns:minmax(0,1fr) auto}.panel-finder .panel-finder-item .panel-finder-meta{grid-column:1;grid-row:2}.panel-finder .panel-finder-item .panel-finder-badge{grid-column:2;grid-row:1}}
 
 .panel-finder .panel-draft-discard{align-self:flex-start;flex:none;height:auto;min-height:32px;margin-top:-4px;padding:5px 10px;font-size:12px;color:#8b5e20;background:#fff;border-color:#eadac1}
+
+.panel-draft-confirm{flex:none;padding:14px;border:1px solid #eadac1;border-radius:8px;background:#fffbf4}.panel-draft-confirm p{margin:0 0 12px;font-size:13px;line-height:1.5}.panel-draft-confirm button{margin-right:8px}.panel-draft-confirm .danger{color:#b42318;border-color:#efc4bf;background:#fff7f6}
