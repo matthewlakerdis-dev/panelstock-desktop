@@ -82,7 +82,7 @@ async function saveProject(){
   if(window.navigator.onLine===false){const error=Error('You are offline.');error.offline=true;throw error;}
   const request=(...args)=>{if(projectOwner()!==owner)throw Error('Your account changed during saving. The browser copy is retained.');return api(...args);};
   const progress=text=>{if(projectOwner()===owner&&projectId===id)projectSaveStatus('saving',text);};let response;
-  try{response=await PanelCadProjects.saveCloud(data,id,cloudRevisions.get(owner+'|'+id)||0,request,progress);}
+  try{response=await PanelCadProjects.saveCloud(data,id,cloudRevisions.get(owner+'|'+id)||0,request,progress,{scope:owner});}
   catch(error){if(!error.conflict)throw error;
    const copyId=crypto.randomUUID();data.name=(data.name+' (device copy)').slice(0,100);
    response=await PanelCadProjects.saveCloud(data,copyId,0,request,progress);

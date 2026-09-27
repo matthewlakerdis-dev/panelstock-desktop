@@ -65,7 +65,8 @@ function restore(text){
  return snapshot(data.panels,Number.isInteger(data.index)?Math.max(0,Math.min(data.index,data.panels.length-1)):0,data.name,data.uploadedFiles);
 }
 const CLOUD_LIMIT=100*1024*1024,CHUNK_SIZE=1024*1024;
-let cloudClientId=null;
+let cloudClientId=null;const savedContent=new Map();
+function projectContent(manifest){const value=structuredClone(manifest);delete value.project.index;delete value.project.updatedAt;for(const panel of value.project.panels){delete panel.message;delete panel.error;}return JSON.stringify(value);}
 async function hashBytes(value){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',value)),b=>b.toString(16).padStart(2,'0')).join('');}
 function toBase64(bytes){let binary='';for(let i=0;i<bytes.length;i+=32768)binary+=String.fromCharCode(...bytes.subarray(i,i+32768));return btoa(binary);}
 async function packCloud(data){
@@ -88,9 +89,12 @@ async function packCloud(data){
 }
 async function saveCloud(data,id,revision,request,progress=()=>{},options={}){
  progress('Preparing project…');const packed=await packCloud(data),base='/cad/projects/'+id;
+ const cacheKey=options.scope?options.scope+'|'+id:null,content=projectContent(packed.manifest),previous=cacheKey&&savedContent.get(cacheKey);
+ if(!options.importCopy&&previous?.revision===revision&&previous.content===content)return previous.response;
+ function remember(response){if(cacheKey&&!options.importCopy)savedContent.set(cacheKey,{content,revision:response.revision,response});return response;}
  cloudClientId||=crypto.randomUUID();
  const imported=options.importCopy?{importId:await hashBytes(new TextEncoder().encode(JSON.stringify(packed.manifest))),sourceUpdatedAt:data.updatedAt||0}:{};
- const prepared=await request(base+'/prepare',{revision,manifest:packed.manifest,clientId:cloudClientId,...imported});if(prepared.saved)return prepared;let completed=0;
+ const prepared=await request(base+'/prepare',{revision,manifest:packed.manifest,clientId:cloudClientId,...imported});if(prepared.saved)return remember(prepared);let completed=0;
  let next=0,failure=null;
  async function uploadNext(){while(!failure&&next<prepared.missing.length){
   const hash=prepared.missing[next++];
@@ -101,7 +105,7 @@ async function saveCloud(data,id,revision,request,progress=()=>{},options={}){
  }}
  await Promise.all(Array.from({length:Math.min(3,prepared.missing.length)},()=>uploadNext()));
  if(failure)throw failure;
- progress('Finishing account save…');return request(base+'/commit',{uploadId:prepared.uploadId});
+ progress('Finishing account save…');return remember(await request(base+'/commit',{uploadId:prepared.uploadId}));
 }
 async function restoreCloud(response,id,request){
  if(!response.manifest)return restore(response.project);
