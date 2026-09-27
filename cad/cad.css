@@ -125,3 +125,5 @@ dialog.panel-finder{width:min(760px,calc(100vw - 32px))}
 .panel-draft-confirm{flex:none;padding:14px;border:1px solid #eadac1;border-radius:8px;background:#fffbf4}.panel-draft-confirm p{margin:0 0 12px;font-size:13px;line-height:1.5}.panel-draft-confirm button{margin-right:8px}.panel-draft-confirm .danger{color:#b42318;border-color:#efc4bf;background:#fff7f6}
 
 .panel-attention-actions{flex:none;padding:0 12px 8px;font-size:12px}.panel-attention-actions summary{cursor:pointer;color:#8b5e20;padding:6px 0}.panel-attention-actions button{display:block;width:100%;height:auto;white-space:normal;text-align:left;padding:8px 10px;margin-top:6px;font-size:12px}
+
+.panel-number-jump{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;margin-top:12px}.panel-number-jump label{font-size:12px}.panel-number-jump input{width:110px;min-width:0}.panel-number-jump span{font-size:12px;color:#8b5e20;align-self:center}
