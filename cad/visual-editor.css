@@ -15,3 +15,5 @@
 .sketch-reference-scroll:focus-visible{outline:2px solid #087e8b;outline-offset:-2px}.sketch-reference-help{font-size:12px;color:#64748b;margin:10px 18px}
 
 .sketch-reference-tools{align-items:center;flex-wrap:wrap;justify-content:flex-end}.sketch-zoom-status{font-size:12px;color:#64748b;min-width:4ch;text-align:right;font-variant-numeric:tabular-nums}
+
+.sketch-reference-scroll{cursor:grab}.sketch-reference-scroll.is-panning{cursor:grabbing;user-select:none}.sketch-reference-scroll img{user-select:none;-webkit-user-select:none}
