@@ -26,39 +26,73 @@ function validate(d){
  else if(Math.abs(v.x*e.dx+v.y*e.dy)/(Math.hypot(v.x,v.y)*length)>1e-8)errors.push('Fold '+(c.fold+1)+' must meet edge '+(c.edge+1)+' at 90°.');}
  return [...new Set(errors)];
 }
+function dimensionPlacement(a,b,offset=26){
+ const length=Math.hypot(b[0]-a[0],b[1]-a[1]);
+ const normal=[-(b[1]-a[1])/length,(b[0]-a[0])/length];
+ const shift=p=>[p[0]+normal[0]*offset,p[1]+normal[1]*offset];
+ return {start:shift(a),end:shift(b),center:shift([(a[0]+b[0])/2,(a[1]+b[1])/2])};
+}
+function bindDimensionHighlight(label,edge){
+ let selected=false,hovered=false,focused=false;
+ const paint=()=>{edge.setAttribute('opacity',selected||hovered||focused?1:0);label.setAttribute('aria-pressed',String(selected));};
+ label.onmouseenter=()=>{hovered=true;paint();};label.onmouseleave=()=>{hovered=false;paint();};
+ label.onfocus=()=>{focused=true;paint();};label.onblur=()=>{focused=false;paint();};
+ label.onclick=()=>{selected=!selected;paint();};
+ label.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();label.onclick();}else if(e.key==='Escape'){selected=false;paint();}};
+ paint();
+}
 function draw(svg,d,onPoint){
  const ns='http://www.w3.org/2000/svg',make=(tag,attrs,text)=>{const e=document.createElementNS(ns,tag);Object.entries(attrs).forEach(([k,v])=>e.setAttribute(k,v));if(text!==undefined)e.textContent=text;return e;};
- svg.replaceChildren();const ps=points(d);if(!ps.length||ps.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)))return;
- const xs=ps.map(p=>p.x),ys=ps.map(p=>p.y),x0=Math.min(...xs),y0=Math.min(...ys),w=Math.max(...xs)-x0,h=Math.max(...ys)-y0,height=Math.max(550,ps.length*26+80),scale=Math.min(340/Math.max(w,1),(height-100)/Math.max(h,1));
+ svg.replaceChildren();svg.dimensionPainters=[];svg.style.userSelect='none';svg.style.webkitUserSelect='none';svg.setAttribute('text-rendering','geometricPrecision');const ps=points(d);if(!ps.length||ps.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)))return;
+ const xs=ps.map(p=>p.x),ys=ps.map(p=>p.y),x0=Math.min(...xs),y0=Math.min(...ys),w=Math.max(...xs)-x0,h=Math.max(...ys)-y0,height=Math.max(550,ps.length*26+80),scale=Math.min(540/Math.max(w,1),(height-100)/Math.max(h,1));
  const left=(760-w*scale)/2,bottom=(height+h*scale)/2,map=p=>[left+(p.x-x0)*scale,bottom-(p.y-y0)*scale];svg.setAttribute('viewBox','0 0 760 '+height);
  svg.append(make('polygon',{points:ps.map(p=>map(p).join(',')).join(' '),fill:'#e6f0f3',stroke:'#2d6074','stroke-width':2}));
  for(const f of d.measuredFolds||[]){if(!f.start||!f.end)continue;const a=map(f.start),b=map(f.end);svg.append(make('line',{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:'#ba7728','stroke-width':2,'stroke-dasharray':'8 5'}));}
- const fmt=n=>String(Number(Math.abs(n).toFixed(2))),occupied=[];
+ const fmt=n=>String(Number(Math.abs(n).toFixed(2))),occupied=[],details=[],dimensionLabels=[];
  ps.forEach((p,i)=>{
   const a=map(p),b=map(ps[(i+1)%ps.length]),e=d.measuredEdges[i],length=Math.hypot(b[0]-a[0],b[1]-a[1]);if(!length)return;
   const u=[(b[0]-a[0])/length,(b[1]-a[1])/length],n=[-u[1],u[0]],text=(Math.abs(e.dx)<.001?fmt(e.dy):Math.abs(e.dy)<.001?fmt(e.dx):fmt(e.dx)+' × '+fmt(e.dy))+' · '+e.code;
-  let angle=Math.atan2(u[1],u[0])*180/Math.PI;if(angle>90)angle-=180;if(angle<-90)angle+=180;
-  const textWidth=text.length*7.2+12,radians=angle*Math.PI/180,bw=Math.abs(Math.cos(radians))*textWidth+Math.abs(Math.sin(radians))*18,bh=Math.abs(Math.sin(radians))*textWidth+Math.abs(Math.cos(radians))*18;
-  let offset=18,c,rect;
-  for(let level=0;level<ps.length+1;level++){c=[(a[0]+b[0])/2+n[0]*offset,(a[1]+b[1])/2+n[1]*offset];rect=[c[0]-bw/2,c[1]-bh/2,c[0]+bw/2,c[1]+bh/2];if(!occupied.some(r=>rect[0]<r[2]+8&&rect[2]>r[0]-8&&rect[1]<r[3]+8&&rect[3]>r[1]-8))break;offset+=14;}occupied.push(rect);
-  const start=[a[0]+n[0]*offset,a[1]+n[1]*offset],end=[b[0]+n[0]*offset,b[1]+n[1]*offset];
+  let angle=Math.atan2(u[1],u[0])*180/Math.PI;if(angle>90)angle-=180;if(angle<-90)angle+=180;const vertical=Math.abs(u[0])<.001;if(vertical)angle=0;
+  const textWidth=text.length*8+12,radians=angle*Math.PI/180,bw=Math.abs(Math.cos(radians))*textWidth+Math.abs(Math.sin(radians))*18,bh=Math.abs(Math.sin(radians))*textWidth+Math.abs(Math.cos(radians))*18;
+  // Keep the fixed gap, switching sides when the notch is too narrow.
+  const mid=[(a[0]+b[0])/2,(a[1]+b[1])/2];
+  const blocked=ps.some((point,j)=>{
+   if(j===i)return false;
+   const q=map(point),r=map(ps[(j+1)%ps.length]),v=[r[0]-q[0],r[1]-q[1]],delta=[q[0]-mid[0],q[1]-mid[1]],den=n[0]*v[1]-n[1]*v[0];
+   if(Math.abs(den)<1e-8)return false;
+   const distance=(delta[0]*v[1]-delta[1]*v[0])/den,t=(delta[0]*n[1]-delta[1]*n[0])/den;
+   return distance>0.01&&distance<52&&t>=0&&t<=1;
+  });
+  if(blocked){n[0]*=-1;n[1]*=-1;}
+  const offset=26,{start,end,center:c}=dimensionPlacement(a,b,blocked?-offset:offset);
   const line=(a,b)=>svg.append(make('line',{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:'#334c59','stroke-width':1,'pointer-events':'none'}));
   for(const point of [a,b])line([point[0]+n[0]*5,point[1]+n[1]*5],[point[0]+n[0]*(offset+6),point[1]+n[1]*(offset+6)]);
-  const gap=textWidth/2,outer=length<textWidth+20;
-  if(outer){line([start[0]-u[0]*12,start[1]-u[1]*12],[end[0]+u[0]*12,end[1]+u[1]*12]);}else{line(start,[c[0]-u[0]*gap,c[1]-u[1]*gap]);line([c[0]+u[0]*gap,c[1]+u[1]*gap],end);}
-  for(const [tip,sign]of [[start,1],[end,-1]]){const inward=sign*(outer?-1:1);svg.append(make('polygon',{points:[tip,[tip[0]+u[0]*inward*7+n[0]*2.5,tip[1]+u[1]*inward*7+n[1]*2.5],[tip[0]+u[0]*inward*7-n[0]*2.5,tip[1]+u[1]*inward*7-n[1]*2.5]].map(p=>p.join(',')).join(' '),fill:'#334c59','pointer-events':'none'}));}
-  const edge=make('line',{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:'#007b9e','stroke-width':4,opacity:0,'pointer-events':'none'}),label=make('text',{x:0,y:0,transform:'translate('+c.join(' ')+') rotate('+angle+')','text-anchor':'middle','dominant-baseline':'middle','font-size':13,fill:'#173f52',stroke:'#f7fafc','stroke-width':4,'paint-order':'stroke fill',tabindex:0,role:'button','aria-label':text+'. Highlight matching edge'},text);
-  svg.append(edge,label);label.onmouseenter=label.onfocus=()=>edge.setAttribute('opacity',1);label.onmouseleave=label.onblur=()=>edge.setAttribute('opacity',0);label.onclick=()=>edge.setAttribute('opacity',edge.getAttribute('opacity')==='1'?0:1);
+  const dimensionGroup=make('g',{'pointer-events':'none'});svg.append(dimensionGroup);
+  const paintDimension=zoom=>{
+   dimensionGroup.replaceChildren();
+   const alongText=(vertical?20:textWidth)/zoom,gap=alongText/2,outer=length<alongText+20/zoom;
+   const stroke=(a,b)=>dimensionGroup.append(make('line',{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:'#334c59','stroke-width':1/zoom}));
+   if(outer){
+    const reach=Math.max(length/2+12/zoom,gap+8/zoom);
+    stroke(start,[c[0]-u[0]*reach,c[1]-u[1]*reach]);stroke(end,[c[0]+u[0]*reach,c[1]+u[1]*reach]);
+   }else{stroke(start,[c[0]-u[0]*gap,c[1]-u[1]*gap]);stroke([c[0]+u[0]*gap,c[1]+u[1]*gap],end);}
+   for(const [tip,sign]of [[start,1],[end,-1]]){
+    const inward=sign*(outer?-1:1);
+    dimensionGroup.append(make('polygon',{points:[tip,[tip[0]+u[0]*inward*7/zoom+n[0]*2.5/zoom,tip[1]+u[1]*inward*7/zoom+n[1]*2.5/zoom],[tip[0]+u[0]*inward*7/zoom-n[0]*2.5/zoom,tip[1]+u[1]*inward*7/zoom-n[1]*2.5/zoom]].map(p=>p.join(',')).join(' '),fill:'#334c59'}));
+   }
+  };svg.dimensionPainters.push(paintDimension);paintDimension(1);
+  const edge=make('line',{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:'#007b9e','stroke-width':4,opacity:0,'pointer-events':'none'}),label=make('text',{'data-dimension-label':'',x:0,y:0,transform:'translate('+c.join(' ')+') rotate('+angle+')','text-anchor':'middle','dominant-baseline':'middle','font-size':14,'font-weight':500,fill:'#173f52',stroke:'#f7fafc','stroke-width':2,'paint-order':'stroke fill',tabindex:0,role:'button','aria-label':text+'. Highlight matching edge'},text);
+  svg.append(edge);dimensionLabels.push(label);bindDimensionHighlight(label,edge);
  });
- const orientation={right:0,down:90,left:180,up:270},angle=orientation[d.panelDirection]??0;
- const identity=make('g',{transform:'translate(380 '+(height/2)+') rotate('+angle+') scale(0.6)','pointer-events':'none'});
- identity.append(make('text',{x:0,y:-10,'text-anchor':'middle','font-size':22,'font-weight':700,fill:'#173f52',stroke:'#e6f0f3','stroke-width':4,'paint-order':'stroke fill'},d.panelId||''));
- if(d.panelDirection in orientation)identity.append(make('path',{d:'M-35 12H35M23 2L35 12L23 22',fill:'none',stroke:'#23627c','stroke-width':3,'stroke-linecap':'round','stroke-linejoin':'round'}));
- svg.append(identity);
  ps.forEach((p,i)=>{const [x,y]=map(p),g=make('g',onPoint?{role:'button',tabindex:0,'aria-label':'Point '+(i+1)}:{}),number=make('text',{x:x+8,y:y-9,'font-size':13,fill:'#14394a',visibility:'hidden'},i+1);
   g.append(make('title',{},'Point '+(i+1)),make('circle',{cx:x,cy:y,r:10,fill:'transparent'}),make('circle',{cx:x,cy:y,r:3,fill:'white',stroke:'#2d6074'}),number);
   const select=()=>{svg.querySelectorAll('[data-point-number]').forEach(e=>e.setAttribute('visibility','hidden'));number.setAttribute('visibility','visible');onPoint?.(i);};number.setAttribute('data-point-number',i);g.onclick=select;g.onfocus=()=>number.setAttribute('visibility','visible');g.onblur=()=>number.setAttribute('visibility','hidden');g.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select();}};svg.append(g);
  });
+ svg.append(...dimensionLabels);
+ const drawingBounds=svg.getBBox(),legendY=drawingBounds.y+drawingBounds.height+32;
+ const arrows={right:'→',left:'←',up:'↑',down:'↓'};
+ svg.append(make('text',{x:drawingBounds.x,y:legendY,'font-size':13,'font-weight':700,fill:'#173f52'},[d.panelId,arrows[d.panelDirection]].filter(Boolean).join('  ')));
+ details.forEach((text,i)=>svg.append(make('text',{x:drawingBounds.x+(i%3)*180,y:legendY+26+Math.floor(i/3)*24,'font-size':14,fill:'#334c59'},text)));
  const bounds=svg.getBBox();svg.setAttribute('viewBox',[bounds.x-24,bounds.y-24,bounds.width+48,bounds.height+48].join(' '));
 }
 function legacyFolds(d){
@@ -68,7 +102,7 @@ function legacyFolds(d){
  for(const level of d.siteFolds){const xs=[];ps.forEach((a,i)=>{const b=ps[(i+1)%ps.length];if(level>Math.min(a.y,b.y)&&level<Math.max(a.y,b.y))xs.push(a.x+(level-a.y)*(b.x-a.x)/(b.y-a.y));});xs.sort((a,b)=>a-b);for(let i=0;i+1<xs.length;i+=2)folds.push({start:{x:xs[i],y:level},end:{x:xs[i+1],y:level}});}
  return folds;
 }
-function fromDraft(d){if(d?.measuredEdges)return {...structuredClone(d),measuredFolds:structuredClone(d.measuredFolds||[]),rightAngles:structuredClone(d.rightAngles||[]),reliefEnds:structuredClone(d.reliefEnds||[])};return {panelId:d?.panelId||'',panelDirection:d?.panelDirection||'none',measuredEdges:(d?.edges||[{direction:'right',site:1000,code:'B'},{direction:'up',site:800,code:'B'},{direction:'left',site:1000,code:'B'},{direction:'down',site:800,code:'B'}]).map(e=>({dx:(dirs[e.direction]?.[0]||0)*(e.site||0),dy:(dirs[e.direction]?.[1]||0)*(e.site||0),code:e.code||'B'})),measuredFolds:legacyFolds(d),rightAngles:[],reliefEnds:[],reviewed:false};}
+function fromDraft(d){if(d?.measuredEdges)return {...structuredClone(d),measuredFolds:structuredClone(d.measuredFolds||[]),rightAngles:structuredClone(d.rightAngles||[]),reliefEnds:structuredClone(d.reliefEnds||[])};return {panelId:d?.panelId||'',panelDirection:d?.panelDirection||'none',measuredEdges:(d?.edges||[{direction:'right',site:1000,code:'B'},{direction:'up',site:800,code:'B'},{direction:'left',site:1000,code:'B'},{direction:'down',site:800,code:'B'}]).map(e=>({dx:(dirs[e.direction]?.[0]||0)*(e.site||0),dy:(dirs[e.direction]?.[1]||0)*(e.site||0),code:e.code||'B',withTag:e.code==='FE'&&!!e.withTag})),measuredFolds:legacyFolds(d),rightAngles:[],reliefEnds:[],reviewed:false};}
 async function open(original,file){return new Promise(resolve=>{
  const d=fromDraft(original),dialog=document.createElement('dialog');dialog.className='outline-correction measured-dialog';
  dialog.innerHTML='<header><h2>Measured outline</h2><button data-cancel>Close</button></header><p>Enter the written horizontal and vertical distances between points. Right and up are positive; left and down are negative. Sloping edge length is calculated from both distances.</p><div class="trace-layout"><div><svg aria-label="Measured panel outline"></svg><button data-mark>Mark fold between two points</button><p data-mark-status></p><img data-reference alt="Original sketch" style="max-width:100%"></div><div><label>Panel ID<input data-id></label><label>Arrow<select data-arrow></select></label><div data-edges></div><button data-add>Add edge</button><h3>Folds and marked corners</h3><div data-folds></div></div></div><p role="status" data-status></p><footer><button data-cancel-bottom>Cancel</button><button data-apply>Apply measured outline</button></footer>';
@@ -82,28 +116,30 @@ async function open(original,file){return new Promise(resolve=>{
  for(const endpoint of [0,1]){const label=document.createElement('label');label.textContent=(endpoint?'End':'Start')+' — 90° to side ';const c=d.rightAngles.find(c=>c.fold===i&&c.end===endpoint);label.append(selectEdge(c?.edge,edge=>{d.rightAngles=d.rightAngles.filter(c=>c.fold!==i||c.end!==endpoint);if(edge!==undefined)d.rightAngles.push({fold:i,end:endpoint,edge});update();},'No right-angle mark'));box.append(label);
  const relief=document.createElement('label');relief.textContent=(endpoint?'End':'Start')+' relief through tag ';const r=d.reliefEnds.find(r=>r.fold===i&&r.end===endpoint);relief.append(selectEdge(r?.edge,edge=>{d.reliefEnds=d.reliefEnds.filter(r=>r.fold!==i||r.end!==endpoint);if(edge!==undefined)d.reliefEnds.push({fold:i,end:endpoint,edge});update();},'Normal side relief'));box.append(relief);}
  const remove=document.createElement('button');remove.textContent='Remove fold';remove.onclick=()=>{d.measuredFolds.splice(i,1);for(const key of ['rightAngles','reliefEnds'])d[key]=d[key].filter(c=>c.fold!==i).map(c=>({...c,fold:c.fold>i?c.fold-1:c.fold}));foldFields();update();};box.append(remove);host.append(box);});}
- function edgeFields(){const host=q('[data-edges]');host.replaceChildren();d.measuredEdges.forEach((e,i)=>{const box=document.createElement('fieldset'),title=document.createElement('legend');title.textContent='Edge '+(i+1);box.append(title);for(const [key,text]of [['dx','Horizontal mm'],['dy','Vertical mm']]){const label=document.createElement('label');label.textContent=text;const input=document.createElement('input');input.type='number';input.step='any';input.value=e[key];input.oninput=()=>{e[key]=input.value===''?null:Number(input.value);update();};label.append(input);box.append(label);}const select=document.createElement('select');select.setAttribute('aria-label','Edge '+(i+1)+' tag');codes.forEach(c=>select.append(new Option(c,c)));select.value=e.code;select.onchange=()=>{e.code=select.value;update();};box.append(select);const split=document.createElement('button');split.textContent='Add point on this edge';split.onclick=()=>{if(d.measuredEdges.length>=64)return;splitEdge(d,i);edgeFields();foldFields();update();};box.append(split);host.append(box);});}
+ function edgeFields(){const host=q('[data-edges]');host.replaceChildren();d.measuredEdges.forEach((e,i)=>{const box=document.createElement('fieldset'),title=document.createElement('legend');title.textContent='Edge '+(i+1);box.append(title);for(const [key,text]of [['dx','Horizontal mm'],['dy','Vertical mm']]){const label=document.createElement('label');label.textContent=text;const input=document.createElement('input');input.type='number';input.step='any';input.value=e[key];input.oninput=()=>{e[key]=input.value===''?null:Number(input.value);update();};label.append(input);box.append(label);}const select=document.createElement('select');select.setAttribute('aria-label','Edge '+(i+1)+' tag');codes.forEach(c=>select.append(new Option(c,c)));select.value=e.code;select.onchange=()=>{e.code=select.value;update();};box.append(select);const tagLabel=document.createElement('label');tagLabel.textContent='With tag';const tagCheck=document.createElement('input');tagCheck.type='checkbox';tagCheck.checked=e.code==='FE'&&!!e.withTag;tagLabel.prepend(tagCheck);tagLabel.hidden=e.code!=='FE';box.append(tagLabel);select.addEventListener('change',()=>{tagLabel.hidden=e.code!=='FE';if(e.code!=='FE'){e.withTag=false;tagCheck.checked=false;}update();});tagCheck.onchange=()=>{e.withTag=tagCheck.checked;if(d.outlineSections?.[i])d.outlineSections[i].withTag=e.withTag;update();};const split=document.createElement('button');split.textContent='Add point on this edge';split.onclick=()=>{if(d.measuredEdges.length>=64)return;splitEdge(d,i);edgeFields();foldFields();update();};box.append(split);host.append(box);});}
  q('[data-mark]').onclick=()=>{marking=!marking;start=null;q('[data-mark-status]').textContent=marking?'Choose two numbered points. Add separate edge sections where a fold meets a side.':'';};
  q('[data-add]').onclick=()=>{if(d.measuredEdges.length>=64)return;d.measuredEdges.push({dx:0,dy:0,code:'B'});edgeFields();foldFields();update();};
  q('[data-cancel]').onclick=q('[data-cancel-bottom]').onclick=()=>finish(null);dialog.oncancel=e=>{e.preventDefault();finish(null);};
  q('[data-apply]').onclick=()=>{resolveFolds(d);const errors=validate(d);if(errors.length){q('[data-status]').textContent=errors.join(' ');return;}d.panelId=q('[data-id]').value.trim();d.panelDirection=q('[data-arrow]').value;d.reviewed=false;finish(d);};
  edgeFields();foldFields();update();dialog.showModal();
 });}
-function addPreviewZoom(host,svg){
- const initial=svg.getAttribute('viewBox').split(' ').map(Number),controls=document.createElement('div');controls.style.cssText='display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0';
- const status=document.createElement('span');status.textContent='100%';status.setAttribute('aria-live','polite');
- let view=[...initial],drag=null;
- const paint=()=>{svg.setAttribute('viewBox',view.join(' '));status.textContent=Math.round(initial[2]/view[2]*100)+'%';};
+function addPreviewZoom(host,svg,heading){
+ let initial=svg.getAttribute('viewBox').split(' ').map(Number);const controls=document.createElement('div');controls.className='sketch-reference-tools';
+ const status=document.createElement('span');status.className='sketch-zoom-status';status.textContent='100%';status.setAttribute('aria-live','polite');
+ let view=[...initial],drag=null;const zoomButtons=[];
+ const paint=()=>{svg.setAttribute('viewBox',view.join(' '));const zoom=initial[2]/view[2];svg.dimensionPainters?.forEach(paint=>paint(zoom));svg.querySelectorAll('[data-dimension-label]').forEach(label=>{label.setAttribute('font-size',14/zoom);label.setAttribute('stroke-width',2/zoom);});svg.querySelectorAll('[data-dimension-arrow]').forEach(arrow=>{const [x,y]=arrow.getAttribute('data-dimension-arrow').split(',').map(Number);arrow.setAttribute('transform','translate('+x+' '+y+') scale('+(1/zoom)+') translate('+(-x)+' '+(-y)+')');});svg.querySelectorAll('[data-callout-circle]').forEach(marker=>{marker.setAttribute('r',10/zoom);marker.setAttribute('stroke-width',1/zoom);});svg.querySelectorAll('[data-callout-letter]').forEach(letter=>letter.setAttribute('font-size',11/zoom));svg.querySelectorAll('[data-edge-measurement]').forEach(label=>{label.setAttribute('font-size',12/zoom);label.setAttribute('stroke-width',4/zoom);});status.textContent=Math.round(zoom*100)+'%';zoomButtons[0].disabled=zoom>=8-1e-6;zoomButtons[1].disabled=zoom<=1+1e-6;zoomButtons[0].title=zoomButtons[0].disabled?'Maximum zoom reached':'Zoom in';zoomButtons[1].title=zoomButtons[1].disabled?'Minimum zoom reached':'Zoom out';};
  const zoom=(factor,cx=view[0]+view[2]/2,cy=view[1]+view[3]/2)=>{const width=Math.max(initial[2]/8,Math.min(initial[2],view[2]/factor)),ratio=width/view[2];view=[cx-(cx-view[0])*ratio,cy-(cy-view[1])*ratio,width,view[3]*ratio];paint();};
- for(const [label,action]of [['Zoom in',()=>zoom(1.3)],['Zoom out',()=>zoom(1/1.3)],['Fit panel',()=>{view=[...initial];paint();}]]){const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=action;controls.append(button);}controls.append(status);host.insertBefore(controls,svg);
- svg.style.touchAction='none';svg.style.cursor='grab';
+ for(const [label,action]of [['Zoom in',()=>zoom(1.3)],['Zoom out',()=>zoom(1/1.3)],['Fit panel',()=>{view=[...initial];paint();}]]){const button=document.createElement('button');button.type='button';button.textContent=label==='Zoom in'?'+':label==='Zoom out'?'−':'Fit';button.setAttribute('aria-label',label);button.title=label;button.onclick=action;zoomButtons.push(button);}controls.append(status,zoomButtons[1],zoomButtons[2],zoomButtons[0]);if(heading)heading.append(controls);else host.insertBefore(controls,svg);paint();
+ svg.setAttribute('tabindex','0');svg.setAttribute('aria-label','Proposed panel sketch. Use plus and minus to zoom, arrow keys to pan, or zero to fit the panel.');
+ svg.addEventListener('keydown',e=>{if(e.ctrlKey||e.metaKey||e.altKey||e.isComposing)return;if(e.key==='+'||e.key==='='){e.preventDefault();zoom(1.3);}else if(e.key==='-'){e.preventDefault();zoom(1/1.3);}else if(e.key==='0'){e.preventDefault();view=[...initial];paint();}else if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();const step=e.shiftKey?.25:.1;view[0]+=(e.key==='ArrowRight'?1:e.key==='ArrowLeft'?-1:0)*view[2]*step;view[1]+=(e.key==='ArrowDown'?1:e.key==='ArrowUp'?-1:0)*view[3]*step;paint();}});
+ svg.style.touchAction='none';svg.style.cursor='grab';svg.addEventListener('selectstart',e=>e.preventDefault());svg.addEventListener('dragstart',e=>e.preventDefault());
  svg.addEventListener('wheel',e=>{if(!e.ctrlKey)return;e.preventDefault();const p=new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());zoom(e.deltaY<0?1.15:1/1.15,p.x,p.y);},{passive:false});
  svg.addEventListener('pointerdown',e=>{if(e.button!==0||e.target.closest('[role=button]'))return;drag={x:e.clientX,y:e.clientY,view:[...view],inverse:svg.getScreenCTM().inverse()};svg.setPointerCapture(e.pointerId);svg.style.cursor='grabbing';});
  svg.addEventListener('pointermove',e=>{if(!drag)return;const a=new DOMPoint(drag.x,drag.y).matrixTransform(drag.inverse),b=new DOMPoint(e.clientX,e.clientY).matrixTransform(drag.inverse);view=[drag.view[0]+a.x-b.x,drag.view[1]+a.y-b.y,...drag.view.slice(2)];paint();});
  const stop=()=>{drag=null;svg.style.cursor='grab';};svg.addEventListener('pointerup',stop);svg.addEventListener('pointercancel',stop);
- const hint=document.createElement('p');hint.className='small';hint.textContent='Zoom with the buttons or Ctrl + scroll. Drag to pan. Hover or select a dimension to highlight its edge.';host.append(hint);
+ const hint=document.createElement('p');hint.className='small';hint.textContent='Zoom with the buttons or Ctrl + scroll. With the sketch focused, use + / − to zoom, arrow keys to pan (Shift for larger steps), and 0 to fit. Drag to pan. Hover or select a dimension to highlight its edge.';const help=document.createElement('details');help.className='sketch-navigation-help';const helpSummary=document.createElement('summary');helpSummary.textContent='Zoom and keyboard help';help.append(helpSummary,hint);host.insertBefore(help,svg);
+ return {reset(){initial=svg.getAttribute('viewBox').split(' ').map(Number);view=[...initial];drag=null;paint();}};
 }
-function show(d){let host=document.getElementById('measured-panel-view');if(!host){host=document.createElement('div');host.id='measured-panel-view';}const table=document.querySelector('.tablewrap');const anchor=table.closest('.edge-details')||table;anchor.before(host);document.body.classList.toggle('has-measured-outline',!!d?.measuredEdges);host.hidden=!d?.measuredEdges;if(host.hidden)return;host.replaceChildren();const title=document.createElement('h3');title.textContent='Measured panel outline';const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.style.cssText='width:100%;max-height:620px;background:#f7fafc';host.append(title,svg);draw(svg,d);addPreviewZoom(host,svg);const note=document.createElement('p');note.textContent='Horizontal and vertical measurements define the shape. Finished dimensions are calculated in the generated preview.';host.append(note);}
-window.PanelMeasuredOutline={points,resolveFolds,splitEdge,validate,fromDraft,open,show};
+function show(d){let host=document.getElementById('measured-panel-view');if(!host){host=document.createElement('div');host.id='measured-panel-view';}const table=document.querySelector('.tablewrap');const anchor=table.closest('.edge-details')||table;anchor.before(host);document.body.classList.toggle('has-measured-outline',!!d?.measuredEdges);host.hidden=!d?.measuredEdges;if(host.hidden)return;host.replaceChildren();const title=document.createElement('div');title.className='sketch-reference-heading';title.innerHTML='<div><strong>Proposed sketch</strong><small>Panel dimensions and folds</small></div>';const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.style.cssText='width:100%;max-height:620px;background:#f7fafc';host.append(title,svg);draw(svg,d);addPreviewZoom(host,svg,title);const note=document.createElement('p');note.textContent='Horizontal and vertical measurements define the shape. Finished dimensions are calculated in the generated preview.';host.append(note);const comparison=document.createElement('div');comparison.className='panel-comparison measured-comparison';const drawing=document.createElement('div');drawing.className='measured-comparison-drawing';while(host.firstChild)drawing.append(host.firstChild);comparison.append(drawing);const workspace=document.createElement('div');workspace.className='drawing-space';const heading=document.createElement('div');heading.className='drawing-heading';heading.innerHTML='<div><span class="editor-eyebrow">PANEL WORKSPACE</span><strong>Edit your panel</strong></div><span class="editor-hint">Select a dimension to highlight its edge</span>';workspace.append(heading,comparison);host.append(workspace);}
+window.PanelMeasuredOutline={points,resolveFolds,splitEdge,validate,fromDraft,open,show,addPreviewZoom};
 })();
-

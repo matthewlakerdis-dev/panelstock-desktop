@@ -6,8 +6,8 @@
 .embedded-cad .sidebar,.embedded-cad .topbar{display:none}.embedded-cad .app-content{margin-left:0}.embedded-cad main{padding:0;max-width:none}.embedded-cad{background:#f8fafc}
 .panel-navigator{display:flex;align-items:center;justify-content:center;gap:20px;padding:14px;margin:0 0 20px;border:1px solid #dbe3ef;border-radius:10px;background:#f8fafc}.panel-navigator>div{display:grid;text-align:center;gap:4px;min-width:140px;max-width:65%}.panel-navigator span{font-size:12px;color:#64748b;overflow-wrap:anywhere}.panel-navigator button{font-size:20px;color:#155e75}
 
-/* Give panel editing more screen space while retaining the full drawing. */
-
-
-/* Enlarge the actual main drawing, with scrolling when space is limited. */
-@media(min-width:761px){.drawing-canvas{overflow:hidden;min-height:0}.drawing-space .drawing-canvas svg{width:100%;min-width:0;min-height:340px;max-height:620px}}
+/* Fit the complete drawing and labels inside either comparison column. */
+.visual-editor .drawing-space .drawing-canvas>svg{width:100%;min-width:0;min-height:0;max-height:none;height:clamp(280px,65vh,620px);aspect-ratio:auto!important}
+.panel-comparison{min-width:0}.panel-comparison>div,.panel-comparison>aside{min-width:0;max-width:100%}
+.measured-comparison-drawing>svg{min-width:0;min-height:0;height:clamp(280px,60vh,580px);object-fit:contain}
+@media(max-width:600px){.visual-editor .drawing-space .drawing-canvas>svg{height:55vh;min-height:260px}.drawing-heading{flex-wrap:wrap}}

@@ -42,3 +42,30 @@
 
 .trace-canvas-area>svg[data-tool=fold] [data-edge]{pointer-events:stroke;cursor:crosshair}
 
+.trace-measure-source{display:block;font-size:12px;font-weight:400;color:#526675;line-height:18px}
+.trace-conflict{padding:12px;border-left:4px solid #c53030;background:#fff3f3;color:#842424;margin-top:10px}
+.trace-conflict p{margin:0 0 8px}
+.trace-conflict-constraint{border-left:4px solid #c53030;padding-left:8px;background:#fff3f3}
+
+/* Compact section card with a dedicated FE option row. */
+.trace-inline-editor{border:1px solid #dbe5eb;border-radius:14px;padding:14px;gap:12px;box-shadow:0 8px 28px #15203326}
+.trace-inline-editor>strong{font-size:16px;letter-spacing:-.2px}
+.trace-inline-editor .trace-tag-tools{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;grid-column:1/-1;padding:0 0 12px;border-bottom:1px solid #e7edf1}
+.trace-inline-editor .trace-tag-tools button{width:100%;height:34px;border-radius:7px}
+.trace-inline-editor .trace-shape-tools{gap:4px}
+.trace-inline-editor .trace-shape-tools button{width:32px;height:30px;min-height:30px}
+.trace-inline-editor label.trace-with-tag{grid-column:1/-1;display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f0f6f8;border:1px solid #dae7ec;border-radius:8px;color:#294d5e;font-size:13px;font-weight:600;cursor:pointer}
+.trace-inline-editor label.trace-with-tag[hidden]{display:none}
+.trace-inline-editor .trace-with-tag input[type=checkbox]{appearance:auto;flex:0 0 17px;width:17px;height:17px;min-height:0;margin:0;padding:0;accent-color:#23627c;cursor:pointer}
+.trace-inline-editor .trace-measure-field{font-size:13px;font-weight:600;color:#385362}
+.trace-inline-editor .trace-measure-source{font-size:11px;font-weight:400;color:#768895}
+.trace-inline-editor .trace-measure-field input{height:38px;border-radius:8px;margin-top:6px}
+.trace-inline-editor .trace-done{justify-self:end;min-width:94px;height:34px;border-radius:8px;font-size:14px}
+/* Drawing labels stay unselected while tracing or panning. */
+.outline-correction .trace-canvas-area>svg,.outline-correction .trace-canvas-area>svg *{user-select:none;-webkit-user-select:none}
+
+/* Keep sketch actions available while the dialog scrolls. */
+.outline-correction{overflow-y:auto;scroll-padding-bottom:110px}
+.outline-correction>footer{position:sticky;bottom:-24px;z-index:20;background:#fff;border-top:1px solid #dce5ec;box-shadow:0 -5px 14px #15203308;margin:20px -24px -24px;padding:16px 24px;flex-wrap:wrap;gap:10px}
+@media(max-width:600px){.outline-correction>footer{padding:12px 16px;gap:8px}.outline-correction>footer button{flex:1 1 auto}}
+

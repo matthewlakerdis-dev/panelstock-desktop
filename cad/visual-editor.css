@@ -1,1 +1,27 @@
 .visual-editor{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:24px;margin:24px 0}.drawing-space{border:1px solid #d5dfe8;border-radius:16px;overflow:hidden;background:#f8fafc}.drawing-heading{display:flex;justify-content:space-between;gap:16px;padding:18px 22px}.drawing-heading span{color:#617386;font-size:14px}.drawing-space svg{display:block;width:100%;max-height:560px;background-image:radial-gradient(#dce5ec 1px,transparent 1px);background-size:20px 20px}.edge-caption{font:14px system-ui;fill:#243d4b;paint-order:stroke;stroke:#f8fafc;stroke-width:5px;stroke-linejoin:round;cursor:pointer}.outline-edge{cursor:pointer}.outline-edge:focus{outline:none}.outline-edge:focus line:first-child{stroke:#bd5b17;stroke-width:8}.drawing-status{padding:0 20px;font-size:14px}.edge-picker{display:flex;gap:8px;flex-wrap:wrap;padding:12px 20px 20px}.edge-picker button{font-size:13px;padding:7px 10px}.edge-picker button[aria-pressed=true]{background:#087e8b;color:white;border-color:#087e8b}.edge-inspector{border:1px solid #d5dfe8;border-radius:16px;padding:20px;background:white}.edge-inspector h3{margin:0 0 20px}.edge-controls{display:grid;gap:14px}.edge-controls label{font-size:14px}.edge-controls input,.edge-controls select{width:100%;min-width:0}.edge-details summary{cursor:pointer;color:#2c5d70;padding:16px 0;font-weight:600}.edge-details{margin-bottom:14px}@media(max-width:950px){.visual-editor{grid-template-columns:1fr}.edge-controls{grid-template-columns:repeat(2,minmax(0,1fr))}.drawing-heading{flex-wrap:wrap}}@media(max-width:500px){.edge-controls{grid-template-columns:1fr}}
+
+.panel-comparison{display:grid;grid-template-columns:minmax(0,1fr)}.panel-comparison.has-reference{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.panel-comparison>.drawing-canvas{min-width:0}.panel-sketch-reference{min-width:0;background:#fff;border-left:1px solid #dce5eb}.panel-sketch-reference[hidden]{display:none}.sketch-reference-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid #e6edf1}.sketch-reference-heading strong{font-size:14px}.sketch-reference-heading small{display:block;color:#64748b;font-size:12px;margin-top:4px;overflow-wrap:anywhere}.sketch-reference-tools{display:flex;gap:5px}.sketch-reference-tools button{min-width:32px;padding:5px 8px;font-size:13px}.sketch-reference-scroll{overflow:auto;max-height:640px;padding:16px}.sketch-reference-scroll img{display:block;width:100%;max-width:none;height:auto}@media(max-width:800px){.panel-comparison.has-reference{grid-template-columns:1fr}.panel-sketch-reference{border-left:0;border-top:1px solid #dce5eb}.sketch-reference-scroll{max-height:420px}}
+.measured-comparison{border:1px solid #dce5eb;border-radius:14px;overflow:hidden;background:#f7fafc}.measured-comparison-drawing{min-width:0;padding:16px}.measured-comparison-drawing h3{margin-top:0}.measured-comparison .panel-sketch-reference{align-self:stretch}
+
+.proposed-sketch{min-width:0}.proposed-sketch>.sketch-reference-heading{background:#fff;min-height:69px;box-sizing:border-box}.measured-comparison-drawing .proposed-sketch-title{font-size:14px;padding:0 0 16px;border-bottom:1px solid #e6edf1;margin-bottom:14px}
+
+/* Keep dragging previews from selecting dimension text. */
+#measured-panel-view svg,.measured-dialog svg,.visual-editor .drawing-canvas svg{user-select:none;-webkit-user-select:none}
+
+#measured-panel-view{margin:24px 0}#measured-panel-view .measured-comparison{border:0;border-radius:0}.measured-comparison-drawing>.sketch-reference-heading{margin:-16px -16px 14px;background:#fff;min-height:69px;box-sizing:border-box}
+
+#measured-panel-view svg:focus-visible{outline:2px solid #087e8b;outline-offset:-2px}
+
+.sketch-reference-scroll:focus-visible{outline:2px solid #087e8b;outline-offset:-2px}.sketch-reference-help{font-size:12px;color:#64748b;margin:10px 18px}
+
+.sketch-reference-tools{align-items:center;flex-wrap:wrap;justify-content:flex-end}.sketch-zoom-status{font-size:12px;color:#64748b;min-width:4ch;text-align:right;font-variant-numeric:tabular-nums}
+
+.sketch-reference-scroll{cursor:grab}.sketch-reference-scroll.is-panning{cursor:grabbing;user-select:none}.sketch-reference-scroll img{user-select:none;-webkit-user-select:none}
+
+.sketch-navigation-help{margin:10px 16px;font-size:12px;color:#64748b}.sketch-navigation-help summary{cursor:pointer;color:#2c5d70}.sketch-navigation-help summary:focus-visible{outline:2px solid #087e8b;outline-offset:3px}.sketch-navigation-help>p{margin:8px 0;line-height:1.5}
+
+.sketch-load-status{padding:16px;margin:0;color:#64748b;font-size:13px;line-height:1.5}
+
+.sketch-retry{margin:10px 18px;font-size:13px}
+
+.sketch-reference-scroll img[hidden]{display:none}
