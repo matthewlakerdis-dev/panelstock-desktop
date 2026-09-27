@@ -9,6 +9,15 @@ $('questions').before(navigator);
 let projectId=null,projectName='Untitled project',projectTimer=null,projectSaveChain=Promise.resolve(),projectRevision=0,projectDirty=false;
 const projectBar=document.createElement('section');projectBar.innerHTML='<div class="row"><label>Project name<input id="projectname" maxlength="100" value="Untitled project"></label><button id="saveproject" type="button">Save project</button><button id="openproject" type="button">Open project</button><button id="newproject" type="button">New project</button></div><p id="projectstatus" role="status">Projects save in this browser on this device.</p>';
 $('workspace').prepend(projectBar);
+for(const [id,label,path] of [
+ ['saveproject','Save project','M5 3h12l4 4v14H3V3h2ZM7 3v6h10V3M7 21v-8h10v8M14 5v2'],
+ ['openproject','Open project','M3 10V5h6l2 2h9v3M3 10h19l-4 10H2l1-10Z'],
+ ['newproject','New project','M14 2H4v20h16V8l-6-6ZM14 2v6h6M12 12v6M9 15h6']
+]){
+ const button=$(id);button.style.cssText='display:inline-flex;align-items:center;justify-content:center;gap:8px';
+ button.innerHTML='<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="flex:none"><path d="'+path+'"/></svg><span>'+label+'</span>';
+ button.title=label;
+}
 function projectOwner(){return session?.username?PanelCadProjects.ownerKey(API,session.username):null;}
 function queueProjectSave(){
  if(!projectOwner()||!panels.length)return;
@@ -231,15 +240,16 @@ function chooseCombinedDrawings(){return new Promise(resolve=>{
  document.body.append(dialog);update();dialog.showModal();
 });}
 function batchSummary(items){
+ const roundLength=length=>Number.isFinite(length)?Math.ceil(length/5)*5:length;
  const panelCounts=new Map(),lengthCounts=new Map();let stiffeners=0,unknownLengths=0;const tags=[];let missingTags=0;
  for(const item of items){
   panelCounts.set(item.name,(panelCounts.get(item.name)||0)+1);
   const v=item.drawing.validation||{};
-  if(!Array.isArray(v.fabricationTags))missingTags++;else for(const tag of v.fabricationTags)tags.push([item.name,tag.edge,tag.type,tag.length,tag.quantity]);
+  if(!Array.isArray(v.fabricationTags))missingTags++;else for(const tag of v.fabricationTags)tags.push([item.name,tag.edge,tag.type,roundLength(tag.length),tag.quantity]);
   for(const plan of v.stiffeners||(v.stiffener?[v.stiffener]:[])){
    stiffeners++;const length=plan.length??(plan.start&&plan.end?Math.hypot(plan.end[0]-plan.start[0],plan.end[1]-plan.start[1]):null);
    if(!Number.isFinite(length)||length<=0){unknownLengths++;continue;}
-   const key=Number(length.toFixed(2));lengthCounts.set(key,(lengthCounts.get(key)||0)+1);
+   const key=roundLength(length);lengthCounts.set(key,(lengthCounts.get(key)||0)+1);
   }
  }
  return {panels:[...panelCounts],lengths:[...lengthCounts].sort((a,b)=>a[0]-b[0]),count:items.length,stiffeners,unknownLengths,tags,missingTags};
@@ -265,7 +275,7 @@ summaryButton.onclick=()=>{
  const tagNote=document.createElement('p');tagNote.textContent='B/S tag lengths include 5 mm beyond the outer edge of each end hole. Separate pieces are listed for uninterrupted spans with holes.'+(summary.missingTags?' '+summary.missingTags+' drawings need regenerating to calculate their tags.':'');dialog.append(tagNote);
  addTable('Panels',['Panel ID','Drawings'],summary.panels);addTable('Stiffeners',['Required length (mm)','Quantity'],summary.lengths);
  if(summary.unknownLengths){const warning=document.createElement('p');warning.textContent=summary.unknownLengths+' stiffener lengths are unavailable. Regenerate those drawings.';dialog.append(warning);}
- const note=document.createElement('p');note.textContent='Quantities count generated drawings in this project. Identical panel IDs are grouped; dimensions should still be reviewed.';dialog.append(note);
+ const note=document.createElement('p');note.textContent='Tag and stiffener cut lengths are rounded up to the next 5 mm. Quantities count generated drawings in this project. Identical panel IDs are grouped; dimensions should still be reviewed.';dialog.append(note);
  const print=document.createElement('button');print.type='button';print.textContent='Print summary / Save PDF';print.onclick=()=>printDrawingSummary(dialog,title.textContent);dialog.append(print);
  const close=document.createElement('button');close.type='button';close.textContent='Close';close.onclick=()=>dialog.close();dialog.onclose=()=>dialog.remove();dialog.append(close);document.body.append(dialog);dialog.showModal();
 };
