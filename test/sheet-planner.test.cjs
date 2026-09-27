@@ -1,8 +1,13 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
-const c={window:{}};vm.runInNewContext(fs.readFileSync(require('node:path').join(__dirname,'../cad/sheet-planner.js'),'utf8'),c);const {availableStock}=c.window.PanelSheetPlanner;
+const c={window:{},crypto:require('node:crypto').webcrypto};vm.runInNewContext(fs.readFileSync(require('node:path').join(__dirname,'../cad/sheet-planner.js'),'utf8'),c);const {availableStock}=c.window.PanelSheetPlanner;
 test('SOH availability excludes each scheduled CNC sheet once without stock changes',()=>{
  const item={id:'s',qty:3,width:100,height:200,material:'ACP',color:'White',thickness:4};const p={stockItemType:'variant',stockItemId:'s',sheetNumber:'1',status:'pending'};
  const data={variants:[item],offcuts:[{...item,id:'o',qty:1}],cncPanels:[p,{...p,panelNumber:'2'},{...p,sheetNumber:'2',status:'completed'}]};const before=JSON.stringify(data),r=availableStock(data);
  assert.equal(JSON.stringify(data),before);assert.equal(r.find(s=>s.id==='s').quantity,2);assert.equal(r.find(s=>s.id==='o').quantity,1);assert.equal(r[0].width,200);assert.equal(r[0].height,100);
 });
 test('unavailable or incomplete stock is excluded',()=>{assert.equal(availableStock({variants:[{id:'x',qty:0},{id:'y',qty:2,width:100,height:200}]}).length,0);});
+
+const {trackerPacket}=c.window.PanelSheetPlanner;
+function fixture(){const stock={id:'s',type:'variant',sku:'S',qty:2,width:2400,height:1200,material:'Aluminium',color:'White',thickness:3};return {data:{variants:[stock],cncPanels:[],restoreEpoch:4},plan:{unplaced:[],sheets:[{stock,panels:[{name:'A',copy:1,area:0.5},{name:'B',copy:1,area:0.3}]}]}};}
+test('CNC handoff creates pending panels and an audit entry without stock changes',()=>{const {data,plan}=fixture(),before=JSON.stringify(data);let n=0;const packet=trackerPacket(plan,data,'7','Job',3,()=>String(++n));assert.equal(JSON.stringify(data),before);assert.equal(packet.restoreEpoch,4);assert.deepEqual(Array.from(packet.changes,c=>c.field),['cncPanels','cncPanels','transactions']);assert.equal(packet.changes[0].after.status,'pending');assert.equal(packet.changes[0].after.sheetNumber,'3');assert.equal(packet.changes[0].after.totalPanelArea,.5);});
+test('CNC handoff refuses partial plans, stale stock and duplicate references',()=>{const {data,plan}=fixture();plan.unplaced.push({name:'X'});assert.throws(()=>trackerPacket(plan,data,'7','Job',1),/Place every/);plan.unplaced=[];data.variants[0].qty=0;assert.throws(()=>trackerPacket(plan,data,'7','Job',1),/Stock has changed/);data.variants[0].qty=2;data.cncPanels.push({jobReference:'Job',orderNumber:'7',sheetNumber:'1',panelNumber:'A',status:'completed'});assert.throws(()=>trackerPacket(plan,data,'7','Job',1),/already scheduled/);});
