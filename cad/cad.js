@@ -490,10 +490,30 @@ readinessButton.onclick=()=>{
  if(busy)return;rememberPanel();
  const finderKey=projectId||panels[0]||'empty',preferences=panelFinderPreferences.get(finderKey)||{query:'',status:'all'};
  const rows=panels.map((p,index)=>{let issues=[];try{if(p.spec)issues=currentIssues(structuredClone(p.spec));}catch{issues=['Review the panel geometry.'];}return {p,index,reasons:fabricationReadiness(p,issues)};});
- const dialog=document.createElement('dialog');dialog.className='drawing-summary';dialog.setAttribute('aria-labelledby','readiness-title');
- const header=document.createElement('header');header.className='summary-header';const title=document.createElement('h2');title.id='readiness-title';title.textContent='Fabrication readiness';const count=document.createElement('p');count.textContent=rows.length?rows.filter(r=>!r.reasons.length).length+' of '+rows.length+' panels ready.':'Add a panel to begin.';header.append(title,count);dialog.append(header);
+ const ready=rows.filter(row=>!row.reasons.length).length,attention=rows.length-ready;
+ const dialog=document.createElement('dialog');dialog.className='drawing-summary readiness-dialog';dialog.setAttribute('aria-labelledby','readiness-title');
+ const header=document.createElement('header');header.className='summary-header';
+ const title=document.createElement('h2');title.id='readiness-title';title.textContent='Fabrication readiness';
+ const count=document.createElement('p');count.className='readiness-overview';count.textContent=!rows.length?'Add a panel to begin.':attention?ready+' of '+rows.length+' panels ready · '+attention+' need attention':'All '+ready+' panels ready';
+ header.append(title,count);
+ if(rows.length){const progress=document.createElement('progress');progress.max=rows.length;progress.value=ready;progress.setAttribute('aria-label','Panels ready for fabrication');header.append(progress);}
+ dialog.append(header);
  const body=document.createElement('div');body.className='summary-body';
- for(const {p,index,reasons} of rows){const card=document.createElement('section');card.className='readiness-card';const heading=document.createElement('h3');heading.textContent=(p.spec?.panelId||p.name||'Panel '+(index+1))+' · '+(reasons.length?'Needs attention':'Ready');card.append(heading);if(reasons.length){const list=document.createElement('ul');for(const reason of reasons){const li=document.createElement('li');li.textContent=reason;list.append(li);}card.append(list);const jump=document.createElement('button');jump.type='button';jump.textContent='Review panel';jump.onclick=()=>{dialog.close();selectPanel(index);$('correctoutline').scrollIntoView({block:'center',behavior:'smooth'});$('correctoutline').focus({preventScroll:true});};card.append(jump);}body.append(card);}dialog.append(body);
+ for(const {p,index,reasons} of [...rows].sort((a,b)=>Number(!!b.reasons.length)-Number(!!a.reasons.length)||a.index-b.index)){
+  const card=document.createElement('section');card.className='readiness-card'+(reasons.length?' needs-attention':'');
+  const top=document.createElement('div');top.className='readiness-row';
+  const identity=document.createElement('div');identity.className='readiness-identity';
+  const heading=document.createElement('h3');heading.textContent=p.spec?.panelId||p.name||'Panel '+(index+1);
+  const meta=document.createElement('span');meta.className='readiness-meta';meta.textContent='Panel '+(index+1)+' · Qty '+(p.quantity||1)+(index===panelIndex?' · Current panel':'');
+  identity.append(heading,meta);
+  const badge=document.createElement('span');badge.className='readiness-badge';badge.textContent=reasons.length?'Needs attention':'✓ Ready';
+  const jump=document.createElement('button');jump.type='button';jump.className='readiness-open';jump.textContent=reasons.length?'Review':'Open';jump.setAttribute('aria-label',(reasons.length?'Review ':'Open ')+heading.textContent);
+  jump.onclick=()=>{dialog.close();selectPanel(index);$('correctoutline').scrollIntoView({block:'center',behavior:'smooth'});$('correctoutline').focus({preventScroll:true});};
+  top.append(identity,badge,jump);card.append(top);
+  if(reasons.length){const list=document.createElement('ul');for(const reason of reasons){const li=document.createElement('li');li.textContent=reason;list.append(li);}card.append(list);}
+  body.append(card);
+ }
+ dialog.append(body);
  const footer=document.createElement('footer');footer.className='summary-footer';const close=document.createElement('button');close.type='button';close.textContent='Close';close.onclick=()=>dialog.close();footer.append(close);dialog.append(footer);dialog.onclose=()=>dialog.remove();document.body.append(dialog);dialog.showModal();
 };
 function nextAttentionPanel(rows,current){
