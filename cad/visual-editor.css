@@ -11,3 +11,5 @@
 #measured-panel-view{margin:24px 0}#measured-panel-view .measured-comparison{border:0;border-radius:0}.measured-comparison-drawing>.sketch-reference-heading{margin:-16px -16px 14px;background:#fff;min-height:69px;box-sizing:border-box}
 
 #measured-panel-view svg:focus-visible{outline:2px solid #087e8b;outline-offset:-2px}
+
+.sketch-reference-scroll:focus-visible{outline:2px solid #087e8b;outline-offset:-2px}.sketch-reference-help{font-size:12px;color:#64748b;margin:10px 18px}
