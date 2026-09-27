@@ -51,4 +51,12 @@ dialog.project-picker[open]{display:flex;flex-direction:column}
 @media(max-width:560px){.project-picker .project-picker-header{padding:20px}.project-picker .project-picker-list{padding:16px 20px}.project-picker .project-picker-footer{padding:14px 20px}.project-picker .project-picker-card{padding:14px}}
 .drawing-summary .readiness-card{padding:16px;border:1px solid #e2e8f0;border-radius:10px;margin:0 0 12px;background:#fafcfd}
 .drawing-summary .readiness-card ul{margin:10px 0 16px;padding-left:20px;color:#64748b;font-size:13px;line-height:1.7}
+.panel-finder .panel-finder-controls{display:grid;grid-template-columns:minmax(0,1fr) 170px;gap:12px;margin-top:18px}
+.panel-finder .panel-finder-controls label{margin:0}
+.panel-finder .panel-finder-item{display:grid;gap:5px;text-align:left;padding:14px 16px;width:100%;white-space:normal;overflow-wrap:anywhere}
+.panel-finder .panel-finder-item strong{font-size:14px;color:#243c49}
+.panel-finder .panel-finder-item span{font-size:12px;font-weight:400;color:#64748b}
+.panel-finder .project-picker-footer{align-items:center;justify-content:space-between}
+.panel-finder .project-picker-footer>span{font-size:12px;color:#64748b}
+@media(max-width:560px){.panel-finder .panel-finder-controls{grid-template-columns:1fr}}
 
