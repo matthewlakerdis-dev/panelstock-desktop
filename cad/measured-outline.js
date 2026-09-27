@@ -28,7 +28,7 @@ function validate(d){
 }
 function draw(svg,d,onPoint){
  const ns='http://www.w3.org/2000/svg',make=(tag,attrs,text)=>{const e=document.createElementNS(ns,tag);Object.entries(attrs).forEach(([k,v])=>e.setAttribute(k,v));if(text!==undefined)e.textContent=text;return e;};
- svg.replaceChildren();const ps=points(d);if(!ps.length||ps.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)))return;
+ svg.replaceChildren();svg.style.userSelect='none';svg.style.webkitUserSelect='none';svg.setAttribute('text-rendering','geometricPrecision');const ps=points(d);if(!ps.length||ps.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)))return;
  const xs=ps.map(p=>p.x),ys=ps.map(p=>p.y),x0=Math.min(...xs),y0=Math.min(...ys),w=Math.max(...xs)-x0,h=Math.max(...ys)-y0,height=Math.max(550,ps.length*26+80),scale=Math.min(540/Math.max(w,1),(height-100)/Math.max(h,1));
  const left=(760-w*scale)/2,bottom=(height+h*scale)/2,map=p=>[left+(p.x-x0)*scale,bottom-(p.y-y0)*scale];svg.setAttribute('viewBox','0 0 760 '+height);
  svg.append(make('polygon',{points:ps.map(p=>map(p).join(',')).join(' '),fill:'#e6f0f3',stroke:'#2d6074','stroke-width':2}));
@@ -38,14 +38,14 @@ function draw(svg,d,onPoint){
   const a=map(p),b=map(ps[(i+1)%ps.length]),e=d.measuredEdges[i],length=Math.hypot(b[0]-a[0],b[1]-a[1]);if(!length)return;
   const u=[(b[0]-a[0])/length,(b[1]-a[1])/length],n=[-u[1],u[0]],text=(Math.abs(e.dx)<.001?fmt(e.dy):Math.abs(e.dy)<.001?fmt(e.dx):fmt(e.dx)+' × '+fmt(e.dy))+' · '+e.code;
   // Small sections use keyed callouts instead of overlapping dimension arrows.
-  if(length<text.length*7.2+40){
+  if(length<text.length*8+40){
    const key=String.fromCharCode(65+details.length),c=[(a[0]+b[0])/2+n[0]*14,(a[1]+b[1])/2+n[1]*14];
    details.push(key+'  '+text+' mm');
    svg.append(make('circle',{cx:c[0],cy:c[1],r:10,fill:'#fff',stroke:'#547b8c','stroke-width':1}),make('text',{x:c[0],y:c[1],'text-anchor':'middle','dominant-baseline':'middle','font-size':11,'font-weight':700,fill:'#173f52'},key));
    occupied.push([c[0]-12,c[1]-12,c[0]+12,c[1]+12]);return;
   }
   let angle=Math.atan2(u[1],u[0])*180/Math.PI;if(angle>90)angle-=180;if(angle<-90)angle+=180;
-  const textWidth=text.length*7.2+12,radians=angle*Math.PI/180,bw=Math.abs(Math.cos(radians))*textWidth+Math.abs(Math.sin(radians))*18,bh=Math.abs(Math.sin(radians))*textWidth+Math.abs(Math.cos(radians))*18;
+  const textWidth=text.length*8+12,radians=angle*Math.PI/180,bw=Math.abs(Math.cos(radians))*textWidth+Math.abs(Math.sin(radians))*18,bh=Math.abs(Math.sin(radians))*textWidth+Math.abs(Math.cos(radians))*18;
   let offset=18,c,rect;
   for(let level=0;level<ps.length+1;level++){c=[(a[0]+b[0])/2+n[0]*offset,(a[1]+b[1])/2+n[1]*offset];rect=[c[0]-bw/2,c[1]-bh/2,c[0]+bw/2,c[1]+bh/2];if(!occupied.some(r=>rect[0]<r[2]+8&&rect[2]>r[0]-8&&rect[1]<r[3]+8&&rect[3]>r[1]-8))break;offset+=14;}occupied.push(rect);
   const start=[a[0]+n[0]*offset,a[1]+n[1]*offset],end=[b[0]+n[0]*offset,b[1]+n[1]*offset];
@@ -54,7 +54,7 @@ function draw(svg,d,onPoint){
   const gap=textWidth/2,outer=length<textWidth+20;
   if(outer){line([start[0]-u[0]*12,start[1]-u[1]*12],[end[0]+u[0]*12,end[1]+u[1]*12]);}else{line(start,[c[0]-u[0]*gap,c[1]-u[1]*gap]);line([c[0]+u[0]*gap,c[1]+u[1]*gap],end);}
   for(const [tip,sign]of [[start,1],[end,-1]]){const inward=sign*(outer?-1:1);svg.append(make('polygon',{points:[tip,[tip[0]+u[0]*inward*7+n[0]*2.5,tip[1]+u[1]*inward*7+n[1]*2.5],[tip[0]+u[0]*inward*7-n[0]*2.5,tip[1]+u[1]*inward*7-n[1]*2.5]].map(p=>p.join(',')).join(' '),fill:'#334c59','pointer-events':'none'}));}
-  const edge=make('line',{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:'#007b9e','stroke-width':4,opacity:0,'pointer-events':'none'}),label=make('text',{x:0,y:0,transform:'translate('+c.join(' ')+') rotate('+angle+')','text-anchor':'middle','dominant-baseline':'middle','font-size':13,fill:'#173f52',stroke:'#f7fafc','stroke-width':4,'paint-order':'stroke fill',tabindex:0,role:'button','aria-label':text+'. Highlight matching edge'},text);
+  const edge=make('line',{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:'#007b9e','stroke-width':4,opacity:0,'pointer-events':'none'}),label=make('text',{x:0,y:0,transform:'translate('+c.join(' ')+') rotate('+angle+')','text-anchor':'middle','dominant-baseline':'middle','font-size':14,'font-weight':500,fill:'#173f52',stroke:'#f7fafc','stroke-width':2,'paint-order':'stroke fill',tabindex:0,role:'button','aria-label':text+'. Highlight matching edge'},text);
   svg.append(edge,label);label.onmouseenter=label.onfocus=()=>edge.setAttribute('opacity',1);label.onmouseleave=label.onblur=()=>edge.setAttribute('opacity',0);label.onclick=()=>edge.setAttribute('opacity',edge.getAttribute('opacity')==='1'?0:1);
  });
  ps.forEach((p,i)=>{const [x,y]=map(p),g=make('g',onPoint?{role:'button',tabindex:0,'aria-label':'Point '+(i+1)}:{}),number=make('text',{x:x+8,y:y-9,'font-size':13,fill:'#14394a',visibility:'hidden'},i+1);
@@ -64,7 +64,7 @@ function draw(svg,d,onPoint){
  const drawingBounds=svg.getBBox(),legendY=drawingBounds.y+drawingBounds.height+32;
  const arrows={right:'→',left:'←',up:'↑',down:'↓'};
  svg.append(make('text',{x:drawingBounds.x,y:legendY,'font-size':13,'font-weight':700,fill:'#173f52'},[d.panelId,arrows[d.panelDirection]].filter(Boolean).join('  ')));
- details.forEach((text,i)=>svg.append(make('text',{x:drawingBounds.x+(i%3)*180,y:legendY+26+Math.floor(i/3)*24,'font-size':12,fill:'#334c59'},text)));
+ details.forEach((text,i)=>svg.append(make('text',{x:drawingBounds.x+(i%3)*180,y:legendY+26+Math.floor(i/3)*24,'font-size':14,fill:'#334c59'},text)));
  const bounds=svg.getBBox();svg.setAttribute('viewBox',[bounds.x-24,bounds.y-24,bounds.width+48,bounds.height+48].join(' '));
 }
 function legacyFolds(d){
@@ -102,7 +102,7 @@ function addPreviewZoom(host,svg){
  const paint=()=>{svg.setAttribute('viewBox',view.join(' '));status.textContent=Math.round(initial[2]/view[2]*100)+'%';};
  const zoom=(factor,cx=view[0]+view[2]/2,cy=view[1]+view[3]/2)=>{const width=Math.max(initial[2]/8,Math.min(initial[2],view[2]/factor)),ratio=width/view[2];view=[cx-(cx-view[0])*ratio,cy-(cy-view[1])*ratio,width,view[3]*ratio];paint();};
  for(const [label,action]of [['Zoom in',()=>zoom(1.3)],['Zoom out',()=>zoom(1/1.3)],['Fit panel',()=>{view=[...initial];paint();}]]){const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=action;controls.append(button);}controls.append(status);host.insertBefore(controls,svg);
- svg.style.touchAction='none';svg.style.cursor='grab';
+ svg.style.touchAction='none';svg.style.cursor='grab';svg.addEventListener('selectstart',e=>e.preventDefault());svg.addEventListener('dragstart',e=>e.preventDefault());
  svg.addEventListener('wheel',e=>{if(!e.ctrlKey)return;e.preventDefault();const p=new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());zoom(e.deltaY<0?1.15:1/1.15,p.x,p.y);},{passive:false});
  svg.addEventListener('pointerdown',e=>{if(e.button!==0||e.target.closest('[role=button]'))return;drag={x:e.clientX,y:e.clientY,view:[...view],inverse:svg.getScreenCTM().inverse()};svg.setPointerCapture(e.pointerId);svg.style.cursor='grabbing';});
  svg.addEventListener('pointermove',e=>{if(!drag)return;const a=new DOMPoint(drag.x,drag.y).matrixTransform(drag.inverse),b=new DOMPoint(e.clientX,e.clientY).matrixTransform(drag.inverse);view=[drag.view[0]+a.x-b.x,drag.view[1]+a.y-b.y,...drag.view.slice(2)];paint();});

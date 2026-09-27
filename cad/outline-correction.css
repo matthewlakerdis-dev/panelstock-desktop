@@ -61,3 +61,5 @@
 .trace-inline-editor .trace-measure-source{font-size:11px;font-weight:400;color:#768895}
 .trace-inline-editor .trace-measure-field input{height:38px;border-radius:8px;margin-top:6px}
 .trace-inline-editor .trace-done{justify-self:end;min-width:94px;height:34px;border-radius:8px;font-size:14px}
+/* Drawing labels stay unselected while tracing or panning. */
+.outline-correction .trace-canvas-area>svg,.outline-correction .trace-canvas-area>svg *{user-select:none;-webkit-user-select:none}

@@ -4,3 +4,6 @@
 .measured-comparison{border:1px solid #dce5eb;border-radius:14px;overflow:hidden;background:#f7fafc}.measured-comparison-drawing{min-width:0;padding:16px}.measured-comparison-drawing h3{margin-top:0}.measured-comparison .panel-sketch-reference{align-self:stretch}
 
 .proposed-sketch{min-width:0}.proposed-sketch>.sketch-reference-heading{background:#fff;min-height:69px;box-sizing:border-box}.measured-comparison-drawing .proposed-sketch-title{font-size:14px;padding:0 0 16px;border-bottom:1px solid #e6edf1;margin-bottom:14px}
+
+/* Keep dragging previews from selecting dimension text. */
+#measured-panel-view svg,.measured-dialog svg,.visual-editor .drawing-canvas svg{user-select:none;-webkit-user-select:none}
