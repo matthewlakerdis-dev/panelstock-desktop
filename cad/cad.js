@@ -11,7 +11,7 @@ const cloudRevisions=new Map();
 const projectBar=document.createElement('section');projectBar.innerHTML='<div class="row"><label>Project name<input id="projectname" maxlength="100" value="Untitled project"></label><button id="saveproject" type="button">Save project</button><button id="openproject" type="button">Open project</button><button id="newproject" type="button">New project</button></div><p id="projectstatus" role="status">Projects save to your account, with a copy kept on this device.</p>';
 $('workspace').prepend(projectBar);
 let projectRetryTimer=null,projectRetryAttempt=0;
-const retrySaveButton=document.createElement('button');retrySaveButton.type='button';retrySaveButton.textContent='Retry save';retrySaveButton.hidden=true;retrySaveButton.className='project-retry';$('projectstatus').after(retrySaveButton);
+const retrySaveButton=document.createElement('button');retrySaveButton.type='button';retrySaveButton.textContent='Retry save';retrySaveButton.hidden=true;retrySaveButton.className='project-retry';$('projectstatus').after(retrySaveButton);const saveBackupButton=document.createElement('button');saveBackupButton.type='button';saveBackupButton.textContent='Download backup';saveBackupButton.hidden=true;saveBackupButton.className='project-retry';saveBackupButton.title='Download a project copy including sketches and drawings';saveBackupButton.onclick=()=>backupButton.click();retrySaveButton.after(saveBackupButton);
 function accountSaveErrorMessage(error){
  const message=String(error?.message||'Unknown error');
  if(message==='Invalid original PDFs.')return 'The original-file list was rejected. Reload the app and retry saving; if it persists, download a backup.';
@@ -20,7 +20,7 @@ function accountSaveErrorMessage(error){
  if(/Failed to fetch|NetworkError|network request failed/i.test(message))return 'Could not reach account storage. Check your connection and retry.';
  return message;
 }
-function projectSaveStatus(state,text){$('projectstatus').dataset.state=state;$('projectstatus').textContent=text;retrySaveButton.hidden=!['offline','error','retrying'].includes(state);}
+function projectSaveStatus(state,text){$('projectstatus').dataset.state=state;$('projectstatus').textContent=text;retrySaveButton.hidden=!['offline','error','retrying'].includes(state);saveBackupButton.hidden=!['offline','error','retrying'].includes(state);}
 function retryProjectSave(owner,id,delay){
  clearTimeout(projectRetryTimer);projectRetryTimer=setTimeout(()=>{
   if(projectOwner()!==owner||projectId!==id||!projectDirty)return;
@@ -542,6 +542,7 @@ $('save').onclick=()=>{try{download(JSON.stringify({...collect(),reviewed:false}
 $('import').onchange=()=>run(async()=>{const file=$('import').files[0];if(!file||file.size>128*1024)throw Error('Choose a panel draft smaller than 128 KB.');const data=JSON.parse(await file.text());if(data.correctionDraft?(!Array.isArray(data.outlineSections)||data.outlineSections.length>32||!data.outlineSections.every(s=>s?.start&&Number.isFinite(s.start.x)&&Number.isFinite(s.start.y))):data.measuredEdges?PanelMeasuredOutline.validate(data).length:(!Array.isArray(data.edges)||data.edges.length<4||data.edges.length>32||!data.edges.every(e=>e&&codes.includes(e.code)&&directions.includes(e.direction))))throw Error('Invalid panel draft.');addPanel(data,file.name);notice('Draft loaded. Review it before generating.');});
 (async()=>{for(const key of (window.parent!==window?['panelstock:session:v2']:[KEY,'panelstock:session:v2','panelstock:site-orders:session:v1'])){try{const saved=JSON.parse(sessionStorage.getItem(key)||'null');if(saved?.token&&saved.expiresAt>Date.now()){session=saved;break;}}catch{}}showSession();if(session)await run(async()=>{await verify();const saved=await PanelCadProjects.list(projectOwner()).catch(()=>[]);notice(saved.length?'Ready. Select Open project to restore your saved work.':'Ready. Upload a sketch or load a test panel.');});})();
 })();
+
 
 
 
