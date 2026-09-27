@@ -77,3 +77,7 @@ dialog.project-picker[open]{display:flex;flex-direction:column}
 .project-icon-button svg{display:block;flex:none}
 .project-icon-button[hidden]{display:none}
 .project-icon-button:focus-visible{outline:3px solid #82b4c6;outline-offset:2px}
+
+.project-picker .project-card-history{margin-left:auto;align-self:center;background:transparent;border-color:transparent}
+.project-picker .project-card-history:hover{background:#e2eef2;border-color:#9eb9c5}
+.project-picker .project-picker-details{flex:1}
