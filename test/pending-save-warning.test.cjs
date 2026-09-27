@@ -1,0 +1,3 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const s=fs.readFileSync(require('node:path').join(__dirname,'../cad/cad.js'),'utf8'),c={projectDirty:false};vm.runInNewContext(s.slice(s.indexOf('function warnPendingProjectSave('),s.indexOf("window.addEventListener('beforeunload'")),c);
+test('only pending changes trigger the leave-page warning',()=>{let prevented=false;const event={preventDefault(){prevented=true;}};c.warnPendingProjectSave(event);assert.equal(prevented,false);assert.equal(event.returnValue,undefined);c.projectDirty=true;c.warnPendingProjectSave(event);assert.equal(prevented,true);assert.equal(event.returnValue,'');});
