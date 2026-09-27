@@ -116,7 +116,7 @@ function render(rebuild=true){
    }
   }
  }
- const viewWidth=extent.right-extent.left,viewHeight=extent.bottom-extent.top;svg.setAttribute('viewBox',[extent.left,extent.top,viewWidth,viewHeight].join(' '));svg.style.aspectRatio=viewWidth+' / '+viewHeight;
+ const contentBounds=svg.getBBox();if(contentBounds.width>0&&contentBounds.height>0){extent={left:contentBounds.x-32,top:contentBounds.y-32,right:contentBounds.x+contentBounds.width+32,bottom:contentBounds.y+contentBounds.height+32};}svg.setAttribute('preserveAspectRatio','xMidYMid meet');const viewWidth=extent.right-extent.left,viewHeight=extent.bottom-extent.top;svg.setAttribute('viewBox',[extent.left,extent.top,viewWidth,viewHeight].join(' '));svg.style.aspectRatio=viewWidth+' / '+viewHeight;
  if(editing&&rebuild&&labelBoxes[selected]){const anchor=labelBoxes[selected];inspector.style.left=Math.max(2,Math.min(58,(anchor.x-extent.left)/viewWidth*100-12))+'%';inspector.style.top=Math.max(3,Math.min(30,(anchor.y-extent.top)/viewHeight*100-8))+'%';}
  inspector.hidden=!editing;
  status.textContent=!complete?'Enter missing site lengths. The outline uses placeholder lengths until all measurements are supplied.':closed?'Site outline closes · Dimensions in mm':'Outline is open — check lengths and directions.';

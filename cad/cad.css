@@ -99,3 +99,16 @@ dialog.project-picker[open]{display:flex;flex-direction:column}
 #edges .edge-with-tag input[type=checkbox]{appearance:auto;flex:0 0 16px;width:16px;height:16px;min-height:0;margin:0;padding:0;accent-color:#23627c;cursor:pointer}
 #edges .edge-with-tag:has(input:checked){background:#e7f2f5;border-color:#aacbd7;color:#1e586e}
 #edges .edge-with-tag:has(input:focus-visible){outline:2px solid #23627c;outline-offset:2px}
+/* Finder rows grow with their content rather than inheriting button height. */
+dialog.panel-finder{width:min(760px,calc(100vw - 32px))}
+.panel-finder .project-picker-list{display:flex;flex-direction:column;gap:10px;justify-content:flex-start;padding:18px 24px;scroll-padding:18px}
+.panel-finder button.panel-finder-item{flex:none;display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto auto;height:auto;min-height:96px;max-height:none;align-content:start;align-items:center;gap:6px 12px;padding:16px;border:1px solid #dde6ec;border-radius:12px;line-height:1.4;background:#fff;box-sizing:border-box}
+.panel-finder .panel-finder-item:hover{border-color:#8db4c3;background:#f7fbfc}
+.panel-finder .panel-finder-item[data-current=true]{border-color:#397b91;background:#eff7fa;box-shadow:inset 3px 0 #397b91}
+.panel-finder .panel-finder-item strong{font-size:15px;line-height:1.4;min-width:0}
+.panel-finder .panel-finder-item .panel-finder-meta,.panel-finder .panel-finder-item .panel-finder-source{grid-column:1/-1;line-height:1.5;min-width:0}
+.panel-finder .panel-finder-item .panel-finder-source{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:#7b8b97}
+.panel-finder .panel-finder-item .panel-finder-badge{font-size:11px;font-weight:600;padding:4px 8px;border-radius:20px;white-space:nowrap;line-height:1.4}
+.panel-finder .panel-finder-badge.is-ready{color:#216443;background:#e8f5ed}.panel-finder .panel-finder-badge.needs-review{color:#8b5e20;background:#fff4df}
+.panel-finder .project-picker-header{background:#fff}.panel-finder .project-picker-footer{flex-shrink:0}
+@media(max-width:480px){.panel-finder .project-picker-list{padding:14px}.panel-finder button.panel-finder-item{padding:12px;gap:6px 8px}}
