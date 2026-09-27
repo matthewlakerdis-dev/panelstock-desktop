@@ -428,3 +428,7 @@ dialog.readiness-dialog{width:min(720px,calc(100vw - 32px))}
 .sheet-result-drawing{padding:8px;border:1px solid #e4ebef;border-radius:8px;background:#f7fafb;overflow:hidden}
 .sheet-result-drawing img{display:block;width:100%;height:auto;margin:0;background:#fff}
 @media(max-width:540px){.sheet-result-heading{align-items:flex-start;flex-direction:column;gap:8px}.sheet-picker .sheet-result-card{padding:12px}}
+
+.sheet-plan-actions{display:flex;align-items:center;gap:12px;margin-top:16px}
+.sheet-picker .sheet-plan-actions .project-icon-button{width:56px;height:56px;min-width:56px;padding:12px;margin:0}
+.sheet-plan-actions .project-icon-button svg{width:30px;height:30px}

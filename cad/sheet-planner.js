@@ -122,6 +122,7 @@ async function open({panels,request,download,projectName}){
 
    for(const sheet of plan.sheets){const card=document.createElement('section'),heading=document.createElement('h3');card.className='sheet-result-card';heading.textContent='Sheet '+sheet.number+' \xb7 '+(sheet.stock.type==='offcut'?'Offcut':'Full sheet')+' \xb7 '+sheet.stock.width+' \xd7 '+sheet.stock.height+' mm';const caption=document.createElement('p');caption.className='sheet-result-summary';caption.textContent=(sheet.stock.sku||sheet.stock.id)+' \u00b7 '+sheet.panels.length+' panel'+(sheet.panels.length===1?'':'s')+' \u00b7 '+sheet.utilisation+'% cut area';const panelNames=document.createElement('p');panelNames.className='sheet-result-panels';panelNames.textContent='Panels: '+sheet.panels.map(p=>p.name+(p.copy>1?' (copy '+p.copy+')':'')).join(', ');const img=document.createElement('img');img.alt='Sheet '+sheet.number+' layout';img.style.width='100%';const url=URL.createObjectURL(new Blob([sheet.svg],{type:'image/svg+xml'}));urls.push(url);img.src=url;const button=document.createElement('button');button.type='button';button.textContent='Download DXF';button.setAttribute('aria-label','Download sheet '+sheet.number+' DXF');button.onclick=()=>download(sheet.dxf,'application/dxf',prefix+'-sheet-'+sheet.number+'.dxf');const top=document.createElement('div');top.className='sheet-result-heading';const details=document.createElement('div');details.append(heading,caption);top.append(details,button);const drawing=document.createElement('div');drawing.className='sheet-result-drawing';drawing.append(img);card.append(top,panelNames,drawing);results.append(card);}
 
+   const planActions=document.createElement('div');planActions.className='sheet-plan-actions';
    if(plan.sheets.length&&!plan.unplaced.length){
 
     const form=document.createElement('form'),heading=document.createElement('h3');heading.textContent='Send approved plan to CNC tracker';form.append(heading);
@@ -136,7 +137,7 @@ async function open({panels,request,download,projectName}){
 
     const explain=document.createElement('p');explain.textContent='Creates pending entries for these panels and their selected stock. Stock quantities are deducted only on CNC completion. Download the sheet DXFs before cutting.';
 
-    const send=document.createElement('button');send.type='submit';actionIcon(send,'Approve and send to CNC');form.append(explain,send);results.append(form);
+    const send=document.createElement('button');send.type='submit';actionIcon(send,'Approve and send to CNC');planActions.append(send);form.append(explain,planActions);results.append(form);
 
     let packet=null,sending=false,sent=false;
 
@@ -154,7 +155,7 @@ async function open({panels,request,download,projectName}){
 
    }
 
-   if(plan.sheets.length){const manifest=document.createElement('button');manifest.type='button';actionIcon(manifest,'Download all planned sheets as one DXF');manifest.onclick=()=>{if(!plan.allSheetsDxf){status.textContent='Preview the plan again to prepare the combined DXF.';return;}download(plan.allSheetsDxf,'application/dxf',prefix+'-all-sheets.dxf');};results.append(manifest);}
+   if(plan.sheets.length){const manifest=document.createElement('button');manifest.type='button';actionIcon(manifest,'Download all planned sheets as one DXF');manifest.onclick=()=>{if(!plan.allSheetsDxf){status.textContent='Preview the plan again to prepare the combined DXF.';return;}download(plan.allSheetsDxf,'application/dxf',prefix+'-all-sheets.dxf');};planActions.append(manifest);if(!planActions.isConnected)results.append(planActions);}
 
  }catch(e){if(dialog.isConnected)status.textContent=e.message||'Could not prepare the sheet plan.';}finally{working=false;build.disabled=!material.value;}};
 
