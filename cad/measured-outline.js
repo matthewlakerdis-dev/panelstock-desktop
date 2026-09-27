@@ -39,9 +39,15 @@ function draw(svg,d,onPoint){
   const u=[(b[0]-a[0])/length,(b[1]-a[1])/length],n=[-u[1],u[0]],text=(Math.abs(e.dx)<.001?fmt(e.dy):Math.abs(e.dy)<.001?fmt(e.dx):fmt(e.dx)+' × '+fmt(e.dy))+' · '+e.code;
   // Small sections use keyed callouts instead of overlapping dimension arrows.
   if(length<text.length*8+40){
-   const key=String.fromCharCode(65+details.length),c=[(a[0]+b[0])/2+n[0]*14,(a[1]+b[1])/2+n[1]*14];
+   const key=String.fromCharCode(65+details.length),mid=[(a[0]+b[0])/2,(a[1]+b[1])/2];
+   let c,rect;
+   for(let level=0;level<ps.length*3+1;level++){
+    const distance=20+level*26;c=[mid[0]+n[0]*distance,mid[1]+n[1]*distance];rect=[c[0]-12,c[1]-12,c[0]+12,c[1]+12];
+    if(!occupied.some(r=>rect[0]<r[2]+8&&rect[2]>r[0]-8&&rect[1]<r[3]+8&&rect[3]>r[1]-8))break;
+   }
+   svg.append(make('line',{x1:mid[0],y1:mid[1],x2:c[0],y2:c[1],stroke:'#547b8c','stroke-width':1,'pointer-events':'none'}));
    details.push(key+'  '+text+' mm');
-   svg.append(make('circle',{cx:c[0],cy:c[1],r:10,fill:'#fff',stroke:'#547b8c','stroke-width':1}),make('text',{x:c[0],y:c[1],'text-anchor':'middle','dominant-baseline':'middle','font-size':11,'font-weight':700,fill:'#173f52'},key));
+   svg.append(make('circle',{'data-callout-circle':'',cx:c[0],cy:c[1],r:10,fill:'#fff',stroke:'#547b8c','stroke-width':1}),make('text',{'data-callout-letter':'',x:c[0],y:c[1],'text-anchor':'middle','dominant-baseline':'middle','font-size':11,'font-weight':700,fill:'#173f52'},key));
    occupied.push([c[0]-12,c[1]-12,c[0]+12,c[1]+12]);return;
   }
   let angle=Math.atan2(u[1],u[0])*180/Math.PI;if(angle>90)angle-=180;if(angle<-90)angle+=180;
@@ -99,7 +105,7 @@ function addPreviewZoom(host,svg){
  const initial=svg.getAttribute('viewBox').split(' ').map(Number),controls=document.createElement('div');controls.style.cssText='display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0';
  const status=document.createElement('span');status.textContent='100%';status.setAttribute('aria-live','polite');
  let view=[...initial],drag=null;
- const paint=()=>{svg.setAttribute('viewBox',view.join(' '));status.textContent=Math.round(initial[2]/view[2]*100)+'%';};
+ const paint=()=>{svg.setAttribute('viewBox',view.join(' '));const zoom=initial[2]/view[2];svg.querySelectorAll('[data-callout-circle]').forEach(marker=>{marker.setAttribute('r',10/zoom);marker.setAttribute('stroke-width',1/zoom);});svg.querySelectorAll('[data-callout-letter]').forEach(letter=>letter.setAttribute('font-size',11/zoom));status.textContent=Math.round(zoom*100)+'%';};
  const zoom=(factor,cx=view[0]+view[2]/2,cy=view[1]+view[3]/2)=>{const width=Math.max(initial[2]/8,Math.min(initial[2],view[2]/factor)),ratio=width/view[2];view=[cx-(cx-view[0])*ratio,cy-(cy-view[1])*ratio,width,view[3]*ratio];paint();};
  for(const [label,action]of [['Zoom in',()=>zoom(1.3)],['Zoom out',()=>zoom(1/1.3)],['Fit panel',()=>{view=[...initial];paint();}]]){const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=action;controls.append(button);}controls.append(status);host.insertBefore(controls,svg);
  svg.style.touchAction='none';svg.style.cursor='grab';svg.addEventListener('selectstart',e=>e.preventDefault());svg.addEventListener('dragstart',e=>e.preventDefault());
