@@ -432,3 +432,9 @@ dialog.readiness-dialog{width:min(720px,calc(100vw - 32px))}
 .sheet-plan-actions{display:flex;align-items:center;gap:12px;margin-top:16px}
 .sheet-picker .sheet-plan-actions .project-icon-button{width:56px;height:56px;min-width:56px;padding:12px;margin:0}
 .sheet-plan-actions .project-icon-button svg{width:30px;height:30px}
+
+.sheet-panel-header{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+.sheet-panel-heading{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;min-width:0}
+.sheet-picker .sheet-panel-heading h3,.sheet-picker .sheet-panel-heading .sheet-selection-count{margin:0}
+.sheet-picker .sheet-panel-header .combine-toolbar{margin:0;gap:6px}
+.sheet-picker .sheet-panel-header .combine-toolbar button{padding:4px 8px;min-height:30px;font-size:12px;line-height:20px}
