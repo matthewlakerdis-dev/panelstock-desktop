@@ -6,26 +6,12 @@ const summary=document.createElement('summary');summary.textContent='Show all ed
 table.before(details);details.append(summary,table);
 const host=document.createElement('div');host.className='visual-editor';details.before(host);
 host.innerHTML='<div class="drawing-space"><div class="drawing-heading"><div><span class="editor-eyebrow">PANEL WORKSPACE</span><strong>Edit your panel</strong></div><span class="editor-hint">Select a dimension or edge to edit</span></div><div class="drawing-canvas"><svg viewBox="0 0 760 540" aria-label="Interactive site outline"></svg><div class="edge-inspector" hidden><div class="inspector-heading"><h3>Selected edge</h3><button type="button" class="close-editor" aria-label="Close edge editor">×</button></div><div class="edge-controls"></div><p class="small">Changes update the outline automatically.</p></div></div><div class="drawing-footer"><p class="drawing-status" role="status"></p><span>Site · Finished (mm)</span></div><div class="edge-picker" hidden></div></div>';
-
-function wheelZoom(svg){
- let base=svg.getAttribute('viewBox'),zoom=1;
- const reset=()=>{zoom=1;svg.setAttribute('viewBox',base);};
- svg.addEventListener('wheel',e=>{
-  if(!e.ctrlKey)return;e.preventDefault();
-  const matrix=svg.getScreenCTM();if(!matrix)return;
-  const p=new DOMPoint(e.clientX,e.clientY).matrixTransform(matrix.inverse()),v=svg.viewBox.baseVal;
-  const next=Math.max(.5,Math.min(5,zoom*Math.exp(-Math.max(-100,Math.min(100,e.deltaY))*.003))),ratio=zoom/next;
-  svg.setAttribute('viewBox',[p.x-(p.x-v.x)*ratio,p.y-(p.y-v.y)*ratio,v.width*ratio,v.height*ratio].join(' '));zoom=next;
- },{passive:false});
- return {reset,setBase(value){if(value!==base){base=value;reset();}}};
-}
 const svg=host.querySelector('svg'),picker=host.querySelector('.edge-picker'),controls=host.querySelector('.edge-controls'),status=host.querySelector('.drawing-status');
 let selected=0,editing=false;const inspector=host.querySelector('.edge-inspector');host.querySelector('.close-editor').onclick=()=>{editing=false;inspector.hidden=true;};host.addEventListener('keydown',e=>{if(e.key==='Escape'){editing=false;inspector.hidden=true;}});
 document.addEventListener('pointerdown',e=>{if(editing&&!inspector.contains(e.target)){editing=false;inspector.hidden=true;}},true);
-const zoomView=wheelZoom(svg);const fit=document.createElement('button');fit.type='button';fit.textContent='Fit panel';fit.onclick=zoomView.reset;host.querySelector('.drawing-heading').append(fit);svg.title='Hold Ctrl and use the mouse wheel to zoom';
 const ns='http://www.w3.org/2000/svg';
 function el(tag,attrs,text){const n=document.createElementNS(ns,tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,v);if(text!==undefined)n.textContent=text;return n;}
-function fields(){return [...rows.children].map(r=>[...r.querySelectorAll('input,select')]);}
+function fields(){return [...rows.children].map(r=>[...r.querySelectorAll('input:not([type=checkbox]),select')]);}
 function measurementErrors(all){
  const bad=all.map(()=>new Set()),messages=[],vectors={right:[1,0],up:[0,1],left:[-1,0],down:[0,-1]};
  for(const column of [3,4]){let x=0,y=0,complete=true;const label=column===3?'Site':'Finished';
@@ -60,11 +46,8 @@ function render(rebuild=true){
  const closed=complete&&Math.hypot(x,y)<.001;
  if(closed)svg.append(el('polygon',{points:points.map(p=>map(p).join(',')).join(' '),fill:'#e6f0f3',stroke:'none'}));
  const foldValues=document.getElementById('folds').value.trim();
- let markedLines=[];try{markedLines=JSON.parse(document.getElementById('folds').dataset.foldLines||'[]');}catch{}
- if(closed)for(const fold of markedLines){if(Math.abs(fold.start.x-fold.end.x)>.001)continue;const a=map([fold.start.x,fold.start.y]),b=map([fold.end.x,fold.end.y]);svg.append(el('line',{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:'#b96c26','stroke-width':2,'stroke-dasharray':'7 5'}));}
-
  if(closed&&foldValues)foldValues.split(',').map(Number).filter(n=>Number.isFinite(n)&&n>0&&n<h).forEach(n=>{
-  const level=minY+n,intersections=segments.filter(s=>level>Math.min(s.a[1],s.b[1])&&level<Math.max(s.a[1],s.b[1])).map(s=>s.a[0]).sort((a,b)=>a-b);
+  const level=minY+n;if(markedLines.some(f=>Math.abs(f.start.y-level)<.001&&Math.abs(f.end.y-level)<.001))return;const intersections=segments.filter(s=>level>Math.min(s.a[1],s.b[1])&&level<Math.max(s.a[1],s.b[1])).map(s=>s.a[0]).sort((a,b)=>a-b);
   for(let i=0;i+1<intersections.length;i+=2){const a=map([intersections[i],level]),b=map([intersections[i+1],level]);svg.append(el('line',{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:'#b96c26','stroke-width':2,'stroke-dasharray':'7 5'}));}
  });
  segments.forEach(({a,b,f,i})=>{const p=map(a),q=map(b),active=i===selected,g=el('g',{role:'button',tabindex:'0','aria-label':f[0].value+', '+f[3].value+' millimetres, '+f[2].value,'aria-pressed':String(active),class:'outline-edge'});g.append(el('line',{x1:p[0],y1:p[1],x2:q[0],y2:q[1],stroke:active?'#155e75':'#6c8793','stroke-width':active?7:3}),el('line',{x1:p[0],y1:p[1],x2:q[0],y2:q[1],stroke:'transparent','stroke-width':24}));g.onclick=()=>choose(i);g.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();choose(i);}};svg.append(g);
@@ -91,24 +74,12 @@ function render(rebuild=true){
  badge.append(el('rect',{x:-badgeWidth/2,y:-12,width:badgeWidth,height:24,rx:3,fill:errors.bad[i].size?'#fff1f2':'#f8fafc',stroke:'none'}),measureText);
 
  badge.onclick=()=>choose(i);badge.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();choose(i);}};svg.append(badge);
- const splits=[0,1];
- if(closed&&a[1]!==b[1]&&['B','S','NT','RE'].includes(f[2].value)&&foldValues){
-  for(const value of foldValues.split(',').map(Number)){const t=(minY+value-a[1])/(b[1]-a[1]);if(Number.isFinite(t)&&t>0&&t<1&&!splits.includes(t))splits.push(t);}
- }
- if(closed&&a[0]!==b[0])for(const fold of markedLines){if(Math.abs(fold.start.x-fold.end.x)>.001)continue;const t=(fold.start.x-a[0])/(b[0]-a[0]);if(t>0&&t<1&&!splits.includes(t))splits.push(t);}
- splits.sort((a,b)=>a-b);
- for(let section=0;section<splits.length-1;section++){
- const lo=splits[section],hi=splits[section+1],middle=(lo+hi)/2;
- let parts=[];try{parts=JSON.parse(rows.children[i].dataset.sections||'[]');}catch{}
- let accumulated=0;const part=parts.find(v=>{accumulated+=v.site;return middle*Number(f[3].value)<accumulated+.001;});
- const sectionCode=part?.code||f[2].value;
- const code=el('g',{class:'edge-code',role:'button',tabindex:'0','aria-label':'Edit '+f[0].value+' edge type '+sectionCode});
- let cx=p[0]+dx*middle-nx*22,cy=p[1]+dy*middle-ny*22;
- for(const depth of [12,22,34,46,58]){let found=false;for(const fraction of [.5,.35,.65,.2,.8,.1,.9]){const along=lo+(hi-lo)*fraction,tx=p[0]+dx*along-nx*depth,ty=p[1]+dy*along-ny*depth,b={x:tx-18,y:ty-14,w:36,h:28};if((!closed||[[b.x,b.y],[b.x+b.w,b.y],[b.x,b.y+b.h],[b.x+b.w,b.y+b.h]].every(v=>inside(...v)))&&!codeBoxes.some(v=>overlaps(b,v))){cx=tx;cy=ty;found=true;break;}}if(found)break;}
+ const code=el('g',{class:'edge-code',role:'button',tabindex:'0','aria-label':'Edit '+f[0].value+' edge type '+f[2].value});
+ let cx=mx-nx*22,cy=my-ny*22;
+ for(const depth of [12,22,34,46,58]){let found=false;for(const fraction of [.5,.35,.65,.2,.8,.1,.9]){const tx=p[0]+dx*fraction-nx*depth,ty=p[1]+dy*fraction-ny*depth,b={x:tx-18,y:ty-14,w:36,h:28};if((!closed||[[b.x,b.y],[b.x+b.w,b.y],[b.x,b.y+b.h],[b.x+b.w,b.y+b.h]].every(v=>inside(...v)))&&!codeBoxes.some(v=>overlaps(b,v))){cx=tx;cy=ty;found=true;break;}}if(found)break;}
  codeBoxes.push({x:cx-18,y:cy-14,w:36,h:28});
- code.append(el('rect',{x:cx-18,y:cy-14,width:36,height:28,rx:4,fill:'transparent'}),el('text',{x:cx,y:cy,'text-anchor':'middle','dominant-baseline':'middle',fill:active?'#155e75':'#526c7a','font-size':15,'font-weight':600},sectionCode));
+ code.append(el('rect',{x:cx-18,y:cy-14,width:36,height:28,rx:4,fill:'transparent'}),el('text',{x:cx,y:cy,'text-anchor':'middle','dominant-baseline':'middle',fill:active?'#155e75':'#526c7a','font-size':15,'font-weight':600},f[2].value));
  const editCode=()=>{choose(i);controls.querySelector('select[data-field="2"]')?.focus();};code.onclick=editCode;code.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();editCode();}};svg.append(code);
- }
  if(active&&editing&&rebuild){inspector.style.left=Math.max(2,Math.min(58,lx/760*100-12))+'%';inspector.style.top=Math.max(3,Math.min(30,ly/540*100-8))+'%';}
  });
  // Chain dimensions read top to bottom, like the original sketch.
@@ -137,7 +108,7 @@ function render(rebuild=true){
    }
   }
  }
- const viewWidth=extent.right-extent.left,viewHeight=extent.bottom-extent.top;zoomView.setBase([extent.left,extent.top,viewWidth,viewHeight].join(' '));svg.style.aspectRatio=viewWidth+' / '+viewHeight;
+ const viewWidth=extent.right-extent.left,viewHeight=extent.bottom-extent.top;svg.setAttribute('viewBox',[extent.left,extent.top,viewWidth,viewHeight].join(' '));svg.style.aspectRatio=viewWidth+' / '+viewHeight;
  if(editing&&rebuild&&labelBoxes[selected]){const anchor=labelBoxes[selected];inspector.style.left=Math.max(2,Math.min(58,(anchor.x-extent.left)/viewWidth*100-12))+'%';inspector.style.top=Math.max(3,Math.min(30,(anchor.y-extent.top)/viewHeight*100-8))+'%';}
  inspector.hidden=!editing;
  status.textContent=!complete?'Enter missing site lengths. The outline uses placeholder lengths until all measurements are supplied.':closed?'Site outline closes · Dimensions in mm':'Outline is open — check lengths and directions.';
