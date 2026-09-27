@@ -5,16 +5,23 @@ function snapshot(panels,index,name,uploadedFiles=[]){
  return {version:1,uploadedFiles:structuredClone(uploadedFiles),name:name.trim()||'Untitled project',updatedAt:Date.now(),index,panels:structuredClone(panels.map(p=>({name:p.name,quantity:p.quantity||1,file:p.file,sourcePdf:p.sourcePdf,sourcePdfName:p.sourcePdfName||p.sourcePdf?.name,spec:p.spec,result:p.result,reviewed:p.reviewed,message:p.message,error:p.error,correctionRecovery:p.correctionRecovery,generatedSpec:p.generatedSpec})))};
 }
 async function packOriginals(project,encode){
-  const seen=new Map(),sources=[];
- for(const file of project.uploadedFiles||[]){if(!(file instanceof Blob)||file.size>25*1024*1024||!['application/pdf','image/png','image/jpeg'].includes(file.type))throw Error('Invalid uploaded file.');if(!seen.has(file)){seen.set(file,sources.length);sources.push({name:file.name||'Uploaded file',type:file.type,...await encode(file)});}}
+ const seen=new Map(),contents=new Map(),sources=[];
+ async function add(file,name,type){
+  if(seen.has(file))return seen.get(file);
+  const encoded=await encode(file),key=type+'|'+JSON.stringify(encoded);
+  let index=contents.get(key);
+  if(index===undefined){index=sources.length;contents.set(key,index);sources.push({name,type,...encoded});}
+  seen.set(file,index);return index;
+ }
+ for(const file of project.uploadedFiles||[]){if(!(file instanceof Blob)||file.size>25*1024*1024||!['application/pdf','image/png','image/jpeg'].includes(file.type))throw Error('Invalid uploaded file.');await add(file,file.name||'Uploaded file',file.type);}
  delete project.uploadedFiles;
  for(const panel of project.panels)if(panel.sourcePdf){
   const file=panel.sourcePdf;if(!(file instanceof Blob)||file.size>25*1024*1024)throw Error('Original PDFs must be 25 MB or smaller.');
-  if(!seen.has(file)){seen.set(file,sources.length);sources.push({name:panel.sourcePdfName||file.name||'Original.pdf',type:'application/pdf',...await encode(file)});}
-  panel.sourcePdf=seen.get(file);
+  panel.sourcePdf=await add(file,panel.sourcePdfName||file.name||'Original.pdf','application/pdf');
  }
  if(sources.length)project.pdfSources=sources;
 }
+
 function attachOriginals(project,files){
  for(const panel of project.panels)if(panel.sourcePdf!==undefined&&panel.sourcePdf!==null){
   const index=panel.sourcePdf;if(!Number.isInteger(index)||index<0||index>=files.length)throw Error('The project contains an invalid original PDF reference.');
