@@ -2,6 +2,10 @@
 
 (()=>{'use strict';
 
+function actionIcon(button,label,done=false){
+ button.classList.add('project-icon-button');button.title=label;button.setAttribute('aria-label',label);
+ button.innerHTML='<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'+(done?'M5 12l4 4L19 6':label.includes('DXF')?'M14 2H4v20h16V8l-6-6ZM14 2v6h6M12 11v7m-3-3 3 3 3-3':'M4 4h16v16H4ZM8 12h8m-3-3 3 3-3 3')+'"/></svg>';
+}
 function availableStock(data){
 
  const reserved=new Map(),seen=new Set();
@@ -132,7 +136,7 @@ async function open({panels,request,download,projectName}){
 
     const explain=document.createElement('p');explain.textContent='Creates pending entries for these panels and their selected stock. Stock quantities are deducted only on CNC completion. Download the sheet DXFs before cutting.';
 
-    const send=document.createElement('button');send.type='submit';send.textContent='Approve and send to CNC';form.append(explain,send);results.append(form);
+    const send=document.createElement('button');send.type='submit';actionIcon(send,'Approve and send to CNC');form.append(explain,send);results.append(form);
 
     let packet=null,sending=false,sent=false;
 
@@ -140,9 +144,9 @@ async function open({panels,request,download,projectName}){
 
      try{if(!packet)packet=trackerPacket(plan,await request('/data'),fields[0].value,fields[1].value,fields[2].value);
 
-      await request('/mutations',packet);sent=true;send.textContent='Sent to CNC tracker';status.textContent='Plan sent to CNC tracker as pending. Stock quantities are unchanged.';material.disabled=true;choices.forEach(c=>c.check.disabled=true);stockChoices.forEach(c=>c.check.disabled=true);build.disabled=true;
+      await request('/mutations',packet);sent=true;actionIcon(send,'Sent to CNC tracker',true);status.textContent='Plan sent to CNC tracker as pending. Stock quantities are unchanged.';material.disabled=true;choices.forEach(c=>c.check.disabled=true);stockChoices.forEach(c=>c.check.disabled=true);build.disabled=true;
 
-     }catch(error){status.textContent=error.message||'Could not send plan. Retry to check the same submission.';send.textContent='Retry sending to CNC';if(!packet||(error.status&&error.status<500)){packet=null;fields.forEach(input=>input.disabled=false);} }
+     }catch(error){status.textContent=error.message||'Could not send plan. Retry to check the same submission.';actionIcon(send,'Retry sending to CNC');if(!packet||(error.status&&error.status<500)){packet=null;fields.forEach(input=>input.disabled=false);} }
 
      finally{sending=false;working=false;send.disabled=sent;if(!sent&&!packet){material.disabled=false;build.disabled=!material.value;choices.forEach(c=>c.check.disabled=!c.panel.dxf);stockChoices.forEach(c=>c.check.disabled=false);}}
 
@@ -150,7 +154,7 @@ async function open({panels,request,download,projectName}){
 
    }
 
-   if(plan.sheets.length){const manifest=document.createElement('button');manifest.type='button';manifest.textContent='Download sheet plan';manifest.onclick=()=>download(JSON.stringify({...plan,projectName,plannedAt:new Date().toISOString(),sheets:plan.sheets.map(({dxf,svg,...sheet})=>sheet)},null,2),'application/json',prefix+'-sheet-plan.json');results.append(manifest);}
+   if(plan.sheets.length){const manifest=document.createElement('button');manifest.type='button';actionIcon(manifest,'Download all planned sheets as one DXF');manifest.onclick=()=>{if(!plan.allSheetsDxf){status.textContent='Preview the plan again to prepare the combined DXF.';return;}download(plan.allSheetsDxf,'application/dxf',prefix+'-all-sheets.dxf');};results.append(manifest);}
 
  }catch(e){if(dialog.isConnected)status.textContent=e.message||'Could not prepare the sheet plan.';}finally{working=false;build.disabled=!material.value;}};
 
