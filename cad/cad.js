@@ -502,6 +502,13 @@ function filterPanelRows(rows,query,status){
 }
 const findPanelsButton=document.createElement('button');findPanelsButton.type='button';projectIcon(findPanelsButton,'Find panel','M21 21l-5-5M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z');navigator.append($('correctoutline'),findPanelsButton,sourcePdfButton);
 const panelFinderPreferences=new Map();
+findPanelsButton.title='Find panel (/)';findPanelsButton.setAttribute('aria-keyshortcuts','/');
+document.addEventListener('keydown',event=>{
+ if(event.defaultPrevented||event.repeat||event.isComposing||event.altKey||event.ctrlKey||event.metaKey||event.key!=='/')return;
+ if(busy||document.querySelector('dialog[open]')||event.target.closest('input,textarea,select,[contenteditable=true]'))return;
+ event.preventDefault();findPanelsButton.click();
+});
+
 findPanelsButton.onclick=()=>{
  if(busy)return;rememberPanel();
  const finderKey=projectId||panels[0]||'empty',preferences=panelFinderPreferences.get(finderKey)||{query:'',status:'all'};
@@ -548,6 +555,7 @@ $('save').onclick=()=>{try{download(JSON.stringify({...collect(),reviewed:false}
 $('import').onchange=()=>run(async()=>{const file=$('import').files[0];if(!file||file.size>128*1024)throw Error('Choose a panel draft smaller than 128 KB.');const data=JSON.parse(await file.text());if(data.correctionDraft?(!Array.isArray(data.outlineSections)||data.outlineSections.length>32||!data.outlineSections.every(s=>s?.start&&Number.isFinite(s.start.x)&&Number.isFinite(s.start.y))):data.measuredEdges?PanelMeasuredOutline.validate(data).length:(!Array.isArray(data.edges)||data.edges.length<4||data.edges.length>32||!data.edges.every(e=>e&&codes.includes(e.code)&&directions.includes(e.direction))))throw Error('Invalid panel draft.');addPanel(data,file.name);notice('Draft loaded. Review it before generating.');});
 (async()=>{for(const key of (window.parent!==window?['panelstock:session:v2']:[KEY,'panelstock:session:v2','panelstock:site-orders:session:v1'])){try{const saved=JSON.parse(sessionStorage.getItem(key)||'null');if(saved?.token&&saved.expiresAt>Date.now()){session=saved;break;}}catch{}}showSession();if(session)await run(async()=>{await verify();const saved=await PanelCadProjects.list(projectOwner()).catch(()=>[]);notice(saved.length?'Ready. Select Open project to restore your saved work.':'Ready. Upload a sketch or load a test panel.');});})();
 })();
+
 
 
 
