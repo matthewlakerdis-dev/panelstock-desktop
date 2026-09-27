@@ -63,3 +63,9 @@
 .trace-inline-editor .trace-done{justify-self:end;min-width:94px;height:34px;border-radius:8px;font-size:14px}
 /* Drawing labels stay unselected while tracing or panning. */
 .outline-correction .trace-canvas-area>svg,.outline-correction .trace-canvas-area>svg *{user-select:none;-webkit-user-select:none}
+
+/* Keep sketch actions available while the dialog scrolls. */
+.outline-correction{overflow-y:auto;scroll-padding-bottom:110px}
+.outline-correction>footer{position:sticky;bottom:-24px;z-index:20;background:#fff;border-top:1px solid #dce5ec;box-shadow:0 -5px 14px #15203308;margin:20px -24px -24px;padding:16px 24px;flex-wrap:wrap;gap:10px}
+@media(max-width:600px){.outline-correction>footer{padding:12px 16px;gap:8px}.outline-correction>footer button{flex:1 1 auto}}
+
