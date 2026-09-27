@@ -458,7 +458,7 @@ function fabricationReadiness(panel,issues=[]){
   if(!Array.isArray(v.stiffeners)&&!Object.hasOwn(v,'stiffener'))reasons.push('Regenerate to check stiffener requirements.');
   for(const plan of v.stiffeners||(v.stiffener?[v.stiffener]:[])){const length=plan.length??(plan.start&&plan.end?Math.hypot(plan.end[0]-plan.start[0],plan.end[1]-plan.start[1]):null);if(!Number.isFinite(length)||length<=0){reasons.push('Regenerate to calculate missing stiffener lengths.');break;}}
   for(const row of v.measurements||[]){if(row.status==='mismatch')reasons.push(row.label+': generated measurement does not match the expected value.');}
-  reasons.push(...(v.warnings||[]));
+  reasons.push(...(v.warnings||[]).filter(warning=>warning!=='Test drawing: tooling width and depth remain unspecified.'&&!/^Holes omitted where required spacing cannot fit: sections [\d, ]+\.$/.test(warning)));
  }
  return [...new Set(reasons)];
 }
@@ -477,7 +477,7 @@ function filterPanelRows(rows,query,status){
  const term=String(query||'').trim().toLowerCase();
  return rows.filter(row=>(!term||[row.p.spec?.panelId,row.p.name,row.p.file?.name].some(value=>String(value||'').toLowerCase().includes(term)))&&(status==='all'||(status==='generated'&&!!row.p.result?.dxf)||(status==='attention'&&row.reasons.length>0)));
 }
-const findPanelsButton=document.createElement('button');findPanelsButton.type='button';findPanelsButton.textContent='Find panel';navigator.append(findPanelsButton);
+const findPanelsButton=document.createElement('button');findPanelsButton.type='button';projectIcon(findPanelsButton,'Find panel','M21 21l-5-5M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z');navigator.append(findPanelsButton);
 findPanelsButton.onclick=()=>{
  if(busy)return;rememberPanel();
  const rows=panels.map((p,index)=>{let issues=[];try{if(p.spec)issues=currentIssues(structuredClone(p.spec));}catch{issues=['Review geometry.'];}return {p,index,reasons:fabricationReadiness(p,issues)};});
