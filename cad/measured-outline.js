@@ -45,7 +45,17 @@ function draw(svg,d,onPoint){
   const u=[(b[0]-a[0])/length,(b[1]-a[1])/length],n=[-u[1],u[0]],text=(Math.abs(e.dx)<.001?fmt(e.dy):Math.abs(e.dy)<.001?fmt(e.dx):fmt(e.dx)+' × '+fmt(e.dy))+' · '+e.code;
   let angle=Math.atan2(u[1],u[0])*180/Math.PI;if(angle>90)angle-=180;if(angle<-90)angle+=180;
   const textWidth=text.length*8+12,radians=angle*Math.PI/180,bw=Math.abs(Math.cos(radians))*textWidth+Math.abs(Math.sin(radians))*18,bh=Math.abs(Math.sin(radians))*textWidth+Math.abs(Math.cos(radians))*18;
-  const offset=26,{start,end,center:c}=dimensionPlacement(a,b,offset);
+  // Keep the fixed gap, switching sides when the notch is too narrow.
+  const mid=[(a[0]+b[0])/2,(a[1]+b[1])/2];
+  const blocked=ps.some((point,j)=>{
+   if(j===i)return false;
+   const q=map(point),r=map(ps[(j+1)%ps.length]),v=[r[0]-q[0],r[1]-q[1]],delta=[q[0]-mid[0],q[1]-mid[1]],den=n[0]*v[1]-n[1]*v[0];
+   if(Math.abs(den)<1e-8)return false;
+   const distance=(delta[0]*v[1]-delta[1]*v[0])/den,t=(delta[0]*n[1]-delta[1]*n[0])/den;
+   return distance>0.01&&distance<52&&t>=0&&t<=1;
+  });
+  if(blocked){n[0]*=-1;n[1]*=-1;}
+  const offset=26,{start,end,center:c}=dimensionPlacement(a,b,blocked?-offset:offset);
   const line=(a,b)=>svg.append(make('line',{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:'#334c59','stroke-width':1,'pointer-events':'none'}));
   for(const point of [a,b])line([point[0]+n[0]*5,point[1]+n[1]*5],[point[0]+n[0]*(offset+6),point[1]+n[1]*(offset+6)]);
   const gap=textWidth/2,outer=length<textWidth+20;
@@ -110,3 +120,4 @@ function addPreviewZoom(host,svg){
 function show(d){let host=document.getElementById('measured-panel-view');if(!host){host=document.createElement('div');host.id='measured-panel-view';}const table=document.querySelector('.tablewrap');const anchor=table.closest('.edge-details')||table;anchor.before(host);document.body.classList.toggle('has-measured-outline',!!d?.measuredEdges);host.hidden=!d?.measuredEdges;if(host.hidden)return;host.replaceChildren();const title=document.createElement('h3');title.textContent='Proposed sketch';title.className='proposed-sketch-title';const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.style.cssText='width:100%;max-height:620px;background:#f7fafc';host.append(title,svg);draw(svg,d);addPreviewZoom(host,svg);const note=document.createElement('p');note.textContent='Horizontal and vertical measurements define the shape. Finished dimensions are calculated in the generated preview.';host.append(note);const comparison=document.createElement('div');comparison.className='panel-comparison measured-comparison';const drawing=document.createElement('div');drawing.className='measured-comparison-drawing';while(host.firstChild)drawing.append(host.firstChild);comparison.append(drawing);host.append(comparison);}
 window.PanelMeasuredOutline={points,resolveFolds,splitEdge,validate,fromDraft,open,show};
 })();
+
