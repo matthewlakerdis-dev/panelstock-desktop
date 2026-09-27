@@ -18,6 +18,8 @@ for(const [id,label,path] of [
  button.innerHTML='<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="flex:none"><path d="'+path+'"/></svg><span>'+label+'</span>';
  button.title=label;
 }
+const quantityLabel=document.createElement('label');quantityLabel.textContent='Panel quantity';const quantityInput=document.createElement('input');quantityInput.id='panelquantity';quantityInput.type='number';quantityInput.min='1';quantityInput.max='9999';quantityInput.step='1';quantityInput.value='1';quantityLabel.append(quantityInput);$('panelid').closest('label').after(quantityLabel);
+quantityInput.onchange=()=>{const value=Number(quantityInput.value);if(!Number.isInteger(value)||value<1||value>9999){quantityInput.value=String(panels[panelIndex]?.quantity||1);notice('Enter a whole panel quantity from 1 to 9,999.');return;}if(panelIndex>=0){panels[panelIndex].quantity=value;queueProjectSave();}};
 function projectOwner(){return session?.username?PanelCadProjects.ownerKey(API,session.username):null;}
 function queueProjectSave(){
  if(!projectOwner()||!panels.length)return;
@@ -54,7 +56,7 @@ $('openproject').onclick=()=>run(async()=>{
  selectPanel(Math.max(0,Math.min(saved.index,panels.length-1)));notice('Project opened. Sketches and generated drawings restored.');
 });
 $('newproject').onclick=()=>run(async()=>{
- await saveProject();panels.length=0;panelIndex=-1;spec=null;result=null;projectId=null;projectName='Untitled project';$('projectname').value=projectName;projectRevision++;projectDirty=false;
+ await saveProject();panels.length=0;panelIndex=-1;spec=null;result=null;projectId=null;projectName='Untitled project';quantityInput.value='1';$('projectname').value=projectName;projectRevision++;projectDirty=false;
  PanelMeasuredOutline.show(null);invalidate();$('edges').replaceChildren();$('panelid').value='';$('questions').replaceChildren();updateNavigator();notice('New project ready. Add a sketch to begin.');$('projectstatus').textContent='Projects save in this browser on this device.';
 });
 $('workspace').addEventListener('input',queueProjectSave);$('workspace').addEventListener('change',queueProjectSave);
@@ -66,7 +68,7 @@ function rememberPanel(){if(panelIndex<0)return;const p=panels[panelIndex];if(sp
 function selectPanel(index){if(index<0||index>=panels.length)return;rememberPanel();panelIndex=index;const p=panels[index];spec=p.spec||null;
  if(previewURL){URL.revokeObjectURL(previewURL);previewURL=null;}
  if(spec)renderSpec();else{PanelMeasuredOutline.show(null);invalidate();$('edges').replaceChildren();$('panelid').value='';$('folds').value='';renderQuestions();}
- result=p.result||null;$('confirmed').checked=!!p.reviewed;
+ quantityInput.value=String(p.quantity||1);result=p.result||null;$('confirmed').checked=!!p.reviewed;
  if(result){previewURL=URL.createObjectURL(new Blob([result.svg],{type:'image/svg+xml'}));$('preview').src=previewURL;$('preview').hidden=false;renderDrawingChecks(result);}
  $('download').disabled=!result;notice(p.error||p.message||'Select Read sketches to read this file.');updateNavigator();}
 function addPanel(draft,name){rememberPanel();panels.push({spec:draft,name,reviewed:false});panelIndex=-1;selectPanel(panels.length-1);}
@@ -249,16 +251,17 @@ function batchSummary(items){
  const roundLength=length=>Number.isFinite(length)?Math.ceil(length/5)*5:length;
  const panelCounts=new Map(),lengthCounts=new Map();let stiffeners=0,unknownLengths=0;const tags=[];let missingTags=0;
  for(const item of items){
-  panelCounts.set(item.name,(panelCounts.get(item.name)||0)+1);
+  const quantity=Number.isInteger(item.quantity)&&item.quantity>0?item.quantity:1;
+  panelCounts.set(item.name,(panelCounts.get(item.name)||0)+quantity);
   const v=item.drawing.validation||{};
-  if(!Array.isArray(v.fabricationTags))missingTags++;else for(const tag of v.fabricationTags)tags.push([item.name,tag.edge,tag.type,roundLength(tag.length),tag.quantity]);
+  if(!Array.isArray(v.fabricationTags))missingTags++;else for(const tag of v.fabricationTags)tags.push([item.name,tag.edge,tag.type,roundLength(tag.length),tag.quantity*quantity]);
   for(const plan of v.stiffeners||(v.stiffener?[v.stiffener]:[])){
-   stiffeners++;const length=plan.length??(plan.start&&plan.end?Math.hypot(plan.end[0]-plan.start[0],plan.end[1]-plan.start[1]):null);
-   if(!Number.isFinite(length)||length<=0){unknownLengths++;continue;}
-   const key=roundLength(length);lengthCounts.set(key,(lengthCounts.get(key)||0)+1);
+   stiffeners+=quantity;const length=plan.length??(plan.start&&plan.end?Math.hypot(plan.end[0]-plan.start[0],plan.end[1]-plan.start[1]):null);
+   if(!Number.isFinite(length)||length<=0){unknownLengths+=quantity;continue;}
+   const key=roundLength(length);lengthCounts.set(key,(lengthCounts.get(key)||0)+quantity);
   }
  }
- return {panels:[...panelCounts],lengths:[...lengthCounts].sort((a,b)=>a[0]-b[0]),count:items.length,stiffeners,unknownLengths,tags,missingTags};
+ return {panels:[...panelCounts],lengths:[...lengthCounts].sort((a,b)=>a[0]-b[0]),count:items.length,panelQuantity:[...panelCounts.values()].reduce((a,b)=>a+b,0),stiffeners,unknownLengths,tags,missingTags};
 }
 function printDrawingSummary(content,title){
  const popup=window.open('','_blank','width=900,height=800');
@@ -272,7 +275,7 @@ function printDrawingSummary(content,title){
 }
 const summaryButton=document.createElement('button');summaryButton.type='button';summaryButton.textContent='Drawing summary';$('downloadall').after(summaryButton);
 summaryButton.onclick=()=>{
- if(busy)return;const items=panels.flatMap((p,i)=>{const drawing=i===panelIndex?result:p.result;return drawing?.dxf?[{name:p.spec?.panelId||p.name||drawing.filename,drawing}]:[];});
+ if(busy)return;const items=panels.flatMap((p,i)=>{const drawing=i===panelIndex?result:p.result;return drawing?.dxf?[{name:p.spec?.panelId||p.name||drawing.filename,quantity:p.quantity||1,drawing}]:[];});
  const summary=batchSummary(items),dialog=document.createElement('dialog');dialog.className='drawing-summary';dialog.setAttribute('aria-labelledby','drawing-summary-title');
  const header=document.createElement('header');header.className='summary-header';
  const eyebrow=document.createElement('p');eyebrow.className='summary-eyebrow';eyebrow.textContent='FABRICATION';header.append(eyebrow);
@@ -280,7 +283,7 @@ summaryButton.onclick=()=>{
  const project=document.createElement('p');project.className='summary-project';project.textContent=$('projectname').value.trim()||'Untitled project';header.append(project);dialog.append(header);
  const body=document.createElement('div');body.className='summary-body';dialog.append(body);
  const stats=document.createElement('div');stats.className='summary-stats';
- for(const [value,label] of [[summary.count,'Drawings'],[summary.tags.reduce((n,t)=>n+Number(t[4]||0),0),'Tag pieces'],[summary.stiffeners,'Stiffeners']]){const card=document.createElement('div'),number=document.createElement('strong'),caption=document.createElement('span');number.textContent=value;caption.textContent=label;card.append(number,caption);stats.append(card);}body.append(stats);
+ for(const [value,label] of [[summary.panelQuantity,'Panels'],[summary.tags.reduce((n,t)=>n+Number(t[4]||0),0),'Tag pieces'],[summary.stiffeners,'Stiffeners']]){const card=document.createElement('div'),number=document.createElement('strong'),caption=document.createElement('span');number.textContent=value;caption.textContent=label;card.append(number,caption);stats.append(card);}body.append(stats);
  const warning=text=>{const p=document.createElement('p');p.className='summary-warning';p.textContent=text;body.append(p);};
  if(panels.length>summary.count)warning((panels.length-summary.count)+' panels have not been generated and are not included.');
  if(summary.missingTags)warning('Regenerate '+summary.missingTags+' drawing'+(summary.missingTags===1?'':'s')+' to include their fabrication tags.');
@@ -289,8 +292,8 @@ summaryButton.onclick=()=>{
  const tags=addTable('Fabrication tags',['Panel ID','Section','Type','Cut length (mm)','Qty'],summary.tags,[1,3,4]);
  const tagNote=document.createElement('p');tagNote.className='summary-note';tagNote.textContent='B/S tags include 5 mm beyond each end hole. Separate pieces are listed for each uninterrupted span.';tags.append(tagNote);
  const grid=document.createElement('div');grid.className='summary-grid';body.append(grid);
- grid.append(addTable('Stiffeners',['Cut length (mm)','Qty'],summary.lengths,[0,1]),addTable('Panels',['Panel ID','Drawings'],summary.panels,[1]));
- const note=document.createElement('p');note.className='summary-note';note.textContent='Cut lengths rounded up to 5 mm. Quantities are based on generated drawings; matching panel IDs are grouped. Review dimensions before fabrication.';body.append(note);
+ grid.append(addTable('Stiffeners',['Cut length (mm)','Qty'],summary.lengths,[0,1]),addTable('Panels',['Panel ID','Quantity'],summary.panels,[1]));
+ const note=document.createElement('p');note.className='summary-note';note.textContent='Cut lengths rounded up to 5 mm. Quantities include all copies of generated panels; matching panel IDs are grouped. DXF downloads contain one drawing per selected panel entry. Review dimensions before fabrication.';body.append(note);
  const footer=document.createElement('footer');footer.className='summary-footer';
  const print=document.createElement('button');print.type='button';print.className='primary';print.textContent='Print / Save PDF';print.onclick=()=>printDrawingSummary(dialog,project.textContent+' — drawing summary');
  const close=document.createElement('button');close.type='button';close.textContent='Close';close.onclick=()=>dialog.close();dialog.onclose=()=>dialog.remove();footer.append(close,print);dialog.append(footer);document.body.append(dialog);dialog.showModal();
