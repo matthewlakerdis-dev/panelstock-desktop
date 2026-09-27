@@ -23,18 +23,22 @@ function retryProjectSave(owner,id,delay){
 retrySaveButton.onclick=()=>{projectRetryAttempt=0;saveProject().catch(()=>{});};
 window.addEventListener('online',()=>{if(projectDirty&&projectOwner())retryProjectSave(projectOwner(),projectId,250);});
 window.addEventListener('offline',()=>{if(projectDirty){projectSaveStatus('offline','Offline — keeping changes on this device.');queueProjectSave();}});
+function projectIcon(button,label,path){
+ button.classList.add('project-icon-button');button.title=label;button.setAttribute('aria-label',label);
+ button.innerHTML='<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="'+path+'"/></svg>';
+}
 for(const [id,label,path] of [
  ['saveproject','Save project','M5 3h12l4 4v14H3V3h2ZM7 3v6h10V3M7 21v-8h10v8M14 5v2'],
  ['openproject','Open project','M3 10V5h6l2 2h9v3M3 10h19l-4 10H2l1-10Z'],
  ['newproject','New project','M14 2H4v20h16V8l-6-6ZM14 2v6h6M12 12v6M9 15h6']
 ]){
- const button=$(id);button.style.cssText='display:inline-flex;align-items:center;justify-content:center;gap:8px';
- button.innerHTML='<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="flex:none"><path d="'+path+'"/></svg><span>'+label+'</span>';
- button.title=label;
+ projectIcon($(id),label,path);
 }
 const quantityLabel=document.createElement('label');quantityLabel.textContent='Panel quantity';const quantityInput=document.createElement('input');quantityInput.id='panelquantity';quantityInput.type='number';quantityInput.min='1';quantityInput.max='9999';quantityInput.step='1';quantityInput.value='1';quantityLabel.append(quantityInput);$('panelid').closest('label').after(quantityLabel);
 quantityInput.onchange=()=>{const value=Number(quantityInput.value);if(!Number.isInteger(value)||value<1||value>9999){quantityInput.value=String(panels[panelIndex]?.quantity||1);notice('Enter a whole panel quantity from 1 to 9,999.');return;}if(panelIndex>=0){panels[panelIndex].quantity=value;queueProjectSave();}};
 const backupButton=document.createElement('button');backupButton.type='button';backupButton.textContent='Download backup';const restoreButton=document.createElement('button');restoreButton.type='button';restoreButton.textContent='Restore backup';const backupInput=document.createElement('input');backupInput.type='file';backupInput.accept='.json,application/json';backupInput.hidden=true;projectBar.querySelector('.row').append(backupButton,restoreButton);projectBar.append(backupInput);
+projectIcon(backupButton,'Download backup','M12 3v12m-4-4 4 4 4-4M4 16v5h16v-5');
+projectIcon(restoreButton,'Restore backup','M12 16V4m-4 4 4-4 4 4M4 16v5h16v-5');
 backupButton.onclick=()=>run(async()=>{if(!panels.length)throw Error('Add a panel before downloading a backup.');rememberPanel();const data=PanelCadProjects.snapshot(panels,panelIndex,$('projectname').value);const text=await PanelCadProjects.backup(data);if(new Blob([text]).size>150*1024*1024)throw Error('This project exceeds the 150 MB backup limit.');download(text,'application/json',combinedFilename(data.name).replace(/\.dxf$/i,'-backup.json'));notice('Project backup downloaded, including sketches and generated drawings.');});
 restoreButton.onclick=()=>{backupInput.value='';backupInput.click();};
 backupInput.onchange=()=>run(async()=>{const file=backupInput.files[0];if(!file)return;if(file.size>150*1024*1024)throw Error('Choose a project backup smaller than 150 MB.');const data=PanelCadProjects.restore(await file.text());await saveProject();const owner=projectOwner();if(!owner)throw Error('Sign in before restoring a project.');const id=crypto.randomUUID();data.name=(data.name+' (restored)').slice(0,100);await PanelCadProjects.save(owner,id,data);panels.length=0;panels.push(...data.panels);panelIndex=-1;spec=null;result=null;projectId=id;projectName=data.name;$('projectname').value=projectName;projectRevision++;projectDirty=false;selectPanel(data.index);notice('Backup restored as a separate project. Review fabrication readiness before downloading drawings.');});
