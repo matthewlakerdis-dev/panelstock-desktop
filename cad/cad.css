@@ -188,3 +188,22 @@ dialog.readiness-dialog{width:min(720px,calc(100vw - 32px))}
 .readiness-dialog .readiness-open{padding:7px 12px;min-height:36px;font-size:13px}
 .readiness-dialog .readiness-card ul{margin:10px 0 0}
 @media(max-width:520px){.readiness-dialog .summary-header{padding:20px}.readiness-dialog .summary-body{padding:12px}.readiness-row{flex-wrap:wrap;gap:8px}.readiness-identity{flex-basis:100%}.readiness-open{margin-left:auto}}
+
+/* Compact sheet planning setup; keep choices beside stock on wide screens. */
+.sheet-picker{width:min(960px,calc(100vw - 32px))}
+.sheet-picker .sheet-plan-note{margin:0 0 16px;padding:10px 12px;background:#eef6f8;border-radius:8px;color:#365e70;font-size:12px;line-height:1.5}
+.sheet-picker .sheet-material{display:block;margin:0 0 20px;font-size:13px;font-weight:600}
+.sheet-picker .sheet-material select{margin-top:6px}
+.sheet-setup{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:start}
+.sheet-picker .sheet-selection{padding:0;margin:0;border:0;border-radius:0;background:none;min-width:0}
+.sheet-picker .sheet-selection h3{margin:0 0 8px;font-size:16px}
+.sheet-selection-count{margin:0 0 10px;font-size:12px;color:#64748b}
+.sheet-picker .combine-list,.sheet-stock-list{display:grid;gap:6px}
+.sheet-picker label.combine-row{margin:0;padding:10px 12px;min-height:44px;display:flex;align-items:center;gap:10px;font-size:13px;line-height:1.45;cursor:pointer;box-sizing:border-box}
+.sheet-picker label.combine-row input{margin:0;flex:0 0 18px;width:18px;height:18px;accent-color:#365e70}
+.sheet-picker label.combine-row span{overflow-wrap:anywhere}
+.sheet-picker label.combine-row:has(input:disabled){opacity:.6;cursor:default}
+.sheet-stock-empty{padding:20px 16px;margin:0;border:1px dashed #cbd5e1;border-radius:10px;color:#64748b;font-size:13px;line-height:1.6}
+.sheet-results:not(:empty){margin-top:24px;border-top:1px solid #e2e8f0;padding-top:20px}
+.sheet-picker .combine-toolbar{margin:0 0 10px}
+@media(max-width:680px){.sheet-setup{grid-template-columns:1fr}.sheet-picker{width:calc(100vw - 24px)}}
