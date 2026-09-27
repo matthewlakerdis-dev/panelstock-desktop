@@ -515,7 +515,7 @@ findPanelsButton.onclick=()=>{
  const keyboardHelp=document.createElement('p');keyboardHelp.id='panel-finder-keyboard-help';keyboardHelp.className='small';keyboardHelp.textContent='Use ↓ to browse results, then Enter to open a panel.';header.append(keyboardHelp);
  search.value=preferences.query;filter.value=preferences.status;sort.value=preferences.sort||'original';
  const rememberFinder=()=>{panelFinderPreferences.set(finderKey,{query:search.value,status:filter.value,sort:sort.value});render();};
- const clear=document.createElement('button');clear.type='button';clear.textContent='Clear filters';clear.onclick=()=>{search.value='';filter.value='all';rememberFinder();search.focus();};controls.append(clear);
+ const clear=document.createElement('button');clear.type='button';clear.textContent='Clear filters';clear.onclick=()=>{search.value='';filter.value='all';rememberFinder();search.focus();};controls.append(clear);const showCurrent=document.createElement('button');showCurrent.type='button';showCurrent.textContent='Show current panel';showCurrent.disabled=panelIndex<0;showCurrent.onclick=()=>{search.value='';filter.value='all';rememberFinder();const current=list.querySelector('[data-current=true]');if(current){current.focus({preventScroll:true});current.scrollIntoView({block:'nearest',behavior:'smooth'});}};controls.append(showCurrent);
  search.oninput=rememberFinder;filter.onchange=rememberFinder;sort.onchange=rememberFinder;dialog.onclose=()=>dialog.remove();render();document.body.append(dialog);dialog.showModal();search.focus();
 };
 function combinedFilename(name){
@@ -534,6 +534,7 @@ $('save').onclick=()=>{try{download(JSON.stringify({...collect(),reviewed:false}
 $('import').onchange=()=>run(async()=>{const file=$('import').files[0];if(!file||file.size>128*1024)throw Error('Choose a panel draft smaller than 128 KB.');const data=JSON.parse(await file.text());if(data.correctionDraft?(!Array.isArray(data.outlineSections)||data.outlineSections.length>32||!data.outlineSections.every(s=>s?.start&&Number.isFinite(s.start.x)&&Number.isFinite(s.start.y))):data.measuredEdges?PanelMeasuredOutline.validate(data).length:(!Array.isArray(data.edges)||data.edges.length<4||data.edges.length>32||!data.edges.every(e=>e&&codes.includes(e.code)&&directions.includes(e.direction))))throw Error('Invalid panel draft.');addPanel(data,file.name);notice('Draft loaded. Review it before generating.');});
 (async()=>{for(const key of (window.parent!==window?['panelstock:session:v2']:[KEY,'panelstock:session:v2','panelstock:site-orders:session:v1'])){try{const saved=JSON.parse(sessionStorage.getItem(key)||'null');if(saved?.token&&saved.expiresAt>Date.now()){session=saved;break;}}catch{}}showSession();if(session)await run(async()=>{await verify();const saved=await PanelCadProjects.list(projectOwner()).catch(()=>[]);notice(saved.length?'Ready. Select Open project to restore your saved work.':'Ready. Upload a sketch or load a test panel.');});})();
 })();
+
 
 
 
