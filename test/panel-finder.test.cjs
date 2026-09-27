@@ -7,3 +7,5 @@ test('filters combine with search and preserve original indices',()=>{assert.equ
 test('ready excludes generated panels with unresolved issues and combines with search',()=>{assert.equal(c.filterPanelRows(rows,'','ready').length,1);assert.equal(c.filterPanelRows(rows,'','ready')[0].index,0);assert.equal(c.filterPanelRows(rows,'Lobby','ready').length,0);});
 
 test('panel ID search ignores spaces hyphens and underscores while respecting filters',()=>{for(const term of ['z221','Z2 21','z2_21'])assert.equal(c.filterPanelRows(rows,term,'all')[0].index,0);assert.equal(c.filterPanelRows(rows,'z221','attention').length,0);assert.equal(c.filterPanelRows(rows,'---','all').length,0);});
+
+test('not generated filter excludes existing drawings and combines with search',()=>{assert.equal(c.filterPanelRows(rows,'','ungenerated').length,1);assert.equal(c.filterPanelRows(rows,'','ungenerated')[0].index,2);assert.equal(c.filterPanelRows(rows,'Lobby','ungenerated').length,0);});

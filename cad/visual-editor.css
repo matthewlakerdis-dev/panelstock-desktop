@@ -7,3 +7,5 @@
 
 /* Keep dragging previews from selecting dimension text. */
 #measured-panel-view svg,.measured-dialog svg,.visual-editor .drawing-canvas svg{user-select:none;-webkit-user-select:none}
+
+#measured-panel-view{margin:24px 0}#measured-panel-view .measured-comparison{border:0;border-radius:0}.measured-comparison-drawing>.sketch-reference-heading{margin:-16px -16px 14px;background:#fff;min-height:69px;box-sizing:border-box}
