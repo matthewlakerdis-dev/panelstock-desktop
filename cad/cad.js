@@ -7,8 +7,22 @@ const panels=[];let panelIndex=-1;
 const navigator=document.createElement('div');navigator.className='panel-navigator';navigator.innerHTML='<button id="previouspanel" type="button" aria-label="Previous panel">←</button><div><strong id="panelcount">No panels</strong><span id="panelsource"></span></div><button id="nextpanel" type="button" aria-label="Next panel">→</button>';
 $('questions').before(navigator);
 let projectId=null,projectName='Untitled project',projectTimer=null,projectSaveChain=Promise.resolve(),projectRevision=0,projectDirty=false;
-const projectBar=document.createElement('section');projectBar.innerHTML='<div class="row"><label>Project name<input id="projectname" maxlength="100" value="Untitled project"></label><button id="saveproject" type="button">Save project</button><button id="openproject" type="button">Open project</button><button id="newproject" type="button">New project</button></div><p id="projectstatus" role="status">Projects save in this browser on this device.</p>';
+const cloudRevisions=new Map();
+const projectBar=document.createElement('section');projectBar.innerHTML='<div class="row"><label>Project name<input id="projectname" maxlength="100" value="Untitled project"></label><button id="saveproject" type="button">Save project</button><button id="openproject" type="button">Open project</button><button id="newproject" type="button">New project</button></div><p id="projectstatus" role="status">Projects save to your account, with a copy kept on this device.</p>';
 $('workspace').prepend(projectBar);
+let projectRetryTimer=null,projectRetryAttempt=0;
+const retrySaveButton=document.createElement('button');retrySaveButton.type='button';retrySaveButton.textContent='Retry save';retrySaveButton.hidden=true;retrySaveButton.className='project-retry';$('projectstatus').after(retrySaveButton);
+function projectSaveStatus(state,text){$('projectstatus').dataset.state=state;$('projectstatus').textContent=text;retrySaveButton.hidden=!['offline','error','retrying'].includes(state);}
+function retryProjectSave(owner,id,delay){
+ clearTimeout(projectRetryTimer);projectRetryTimer=setTimeout(()=>{
+  if(projectOwner()!==owner||projectId!==id||!projectDirty)return;
+  if(busy){retryProjectSave(owner,id,1000);return;}
+  projectSaveStatus('retrying','Retrying account save…');saveProject().catch(()=>{});
+ },delay);
+}
+retrySaveButton.onclick=()=>{projectRetryAttempt=0;saveProject().catch(()=>{});};
+window.addEventListener('online',()=>{if(projectDirty&&projectOwner())retryProjectSave(projectOwner(),projectId,250);});
+window.addEventListener('offline',()=>{if(projectDirty){projectSaveStatus('offline','Offline — keeping changes on this device.');queueProjectSave();}});
 for(const [id,label,path] of [
  ['saveproject','Save project','M5 3h12l4 4v14H3V3h2ZM7 3v6h10V3M7 21v-8h10v8M14 5v2'],
  ['openproject','Open project','M3 10V5h6l2 2h9v3M3 10h19l-4 10H2l1-10Z'],
@@ -21,47 +35,114 @@ for(const [id,label,path] of [
 const quantityLabel=document.createElement('label');quantityLabel.textContent='Panel quantity';const quantityInput=document.createElement('input');quantityInput.id='panelquantity';quantityInput.type='number';quantityInput.min='1';quantityInput.max='9999';quantityInput.step='1';quantityInput.value='1';quantityLabel.append(quantityInput);$('panelid').closest('label').after(quantityLabel);
 quantityInput.onchange=()=>{const value=Number(quantityInput.value);if(!Number.isInteger(value)||value<1||value>9999){quantityInput.value=String(panels[panelIndex]?.quantity||1);notice('Enter a whole panel quantity from 1 to 9,999.');return;}if(panelIndex>=0){panels[panelIndex].quantity=value;queueProjectSave();}};
 const backupButton=document.createElement('button');backupButton.type='button';backupButton.textContent='Download backup';const restoreButton=document.createElement('button');restoreButton.type='button';restoreButton.textContent='Restore backup';const backupInput=document.createElement('input');backupInput.type='file';backupInput.accept='.json,application/json';backupInput.hidden=true;projectBar.querySelector('.row').append(backupButton,restoreButton);projectBar.append(backupInput);
-backupButton.onclick=()=>run(async()=>{if(!panels.length)throw Error('Add a panel before downloading a backup.');rememberPanel();const data=PanelCadProjects.snapshot(panels,panelIndex,$('projectname').value);const text=await PanelCadProjects.backup(data);if(new Blob([text]).size>100*1024*1024)throw Error('This project exceeds the 100 MB backup limit.');download(text,'application/json',combinedFilename(data.name).replace(/\.dxf$/i,'-backup.json'));notice('Project backup downloaded, including sketches and generated drawings.');});
+backupButton.onclick=()=>run(async()=>{if(!panels.length)throw Error('Add a panel before downloading a backup.');rememberPanel();const data=PanelCadProjects.snapshot(panels,panelIndex,$('projectname').value);const text=await PanelCadProjects.backup(data);if(new Blob([text]).size>150*1024*1024)throw Error('This project exceeds the 150 MB backup limit.');download(text,'application/json',combinedFilename(data.name).replace(/\.dxf$/i,'-backup.json'));notice('Project backup downloaded, including sketches and generated drawings.');});
 restoreButton.onclick=()=>{backupInput.value='';backupInput.click();};
-backupInput.onchange=()=>run(async()=>{const file=backupInput.files[0];if(!file)return;if(file.size>100*1024*1024)throw Error('Choose a project backup smaller than 100 MB.');const data=PanelCadProjects.restore(await file.text());await saveProject();const owner=projectOwner();if(!owner)throw Error('Sign in before restoring a project.');const id=crypto.randomUUID();data.name=(data.name+' (restored)').slice(0,100);await PanelCadProjects.save(owner,id,data);panels.length=0;panels.push(...data.panels);panelIndex=-1;spec=null;result=null;projectId=id;projectName=data.name;$('projectname').value=projectName;projectRevision++;projectDirty=false;selectPanel(data.index);notice('Backup restored as a separate project. Review fabrication readiness before downloading drawings.');});
+backupInput.onchange=()=>run(async()=>{const file=backupInput.files[0];if(!file)return;if(file.size>150*1024*1024)throw Error('Choose a project backup smaller than 150 MB.');const data=PanelCadProjects.restore(await file.text());await saveProject();const owner=projectOwner();if(!owner)throw Error('Sign in before restoring a project.');const id=crypto.randomUUID();data.name=(data.name+' (restored)').slice(0,100);await PanelCadProjects.save(owner,id,data);panels.length=0;panels.push(...data.panels);panelIndex=-1;spec=null;result=null;projectId=id;projectName=data.name;$('projectname').value=projectName;projectRevision++;projectDirty=false;selectPanel(data.index);notice('Backup restored as a separate project. Review fabrication readiness before downloading drawings.');});
 function projectOwner(){return session?.username?PanelCadProjects.ownerKey(API,session.username):null;}
 function queueProjectSave(){
  if(!projectOwner()||!panels.length)return;
  projectDirty=true;projectRevision++;clearTimeout(projectTimer);
+ projectSaveStatus('pending','Changes waiting to save…');
  projectTimer=setTimeout(()=>{if(!busy)saveProject().catch(()=>{});else queueProjectSave();},700);
 }
 async function saveProject(){
- clearTimeout(projectTimer);const owner=projectOwner();if(!owner||!panels.length)return;
+ clearTimeout(projectTimer);clearTimeout(projectRetryTimer);const owner=projectOwner();if(!owner||!panels.length)return;
  rememberPanel();projectName=$('projectname').value.trim()||'Untitled project';projectId||=crypto.randomUUID();
  const id=projectId,revision=projectRevision,data=PanelCadProjects.snapshot(panels,panelIndex,projectName);
- $('projectstatus').textContent='Saving project…';
- const task=projectSaveChain.catch(()=>{}).then(()=>PanelCadProjects.save(owner,id,data));projectSaveChain=task;
- try{await task;if(projectOwner()===owner&&projectId===id&&projectRevision===revision){projectDirty=false;$('projectstatus').textContent='Saved in this browser at '+new Date(data.updatedAt).toLocaleTimeString()+'.';}}
- catch(error){if(projectOwner()===owner){projectDirty=true;$('projectstatus').textContent='Could not save this project. Browser storage may be full or unavailable. Keep this page open and download your drafts and drawings.';}throw error;}
+ projectSaveStatus('saving','Saving project…');let localSaved=false;
+ const task=projectSaveChain.catch(()=>{}).then(async()=>{
+  await PanelCadProjects.save(owner,id,data);
+  localSaved=true;
+  if(projectOwner()!==owner)return;
+  if(window.navigator.onLine===false){const error=Error('You are offline.');error.offline=true;throw error;}
+  const request=(...args)=>{if(projectOwner()!==owner)throw Error('Your account changed during saving. The browser copy is retained.');return api(...args);};
+  const progress=text=>{if(projectOwner()===owner&&projectId===id)projectSaveStatus('saving',text);};let response;
+  try{response=await PanelCadProjects.saveCloud(data,id,cloudRevisions.get(owner+'|'+id)||0,request,progress);}
+  catch(error){if(!error.conflict)throw error;
+   const copyId=crypto.randomUUID();data.name=(data.name+' (device copy)').slice(0,100);
+   response=await PanelCadProjects.saveCloud(data,copyId,0,request,progress);
+   await PanelCadProjects.save(owner,copyId,data);cloudRevisions.set(owner+'|'+copyId,response.revision);
+   if(projectOwner()===owner&&projectId===id){projectId=copyId;projectName=data.name;$('projectname').value=data.name;if(projectRevision===revision)projectDirty=false;projectRetryAttempt=0;projectSaveStatus('saved','Saved to your account as a separate device copy.');notice('Another device changed this project. Your changes were saved as a separate device copy.');}return;
+  }
+  cloudRevisions.set(owner+'|'+id,response.revision);
+ });projectSaveChain=task;
+ try{await task;if(projectOwner()===owner&&projectId===id&&projectRevision===revision){projectDirty=false;projectRetryAttempt=0;projectSaveStatus('saved','Saved to your account at '+new Date().toLocaleTimeString()+'.');}}
+ catch(error){if(projectOwner()===owner&&projectId===id){
+  projectDirty=true;const offline=error.offline||window.navigator.onLine===false;
+  const canRetry=localSaved&&!offline&&(!error.status||error.status===429||error.status>=500)&&projectRetryAttempt<5;
+  const delay=Math.min(30000,2000*2**projectRetryAttempt);
+  projectSaveStatus(offline?'offline':canRetry?'retrying':'error',offline?(localSaved?'Offline — saved on this device. Account saving resumes when you reconnect.':'Offline — could not save on this device. Keep this page open and download a backup.'):'Account save failed: '+error.message+(localSaved?' Saved on this device.':' Keep this page open and download a backup.')+(canRetry?' Retrying in '+delay/1000+' seconds.':''));
+  if(canRetry){projectRetryAttempt++;retryProjectSave(owner,id,delay);}
+ }throw error;}
 }
 function pickProject(items){return new Promise(resolve=>{
  const dialog=document.createElement('dialog');dialog.className='project-picker';dialog.setAttribute('aria-labelledby','project-picker-title');
  const header=document.createElement('header');header.className='project-picker-header';
  const eyebrow=document.createElement('p');eyebrow.className='project-picker-eyebrow';eyebrow.textContent='YOUR WORKSPACE';
  const title=document.createElement('h2');title.id='project-picker-title';title.textContent='Open saved project';
- const description=document.createElement('p');description.textContent='Continue from where you left off. Projects are saved in this browser.';header.append(eyebrow,title,description);dialog.append(header);
+ const description=document.createElement('p');description.textContent='Open an account project from any device, or a copy saved on this device.';header.append(eyebrow,title,description);dialog.append(header);
  const list=document.createElement('div');list.className='project-picker-list';list.setAttribute('role','group');list.setAttribute('aria-label','Saved projects');let selected=0;
  items.forEach((p,i)=>{const card=document.createElement('label');card.className='project-picker-card';const radio=document.createElement('input');radio.type='radio';radio.name='saved-project';radio.value=String(i);radio.checked=i===0;radio.onchange=()=>{selected=i;};
  const details=document.createElement('span');details.className='project-picker-details';const name=document.createElement('strong');name.textContent=p.name;
- const meta=document.createElement('span');meta.textContent=p.panels.length+' panel'+(p.panels.length===1?'':'s')+' · Saved '+new Date(p.updatedAt).toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});details.append(name,meta);card.append(radio,details);list.append(card);});dialog.append(list);
+ const meta=document.createElement('span');meta.textContent=(p.cloud?'Account · ':'This device · ')+(p.panelCount??p.panels.length)+' panel'+((p.panelCount??p.panels.length)===1?'':'s')+' · Saved '+new Date(p.updatedAt).toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});details.append(name,meta);card.append(radio,details);list.append(card);});dialog.append(list);
  const footer=document.createElement('footer');footer.className='project-picker-footer';const open=document.createElement('button');open.textContent='Open project';open.className='primary';open.type='button';open.disabled=!items.length;const cancel=document.createElement('button');cancel.textContent='Cancel';cancel.type='button';footer.append(cancel,open);dialog.append(footer);
- const close=value=>{dialog.close();dialog.remove();resolve(value);};open.onclick=()=>close(items[selected]);cancel.onclick=()=>close(null);dialog.oncancel=e=>{e.preventDefault();close(null);};document.body.append(dialog);dialog.showModal();
+ const close=value=>{dialog.close();dialog.remove();resolve(value);};
+ const actions=document.createElement('div');actions.className='project-management-actions';
+ for(const [action,label] of [['rename','Rename'],['duplicate','Duplicate'],['delete','Delete']]){const button=document.createElement('button');button.type='button';button.textContent=label;button.disabled=!items.length;if(action==='delete')button.className='danger';button.onclick=()=>close({action,item:items[selected]});actions.append(button);}footer.before(actions);
+ open.onclick=()=>close({action:'open',item:items[selected]});cancel.onclick=()=>close(null);dialog.oncancel=e=>{e.preventDefault();close(null);};document.body.append(dialog);dialog.showModal();
 });}
+function projectActionDialog(action,item){return new Promise(resolve=>{
+ const dialog=document.createElement('dialog');dialog.className='project-picker project-action-dialog';const header=document.createElement('header');header.className='project-picker-header';const title=document.createElement('h2');title.textContent=action==='delete'?'Delete project?':action==='rename'?'Rename project':'Duplicate project';header.append(title);dialog.append(header);
+ const content=document.createElement('div');content.className='project-picker-list';const description=document.createElement('p');description.textContent=action==='delete'?'Delete “'+item.name+'”'+(item.cloud?' from your account and this device?':' from this device?')+' Download a backup first if you want to keep it.':'Enter a name for this project.';content.append(description);
+ const input=document.createElement('input');input.maxLength=100;input.value=(item.name+(action==='duplicate'?' (copy)':'')).slice(0,100);if(action!=='delete'){const label=document.createElement('label');label.textContent='Project name';label.append(input);content.append(label);}dialog.append(content);
+ const footer=document.createElement('footer');footer.className='project-picker-footer';const cancel=document.createElement('button');cancel.textContent='Cancel';const submit=document.createElement('button');submit.textContent=action==='delete'?'Delete project':action==='rename'?'Save name':'Create copy';submit.className=action==='delete'?'danger':'primary';footer.append(cancel,submit);dialog.append(footer);
+ const close=value=>{dialog.close();dialog.remove();resolve(value);};cancel.onclick=()=>close(null);dialog.oncancel=e=>{e.preventDefault();close(null);};submit.onclick=()=>{if(action!=='delete'&&!input.value.trim()){input.focus();return;}close(action==='delete'?true:input.value.trim());};input.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();submit.click();}};document.body.append(dialog);dialog.showModal();if(action==='delete')cancel.focus();else{input.focus();input.select();}
+});}
+async function manageSavedProject(action,item,owner){
+ const value=await projectActionDialog(action,item);if(value===null||projectOwner()!==owner)return;
+ const request=(...args)=>{if(projectOwner()!==owner)throw Error('Your account changed. Open the project list again.');return api(...args);};
+ const id=item.projectId;
+ if(action==='delete'){
+  if(item.cloud)await request('/cad/projects/'+id+'/delete',{revision:item.revision});
+  let localError=null;try{await PanelCadProjects.remove(owner,id);}catch(error){if(!item.cloud)throw error;localError=error;}cloudRevisions.delete(owner+'|'+id);
+  if(projectId===id){clearTimeout(projectTimer);clearTimeout(projectRetryTimer);panels.length=0;panelIndex=-1;spec=null;result=null;projectId=null;projectName='Untitled project';$('projectname').value=projectName;projectDirty=false;projectRevision++;PanelMeasuredOutline.show(null);invalidate();$('edges').replaceChildren();$('panelid').value='';$('questions').replaceChildren();updateNavigator();projectSaveStatus('saved','Project deleted. Start a new project when ready.');}
+  notice(localError?'Account project deleted. The browser copy could not be removed; delete that device copy separately.':'Project deleted.');return;
+ }
+ if(action==='rename'){
+  if(item.cloud&&projectId===id&&(projectDirty||cloudRevisions.get(owner+'|'+id)!==item.revision))throw Error('Open the latest account copy before renaming this project. Your unsaved changes remain on this device.');
+  let response;if(item.cloud)response=await request('/cad/projects/'+id+'/rename',{revision:item.revision,name:value});
+  if(response)cloudRevisions.set(owner+'|'+id,response.revision);
+  if(projectId===id){projectName=value;$('projectname').value=value;projectSaveStatus(item.cloud?'saved':'pending',item.cloud?'Project renamed in your account.':'Project renamed on this device.');}
+  const local=(await PanelCadProjects.list(owner)).find(p=>p.projectId===id);if(local)await PanelCadProjects.save(owner,id,{...local,name:value,updatedAt:Date.now()});
+  notice('Project renamed.');return;
+ }
+ const data=item.cloud?await PanelCadProjects.restoreCloud(await request('/cad/projects/'+id),id,request):PanelCadProjects.snapshot(item.panels,item.index,item.name);
+ data.name=value;const copyId=crypto.randomUUID();await PanelCadProjects.save(owner,copyId,data);
+ if(item.cloud){const response=await PanelCadProjects.saveCloud(data,copyId,0,request);cloudRevisions.set(owner+'|'+copyId,response.revision);}
+ notice('Project duplicated as “'+value+'”.');
+}
 $('saveproject').onclick=()=>run(()=>saveProject());
 $('openproject').onclick=()=>run(async()=>{
- await saveProject();const owner=projectOwner(),items=await PanelCadProjects.list(owner);if(!items.length){notice('No projects saved in this browser yet.');return;}
- const saved=await pickProject(items);if(!saved||owner!==projectOwner())return;
+ try{await saveProject();}catch{notice('Current changes remain on this device. Select a saved project below.');}
+ const owner=projectOwner();if(!owner)return;
+ while(owner===projectOwner()){
+ const local=await PanelCadProjects.list(owner);let remote=[];
+ try{remote=(await api('/cad/projects')).projects.map(p=>({...p,cloud:true}));}catch{notice('Account projects are unavailable. Showing this device’s copies.');}
+ const items=[...remote,...local];if(!items.length){notice('No saved projects yet.');return;}
+ const choice=await pickProject(items);if(!choice||owner!==projectOwner())return;
+ if(choice.action!=='open'){try{await manageSavedProject(choice.action,choice.item,owner);}catch(error){notice(error.conflict?'This project changed on another device. The list has been refreshed; choose it again.':error.message);}continue;}
+ let saved=choice.item;
+ if(saved.cloud){const id=saved.projectId,request=(...args)=>{if(projectOwner()!==owner)throw Error('Your account changed while opening the project.');return api(...args);},response=await request('/cad/projects/'+id);saved={...await PanelCadProjects.restoreCloud(response,id,request),projectId:id};cloudRevisions.set(owner+'|'+id,response.revision);}
+ else {saved={...saved,projectId:crypto.randomUUID(),name:(saved.name+' (device copy)').slice(0,100)};}
+ if(owner!==projectOwner())return;
  panels.length=0;panels.push(...saved.panels);panelIndex=-1;spec=null;result=null;projectId=saved.projectId;projectName=saved.name;$('projectname').value=projectName;projectRevision++;projectDirty=false;
  selectPanel(Math.max(0,Math.min(saved.index,panels.length-1)));notice('Project opened. Sketches and generated drawings restored.');
+ return;
+ }
 });
 $('newproject').onclick=()=>run(async()=>{
  await saveProject();panels.length=0;panelIndex=-1;spec=null;result=null;projectId=null;projectName='Untitled project';quantityInput.value='1';$('projectname').value=projectName;projectRevision++;projectDirty=false;
- PanelMeasuredOutline.show(null);invalidate();$('edges').replaceChildren();$('panelid').value='';$('questions').replaceChildren();updateNavigator();notice('New project ready. Add a sketch to begin.');$('projectstatus').textContent='Projects save in this browser on this device.';
+ PanelMeasuredOutline.show(null);invalidate();$('edges').replaceChildren();$('panelid').value='';$('questions').replaceChildren();updateNavigator();notice('New project ready. Add a sketch to begin.');$('projectstatus').textContent='Projects save to your account, with a copy kept on this device.';
 });
 $('workspace').addEventListener('input',queueProjectSave);$('workspace').addEventListener('change',queueProjectSave);
 window.addEventListener('beforeunload',e=>{if(projectDirty){e.preventDefault();e.returnValue='';}});
@@ -93,7 +174,7 @@ function renderDrawingChecks(drawing){
  if(rows.length){const wrap=document.createElement('div');wrap.className='tablewrap';const table=document.createElement('table');const thead=document.createElement('thead'),head=document.createElement('tr');for(const label of ['Measurement','Sketch','Deduction','Expected','Actual','Check']){const th=document.createElement('th');th.textContent=label;head.append(th);}thead.append(head);table.append(thead);const tbody=document.createElement('tbody');const number=value=>Number.isFinite(value)?String(Number(value.toFixed(3))):'—';for(const row of rows){const tr=document.createElement('tr');if(row.status==='mismatch')tr.className='measurement-mismatch';for(const value of [row.label,number(row.site),number(row.deduction),number(row.expected),number(row.actual),row.status==='pass'?'Matches':row.status==='mismatch'?'Mismatch':'Calculated']){const td=document.createElement('td');td.textContent=value;tr.append(td);}tbody.append(tr);}table.append(tbody);wrap.append(table);audit.append(wrap);}box.append(audit);
 }
 function invalidate(){const errorBox=$('generation-error');if(errorBox)errorBox.hidden=true;version++;result=null;updateNavigator();$('download').disabled=true;$('confirmed').checked=false;$('preview').hidden=true;$('validation').textContent='Generate a new preview after reviewing your changes.';}
-async function api(path,body){const token=session?.token;const response=await fetch(API+path,{method:body?'POST':'GET',headers:{...(token?{Authorization:'Bearer '+token}:{}),...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),cache:'no-store',signal:AbortSignal.timeout(95000)});const data=await response.json();if(response.status===401){session=null;sessionStorage.removeItem(KEY);showSession();}if(!response.ok)throw Error(data.error||'Request failed');return data;}
+async function api(path,body){const token=session?.token;const response=await fetch(API+path,{method:body?'POST':'GET',headers:{...(token?{Authorization:'Bearer '+token}:{}),...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),cache:'no-store',signal:AbortSignal.timeout(95000)});const data=await response.json();if(response.status===401){session=null;sessionStorage.removeItem(KEY);showSession();}if(!response.ok){const error=Error(data.error||'Request failed');error.conflict=data.conflict===true;error.status=response.status;throw error;}return data;}
 function showSession(){if(!session){clearTimeout(projectTimer);projectId=null;projectDirty=false;$('projectname').value='Untitled project';PanelMeasuredOutline.show(null);panels.length=0;panelIndex=-1;updateNavigator();spec=null;invalidate();$('edges').replaceChildren();$('panelid').value='';$('folds').value='';$('questions').replaceChildren();if(previewURL){URL.revokeObjectURL(previewURL);previewURL=null;}}$('login').hidden=!!session;$('workspace').hidden=!session;$('signout').hidden=!session;$('account').textContent=session?.username||'';}
 async function run(action){if(busy)return;busy=true;for(const b of document.querySelectorAll('button'))b.disabled=true;notice('Working…');try{await action();}catch(e){notice(e.name==='TimeoutError'?'This request timed out. Please retry.':e.message||'Could not reach the server.');}finally{busy=false;for(const b of document.querySelectorAll('button'))b.disabled=false;$('download').disabled=!result;updateNavigator();queueProjectSave();}}
 function edgeRow(edge,index){const tr=document.createElement('tr');tr.dataset.sections=JSON.stringify(edge.sections||[]);const name=document.createElement('input');name.value=edge.name||'Edge '+(index+1);name.maxLength=60;name.setAttribute('aria-label','Edge name');
@@ -368,9 +449,3 @@ $('save').onclick=()=>{try{download(JSON.stringify({...collect(),reviewed:false}
 $('import').onchange=()=>run(async()=>{const file=$('import').files[0];if(!file||file.size>128*1024)throw Error('Choose a panel draft smaller than 128 KB.');const data=JSON.parse(await file.text());if(data.correctionDraft?(!Array.isArray(data.outlineSections)||data.outlineSections.length>32||!data.outlineSections.every(s=>s?.start&&Number.isFinite(s.start.x)&&Number.isFinite(s.start.y))):data.measuredEdges?PanelMeasuredOutline.validate(data).length:(!Array.isArray(data.edges)||data.edges.length<4||data.edges.length>32||!data.edges.every(e=>e&&codes.includes(e.code)&&directions.includes(e.direction))))throw Error('Invalid panel draft.');addPanel(data,file.name);notice('Draft loaded. Review it before generating.');});
 (async()=>{for(const key of (window.parent!==window?['panelstock:session:v2']:[KEY,'panelstock:session:v2','panelstock:site-orders:session:v1'])){try{const saved=JSON.parse(sessionStorage.getItem(key)||'null');if(saved?.token&&saved.expiresAt>Date.now()){session=saved;break;}}catch{}}showSession();if(session)await run(async()=>{await verify();const saved=await PanelCadProjects.list(projectOwner()).catch(()=>[]);notice(saved.length?'Ready. Select Open project to restore your saved work.':'Ready. Upload a sketch or load a test panel.');});})();
 })();
-
-
-
-
-
-

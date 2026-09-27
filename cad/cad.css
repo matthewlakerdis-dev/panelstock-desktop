@@ -63,4 +63,13 @@ dialog.project-picker[open]{display:flex;flex-direction:column}
 .measurement-audit summary{cursor:pointer;font-weight:600;color:#155e75}
 .measurement-audit td:not(:first-child){font-variant-numeric:tabular-nums;white-space:nowrap}
 .measurement-audit .measurement-mismatch{background:#fff1ee;color:#9b2c20}
-
+.project-management-actions{display:flex;gap:8px;flex-wrap:wrap;padding:0 28px 16px}
+.project-picker button.danger{color:#b42318;border-color:#edc1bd;background:#fff7f6}
+.project-action-dialog .project-picker-list p{margin:0;line-height:1.6}
+#projectstatus{display:inline-flex;align-items:center;gap:8px;font-size:13px;padding:7px 11px;border-radius:8px;background:#f1f5f9;color:#475569}
+#projectstatus[data-state="saved"]{background:#edf8f1;color:#20633d}
+#projectstatus[data-state="saving"],#projectstatus[data-state="pending"]{background:#edf5fb;color:#285a80}
+#projectstatus[data-state="offline"],#projectstatus[data-state="retrying"]{background:#fff6e6;color:#86570b}
+#projectstatus[data-state="error"]{background:#fff0ee;color:#a62c24}
+.project-retry{margin-left:8px;font-size:12px;padding:7px 12px}
+.project-retry[hidden]{display:none}
