@@ -43,7 +43,7 @@ function draw(svg,d,onPoint){
  ps.forEach((p,i)=>{
   const a=map(p),b=map(ps[(i+1)%ps.length]),e=d.measuredEdges[i],length=Math.hypot(b[0]-a[0],b[1]-a[1]);if(!length)return;
   const u=[(b[0]-a[0])/length,(b[1]-a[1])/length],n=[-u[1],u[0]],text=(Math.abs(e.dx)<.001?fmt(e.dy):Math.abs(e.dy)<.001?fmt(e.dx):fmt(e.dx)+' × '+fmt(e.dy))+' · '+e.code;
-  let angle=Math.atan2(u[1],u[0])*180/Math.PI;if(angle>90)angle-=180;if(angle<-90)angle+=180;
+  let angle=Math.atan2(u[1],u[0])*180/Math.PI;if(angle>90)angle-=180;if(angle<-90)angle+=180;const vertical=Math.abs(u[0])<.001;if(vertical)angle=0;
   const textWidth=text.length*8+12,radians=angle*Math.PI/180,bw=Math.abs(Math.cos(radians))*textWidth+Math.abs(Math.sin(radians))*18,bh=Math.abs(Math.sin(radians))*textWidth+Math.abs(Math.cos(radians))*18;
   // Keep the fixed gap, switching sides when the notch is too narrow.
   const mid=[(a[0]+b[0])/2,(a[1]+b[1])/2];
@@ -58,8 +58,8 @@ function draw(svg,d,onPoint){
   const offset=26,{start,end,center:c}=dimensionPlacement(a,b,blocked?-offset:offset);
   const line=(a,b)=>svg.append(make('line',{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:'#334c59','stroke-width':1,'pointer-events':'none'}));
   for(const point of [a,b])line([point[0]+n[0]*5,point[1]+n[1]*5],[point[0]+n[0]*(offset+6),point[1]+n[1]*(offset+6)]);
-  const gap=textWidth/2,outer=length<textWidth+20;
-  if(outer){const tail=12,gapEnd=Math.max(12,(textWidth-length)/2+8);line([start[0]-u[0]*(gapEnd+tail),start[1]-u[1]*(gapEnd+tail)],[start[0]-u[0]*gapEnd,start[1]-u[1]*gapEnd]);line([end[0]+u[0]*gapEnd,end[1]+u[1]*gapEnd],[end[0]+u[0]*(gapEnd+tail),end[1]+u[1]*(gapEnd+tail)]);}else{line(start,[c[0]-u[0]*gap,c[1]-u[1]*gap]);line([c[0]+u[0]*gap,c[1]+u[1]*gap],end);}
+  const alongText=vertical?20:textWidth,gap=alongText/2,outer=length<alongText+20;
+  if(outer){const tail=12,gapEnd=Math.max(12,(alongText-length)/2+8);line([start[0]-u[0]*(gapEnd+tail),start[1]-u[1]*(gapEnd+tail)],[start[0]-u[0]*gapEnd,start[1]-u[1]*gapEnd]);line([end[0]+u[0]*gapEnd,end[1]+u[1]*gapEnd],[end[0]+u[0]*(gapEnd+tail),end[1]+u[1]*(gapEnd+tail)]);}else{line(start,[c[0]-u[0]*gap,c[1]-u[1]*gap]);line([c[0]+u[0]*gap,c[1]+u[1]*gap],end);}
   for(const [tip,sign]of [[start,1],[end,-1]]){const inward=sign*(outer?-1:1);svg.append(make('polygon',{'data-dimension-arrow':tip.join(','),points:[tip,[tip[0]+u[0]*inward*7+n[0]*2.5,tip[1]+u[1]*inward*7+n[1]*2.5],[tip[0]+u[0]*inward*7-n[0]*2.5,tip[1]+u[1]*inward*7-n[1]*2.5]].map(p=>p.join(',')).join(' '),fill:'#334c59','pointer-events':'none'}));}
   const edge=make('line',{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:'#007b9e','stroke-width':4,opacity:0,'pointer-events':'none'}),label=make('text',{'data-dimension-label':'',x:0,y:0,transform:'translate('+c.join(' ')+') rotate('+angle+')','text-anchor':'middle','dominant-baseline':'middle','font-size':14,'font-weight':500,fill:'#173f52',stroke:'#f7fafc','stroke-width':2,'paint-order':'stroke fill',tabindex:0,role:'button','aria-label':text+'. Highlight matching edge'},text);
   svg.append(edge);dimensionLabels.push(label);label.onmouseenter=label.onfocus=()=>edge.setAttribute('opacity',1);label.onmouseleave=label.onblur=()=>edge.setAttribute('opacity',0);label.onclick=()=>edge.setAttribute('opacity',edge.getAttribute('opacity')==='1'?0:1);
