@@ -115,7 +115,7 @@ async function open({panels,request,download,projectName,orderNumber,jobReferenc
 
    const plan=await request('/cad/generate',payload);if(!dialog.isConnected||version!==revision)return;
 
-   setStatus(plan.sheets.length+' sheets planned \xb7 '+plan.unplaced.length+' panel copies could not fit. Stock has not changed.',false,plan.unplaced.length>0);
+   setStatus(plan.sheets.length+' sheets planned. '+(plan.unplaced.length?'Panels not planned: '+plan.unplaced.map(p=>p.name+' (copy '+p.copy+')').join(', ')+'.':'All selected panels placed.')+' Stock has not changed.',false,plan.unplaced.length>0);
 
    if(plan.unplaced.length){const warning=document.createElement('p');warning.textContent='Not placed: '+plan.unplaced.map(p=>p.name+' (copy '+p.copy+')').join(', ')+'. No available sheet fits, or available quantities have been used.';results.append(warning);}
 
