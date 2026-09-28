@@ -6,7 +6,7 @@ let session=null,spec=null,result=null,busy=false,previewURL=null,version=0;
 const panels=[];let panelIndex=-1;
 const navigator=document.createElement('div');navigator.className='panel-navigator';navigator.innerHTML='<button id="previouspanel" type="button" aria-label="Previous panel">←</button><div><strong id="panelcount">No panels</strong><span id="panelsource"></span></div><button id="nextpanel" type="button" aria-label="Next panel">→</button>';
 $('questions').before(navigator);
-const deletePanelButton=document.createElement('button');deletePanelButton.type='button';deletePanelButton.id='deletepanel';deletePanelButton.textContent='Delete panel';deletePanelButton.title='Delete the current panel from this project';navigator.append(deletePanelButton);
+const deletePanelButton=document.createElement('button');deletePanelButton.type='button';deletePanelButton.id='deletepanel';projectIcon(deletePanelButton,'Delete panel','M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7');navigator.append(deletePanelButton);
 deletePanelButton.onclick=()=>{
  if(busy||panelIndex<0)return;
  const target=panels[panelIndex],name=spec?.panelId||target.name||'this panel';
