@@ -1,9 +1,8 @@
 /* Visual controls delegate to the existing, validated edge editor. */
 (()=>{'use strict';
 const table=document.querySelector('.tablewrap'),rows=document.getElementById('edges');
-const details=document.createElement('details');details.className='edge-details';
-const summary=document.createElement('summary');summary.textContent='Show all edge details';
-table.before(details);details.append(summary,table);
+const details=document.createElement('div');details.className='edge-details';details.hidden=true;
+table.before(details);details.append(table);
 const host=document.createElement('div');host.className='visual-editor';details.before(host);
 host.innerHTML='<div class="drawing-space"><div class="drawing-heading"><div><span class="editor-eyebrow">PANEL WORKSPACE</span><strong>Edit your panel</strong></div><span class="editor-hint">Select a dimension or edge to edit</span></div><div class="drawing-canvas"><svg viewBox="0 0 760 540" aria-label="Interactive site outline"></svg><div class="edge-inspector" hidden><div class="inspector-heading"><h3>Selected edge</h3><button type="button" class="close-editor" aria-label="Close edge editor">×</button></div><div class="edge-controls"></div><p class="small">Changes update the outline automatically.</p></div></div><div class="drawing-footer"><p class="drawing-status" role="status"></p><span>Site · Finished (mm)</span></div><div class="edge-picker" hidden></div></div>';
 const comparison=document.createElement('div');comparison.className='panel-comparison';const drawingCanvas=host.querySelector('.drawing-canvas');drawingCanvas.before(comparison);const proposed=document.createElement('div');proposed.className='proposed-sketch';const proposedHeading=document.createElement('div');proposedHeading.className='sketch-reference-heading';proposedHeading.innerHTML='<div><strong>Proposed sketch</strong><small>Panel dimensions and folds</small></div>';proposed.append(proposedHeading,drawingCanvas);comparison.append(proposed);
@@ -149,7 +148,7 @@ function render(rebuild=true){
  const help=document.createElement('p');help.className='small';help.textContent='Change this only to correct which way the edge runs around the outline.';advanced.append(help);controls.append(advanced);measurementErrors(all);
 }
 rows.addEventListener('input',()=>render(false));
-details.addEventListener('toggle',()=>render(true));
+
 document.getElementById('folds').addEventListener('input',()=>render(false));
 new MutationObserver(()=>{editing=false;render(true);}).observe(rows,{childList:true});
 render();
