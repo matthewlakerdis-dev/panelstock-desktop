@@ -93,7 +93,7 @@ async function open({panels,request,download,projectName,orderNumber,jobReferenc
  const results=document.createElement('div');results.className='sheet-results';body.append(results);let stockChoices=[],urls=[],revision=0,working=false;
 
  const status=document.createElement('p');status.className='combine-status';status.setAttribute('role','status');
- function setStatus(message,error=false){status.classList.toggle('cad-error-message',error);status.setAttribute('role',error?'alert':'status');status.textContent=message;}
+ function setStatus(message,error=false,warning=false){status.classList.toggle('cad-error-message',error);status.classList.toggle('cad-warning-message',warning&&!error);status.setAttribute('role',error||warning?'alert':'status');status.textContent=(warning&&!error?'Warning: ':'')+message;}
 
  const build=document.createElement('button');build.type='button';build.className='primary';build.textContent='Preview sheet plan';const close=document.createElement('button');close.type='button';close.textContent='Close';footer.append(status,close,build);dialog.append(header,body,footer);
 
@@ -115,7 +115,7 @@ async function open({panels,request,download,projectName,orderNumber,jobReferenc
 
    const plan=await request('/cad/generate',payload);if(!dialog.isConnected||version!==revision)return;
 
-   setStatus(plan.sheets.length+' sheets planned \xb7 '+plan.unplaced.length+' panel copies could not fit. Stock has not changed.');
+   setStatus(plan.sheets.length+' sheets planned \xb7 '+plan.unplaced.length+' panel copies could not fit. Stock has not changed.',false,plan.unplaced.length>0);
 
    if(plan.unplaced.length){const warning=document.createElement('p');warning.textContent='Not placed: '+plan.unplaced.map(p=>p.name+' (copy '+p.copy+')').join(', ')+'. No available sheet fits, or available quantities have been used.';results.append(warning);}
 

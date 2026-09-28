@@ -446,3 +446,6 @@ dialog.readiness-dialog{width:min(720px,calc(100vw - 32px))}
 .cad-error-message::before{content:"!";position:absolute;left:0;top:.2em;display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:#b42318;color:#fff;font:bold 14px/1 sans-serif}
 #generation-error.cad-error-message{padding-left:42px!important}
 #generation-error.cad-error-message::before{left:14px;top:15px}
+
+.cad-warning-message.cad-warning-message{color:#946200;position:relative;padding-left:28px}
+.cad-warning-message::before{content:"!";position:absolute;left:0;top:.1em;display:inline-flex;align-items:center;justify-content:center;width:21px;height:20px;padding-top:3px;box-sizing:border-box;clip-path:polygon(50% 0,100% 100%,0 100%);background:#f9b233;color:#fff;font:bold 14px/1 sans-serif}
