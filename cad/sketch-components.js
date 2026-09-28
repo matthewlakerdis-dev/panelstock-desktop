@@ -104,7 +104,7 @@ function infer(points,values,folds=[],constraints={}){
   }
  }
  let solved;
- try{solved=resolve(points,prepared,folds,{...constraints,partial:true});}
+ try{solved=resolve(points,prepared,folds,{...constraints,partial:true});if(constraints.edgeRightAngles?.length&&solved.values.every(v=>(v.kind==='sloping'?['width','height']:['site']).every(k=>Number.isFinite(v[k]))))build(points,solved.values,folds,constraints);}
  catch(error){
   // A previously inferred slope can still be required by explicit dimensions
   // (for example unequal end heights). Recalculate it, never reuse its value.
@@ -120,7 +120,7 @@ function infer(points,values,folds=[],constraints={}){
   else {
   // A snapped trace is approximate. Only relax one unmarked, unlocked axis
   // when the written dimensions and fold constraints identify it uniquely.
-  if(!constraints.rightAngles?.length&&!constraints.measurementConstraints?.length)throw error;
+  if(!constraints.rightAngles?.length&&!constraints.measurementConstraints?.length&&!constraints.edgeRightAngles?.length)throw error;
   let baseline;try{baseline=resolve(points,prepared,folds,{...constraints,measurementConstraints:[],partial:true}).values;}catch(_){baseline=prepared;}
   const candidates=[];
   baseline.forEach((v,i)=>{
@@ -150,6 +150,7 @@ function infer(points,values,folds=[],constraints={}){
 function mergeReadMeasurements(values,edges){
  return values.map((value,i)=>{
   const v={...value},e=edges[i]||{};
+  if(!v.shapeExplicit&&!Object.values(v.manualMeasurements||{}).some(Boolean)&&['horizontal','vertical','sloping'].includes(e.kind)){v.kind=e.kind;if(e.kind==='sloping'){if(v.width==null&&value.kind==='horizontal')v.width=v.site;if(v.height==null&&value.kind==='vertical')v.height=v.site;}}
   for(const key of ['site','width','height']){
    if(v[key]!=null||v.manualMeasurements?.[key])continue;
    if(Number.isFinite(e[key])&&e[key]>=(key==='site'?.001:0)&&e[key]<=10000){

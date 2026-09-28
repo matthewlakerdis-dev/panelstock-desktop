@@ -6,6 +6,24 @@ let session=null,spec=null,result=null,busy=false,previewURL=null,version=0;
 const panels=[];let panelIndex=-1;
 const navigator=document.createElement('div');navigator.className='panel-navigator';navigator.innerHTML='<button id="previouspanel" type="button" aria-label="Previous panel">←</button><div><strong id="panelcount">No panels</strong><span id="panelsource"></span></div><button id="nextpanel" type="button" aria-label="Next panel">→</button>';
 $('questions').before(navigator);
+const deletePanelButton=document.createElement('button');deletePanelButton.type='button';deletePanelButton.id='deletepanel';deletePanelButton.textContent='Delete panel';deletePanelButton.title='Delete the current panel from this project';navigator.append(deletePanelButton);
+deletePanelButton.onclick=()=>{
+ if(busy||panelIndex<0)return;
+ const target=panels[panelIndex],name=spec?.panelId||target.name||'this panel';
+ const dialog=document.createElement('dialog');dialog.className='project-picker';
+ const header=document.createElement('header');header.className='project-picker-header';
+ const title=document.createElement('h2');title.textContent='Delete '+name+'?';
+ const message=document.createElement('p');message.textContent='This removes the panel, its saved outline edits and generated drawing from this project. Original uploaded files and existing CNC tracker entries are kept.';
+ header.append(title,message);const footer=document.createElement('footer');footer.className='project-picker-footer';
+ const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Keep panel';
+ const apply=document.createElement('button');apply.type='button';apply.className='danger';apply.textContent='Delete panel';
+ const close=()=>{dialog.close();dialog.remove();deletePanelButton.focus();};cancel.onclick=close;dialog.oncancel=e=>{e.preventDefault();close();};
+ apply.onclick=()=>{if(busy)return;const index=panels.indexOf(target);if(index<0){close();return;}rememberPanel();panels.splice(index,1);panelIndex=-1;spec=null;result=null;
+ if(previewURL){URL.revokeObjectURL(previewURL);previewURL=null;}
+ if(panels.length)selectPanel(Math.min(index,panels.length-1));else{PanelMeasuredOutline.show(null);invalidate();$('edges').replaceChildren();$('panelid').value='';$('folds').value='';$('questions').replaceChildren();quantityInput.value='1';updateNavigator();}
+ queueProjectSave();close();notice(name+' deleted from the project.');};
+ footer.append(cancel,apply);dialog.append(header,footer);document.body.append(dialog);dialog.showModal();cancel.focus();
+};
 let projectId=null,projectName='Untitled project',projectTimer=null,projectSaveChain=Promise.resolve(),projectRevision=0,projectDirty=false;
 const cloudRevisions=new Map();
 function warnPendingProjectSave(event){
@@ -86,13 +104,13 @@ restoreButton.onclick=()=>{backupInput.value='';backupInput.click();};
 backupInput.onchange=()=>run(async()=>{const file=backupInput.files[0];if(!file)return;if(file.size>150*1024*1024)throw Error('Choose a project backup smaller than 150 MB.');const data=PanelCadProjects.restore(await file.text());await saveProject();const owner=projectOwner();if(!owner)throw Error('Sign in before restoring a project.');const id=crypto.randomUUID();uploadedSketchFiles=data.uploadedFiles||[];data.name=(data.name+' (restored)').slice(0,100);await PanelCadProjects.save(owner,id,data);panels.length=0;panels.push(...data.panels);panelIndex=-1;spec=null;result=null;projectId=id;projectName=data.name;$('projectname').value=projectName;projectRevision++;projectDirty=false;selectPanel(data.index);notice('Backup restored as a separate project. Review fabrication readiness before downloading drawings.');});
 function projectOwner(){return session?.username?PanelCadProjects.ownerKey(API,session.username):null;}
 function queueProjectSave(){
- if(!projectOwner()||(!panels.length&&!uploadedSketchFiles.length))return;
+ if(!projectOwner()||(!panels.length&&!uploadedSketchFiles.length&&!projectId))return;
  projectDirty=true;projectRevision++;clearTimeout(projectTimer);
  projectSaveStatus('pending','Changes waiting to save…');
  projectTimer=setTimeout(()=>{if(!busy)saveProject().catch(()=>{});else queueProjectSave();},700);
 }
 async function saveProject(){
- clearTimeout(projectTimer);clearTimeout(projectRetryTimer);const owner=projectOwner();if(!owner||(!panels.length&&!uploadedSketchFiles.length))return;
+ clearTimeout(projectTimer);clearTimeout(projectRetryTimer);const owner=projectOwner();if(!owner||(!panels.length&&!uploadedSketchFiles.length&&!projectId))return;
  rememberPanel();projectName=$('projectname').value.trim()||'Untitled project';projectId||=crypto.randomUUID();
  const id=projectId,revision=projectRevision,data=PanelCadProjects.snapshot(panels,panelIndex,projectName,uploadedSketchFiles);
  projectSaveStatus('saving','Saving project…');let localSaved=false;
@@ -232,7 +250,7 @@ $('workspace').addEventListener('input',queueProjectSave);$('workspace').addEven
 window.addEventListener('beforeunload',e=>{if(projectDirty){e.preventDefault();e.returnValue='';}});
 
 function generatedDrawings(){return panels.map((p,i)=>i===panelIndex?result:p.result).filter(r=>r?.dxf);}
-function updateNavigator(){window.dispatchEvent(new CustomEvent('panel-sketch-reference',{detail:{file:panels[panelIndex]?.file||null,name:panels[panelIndex]?.spec?.panelId||panels[panelIndex]?.name||'Panel sketch'}}));updateSourcePdfButton();if($('downloadall')){$('downloadall').disabled=busy||!generatedDrawings().length;updateCombineIcon();} $('panelcount').textContent=panels.length?'Panel '+(panelIndex+1)+' of '+panels.length:'No panels';$('panelsource').textContent=panels[panelIndex]?.name||'';$('previouspanel').disabled=busy||panelIndex<=0;$('nextpanel').disabled=busy||panelIndex>=panels.length-1;}
+function updateNavigator(){deletePanelButton.disabled=busy||panelIndex<0;window.dispatchEvent(new CustomEvent('panel-sketch-reference',{detail:{file:panels[panelIndex]?.file||null,name:panels[panelIndex]?.spec?.panelId||panels[panelIndex]?.name||'Panel sketch'}}));updateSourcePdfButton();if($('downloadall')){$('downloadall').disabled=busy||!generatedDrawings().length;updateCombineIcon();} $('panelcount').textContent=panels.length?'Panel '+(panelIndex+1)+' of '+panels.length:'No panels';$('panelsource').textContent=panels[panelIndex]?.name||'';$('previouspanel').disabled=busy||panelIndex<=0;$('nextpanel').disabled=busy||panelIndex>=panels.length-1;}
 function rememberPanel(){if(panelIndex<0)return;const p=panels[panelIndex];if(spec)spec.panelId=$('panelid').value.trim();Object.assign(p,{spec,result,reviewed:$('confirmed').checked,message:$('notice').textContent});}
 function selectPanel(index){if(index<0||index>=panels.length)return;rememberPanel();panelIndex=index;const p=panels[index];spec=p.spec||null;
  if(previewURL){URL.revokeObjectURL(previewURL);previewURL=null;}

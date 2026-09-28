@@ -119,4 +119,24 @@ test('corner-to-outline-line constraints calculate perpendicular distance withou
  const restored=api.restore(d);assert.doesNotThrow(()=>api.build(restored.points,restored.values,[],constraints));
  const bad={measurementConstraints:[{from:0,edge:99,axis:'y',value:120,direction:1}]};assert.throws(()=>api.infer(p,v,[],bad),/constraint/);
 });
+test('constraints replace reader estimates before distorting Z2-20 manual edges',()=>{
+ const draft=JSON.parse(fs.readFileSync(path.join(__dirname,'../../../outputs/Z2-20-auto-measurements.json'),'utf8').replace(/^\uFEFF/,''));
+ const points=draft.outlineSections.map(v=>v.start),r=api.infer(points,draft.outlineSections,draft.markedFolds,draft);
+ assert.equal(r.values[3].height,300);assert.equal(r.values[9].kind,'vertical');assert.equal(r.values[9].site,1970);assert.equal(r.values[10].site,72);assert.equal(r.values[0].height,5);assert.ok(r.remaining>0);
+ draft.outlineSections.forEach((v,i)=>{for(const key of Object.keys(v.manualMeasurements||{}))assert.equal(r.values[i][key],v[key]);});
+ const repeated=api.infer(points,r.values,draft.markedFolds,draft);assert.equal(repeated.values[3].height,300);assert.equal(repeated.values[9].kind,'vertical');
+});
 
+test('Z3-30a marked bottom corners identify the unsnapped top slope',()=>{
+ const p=[{x:0,y:800},{x:900,y:800},{x:900,y:100},{x:0,y:100}];
+ const v=[1409,40,1409,70].map((site,i)=>({site,kind:i%2?'vertical':'horizontal',code:'B'}));
+ const solved=api.infer(p,v,[],{edgeRightAngles:[0,1]});
+ assert.equal(solved.values[2].kind,'sloping');assert.equal(solved.values[2].height,30);
+ const d=api.build(p,solved.values);assert.equal(d.measuredEdges[2].dx,-1409);assert.equal(d.measuredEdges[2].dy,30);
+ assert.equal(d.measuredEdges[1].dy,40);assert.equal(d.measuredEdges[3].dy,-70);
+});
+test('reader applies slope classification while preserving manual shape choices',()=>{
+ const read=[{kind:'sloping',width:1409,height:30}];
+ assert.equal(api.mergeReadMeasurements([{kind:'horizontal',site:1409}],read)[0].kind,'sloping');
+ assert.equal(api.mergeReadMeasurements([{kind:'horizontal',site:1409,shapeExplicit:true}],read)[0].kind,'horizontal');
+});
