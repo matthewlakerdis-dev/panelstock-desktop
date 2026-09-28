@@ -44,7 +44,8 @@ test('plan warning names each unplaced panel and copy',()=>{
  const statement=source.split('\n').find(line=>line.includes('setStatus(plan.sheets.length'));
  let message,warning;
  const plan={sheets:[{}],unplaced:[{name:'C501a',copy:1},{name:'C501b',copy:2}]};
- const context=vm.createContext({plan,setStatus:(text,error,warn)=>{message=text;warning=warn;}});
+ const panelCopyLabel=p=>p.name+' (copy '+p.copy+')';
+ const context=vm.createContext({plan,panelCopyLabel,setStatus:(text,error,warn)=>{message=text;warning=warn;}});
  vm.runInContext(statement,context);
  assert.ok(message.includes('Panels not planned: C501a (copy 1), C501b (copy 2).'));
  assert.equal(warning,true);

@@ -17,3 +17,15 @@ test('panel rows distinguish planned, partial and unplanned copies and reset sta
  vm.runInContext('updatePanelStatuses()',context);
  assert.ok(choices.every(c=>c.badge.textContent==='Needs planning'));
 });
+
+test('copy labels appear only for panels with multiple requested copies',()=>{
+ const source=fs.readFileSync(path.join(__dirname,'../cad/sheet-planner.js'),'utf8');
+ const helper=source.slice(source.indexOf('function panelCopyLabel('),source.indexOf(' function updatePanelStatuses('));
+ const context=vm.createContext({panels:[{name:'A',quantity:1},{name:'B',quantity:3}]});
+ vm.runInContext(helper,context);
+ assert.equal(vm.runInContext("panelCopyLabel({name:'A',copy:1})",context),'A');
+ assert.equal(vm.runInContext("panelCopyLabel({name:'B',copy:1})",context),'B (copy 1)');
+ assert.equal(vm.runInContext("panelCopyLabel({name:'B',copy:3})",context),'B (copy 3)');
+ assert.ok(source.includes('plan.unplaced.map(panelCopyLabel)'));
+ assert.ok(source.includes('sheet.panels.map(panelCopyLabel)'));
+});
