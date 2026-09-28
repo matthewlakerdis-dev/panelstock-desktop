@@ -80,7 +80,7 @@ async function open({panels,request,download,projectName,orderNumber,jobReferenc
 
  const body=document.createElement('div');body.className='combine-body';const footer=document.createElement('footer');
 
- const note=document.createElement('p');note.className='sheet-plan-note';note.textContent='Offcuts first \xb7 Multiple panels per sheet \xb7 Stock deducted only on CNC completion';body.append(note);
+ const note=document.createElement('p');note.className='sheet-plan-note';note.textContent='Fill planned sheets first \xb7 Offcuts preferred for new sheets \xb7 Stock deducted only on CNC completion';body.append(note);
 
  const materialLabel=document.createElement('label');materialLabel.className='sheet-material';materialLabel.textContent='Material, colour and thickness';const material=document.createElement('select');const groups=new Map();stock.forEach(s=>groups.set(groupKey(s),s));material.append(new Option('Choose the material for this job',''));for(const [key,s]of groups)material.append(new Option(s.material+' \xb7 '+s.color+' \xb7 '+s.thickness+' mm',key));materialLabel.append(material);body.append(materialLabel);
 
