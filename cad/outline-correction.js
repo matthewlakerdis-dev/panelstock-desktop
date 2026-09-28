@@ -260,6 +260,8 @@ async function open(file,draft,readMeasurements,onDraft){
  q('[data-read]').hidden=!readMeasurements;
  q('[data-read]').onclick=async()=>{try{if(!closed)throw Error('Finish tracing the outline first.');directions(points,true);reading=true;dialog.querySelectorAll('button,input,select').forEach(e=>e.disabled=true);status('Reading written measurements against your traced outline…');const candidate=await readMeasurements({components:true,edges:points.map((start,i)=>({start:{...start},kind:values[i].kind||PanelSketchComponents.kind(start,points[(i+1)%points.length])}))});if(disposed)return;if(candidate.unsupported)throw Error((candidate.questions||[]).join(" ")||"The sketch needs clarification. Existing entries are unchanged.");
  values=PanelSketchComponents.mergeReadMeasurements(values,candidate.edges);
+ edgeRightAngles=[...new Set([...edgeRightAngles,...(candidate.edgeRightAngles||[]).filter(i=>Number.isInteger(i)&&i>=0&&i<points.length)])];
+ const solved=PanelSketchComponents.infer(points,values,markedFolds,{rightAngles,edgeRightAngles,measurementConstraints});values=solved.values;
  if(!q('[data-id]').value)q('[data-id]').value=candidate.panelId||'';
  if(!q('[data-folds]').value&&Array.isArray(candidate.siteFolds))q('[data-folds]').value=candidate.siteFolds.join(', ');
  fields();const missing=values.filter(v=>!v.code||(v.kind==='sloping'?(v.width==null||v.height==null):v.site==null)).length;status((missing?missing+' edges still need measurements or types. ':'Measurements filled. ')+(candidate.questions||[]).join(' ')+' Review every value before applying.');
