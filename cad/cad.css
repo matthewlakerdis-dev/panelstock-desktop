@@ -438,3 +438,5 @@ dialog.readiness-dialog{width:min(720px,calc(100vw - 32px))}
 .sheet-picker .sheet-panel-heading h3,.sheet-picker .sheet-panel-heading .sheet-selection-count{margin:0}
 .sheet-picker .sheet-panel-header .combine-toolbar{margin:0;gap:6px}
 .sheet-picker .sheet-panel-header .combine-toolbar button{padding:4px 8px;min-height:30px;font-size:12px;line-height:20px}
+
+.cad-project-notes{display:block;margin-top:16px}.cad-project-notes textarea{box-sizing:border-box;width:100%;resize:vertical;font:inherit;padding:12px;border:1px solid #cbd9e2;border-radius:10px}#cadprojectliststatus:empty{display:none}
