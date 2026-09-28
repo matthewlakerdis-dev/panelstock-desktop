@@ -1,8 +1,8 @@
 /* Browser-local CAD projects. Tokens are never stored with drawing data. */
 (()=>{'use strict';
 function ownerKey(api,username){return api+'|'+String(username||'').trim().toLowerCase();}
-function snapshot(panels,index,name,uploadedFiles=[]){
- return {version:1,uploadedFiles:structuredClone(uploadedFiles),name:name.trim()||'Untitled project',updatedAt:Date.now(),index,panels:structuredClone(panels.map(p=>({name:p.name,quantity:p.quantity||1,file:p.file,sourcePdf:p.sourcePdf,sourcePdfName:p.sourcePdfName||p.sourcePdf?.name,spec:p.spec,result:p.result,reviewed:p.reviewed,message:p.message,error:p.error,correctionRecovery:p.correctionRecovery,generatedSpec:p.generatedSpec})))};
+function snapshot(panels,index,name,uploadedFiles=[],details={}){
+ return {version:1,projectDetails:{projectId:String(details.projectId||'').slice(0,100),projectName:String(details.projectName||'').slice(0,100),orderNumber:String(details.orderNumber||'').slice(0,50),additionalInfo:String(details.additionalInfo||'').slice(0,4000)},uploadedFiles:structuredClone(uploadedFiles),name:name.trim()||'Untitled project',updatedAt:Date.now(),index,panels:structuredClone(panels.map(p=>({name:p.name,quantity:p.quantity||1,file:p.file,sourcePdf:p.sourcePdf,sourcePdfName:p.sourcePdfName||p.sourcePdf?.name,spec:p.spec,result:p.result,reviewed:p.reviewed,message:p.message,error:p.error,correctionRecovery:p.correctionRecovery,generatedSpec:p.generatedSpec})))};
 }
 async function packOriginals(project,encode){
  const seen=new Map(),contents=new Map(),sources=[];
@@ -44,14 +44,14 @@ async function combineCopies(group,request,progress=()=>{}){
  if(group.copies.length>1||(current&&current.name!==group.name)){const merged=await request('/cad/projects/'+id+'/merge',{revision,sources:group.copies.slice(1).map(p=>({projectId:p.projectId,revision:p.revision}))});revision=merged.revision;}
  for(const local of [...group.deviceCopies].sort((a,b)=>a.updatedAt-b.updatedAt)){
   if(current&&local.importedTo===id&&local.importedAt===local.updatedAt)continue;
-  const data=snapshot(local.panels,local.index,group.name,local.uploadedFiles);data.updatedAt=local.updatedAt;
+  const data=snapshot(local.panels,local.index,group.name,local.uploadedFiles,local.projectDetails);data.updatedAt=local.updatedAt;
   const response=await saveCloud(data,id,revision,request,progress,{importCopy:true});revision=response.revision;
  }
  return {projectId:id,revision,cloud:true,name:group.name};
 }
 async function remove(owner,id){if(!owner||!id)throw Error('Sign in before deleting a project.');await transaction('readwrite',s=>s.delete(owner+'|'+id));}
 async function backup(data){
- const clean=snapshot(data.panels,data.index,data.name,data.uploadedFiles);
+ const clean=snapshot(data.panels,data.index,data.name,data.uploadedFiles,data.projectDetails);
  await packOriginals(clean,async file=>({data:toBase64(new Uint8Array(await file.arrayBuffer()))}));
  for(const panel of clean.panels){if(panel.file){const file=panel.file,bytes=new Uint8Array(await file.arrayBuffer());let binary='';for(let i=0;i<bytes.length;i+=32768)binary+=String.fromCharCode(...bytes.subarray(i,i+32768));panel.file={name:file.name||'sketch',type:file.type,data:btoa(binary)};}}
  return JSON.stringify({format:'panelstock-project',version:clean.pdfSources?2:1,project:clean});
@@ -69,7 +69,7 @@ function restore(text){
   if(panel.file){const file=panel.file;if(typeof file.name!=='string'||typeof file.data!=='string'||!['image/png','image/jpeg','application/pdf'].includes(file.type))throw Error('The backup contains an unsupported sketch.');let binary;try{binary=atob(file.data);}catch{throw Error('The backup contains damaged sketch data.');}if(binary.length>25*1024*1024)throw Error('A sketch in this backup is too large.');panel.file=new File([Uint8Array.from(binary,c=>c.charCodeAt(0))],file.name,{type:file.type});}
  }
  attachOriginals(data,originals);
- return snapshot(data.panels,Number.isInteger(data.index)?Math.max(0,Math.min(data.index,data.panels.length-1)):0,data.name,data.uploadedFiles);
+ return snapshot(data.panels,Number.isInteger(data.index)?Math.max(0,Math.min(data.index,data.panels.length-1)):0,data.name,data.uploadedFiles,data.projectDetails);
 }
 const CLOUD_LIMIT=100*1024*1024,CHUNK_SIZE=1024*1024;
 let cloudClientId=null;const savedContent=new Map();
@@ -77,7 +77,7 @@ function projectContent(manifest){const value=structuredClone(manifest);delete v
 async function hashBytes(value){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',value)),b=>b.toString(16).padStart(2,'0')).join('');}
 function toBase64(bytes){let binary='';for(let i=0;i<bytes.length;i+=32768)binary+=String.fromCharCode(...bytes.subarray(i,i+32768));return btoa(binary);}
 async function packCloud(data){
- const project=snapshot(data.panels,data.index,data.name,data.uploadedFiles),chunks=new Map();delete project.updatedAt;let total=0;
+ const project=snapshot(data.panels,data.index,data.name,data.uploadedFiles,data.projectDetails),chunks=new Map();delete project.updatedAt;let total=0;
  async function asset(blob){
   total+=blob.size;if(total>CLOUD_LIMIT)throw Error('Account projects must be 100 MB or smaller.');
   const result={size:blob.size,chunks:[]};
@@ -137,7 +137,7 @@ async function restoreCloud(response,id,request){
   if(panel.result){panel.result=JSON.parse(await (await asset(panel.result)).text());if(typeof panel.result.dxf!=='string'||typeof panel.result.svg!=='string')throw Error('Invalid saved drawing.');}
  }
  attachOriginals(data,originals);
- return snapshot(data.panels,Number.isInteger(data.index)?Math.max(0,Math.min(data.index,data.panels.length-1)):0,data.name,data.uploadedFiles);
+ return snapshot(data.panels,Number.isInteger(data.index)?Math.max(0,Math.min(data.index,data.panels.length-1)):0,data.name,data.uploadedFiles,data.projectDetails);
 }
 window.PanelCadProjects={ownerKey,snapshot,save,list,mergeSaved,combineCopies,baseOrderName,remove,backup,restore,packCloud,saveCloud,restoreCloud};
 })();

@@ -68,7 +68,7 @@ function trackerPacket(plan,data,order,job,start,id=()=>crypto.randomUUID()){
 
 }
 
-async function open({panels,request,download,projectName}){
+async function open({panels,request,download,projectName,orderNumber,jobReference}){
 
  const data=await request('/data'),stock=availableStock(data);
 
@@ -129,7 +129,7 @@ async function open({panels,request,download,projectName}){
 
     const fields=[];
 
-    for(const [text,value,type]of [['Order number','','text'],['Job reference',projectName||'','text'],['First sheet number','1','number']]){
+    for(const [text,value,type]of [['Order number',orderNumber||'','text'],['Job reference',jobReference||projectName||'','text'],['First sheet number','1','number']]){
 
      const label=document.createElement('label');label.textContent=text;const input=document.createElement('input');input.type=type;input.value=value;if(type==='number'){input.min='1';input.step='1';}input.maxLength=text==='Job reference'?120:100;input.required=text!=='Job reference';label.append(input);form.append(label);fields.push(input);
 

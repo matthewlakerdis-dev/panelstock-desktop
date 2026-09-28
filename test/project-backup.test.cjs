@@ -5,3 +5,11 @@ test('unread panels restore and malformed backups fail',()=>{const pack=panels=>
 test('original PDFs are backed up once and restored with their panel links',async()=>{const pdf=new File(['%PDF-original'],'Original.pdf',{type:'application/pdf'}),data={name:'PDF job',index:0,panels:[{name:'A',sourcePdf:pdf},{name:'B',sourcePdf:pdf}]};const text=await api.backup(data),packed=JSON.parse(text);assert.equal(packed.version,2);assert.equal(packed.project.pdfSources.length,1);assert.equal(packed.project.panels[0].sourcePdf,0);assert.equal(packed.project.panels[1].sourcePdf,0);const restored=api.restore(text);assert.equal(await restored.panels[0].sourcePdf.text(),'%PDF-original');assert.equal(restored.panels[1].sourcePdfName,'Original.pdf');assert.equal(restored.panels[0].sourcePdf,restored.panels[1].sourcePdf);packed.project.panels[0].sourcePdf=9;assert.throws(()=>api.restore(JSON.stringify(packed)),/PDF reference/);});
 const { } = {};
 test('separate PDF objects with identical bytes share one original across 30 panels',async()=>{const pdf=()=>new File(['same PDF'],'Original.pdf',{type:'application/pdf'});const data={name:'Job',index:0,uploadedFiles:[pdf()],panels:Array.from({length:30},(_,i)=>({name:String(i),sourcePdf:pdf()}))};const packed=JSON.parse(await api.backup(data));assert.equal(packed.project.pdfSources.length,1);assert.ok(packed.project.panels.every(p=>p.sourcePdf===0));assert.equal(api.restore(JSON.stringify(packed)).panels.length,30);});
+
+test('project, order and additional information survive backup and restore',async()=>{
+ const details={projectId:'project-1',projectName:'Salacia',orderNumber:'7',additionalInfo:'North elevation\nKeep labels visible'};
+ const data=api.snapshot([{name:'A'}],0,'Salacia - Order 7',[],details);
+ const restored=api.restore(await api.backup(data));
+ assert.equal(JSON.stringify(restored.projectDetails),JSON.stringify(details));
+ assert.equal(restored.name,'Salacia - Order 7');
+});
