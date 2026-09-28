@@ -449,3 +449,8 @@ dialog.readiness-dialog{width:min(720px,calc(100vw - 32px))}
 
 .cad-warning-message.cad-warning-message{color:#946200;position:relative;padding-left:28px}
 .cad-warning-message::before{content:"!";position:absolute;left:0;top:.1em;display:inline-flex;align-items:center;justify-content:center;width:21px;height:20px;padding-top:3px;box-sizing:border-box;clip-path:polygon(50% 0,100% 100%,0 100%);background:#f9b233;color:#fff;font:bold 14px/1 sans-serif}
+
+.sheet-panel-status{margin-left:auto;font-size:12px;font-weight:600;color:#946200;background:#fff7df;padding:4px 8px;border-radius:6px;flex-shrink:0}
+.sheet-panel-status.is-planned{color:#187044;background:#e5f5ec}
+.sheet-panel-status.is-partial{color:#946200;background:#fff0c2}
+.sheet-selection .combine-row{flex-wrap:wrap}
