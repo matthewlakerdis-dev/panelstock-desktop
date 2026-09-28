@@ -2,7 +2,7 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),fs=requir
 const source=fs.readFileSync(require('node:path').join(__dirname,'../cad/cad.js'),'utf8');
 function fixture(count,index){
  const elements=[];function element(){const e={append(){},focus(){},close(){},remove(){},showModal(){},replaceChildren(){},value:''};elements.push(e);return e;}
- const fields={};const c={document:{createElement:element,body:element()},navigator:element(),busy:false,panelIndex:index,panels:Array.from({length:count},(_,i)=>({name:'P'+i})),spec:null,result:{old:true},previewURL:'old',URL:{revokeObjectURL(){}},quantityInput:element(),PanelMeasuredOutline:{show(){}},saved:0,rememberPanel(){},invalidate(){},updateNavigator(){},notice(){},$:id=>fields[id]||(fields[id]=element())};
+ const fields={};const c={projectIcon(button,label){button.title=label;},document:{createElement:element,body:element()},navigator:element(),busy:false,panelIndex:index,panels:Array.from({length:count},(_,i)=>({name:'P'+i})),spec:null,result:{old:true},previewURL:'old',URL:{revokeObjectURL(){}},quantityInput:element(),PanelMeasuredOutline:{show(){}},saved:0,rememberPanel(){},invalidate(){},updateNavigator(){},notice(){},$:id=>fields[id]||(fields[id]=element())};
  c.selectPanel=i=>{c.panelIndex=i;c.spec=c.panels[i].spec||null;};c.queueProjectSave=()=>c.saved++;
  vm.createContext(c);vm.runInContext(source.slice(source.indexOf('const deletePanelButton='),source.indexOf('let projectId='))+'\nglobalThis.button=deletePanelButton;',c);
  c.button.onclick();return {c,confirm:elements.find(e=>e.textContent==='Delete panel'&&e!==c.button),cancel:elements.find(e=>e.textContent==='Keep panel')};
