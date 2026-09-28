@@ -93,16 +93,17 @@ async function open({panels,request,download,projectName,orderNumber,jobReferenc
  const results=document.createElement('div');results.className='sheet-results';body.append(results);let stockChoices=[],urls=[],revision=0,working=false;
 
  const status=document.createElement('p');status.className='combine-status';status.setAttribute('role','status');
+ function setStatus(message,error=false){status.classList.toggle('cad-error-message',error);status.setAttribute('role',error?'alert':'status');status.textContent=message;}
 
  const build=document.createElement('button');build.type='button';build.className='primary';build.textContent='Preview sheet plan';const close=document.createElement('button');close.type='button';close.textContent='Close';footer.append(status,close,build);dialog.append(header,body,footer);
 
- function clear(){const selected=choices.filter(c=>c.check.checked);selectionCount.textContent=selected.length+' of '+choices.length+' drawings selected \xb7 '+selected.reduce((n,c)=>n+Number(c.panel.quantity||1),0)+' panel copies';for(const {check}of [...choices,...stockChoices])check.closest('label').classList.toggle('is-selected',check.checked);revision++;results.replaceChildren();urls.forEach(URL.revokeObjectURL);urls=[];status.textContent='Choose panels and stock, then preview the plan.';build.disabled=working||!material.value||!choices.some(c=>c.check.checked)||!stockChoices.some(c=>c.check.checked);}
+ function clear(){const selected=choices.filter(c=>c.check.checked);selectionCount.textContent=selected.length+' of '+choices.length+' drawings selected \xb7 '+selected.reduce((n,c)=>n+Number(c.panel.quantity||1),0)+' panel copies';for(const {check}of [...choices,...stockChoices])check.closest('label').classList.toggle('is-selected',check.checked);revision++;results.replaceChildren();urls.forEach(URL.revokeObjectURL);urls=[];setStatus('Choose panels and stock, then preview the plan.');build.disabled=working||!material.value||!choices.some(c=>c.check.checked)||!stockChoices.some(c=>c.check.checked);}
 
  function stockRows(){stockChoices=[];stockList.replaceChildren();if(!material.value){const empty=document.createElement('p');empty.className='sheet-stock-empty';empty.textContent='Choose a material above to see available sheets and usable offcuts.';stockList.append(empty);}for(const s of stock.filter(s=>groupKey(s)===material.value)){const label=document.createElement('label');label.className='combine-row';const check=document.createElement('input');check.type='checkbox';check.checked=true;check.style.width='18px';const text=document.createElement('span');text.textContent=(s.type==='offcut'?'Offcut':'Full sheet')+' \xb7 '+s.width+' \xd7 '+s.height+' mm \xb7 '+s.quantity+' available \xb7 '+(s.sku||s.id);label.append(check,text);stockList.append(label);stockChoices.push({check,s});check.onchange=clear;}clear();}
 
  material.onchange=stockRows;choices.forEach(c=>c.check.onchange=clear);
 
- build.onclick=async()=>{if(working)return;clear();const version=revision;working=true;build.disabled=true;status.textContent='Checking current SOH and arranging panels\u2026';try{
+ build.onclick=async()=>{if(working)return;clear();const version=revision;working=true;build.disabled=true;setStatus('Checking current SOH and arranging panels\u2026');try{
 
    const selected=choices.filter(c=>c.check.checked).map(c=>c.panel);if(!selected.length)throw Error('Select at least one generated panel.');
 
@@ -114,7 +115,7 @@ async function open({panels,request,download,projectName,orderNumber,jobReferenc
 
    const plan=await request('/cad/generate',payload);if(!dialog.isConnected||version!==revision)return;
 
-   status.textContent=plan.sheets.length+' sheets planned \xb7 '+plan.unplaced.length+' panel copies could not fit. Stock has not changed.';
+   setStatus(plan.sheets.length+' sheets planned \xb7 '+plan.unplaced.length+' panel copies could not fit. Stock has not changed.');
 
    if(plan.unplaced.length){const warning=document.createElement('p');warning.textContent='Not placed: '+plan.unplaced.map(p=>p.name+' (copy '+p.copy+')').join(', ')+'. No available sheet fits, or available quantities have been used.';results.append(warning);}
 
@@ -145,9 +146,9 @@ async function open({panels,request,download,projectName,orderNumber,jobReferenc
 
      try{if(!packet)packet=trackerPacket(plan,await request('/data'),fields[0].value,fields[1].value,fields[2].value);
 
-      await request('/mutations',packet);sent=true;actionIcon(send,'Sent to CNC tracker',true);status.textContent='Plan sent to CNC tracker as pending. Stock quantities are unchanged.';material.disabled=true;choices.forEach(c=>c.check.disabled=true);stockChoices.forEach(c=>c.check.disabled=true);build.disabled=true;
+      await request('/mutations',packet);sent=true;actionIcon(send,'Sent to CNC tracker',true);setStatus('Plan sent to CNC tracker as pending. Stock quantities are unchanged.');material.disabled=true;choices.forEach(c=>c.check.disabled=true);stockChoices.forEach(c=>c.check.disabled=true);build.disabled=true;
 
-     }catch(error){status.textContent=error.message||'Could not send plan. Retry to check the same submission.';actionIcon(send,'Retry sending to CNC');if(!packet||(error.status&&error.status<500)){packet=null;fields.forEach(input=>input.disabled=false);} }
+     }catch(error){setStatus(error.message||'Could not send plan. Retry to check the same submission.',true);actionIcon(send,'Retry sending to CNC');if(!packet||(error.status&&error.status<500)){packet=null;fields.forEach(input=>input.disabled=false);} }
 
      finally{sending=false;working=false;send.disabled=sent;if(!sent&&!packet){material.disabled=false;build.disabled=!material.value;choices.forEach(c=>c.check.disabled=!c.panel.dxf);stockChoices.forEach(c=>c.check.disabled=false);}}
 
@@ -155,9 +156,9 @@ async function open({panels,request,download,projectName,orderNumber,jobReferenc
 
    }
 
-   if(plan.sheets.length){const manifest=document.createElement('button');manifest.type='button';actionIcon(manifest,'Download all planned sheets as one DXF');manifest.onclick=()=>{if(!plan.allSheetsDxf){status.textContent='Preview the plan again to prepare the combined DXF.';return;}download(plan.allSheetsDxf,'application/dxf',prefix+'-all-sheets.dxf');};planActions.append(manifest);if(!planActions.isConnected)results.append(planActions);}
+   if(plan.sheets.length){const manifest=document.createElement('button');manifest.type='button';actionIcon(manifest,'Download all planned sheets as one DXF');manifest.onclick=()=>{if(!plan.allSheetsDxf){setStatus('Preview the plan again to prepare the combined DXF.',true);return;}download(plan.allSheetsDxf,'application/dxf',prefix+'-all-sheets.dxf');};planActions.append(manifest);if(!planActions.isConnected)results.append(planActions);}
 
- }catch(e){if(dialog.isConnected)status.textContent=e.message||'Could not prepare the sheet plan.';}finally{working=false;build.disabled=!material.value;}};
+ }catch(e){if(dialog.isConnected)setStatus(e.message||'Could not prepare the sheet plan.',true);}finally{working=false;build.disabled=!material.value;}};
 
  const dismiss=()=>{revision++;urls.forEach(URL.revokeObjectURL);dialog.close();dialog.remove();};close.onclick=dismiss;dialog.oncancel=e=>{e.preventDefault();dismiss();};document.body.append(dialog);stockRows();dialog.showModal();
 

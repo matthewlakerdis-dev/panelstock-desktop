@@ -440,3 +440,9 @@ dialog.readiness-dialog{width:min(720px,calc(100vw - 32px))}
 .sheet-picker .sheet-panel-header .combine-toolbar button{padding:4px 8px;min-height:30px;font-size:12px;line-height:20px}
 
 .cad-project-notes{display:block;margin-top:16px}.cad-project-notes textarea{box-sizing:border-box;width:100%;resize:vertical;font:inherit;padding:12px;border:1px solid #cbd9e2;border-radius:10px}#cadprojectliststatus:empty{display:none}
+
+/* Errors keep their message and gain a clear visual warning. */
+.cad-error-message.cad-error-message{color:#b42318;position:relative;padding-left:28px}
+.cad-error-message::before{content:"!";position:absolute;left:0;top:.2em;display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:#b42318;color:#fff;font:bold 14px/1 sans-serif}
+#generation-error.cad-error-message{padding-left:42px!important}
+#generation-error.cad-error-message::before{left:14px;top:15px}
