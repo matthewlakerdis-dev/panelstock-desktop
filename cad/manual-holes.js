@@ -44,7 +44,7 @@
   }
   function addAt(x,y){if(draft.length>=200)return;const ref=activeReference().id;draft.push({...(ref==='origin'?{}:{reference:ref}),x:Math.round(x*100)/100,y:Math.round(y*100)/100,diameter:selected>=0&&valid(draft[selected])?draft[selected].diameter:3});selected=draft.length-1;render();fields.x.focus();}
   svg.onclick=e=>{const matrix=svg.getScreenCTM();if(!matrix)return;const point=new DOMPoint(e.clientX,e.clientY).matrixTransform(matrix.inverse());addAt(point.x-layout.origin[0],-point.y-layout.origin[1]);};
-  add.onclick=()=>addAt((minX+maxX)/2-layout.origin[0],(minY+maxY)/2-layout.origin[1]);remove.onclick=()=>{draft.splice(selected,1);selected=Math.min(selected,draft.length-1);render();};list.onchange=()=>{selected=Number(list.value);render();};
+  add.onclick=()=>{const prior=draft[draft.length-1];if(prior){selected=draft.length-1;addAt(prior.x,prior.y);}else{const ref=activeReference();addAt(ref.point[0]-layout.origin[0],ref.point[1]-layout.origin[1]);}};remove.onclick=()=>{draft.splice(selected,1);selected=Math.min(selected,draft.length-1);render();};list.onchange=()=>{selected=Number(list.value);render();};
   const close=()=>{dialog.close();dialog.remove();previous?.focus();};cancel.onclick=close;dialog.oncancel=e=>{e.preventDefault();close();};apply.onclick=()=>{if(draft.some(h=>!valid(h)))return;const result=draft.map(h=>({...h}));close();onApply(result);};
   document.body.append(dialog);render();dialog.showModal();add.focus();
  }

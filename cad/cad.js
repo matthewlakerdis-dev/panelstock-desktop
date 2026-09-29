@@ -7,6 +7,22 @@ const panels=[];let panelIndex=-1;
 const navigator=document.createElement('div');navigator.className='panel-navigator';navigator.innerHTML='<button id="previouspanel" type="button" aria-label="Previous panel">←</button><div><strong id="panelcount">No panels</strong><span id="panelsource"></span></div><button id="nextpanel" type="button" aria-label="Next panel">→</button>';
 $('questions').before(navigator);
 const deletePanelButton=document.createElement('button');deletePanelButton.type='button';deletePanelButton.id='deletepanel';projectIcon(deletePanelButton,'Delete panel','M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7');navigator.append(deletePanelButton);
+const duplicatePanelButton=document.createElement('button');duplicatePanelButton.type='button';duplicatePanelButton.id='duplicatepanel';projectIcon(duplicatePanelButton,'Duplicate panel','M9 9h12v12H9V9ZM15 9V3H3v12h6');deletePanelButton.before(duplicatePanelButton);
+function duplicatePanelDraft(source,existing){
+ const copy=structuredClone(source.spec),base=(copy.panelId||'Panel').slice(0,48);let n=1,id;
+ do{id=base+' copy '+n++;}while(existing.some(p=>p.spec?.panelId===id));
+ copy.panelId=id;copy.reviewed=false;
+ const panel={spec:copy,name:id,quantity:1,result:null,reviewed:false,file:source.file,sourcePdf:source.sourcePdf,sourcePdfName:source.sourcePdfName};
+ if(source.correctionRecovery){panel.correctionRecovery=structuredClone(source.correctionRecovery);panel.correctionRecovery.panelId=id;}
+ return panel;
+}
+duplicatePanelButton.onclick=()=>{
+ if(busy||panelIndex<0||!spec)return;
+ if(panels.length>=30){notice('A project can contain up to 30 panels.',true);return;}
+ rememberPanel();const copy=duplicatePanelDraft(panels[panelIndex],panels);panels.push(copy);selectPanel(panels.length-1);queueProjectSave();
+ notice('Panel duplicated. Edit its panel ID and generate a new drawing.');$('panelid').focus();$('panelid').select();
+};
+
 deletePanelButton.onclick=()=>{
  if(busy||panelIndex<0)return;
  const target=panels[panelIndex],name=spec?.panelId||target.name||'this panel';
@@ -270,7 +286,7 @@ $('workspace').addEventListener('input',queueProjectSave);$('workspace').addEven
 window.addEventListener('beforeunload',e=>{if(projectDirty){e.preventDefault();e.returnValue='';}});
 
 function generatedDrawings(){return panels.map((p,i)=>i===panelIndex?result:p.result).filter(r=>r?.dxf);}
-function updateNavigator(){deletePanelButton.disabled=busy||panelIndex<0;window.dispatchEvent(new CustomEvent('panel-sketch-reference',{detail:{file:panels[panelIndex]?.file||null,name:panels[panelIndex]?.spec?.panelId||panels[panelIndex]?.name||'Panel sketch'}}));updateSourcePdfButton();if($('downloadall')){$('downloadall').disabled=busy||!generatedDrawings().length;updateCombineIcon();} $('panelcount').textContent=panels.length?'Panel '+(panelIndex+1)+' of '+panels.length:'No panels';$('panelsource').textContent=panels[panelIndex]?.name||'';$('previouspanel').disabled=busy||panelIndex<=0;$('nextpanel').disabled=busy||panelIndex>=panels.length-1;}
+function updateNavigator(){duplicatePanelButton.disabled=busy||panelIndex<0||!spec||panels.length>=30;deletePanelButton.disabled=busy||panelIndex<0;window.dispatchEvent(new CustomEvent('panel-sketch-reference',{detail:{file:panels[panelIndex]?.file||null,name:panels[panelIndex]?.spec?.panelId||panels[panelIndex]?.name||'Panel sketch'}}));updateSourcePdfButton();if($('downloadall')){$('downloadall').disabled=busy||!generatedDrawings().length;updateCombineIcon();} $('panelcount').textContent=panels.length?'Panel '+(panelIndex+1)+' of '+panels.length:'No panels';$('panelsource').textContent=panels[panelIndex]?.name||'';$('previouspanel').disabled=busy||panelIndex<=0;$('nextpanel').disabled=busy||panelIndex>=panels.length-1;}
 function rememberPanel(){if(panelIndex<0)return;const p=panels[panelIndex];if(spec)spec.panelId=$('panelid').value.trim();Object.assign(p,{spec,result,reviewed:!!result,message:$('notice').textContent});}
 function selectPanel(index){if(index<0||index>=panels.length)return;rememberPanel();panelIndex=index;const p=panels[index];spec=p.spec||null;
  if(previewURL){URL.revokeObjectURL(previewURL);previewURL=null;}

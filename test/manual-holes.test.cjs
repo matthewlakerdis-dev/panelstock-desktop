@@ -1,5 +1,15 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const code=fs.readFileSync(path.join(__dirname,'../cad/manual-holes.js'),'utf8');
+test('Add hole starts at reference zero then copies the last hole offsets',()=>{
+ const {api,nodes}=setup();let saved;
+ api.open({layout:{origin:[10,15],cut:[[10,15],[210,15],[210,115],[10,115]],face:[[10,15],[210,15],[210,115],[10,115]]},onApply:h=>saved=h});
+ const reference=nodes.find(n=>n.attributes['aria-label']==='Hole offset reference');reference.value='corner-2';reference.onchange();
+ const add=nodes.find(n=>n.textContent==='Add hole'),fields=nodes.filter(n=>n.tag==='input');add.onclick();
+ assert.equal(fields[0].value,0);assert.equal(fields[1].value,0);
+ fields[0].value='-30';fields[0].oninput();fields[1].value='-25';fields[1].oninput();add.onclick();
+ assert.equal(fields[0].value,-30);assert.equal(fields[1].value,-25);
+ nodes.find(n=>n.textContent==='Apply and generate').onclick();assert.equal(saved.length,2);assert.equal(saved[0].x,saved[1].x);assert.equal(saved[0].y,saved[1].y);assert.equal(saved[1].reference,'corner-2');
+});
 test('corner and fold references change displayed offsets without moving the hole',()=>{
  const {api,nodes}=setup();let saved;
  api.open({layout:{origin:[10,15],cut:[[10,15],[210,15],[210,115],[10,115]],face:[[10,15],[210,15],[210,115],[10,115],[10,15]],folds:[[[10,65],[210,65]]]},holes:[{x:50,y:40,diameter:3}],onApply:h=>saved=h});
