@@ -27,7 +27,7 @@ async function harness(fetchImpl=async()=>Response.json({ok:true}),pending=false
   const document={body,documentElement:body,querySelectorAll:()=>[],createElement:tag=>new Element(tag),getElementById:id=>walk(body).find(node=>node.id===id),addEventListener(){},removeEventListener(){}};
   const context={console,URL,Headers,Response,Request,AbortSignal,Event,CustomEvent,Blob,crypto,localStorage,sessionStorage,document,
     Date:class extends Date{static now(){return clock.now;}},
-    location:{href:'https://app.test/',reload(){}},navigator:{locks:{request:(_name,_options,fn)=>fn({})}},
+    location:{href:settings.href||'https://app.test/',reload(){},assign(url){events.push(url);}},navigator:{locks:{request:(_name,_options,fn)=>{events.push('editor-lock');if(settings.lockDenied){setImmediate(()=>fn(null));return;}return fn({});}}},
     setTimeout,clearTimeout,queueMicrotask,requestAnimationFrame:fn=>queueMicrotask(fn),MutationObserver:class{observe(){}},
     dispatchEvent:event=>{events.push(event.type);return true;},addEventListener(){},
     fetch:async(url,options)=>{calls.push([url,options]);return url.endsWith('/session')&&!settings.customSession?Response.json({username:'a',isAdmin:true}):fetchImpl(url,options);}};
@@ -205,3 +205,27 @@ for(const failure of ['rejected','slow','503']){
     metadata.resolve(Response.json({}, {status:503}));
   });
 }
+
+test('PDF tab opens with another editor active and cannot write or flush pending stock',async()=>{
+ const id='12345678-1234-1234-1234-123456789012';
+ const h=await harness(async()=>Response.json({pdfToken:'ticket-value'}),true,{owner:'a',lockDenied:true,href:'https://app.test/?page=orders&orderPdf='+id});
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(h.events.includes('editor-lock'),false);
+ assert.ok(h.events.includes('https://api.test/orders/'+id+'/pdf?ticket=ticket-value'));
+ assert.equal(await h.api.snapshot(),null);
+ assert.equal(await h.api.flush(),false);
+ assert.throws(()=>h.api.stage({},{}),/cannot edit stock/);
+ await assert.rejects(h.api.apiFetch('https://api.test/mutations',{method:'POST'}),/only for viewing/);
+ await assert.rejects(h.api.apiFetch('https://api.test/orders',{method:'POST'}),/only for viewing/);
+ assert.equal(h.localStorage.getItem(OUTBOX),JSON.stringify(h.queue));
+ assert.equal(h.calls.some(([url])=>url.endsWith('/mutations')),false);
+ assert.equal(h.nodes().some(node=>node.id==='panelstock-safety-notice'),false);
+});
+test('normal tabs still enforce the editor lock',async()=>{
+ const h=await harness(undefined,false,{lockDenied:true});
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.ok(h.events.includes('editor-lock'));
+ assert.throws(()=>h.api.stage({},{}),/cannot edit stock/);
+ assert.ok(h.nodes().some(node=>node.textContent==='PanelStock is open in another tab'));
+});
+

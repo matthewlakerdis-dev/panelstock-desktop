@@ -66,15 +66,15 @@
   }
 
   class IndexedOutboxStorage {
-    constructor(fallback,notify=()=>{}){this.fallback=fallback;this.notify=notify;this.value=null;this.db=null;this.writes=Promise.resolve();}
+    constructor(fallback,notify=()=>{},readOnly=false){this.readOnly=readOnly;this.fallback=fallback;this.notify=notify;this.value=null;this.db=null;this.writes=Promise.resolve();}
     async ready(){
       if(!root.indexedDB){this.value=this.fallback.getItem(OUTBOX_KEY);return this;}
       try{
         this.db=await new Promise((resolve,reject)=>{const request=root.indexedDB.open('panelstock-sync',1);request.onupgradeneeded=()=>request.result.createObjectStore('state');request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});
         const saved=await new Promise((resolve,reject)=>{const request=this.db.transaction('state').objectStore('state').get(OUTBOX_KEY);request.onsuccess=()=>resolve(request.result??null);request.onerror=()=>reject(request.error);});
         const legacy=this.fallback.getItem(OUTBOX_KEY);this.value=saved??legacy;
-        if(saved==null&&legacy!=null){this.setItem(OUTBOX_KEY,legacy);await this.flushWrites();}
-        if(saved!=null)this.fallback.removeItem(OUTBOX_KEY);
+        if(!this.readOnly&&saved==null&&legacy!=null){this.setItem(OUTBOX_KEY,legacy);await this.flushWrites();}
+        if(!this.readOnly&&saved!=null)this.fallback.removeItem(OUTBOX_KEY);
       }catch(error){this.db=null;this.value=this.fallback.getItem(OUTBOX_KEY);this.notify('storage','Reliable device storage could not be opened. Pending changes will use limited browser storage.');}
       return this;
     }
@@ -301,6 +301,8 @@
   }).observe(document.documentElement,{childList:true,subtree:true});
   queueMicrotask(queueCncEnhance);
 
+  const linkedOrderId=new URL(root.location?.href||'https://panelstock.invalid').searchParams.get('orderPdf');
+  const orderPdfView=/^[a-zA-Z0-9-]{16,100}$/.test(linkedOrderId||'');
   const SESSION='panelstock:session:v2';
   let session=null,workerUrl='',status='synced',message='',lockGranted=false,lockDenied=false,liveSocket=null,liveRetry=1000,liveTimer=null;
   let sessionVersion=0,sessionWrites=Promise.resolve();
@@ -339,6 +341,8 @@
     const absolute=new URL(url,location.href);
     if(!workerUrl || absolute.origin!==new URL(workerUrl).origin)throw Error('Unapproved API destination');
     const authenticating=['/login','/set-pin'].includes(absolute.pathname);
+    const method=(options.method||'GET').toUpperCase();
+    if(orderPdfView&&!['GET','HEAD'].includes(method)&&!(method==='POST'&&(authenticating||absolute.pathname==='/orders/'+encodeURIComponent(linkedOrderId)+'/pdf-link')))throw Error('This tab is only for viewing an order PDF.');
     // Starting a new login also invalidates an older login still in flight.
     if(authenticating)sessionVersion++;
     let version=sessionVersion,token=session?.token||null;
@@ -377,12 +381,13 @@
     return guard(res);
   };
   const startLive=async()=>{
+    if(orderPdfView)return;
     clearTimeout(liveTimer);if(!root.WebSocket||!session||!workerUrl||liveSocket?.readyState===WebSocket.OPEN||liveSocket?.readyState===WebSocket.CONNECTING)return;
     try{const response=await apiFetch(workerUrl+'/live-ticket'),result=await response.json();if(!response.ok||!result.ticket)throw Error();const url=new URL(workerUrl);url.protocol=url.protocol==='https:'?'wss:':'ws:';url.pathname='/live';url.search='?ticket='+encodeURIComponent(result.ticket);const socket=liveSocket=new WebSocket(url);socket.onopen=()=>{liveRetry=1000;};socket.onmessage=event=>{try{const update=JSON.parse(event.data);if(['ready','revision'].includes(update.type)&&update.revision>(outbox?.state.view?.revision||0))root.dispatchEvent(new CustomEvent('panelstock-remote-change',{detail:update}));}catch{}};socket.onclose=()=>{if(liveSocket===socket)liveSocket=null;if(session)liveTimer=setTimeout(()=>void startLive(),liveRetry=Math.min(liveRetry*2,30000));};socket.onerror=()=>socket.close();}catch{if(session)liveTimer=setTimeout(()=>void startLive(),liveRetry=Math.min(liveRetry*2,30000));}
   };
 
-  const durableStorage=new IndexedOutboxStorage(localStorage,announce);
-  const outboxReady=durableStorage.ready().then(()=>{outbox=new Outbox(durableStorage,(packet,owner)=>{
+  const durableStorage=new IndexedOutboxStorage(localStorage,announce,orderPdfView);
+  const outboxReady=durableStorage.ready().then(()=>{outbox=new Outbox(orderPdfView?{getItem:()=>null,setItem:()=>{throw Error('This tab is only for viewing an order PDF.');}}:durableStorage,(packet,owner)=>{
     if(!session || session.username!==owner)return Promise.resolve(new Response('{}',{status:401}));
     return apiFetch(workerUrl+'/mutations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(packet)});
   },announce);root.PanelStock.outbox=outbox;return outbox;});
@@ -476,6 +481,7 @@
   }
 
   function renderNotice() {
+    if(orderPdfView)return;
     let el=document.getElementById('panelstock-safety-notice');
     const legacy=getLegacyPending();
     const ownerMismatch=session && outbox.pending() && outbox.state.owner!==session.username;
@@ -603,7 +609,9 @@
     card.appendChild(foot);
   }
 
-  if(navigator.locks){
+  if(orderPdfView){
+    // PDF links authenticate without taking the stock editor lock.
+  } else if(navigator.locks){
     void navigator.locks.request('panelstock-editor-v2',{ifAvailable:true},lock=>{
       if(!lock){
         lockDenied=true;
@@ -651,6 +659,7 @@
       }catch{return offlineUser();}
     },
     async snapshot(){
+      if(orderPdfView)return null;
       if(session && !(session.expiresAt>Date.now())){await clearSession();return null;}
       if(!session)return null;
       const version=sessionVersion,owner=session.username;
@@ -678,7 +687,7 @@
       if(!session)throw Error('Please log in before editing.');
       outbox.stage(fields,session.username,rendered);
     },
-    async flush(){await outboxReady;return session?outbox.flush(session.username):false;},
+    async flush(){if(orderPdfView)return false;await outboxReady;return session?outbox.flush(session.username):false;},
     async logout(){
       const token=session?.token;
       const saved=clearSession(),version=sessionVersion;
