@@ -119,7 +119,7 @@ function updateSourcePdfButton(){const panel=panels[panelIndex];sourcePdfButton.
 sourcePdfButton.onclick=()=>{const panel=panels[panelIndex];if(panel?.sourcePdf)download(panel.sourcePdf,'application/pdf',panel.sourcePdfName||panel.sourcePdf.name||'Original.pdf');};
 const projectHistoryButton=document.createElement('button');projectHistoryButton.type='button';projectIcon(projectHistoryButton,'Project version history','M3 11a9 9 0 1 1 2.7 7M3 4v7h7M12 7v5l3 2');projectBar.querySelector('.row').append(projectHistoryButton);
 projectHistoryButton.onclick=()=>run(async()=>{await saveProject();if(projectId)await showProjectHistory({projectId,name:projectName},projectOwner());else notice('Save a project before opening its history.');});
-backupButton.onclick=()=>run(async()=>{if(!panels.length&&!uploadedSketchFiles.length)throw Error('Upload a file before downloading a backup.');rememberPanel();const data=PanelCadProjects.snapshot(panels,panelIndex,$('projectname').value,uploadedSketchFiles,projectDetails());const text=await PanelCadProjects.backup(data);if(new Blob([text]).size>150*1024*1024)throw Error('This project exceeds the 150 MB backup limit.');download(text,'application/json',combinedFilename(data.name).replace(/\.dxf$/i,'-backup.json'));notice('Project backup downloaded, including sketches and generated drawings.');});
+backupButton.onclick=()=>run(async()=>{if(!panels.length&&!uploadedSketchFiles.length)throw Error('Upload a file before downloading a backup.');rememberPanel();const data=PanelCadProjects.snapshot(panels,panelIndex,$('projectname').value,uploadedSketchFiles,projectDetails(),panel=>panelDrawingReadiness(panel));const text=await PanelCadProjects.backup(data);if(new Blob([text]).size>150*1024*1024)throw Error('This project exceeds the 150 MB backup limit.');download(text,'application/json',combinedFilename(data.name).replace(/\.dxf$/i,'-backup.json'));notice('Project backup downloaded, including sketches and generated drawings.');});
 restoreButton.onclick=()=>{backupInput.value='';backupInput.click();};
 backupInput.onchange=()=>run(async()=>{const file=backupInput.files[0];if(!file)return;if(file.size>150*1024*1024)throw Error('Choose a project backup smaller than 150 MB.');const data=PanelCadProjects.restore(await file.text());await saveProject();const owner=projectOwner();if(!owner)throw Error('Sign in before restoring a project.');const id=crypto.randomUUID();uploadedSketchFiles=data.uploadedFiles||[];data.name=(data.name+' (restored)').slice(0,100);await PanelCadProjects.save(owner,id,data);panels.length=0;panels.push(...data.panels);panelIndex=-1;spec=null;result=null;projectId=id;projectName=data.name;$('projectname').value=projectName;restoreProjectDetails(data);projectRevision++;projectDirty=false;selectPanel(data.index);notice('Backup restored as a separate project. Review fabrication readiness before downloading drawings.');});
 function projectOwner(){return session?.username?PanelCadProjects.ownerKey(API,session.username):null;}
@@ -522,6 +522,10 @@ function fabricationReadiness(panel,issues=[]){
  return [...new Set(reasons)];
 }
 function drawingSpecKey(value){const copy={...value};delete copy.reviewed;return JSON.stringify(copy);}
+function panelDrawingReadiness(panel){
+ let issues=[];try{if(panel.spec)issues=currentIssues(structuredClone(panel.spec));}catch{issues=['Review the panel geometry.'];}
+ return {version:1,ready:!!panel.generatedSpec&&fabricationReadiness(panel,issues).length===0};
+}
 const readinessButton=document.createElement('button');readinessButton.type='button';projectIcon(readinessButton,'Fabrication readiness','M8 4H5v18h14V4h-3M9 2h6v4H9V2ZM8 14l3 3 5-6');summaryButton.after(readinessButton);
 readinessButton.onclick=()=>{
  if(busy)return;rememberPanel();
