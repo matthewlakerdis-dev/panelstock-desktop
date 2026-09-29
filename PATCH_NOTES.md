@@ -1,5 +1,12 @@
 # PanelStock release notes
 
+## Post-coating final QA — 29 September 2026
+
+- Panel dispatch now separates Coating complete from final QA. Coated loads remain active with an Approve final QA confirmation, and cannot be dispatched to site until the whole load passes.
+- The final approval records who checked the load and when, and appears in dispatch history. Requires the accompanying backend release.
+- The shared CNC workbook backend now includes a matching Site Orders tab with automatic workflow ticks. A fresh workbook download is required once to add the tab.
+
+
 ## Automatic order drawing progress — 29 September 2026
 
 - PanelCAD account saves now include the existing fabrication-readiness result for each highlighted panel, with no extra completion confirmation.
