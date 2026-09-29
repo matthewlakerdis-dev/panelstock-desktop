@@ -148,7 +148,7 @@ function queueProjectSave(){
 async function saveProject(){
  clearTimeout(projectTimer);clearTimeout(projectRetryTimer);const owner=projectOwner();if(!owner||(!panels.length&&!uploadedSketchFiles.length&&!projectId))return;
  rememberPanel();projectName=$('projectname').value.trim()||'Untitled project';projectId||=crypto.randomUUID();
- const id=projectId,revision=projectRevision,data=PanelCadProjects.snapshot(panels,panelIndex,projectName,uploadedSketchFiles,projectDetails());
+ const id=projectId,revision=projectRevision,data=PanelCadProjects.snapshot(panels,panelIndex,projectName,uploadedSketchFiles,projectDetails(),panel=>panelDrawingReadiness(panel));
  projectSaveStatus('saving','Saving project…');let localSaved=false;
  const task=projectSaveChain.catch(()=>{}).then(async()=>{
   await PanelCadProjects.save(owner,id,data);
