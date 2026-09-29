@@ -68,7 +68,7 @@ function trackerPacket(plan,data,order,job,start,id=()=>crypto.randomUUID()){
 
 }
 
-async function open({panels,request,download,projectName,orderNumber,jobReference}){
+async function open({panels,request,download,projectName,orderNumber,jobReference,canSendCnc=false}){
 
  const data=await request('/data'),stock=availableStock(data);
 
@@ -127,7 +127,7 @@ async function open({panels,request,download,projectName,orderNumber,jobReferenc
    for(const sheet of plan.sheets){const card=document.createElement('section'),heading=document.createElement('h3');card.className='sheet-result-card';heading.textContent='Sheet '+sheet.number+' \xb7 '+(sheet.stock.type==='offcut'?'Offcut':'Full sheet')+' \xb7 '+sheet.stock.width+' \xd7 '+sheet.stock.height+' mm';const caption=document.createElement('p');caption.className='sheet-result-summary';caption.textContent=(sheet.stock.sku||sheet.stock.id)+' \u00b7 '+sheet.panels.length+' panel'+(sheet.panels.length===1?'':'s')+' \u00b7 '+sheet.utilisation+'% cut area';const panelNames=document.createElement('p');panelNames.className='sheet-result-panels';panelNames.textContent='Panels: '+sheet.panels.map(panelCopyLabel).join(', ');const img=document.createElement('img');img.alt='Sheet '+sheet.number+' layout';img.style.width='100%';const url=URL.createObjectURL(new Blob([sheet.svg],{type:'image/svg+xml'}));urls.push(url);img.src=url;const button=document.createElement('button');button.type='button';button.textContent='Download DXF';button.setAttribute('aria-label','Download sheet '+sheet.number+' DXF');button.onclick=()=>download(sheet.dxf,'application/dxf',prefix+'-sheet-'+sheet.number+'.dxf');const top=document.createElement('div');top.className='sheet-result-heading';const details=document.createElement('div');details.append(heading,caption);top.append(details,button);const drawing=document.createElement('div');drawing.className='sheet-result-drawing';drawing.append(img);card.append(top,panelNames,drawing);results.append(card);}
 
    const planActions=document.createElement('div');planActions.className='sheet-plan-actions';
-   if(plan.sheets.length&&!plan.unplaced.length){
+   if(canSendCnc&&plan.sheets.length&&!plan.unplaced.length){
 
     const form=document.createElement('form'),heading=document.createElement('h3');heading.textContent='Send approved plan to CNC tracker';form.append(heading);
 
