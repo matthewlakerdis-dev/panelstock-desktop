@@ -454,3 +454,5 @@ dialog.readiness-dialog{width:min(720px,calc(100vw - 32px))}
 .sheet-panel-status.is-planned{color:#187044;background:#e5f5ec}
 .sheet-panel-status.is-partial{color:#946200;background:#fff0c2}
 .sheet-selection .combine-row{flex-wrap:wrap}
+
+.manual-hole-body{display:grid;grid-template-columns:minmax(0,2fr) minmax(220px,1fr);gap:20px;padding:20px;overflow:auto}.manual-hole-body svg{width:100%;height:420px;max-height:55vh;cursor:crosshair;background:#fff;border:1px solid #d7e2eb;border-radius:10px}.manual-hole-body label{display:block;margin:12px 0}.manual-hole-body select{width:100%}@media(max-width:700px){.manual-hole-body{grid-template-columns:1fr}.manual-hole-body svg{height:260px}}
