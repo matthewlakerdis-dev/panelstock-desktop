@@ -356,6 +356,7 @@
         version=++sessionVersion;token=session.token;
         await persistSession();
         if(!current())throw sessionChanged();
+        orderPdfFailed=false;queueMicrotask(()=>void openLinkedOrderPdf());
       }
     }
     if(res.status===401 && !authenticating){
@@ -645,6 +646,7 @@
         await persistSession();
         if(version!==sessionVersion)return null;
         void startLive();
+        void openLinkedOrderPdf();
         return user;
       }catch{return offlineUser();}
     },
@@ -697,7 +699,31 @@
     get pending(){return !!outbox?.pending()||!!getLegacyPending();}
   };
 
+  let orderPdfOpening=false,orderPdfFailed=false;
+  async function openLinkedOrderPdf(){
+    const id=new URL(root.location.href).searchParams.get('orderPdf');
+    if(!id||!session||!workerUrl||orderPdfOpening||orderPdfFailed)return;
+    if(!/^[a-zA-Z0-9-]{16,100}$/.test(id))return;
+    orderPdfOpening=true;
+    try{
+      const response=await apiFetch(workerUrl+'/orders/'+encodeURIComponent(id)+'/pdf-link',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+      const result=await response.json();
+      if(!response.ok||!result.pdfToken)throw Error(result.error||'The order PDF could not be opened.');
+      const destination=new URL(workerUrl+'/orders/'+encodeURIComponent(id)+'/pdf');destination.searchParams.set('ticket',result.pdfToken);
+      root.location.assign(destination.href);
+    }catch(error){
+      orderPdfFailed=true;
+      const dialog=document.createElement('dialog'),title=document.createElement('h2'),message=document.createElement('p'),retry=document.createElement('button'),close=document.createElement('button');
+      title.textContent='Order PDF';message.textContent=error.message||'The order PDF could not be opened.';retry.textContent='Retry';close.textContent='Close';
+      retry.onclick=()=>{dialog.close();dialog.remove();orderPdfFailed=false;void openLinkedOrderPdf();};
+      close.onclick=()=>{dialog.close();dialog.remove();};
+      dialog.append(title,message,retry,close);document.body.append(dialog);dialog.showModal();
+    }finally{orderPdfOpening=false;}
+  }
+  root.addEventListener('panelstock-sync',()=>{void openLinkedOrderPdf();});
+
   root.addEventListener('online',()=>{void root.PanelStock.flush();});
   root.addEventListener('online',()=>{void startLive();});
   void outboxReady.then(renderNotice);
 })(typeof window==='undefined'?globalThis:window);
+
