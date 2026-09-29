@@ -461,3 +461,8 @@ dialog.readiness-dialog{width:min(720px,calc(100vw - 32px))}
 .panel-drawing-actions .project-icon-button{width:48px;height:48px;min-width:48px;padding:11px;margin:0}
 .panel-drawing-actions .project-icon-button svg{width:26px;height:26px}
 .panel-drawing-actions #generate{margin-left:8px}
+
+.panel-arrow-dialog{border:1px solid #cbd7df;border-radius:16px;padding:24px;max-width:min(440px,90vw);color:#254a5b}
+.panel-arrow-dialog::backdrop{background:#14232e66}
+.panel-arrow-choices{display:flex;flex-wrap:wrap;gap:10px;margin:20px 0}
+.panel-arrow-choices [aria-pressed=true]{background:#2e6074;color:white;border-color:#2e6074}

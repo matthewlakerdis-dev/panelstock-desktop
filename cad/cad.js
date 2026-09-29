@@ -637,6 +637,23 @@ editFoldsButton.onclick=()=>{
 };
 var manualHoleRetryLayout=null;
 const manualHolesButton=document.createElement('button');manualHolesButton.type='button';projectIcon(manualHolesButton,'Add or edit manual holes','M12 3v4m0 10v4M3 12h4m10 0h4M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z');$('generate').before(manualHolesButton);
+const arrowDirectionButton=document.createElement('button');arrowDirectionButton.type='button';projectIcon(arrowDirectionButton,'Set panel arrow direction','M4 12h16m-6-6 6 6-6 6');$('generate').before(arrowDirectionButton);
+arrowDirectionButton.onclick=()=>{
+ if(busy)return;if(!spec){notice('Create or open a panel first.',true);return;}
+ const dialog=document.createElement('dialog');dialog.className='panel-arrow-dialog';dialog.setAttribute('aria-label','Panel arrow direction');
+ const title=document.createElement('h2');title.textContent='Panel arrow direction';
+ const help=document.createElement('p');help.textContent='Choose the arrow shown on the drawing. Generate again to update the DXF.';
+ const choices=document.createElement('div');choices.className='panel-arrow-choices';choices.setAttribute('role','group');choices.setAttribute('aria-label','Arrow direction');
+ const close=()=>{dialog.close();dialog.remove();arrowDirectionButton.focus();};
+ for(const [value,label,path] of [['up','Up','M12 20V4m-6 6 6-6 6 6'],['down','Down','M12 4v16m-6-6 6 6 6-6'],['left','Left','M20 12H4m6-6-6 6 6 6'],['right','Right','M4 12h16m-6-6 6 6-6 6'],['none','No arrow','M5 5l14 14M19 5 5 19']]){
+  const button=document.createElement('button');button.type='button';projectIcon(button,label,path);button.setAttribute('aria-pressed',String((spec.panelDirection||'none')===value));
+  button.onclick=()=>{spec.panelDirection=value;renderSpec();rememberPanel();queueProjectSave();close();notice(value==='none'?'Direction arrow removed. Generate again to update the drawing.':'Direction arrow set to '+value+'. Generate again to update the drawing.');};
+  choices.append(button);
+ }
+ const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Cancel';cancel.onclick=close;dialog.oncancel=e=>{e.preventDefault();close();};
+ dialog.append(title,help,choices,cancel);document.body.append(dialog);dialog.showModal();
+};
+
 const panelDrawingActions=$('generate').parentElement;panelDrawingActions.classList.add('panel-drawing-actions');panelDrawingActions.setAttribute('role','group');panelDrawingActions.setAttribute('aria-label','Panel drawing actions');
 manualHolesButton.onclick=()=>{const layout=result?.manualHoleLayout||(manualHoleRetryLayout?.spec===spec?manualHoleRetryLayout.layout:null);if(!spec||!layout){notice('Generate a fresh drawing first, then add manual holes.',true);return;}PanelManualHoles.open({layout,holes:spec.manualHoles||[],onApply:holes=>{spec.manualHoles=holes;invalidate();manualHoleRetryLayout={spec,layout};rememberPanel();queueProjectSave();$('generate').click();}});};
 sheetPlanButton.onclick=()=>run(async()=>{rememberPanel();if(!generatedDrawings().length)throw Error('Generate a panel drawing first.');await PanelSheetPlanner.open({canSendCnc:!!(session?.isAdmin||session?.taskAccess?.['factory.cnc']===true),projectName:$('projectname').value,orderNumber:projectDetails().orderNumber,jobReference:projectDetails().projectName,request:api,download,panels:panels.map((p,i)=>({name:p.spec?.panelId||p.name||'Panel',quantity:p.quantity||1,direction:p.spec?.panelDirection,dxf:(i===panelIndex?result:p.result)?.dxf}))});});

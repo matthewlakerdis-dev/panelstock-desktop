@@ -1,5 +1,14 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const code=fs.readFileSync(path.join(__dirname,'../cad/manual-holes.js'),'utf8');
+test('corner and fold references change displayed offsets without moving the hole',()=>{
+ const {api,nodes}=setup();let saved;
+ api.open({layout:{origin:[10,15],cut:[[10,15],[210,15],[210,115],[10,115]],face:[[10,15],[210,15],[210,115],[10,115],[10,15]],folds:[[[10,65],[210,65]]]},holes:[{x:50,y:40,diameter:3}],onApply:h=>saved=h});
+ const reference=nodes.find(n=>n.attributes['aria-label']==='Hole offset reference'),fields=nodes.filter(n=>n.tag==='input');
+ reference.value='corner-2';reference.onchange();assert.equal(fields[0].value,-150);assert.equal(fields[1].value,-60);
+ reference.value='fold-0-0';reference.onchange();assert.equal(fields[0].value,50);assert.equal(fields[1].value,-10);
+ fields[1].value='20';fields[1].oninput();nodes.find(n=>n.textContent==='Apply and generate').onclick();
+ assert.deepEqual(JSON.parse(JSON.stringify(saved)),[{x:50,y:70,diameter:3,reference:'fold-0-0'}]);
+});
 function setup(){
  const nodes=[];
  function element(tag){const node={tag,children:[],style:{},attributes:{},append(...x){this.children.push(...x);},prepend(...x){this.children.unshift(...x);},replaceChildren(...x){this.children=x;},add(x){this.children.push(x);},setAttribute(k,v){this.attributes[k]=v;},focus(){},showModal(){},close(){},remove(){},getScreenCTM(){return {inverse(){return {};}};}};nodes.push(node);return node;}
