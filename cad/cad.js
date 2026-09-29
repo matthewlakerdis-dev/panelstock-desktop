@@ -347,7 +347,7 @@ function recalculateOutline(draft){
  if(folds.length>12||new Set(folds).size!==folds.length||folds.some(f=>typeof f!=='number'||!Number.isFinite(f)||f<.001||f>height-.001)){draft.calculationError='Enter distinct site fold heights inside the panel (at most 12).';return true;}
  for(const f of folds){const level=minY+f;
   const crossing=es.filter((e,i)=>{const a=points[i],b=points[(i+1)%es.length];return level>Math.min(a[1],b[1])&&level<Math.max(a[1],b[1]);});
-  if(points.some(p=>Math.abs(p[1]-level)<.001)||crossing.length<2||crossing.length%2||crossing.some(e=>!tags.includes(e.code))){draft.calculationError='Internal folds must cross material and end at tagged vertical sides, away from corners.';return true;}
+  if(points.some(p=>Math.abs(p[1]-level)<.001)||crossing.length<2||crossing.length%2){draft.calculationError='Internal folds must cross material and end at vertical sides, away from corners.';return true;}
  }
  const bottomShift=shifted[0][1]-points[0][1];
  const finishedFolds=folds.map((f,i)=>Number((f-bottomShift-1-2*i).toFixed(6)));
@@ -615,7 +615,7 @@ function combinedPayload(drawings){
   return payload;
 }
 const sheetPlanButton=document.createElement('button');sheetPlanButton.type='button';projectIcon(sheetPlanButton,'Plan on SOH sheets','M2 3h20v18H2V3ZM5 6h6v12H5V6ZM14 6h5v5h-5V6ZM14 14h5v4h-5v-4Z');$('downloadall').after(sheetPlanButton);
-const editFoldsButton=document.createElement('button');editFoldsButton.type='button';editFoldsButton.textContent='Add/edit folds';$('generate').before(editFoldsButton);
+const editFoldsButton=document.createElement('button');editFoldsButton.type='button';projectIcon(editFoldsButton,'Add or edit folds','M4 4h16v16H4V4ZM4 9h3m3 0h4m3 0h3M4 15h3m3 0h4m3 0h3');$('generate').before(editFoldsButton);
 editFoldsButton.onclick=()=>{
  if(!spec||spec.measuredEdges||spec.edges?.length!==4||spec.edges.map(e=>e.direction).join(',')!=='right,up,left,down'){notice('Use this control for a rectangle. For a traced panel, mark folds in Correct outline on sketch.',true);return;}
  const width=Number(spec.edges[0].site),height=Number(spec.edges[1].site);
@@ -636,7 +636,8 @@ editFoldsButton.onclick=()=>{
  };document.body.append(dialog);render();dialog.showModal();add.focus();
 };
 var manualHoleRetryLayout=null;
-const manualHolesButton=document.createElement('button');manualHolesButton.type='button';projectIcon(manualHolesButton,'Add or edit manual holes','M12 3v4m0 10v4M3 12h4m10 0h4M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z');$('generate').after(manualHolesButton);
+const manualHolesButton=document.createElement('button');manualHolesButton.type='button';projectIcon(manualHolesButton,'Add or edit manual holes','M12 3v4m0 10v4M3 12h4m10 0h4M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z');$('generate').before(manualHolesButton);
+const panelDrawingActions=$('generate').parentElement;panelDrawingActions.classList.add('panel-drawing-actions');panelDrawingActions.setAttribute('role','group');panelDrawingActions.setAttribute('aria-label','Panel drawing actions');
 manualHolesButton.onclick=()=>{const layout=result?.manualHoleLayout||(manualHoleRetryLayout?.spec===spec?manualHoleRetryLayout.layout:null);if(!spec||!layout){notice('Generate a fresh drawing first, then add manual holes.',true);return;}PanelManualHoles.open({layout,holes:spec.manualHoles||[],onApply:holes=>{spec.manualHoles=holes;invalidate();manualHoleRetryLayout={spec,layout};rememberPanel();queueProjectSave();$('generate').click();}});};
 sheetPlanButton.onclick=()=>run(async()=>{rememberPanel();if(!generatedDrawings().length)throw Error('Generate a panel drawing first.');await PanelSheetPlanner.open({canSendCnc:!!(session?.isAdmin||session?.taskAccess?.['factory.cnc']===true),projectName:$('projectname').value,orderNumber:projectDetails().orderNumber,jobReference:projectDetails().projectName,request:api,download,panels:panels.map((p,i)=>({name:p.spec?.panelId||p.name||'Panel',quantity:p.quantity||1,direction:p.spec?.panelDirection,dxf:(i===panelIndex?result:p.result)?.dxf}))});});
 $('downloadall').onclick=()=>run(async()=>{if(!generatedDrawings().length)throw Error('Generate a drawing first.');const combined=await chooseCombinedDrawings();if(!combined){notice('Combined download cancelled.');return;}download(combined.dxf,'application/dxf',combinedFilename($('projectname').value));notice(combined.panelCount+' selected drawings downloaded in one DXF.');});
