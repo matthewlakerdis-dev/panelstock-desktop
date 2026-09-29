@@ -2,6 +2,14 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),fs=requir
 const records=new Map();let fail=false;
 const indexedDB={open(){const request={};queueMicrotask(()=>{request.result={close(){},transaction(){const tx={objectStore:()=>({put(value){const r={};queueMicrotask(()=>{if(fail){tx.error=Error('Storage full');tx.onerror();}else{records.set(value.id,structuredClone(value));tx.oncomplete();}});return r;},getAll(){const r={};queueMicrotask(()=>{r.result=structuredClone([...records.values()]);tx.oncomplete();});return r;}})};return tx;}};request.onsuccess();});return request;}};
 const c={window:{},structuredClone,indexedDB};vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../cad/cad-projects.js'),'utf8'),c);const api=c.window.PanelCadProjects;
+test('drawing readiness is evaluated at save and preserved by snapshot repacking',()=>{
+ const panels=[{name:'P1'},{name:'P2'}];let calls=0;
+ const first=api.snapshot(panels,0,'Order',[],{orderNumber:'7'},()=>({version:1,ready:++calls===1}));
+ assert.equal(calls,2);assert.equal(first.panels[0].drawingReadiness.ready,true);assert.equal(first.panels[1].drawingReadiness.ready,false);
+ const packed=api.snapshot(first.panels,0,first.name,[],first.projectDetails);
+ assert.equal(packed.panels[0].drawingReadiness.ready,true);assert.equal(packed.projectDetails.orderNumber,'7');
+ first.panels[0].drawingReadiness.ready=false;assert.equal(packed.panels[0].drawingReadiness.ready,true);
+});
 test('project saves preserve sketches, generated drawings and unfinished corrections without credentials',async()=>{
  const panels=[{name:'P1',spec:{panelId:'P1'},result:{dxf:'drawing',svg:'preview'},file:new Blob(['image']),correctionRecovery:{traceClosed:false},token:'not for storage'}];
  const snapshot=api.snapshot(panels,0,'Job A');panels[0].spec.panelId='changed';

@@ -132,7 +132,7 @@ function queueProjectSave(){
 async function saveProject(){
  clearTimeout(projectTimer);clearTimeout(projectRetryTimer);const owner=projectOwner();if(!owner||(!panels.length&&!uploadedSketchFiles.length&&!projectId))return;
  rememberPanel();projectName=$('projectname').value.trim()||'Untitled project';projectId||=crypto.randomUUID();
- const id=projectId,revision=projectRevision,data=PanelCadProjects.snapshot(panels,panelIndex,projectName,uploadedSketchFiles,projectDetails());
+ const id=projectId,revision=projectRevision,data=PanelCadProjects.snapshot(panels,panelIndex,projectName,uploadedSketchFiles,projectDetails(),panel=>panelDrawingReadiness(panel));
  projectSaveStatus('saving','Saving project…');let localSaved=false;
  const task=projectSaveChain.catch(()=>{}).then(async()=>{
   await PanelCadProjects.save(owner,id,data);
@@ -522,6 +522,10 @@ function fabricationReadiness(panel,issues=[]){
  return [...new Set(reasons)];
 }
 function drawingSpecKey(value){const copy={...value};delete copy.reviewed;return JSON.stringify(copy);}
+function panelDrawingReadiness(panel){
+ let issues=[];try{if(panel.spec)issues=currentIssues(structuredClone(panel.spec));}catch{issues=['Review the panel geometry.'];}
+ return {version:1,ready:!!panel.generatedSpec&&fabricationReadiness(panel,issues).length===0};
+}
 const readinessButton=document.createElement('button');readinessButton.type='button';projectIcon(readinessButton,'Fabrication readiness','M8 4H5v18h14V4h-3M9 2h6v4H9V2ZM8 14l3 3 5-6');summaryButton.after(readinessButton);
 readinessButton.onclick=()=>{
  if(busy)return;rememberPanel();

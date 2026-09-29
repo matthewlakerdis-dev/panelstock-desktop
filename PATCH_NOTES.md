@@ -1,5 +1,11 @@
 # PanelStock release notes
 
+## Automatic order drawing progress — 29 September 2026
+
+- PanelCAD account saves now include the existing fabrication-readiness result for each highlighted panel, with no extra completion confirmation.
+- Ready status requires a current generated drawing, reviewed dimensions and passing geometry/fabrication checks. Newly added, changed or failed panels keep the order incomplete.
+- Progress is published only by a successful account save; offline and unfinished uploads retain the last saved status.
+
 ## Separately completed QA recuts — 10 September 2026
 
 - Administrators can resolve a panel recut that was completed and scheduled separately.

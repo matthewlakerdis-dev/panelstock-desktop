@@ -1,8 +1,8 @@
 /* Browser-local CAD projects. Tokens are never stored with drawing data. */
 (()=>{'use strict';
 function ownerKey(api,username){return api+'|'+String(username||'').trim().toLowerCase();}
-function snapshot(panels,index,name,uploadedFiles=[],details={}){
- return {version:1,projectDetails:{projectId:String(details.projectId||'').slice(0,100),projectName:String(details.projectName||'').slice(0,100),orderNumber:String(details.orderNumber||'').slice(0,50),additionalInfo:String(details.additionalInfo||'').slice(0,4000)},uploadedFiles:structuredClone(uploadedFiles),name:name.trim()||'Untitled project',updatedAt:Date.now(),index,panels:structuredClone(panels.map(p=>({name:p.name,quantity:p.quantity||1,file:p.file,sourcePdf:p.sourcePdf,sourcePdfName:p.sourcePdfName||p.sourcePdf?.name,spec:p.spec,result:p.result,reviewed:p.reviewed,message:p.message,error:p.error,correctionRecovery:p.correctionRecovery,generatedSpec:p.generatedSpec})))};
+function snapshot(panels,index,name,uploadedFiles=[],details={},readiness){
+ return {version:1,projectDetails:{projectId:String(details.projectId||'').slice(0,100),projectName:String(details.projectName||'').slice(0,100),orderNumber:String(details.orderNumber||'').slice(0,50),additionalInfo:String(details.additionalInfo||'').slice(0,4000)},uploadedFiles:structuredClone(uploadedFiles),name:name.trim()||'Untitled project',updatedAt:Date.now(),index,panels:structuredClone(panels.map(p=>({name:p.name,quantity:p.quantity||1,file:p.file,sourcePdf:p.sourcePdf,sourcePdfName:p.sourcePdfName||p.sourcePdf?.name,spec:p.spec,result:p.result,reviewed:p.reviewed,message:p.message,error:p.error,correctionRecovery:p.correctionRecovery,generatedSpec:p.generatedSpec,drawingReadiness:readiness?readiness(p):p.drawingReadiness})))};
 }
 async function packOriginals(project,encode){
  const seen=new Map(),contents=new Map(),sources=[];
