@@ -132,7 +132,7 @@ function queueProjectSave(){
 async function saveProject(){
  clearTimeout(projectTimer);clearTimeout(projectRetryTimer);const owner=projectOwner();if(!owner||(!panels.length&&!uploadedSketchFiles.length&&!projectId))return;
  rememberPanel();projectName=$('projectname').value.trim()||'Untitled project';projectId||=crypto.randomUUID();
- const id=projectId,revision=projectRevision,data=PanelCadProjects.snapshot(panels,panelIndex,projectName,uploadedSketchFiles,projectDetails(),panel=>panelDrawingReadiness(panel));
+ const id=projectId,revision=projectRevision,data=PanelCadProjects.snapshot(panels,panelIndex,projectName,uploadedSketchFiles,projectDetails());
  projectSaveStatus('saving','Saving project…');let localSaved=false;
  const task=projectSaveChain.catch(()=>{}).then(async()=>{
   await PanelCadProjects.save(owner,id,data);
@@ -295,7 +295,7 @@ function renderDrawingChecks(drawing){
  const help=document.createElement('p');help.textContent=rows.length?'All values are in mm. Actual values use unrounded geometry. Calculated rows show measured differences, without an independently verified deduction.':'Regenerate this drawing to include the measurement check.';audit.append(help);
  if(rows.length){const wrap=document.createElement('div');wrap.className='tablewrap';const table=document.createElement('table');const thead=document.createElement('thead'),head=document.createElement('tr');for(const label of ['Measurement','Sketch','Deduction','Expected','Actual','Check']){const th=document.createElement('th');th.textContent=label;head.append(th);}thead.append(head);table.append(thead);const tbody=document.createElement('tbody');const number=value=>Number.isFinite(value)?String(Number(value.toFixed(3))):'—';for(const row of rows){const tr=document.createElement('tr');if(row.status==='mismatch')tr.className='measurement-mismatch';for(const value of [row.label,number(row.site),number(row.deduction),number(row.expected),number(row.actual),row.status==='pass'?'Matches':row.status==='mismatch'?'Mismatch':'Calculated']){const td=document.createElement('td');td.textContent=value;tr.append(td);}tbody.append(tr);}table.append(tbody);wrap.append(table);audit.append(wrap);}box.append(audit);
 }
-function invalidate(){const errorBox=$('generation-error');if(errorBox)errorBox.hidden=true;version++;result=null;updateNavigator();$('download').disabled=true;$('preview').hidden=true;$('validation').textContent='Generate a new preview after reviewing your changes.';}
+function invalidate(){manualHoleRetryLayout=null;const errorBox=$('generation-error');if(errorBox)errorBox.hidden=true;version++;result=null;updateNavigator();$('download').disabled=true;$('preview').hidden=true;$('validation').textContent='Generate a new preview after reviewing your changes.';}
 async function api(path,body){const token=session?.token;const response=await fetch(API+path,{method:body?'POST':'GET',headers:{...(token?{Authorization:'Bearer '+token}:{}),...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),cache:'no-store',signal:AbortSignal.timeout(95000)});const data=await response.json();if(response.status===401){session=null;sessionStorage.removeItem(KEY);showSession();}if(!response.ok){const error=Error(data.error||'Request failed');error.conflict=data.conflict===true;error.status=response.status;throw error;}return data;}
 function showSession(){if(!session){uploadedSketchFiles=[];clearTimeout(projectTimer);projectId=null;projectDirty=false;$('projectname').value='Untitled project';cadProjectOptions=[];restoreProjectDetails();PanelMeasuredOutline.show(null);panels.length=0;panelIndex=-1;updateNavigator();spec=null;invalidate();$('edges').replaceChildren();$('panelid').value='';$('folds').value='';$('questions').replaceChildren();if(previewURL){URL.revokeObjectURL(previewURL);previewURL=null;}}$('login').hidden=!!session;$('workspace').hidden=!session;$('signout').hidden=!session;$('account').textContent=session?.username||'';}
 async function run(action){if(busy)return;busy=true;for(const b of document.querySelectorAll('button'))b.disabled=true;notice('Working…');try{await action();}catch(e){notice(e.name==='TimeoutError'?'This request timed out. Please retry.':e.message||'Could not reach the server.',true);}finally{busy=false;for(const b of document.querySelectorAll('button'))b.disabled=false;$('download').disabled=!result;updateNavigator();queueProjectSave();}}
@@ -522,10 +522,6 @@ function fabricationReadiness(panel,issues=[]){
  return [...new Set(reasons)];
 }
 function drawingSpecKey(value){const copy={...value};delete copy.reviewed;return JSON.stringify(copy);}
-function panelDrawingReadiness(panel){
- let issues=[];try{if(panel.spec)issues=currentIssues(structuredClone(panel.spec));}catch{issues=['Review the panel geometry.'];}
- return {version:1,ready:!!panel.generatedSpec&&fabricationReadiness(panel,issues).length===0};
-}
 const readinessButton=document.createElement('button');readinessButton.type='button';projectIcon(readinessButton,'Fabrication readiness','M8 4H5v18h14V4h-3M9 2h6v4H9V2ZM8 14l3 3 5-6');summaryButton.after(readinessButton);
 readinessButton.onclick=()=>{
  if(busy)return;rememberPanel();
@@ -619,6 +615,29 @@ function combinedPayload(drawings){
   return payload;
 }
 const sheetPlanButton=document.createElement('button');sheetPlanButton.type='button';projectIcon(sheetPlanButton,'Plan on SOH sheets','M2 3h20v18H2V3ZM5 6h6v12H5V6ZM14 6h5v5h-5V6ZM14 14h5v4h-5v-4Z');$('downloadall').after(sheetPlanButton);
+const editFoldsButton=document.createElement('button');editFoldsButton.type='button';editFoldsButton.textContent='Add/edit folds';$('generate').before(editFoldsButton);
+editFoldsButton.onclick=()=>{
+ if(!spec||spec.measuredEdges||spec.edges?.length!==4||spec.edges.map(e=>e.direction).join(',')!=='right,up,left,down'){notice('Use this control for a rectangle. For a traced panel, mark folds in Correct outline on sketch.',true);return;}
+ const width=Number(spec.edges[0].site),height=Number(spec.edges[1].site);
+ if(!(width>0&&height>0)){notice('Enter the rectangle width and height before adding folds.',true);return;}
+ const dialog=document.createElement('dialog');dialog.className='combine-picker';const header=document.createElement('header'),title=document.createElement('h2');title.textContent='Panel folds';header.append(title);
+ const body=document.createElement('div');body.className='combine-body';const directionLabel=document.createElement('label');directionLabel.textContent='Fold direction';const direction=document.createElement('select');direction.append(new Option('Horizontal - measured from bottom','horizontal'),new Option('Vertical - measured from left','vertical'));direction.value=spec.foldLines?.length?'vertical':'horizontal';directionLabel.append(direction);body.append(directionLabel);
+ const help=document.createElement('p');help.textContent='Enter each fold position using the original site dimensions. Fold deductions are calculated automatically. Use one direction per rectangle.';body.append(help);const rows=document.createElement('div');body.append(rows);
+ let values=direction.value==='vertical'?(spec.foldLines||[]).map(f=>f.start.x):[...(spec.siteFolds||[])];
+ const add=document.createElement('button');add.type='button';add.textContent='Add fold';body.append(add);const error=document.createElement('p');error.className='cad-error-message';error.setAttribute('role','alert');error.hidden=true;body.append(error);
+ function render(){rows.replaceChildren();values.forEach((value,i)=>{const row=document.createElement('div');row.className='row';const label=document.createElement('label');label.textContent='Fold '+(i+1)+' from '+(direction.value==='vertical'?'left':'bottom')+' (mm)';const input=document.createElement('input');input.type='number';input.step='any';input.min='0.001';input.value=Number.isFinite(value)?value:'';input.oninput=()=>{values[i]=input.value===''?NaN:Number(input.value);};label.append(input);const remove=document.createElement('button');remove.type='button';remove.textContent='Remove';remove.onclick=()=>{values.splice(i,1);render();};row.append(label,remove);rows.append(row);});add.disabled=values.length>=12;}
+ direction.onchange=render;add.onclick=()=>{values.push(NaN);render();rows.lastElementChild?.querySelector('input')?.focus();};
+ const footer=document.createElement('footer'),cancel=document.createElement('button'),apply=document.createElement('button');cancel.textContent='Cancel';apply.textContent='Apply folds';apply.className='primary';footer.append(cancel,apply);dialog.append(header,body,footer);
+ const close=()=>{dialog.close();dialog.remove();editFoldsButton.focus();};cancel.onclick=close;dialog.oncancel=e=>{e.preventDefault();close();};apply.onclick=()=>{
+ const limit=direction.value==='vertical'?width:height;if(values.some(v=>!Number.isFinite(v)||v<=0||v>=limit)||new Set(values).size!==values.length){error.textContent='Enter distinct fold positions greater than 0 and less than '+limit+' mm.';error.hidden=false;return;}
+ const folds=[...values].sort((a,b)=>a-b);delete spec.foldSectionsTop;delete spec.verticalFolds;delete spec.manualSiteFolds;spec.folds=[];
+ if(direction.value==='vertical'){spec.siteFolds=[];spec.foldLines=folds.map(x=>({start:{x,y:0},end:{x,y:height}}));}else{delete spec.foldLines;spec.siteFolds=folds;}
+ renderSpec();rememberPanel();queueProjectSave();$('folds').dispatchEvent(new Event('input'));close();notice('Folds updated. Generate the drawing to check them.');
+ };document.body.append(dialog);render();dialog.showModal();add.focus();
+};
+var manualHoleRetryLayout=null;
+const manualHolesButton=document.createElement('button');manualHolesButton.type='button';projectIcon(manualHolesButton,'Add or edit manual holes','M12 3v4m0 10v4M3 12h4m10 0h4M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z');$('generate').after(manualHolesButton);
+manualHolesButton.onclick=()=>{const layout=result?.manualHoleLayout||(manualHoleRetryLayout?.spec===spec?manualHoleRetryLayout.layout:null);if(!spec||!layout){notice('Generate a fresh drawing first, then add manual holes.',true);return;}PanelManualHoles.open({layout,holes:spec.manualHoles||[],onApply:holes=>{spec.manualHoles=holes;invalidate();manualHoleRetryLayout={spec,layout};rememberPanel();queueProjectSave();$('generate').click();}});};
 sheetPlanButton.onclick=()=>run(async()=>{rememberPanel();if(!generatedDrawings().length)throw Error('Generate a panel drawing first.');await PanelSheetPlanner.open({canSendCnc:!!(session?.isAdmin||session?.taskAccess?.['factory.cnc']===true),projectName:$('projectname').value,orderNumber:projectDetails().orderNumber,jobReference:projectDetails().projectName,request:api,download,panels:panels.map((p,i)=>({name:p.spec?.panelId||p.name||'Panel',quantity:p.quantity||1,direction:p.spec?.panelDirection,dxf:(i===panelIndex?result:p.result)?.dxf}))});});
 $('downloadall').onclick=()=>run(async()=>{if(!generatedDrawings().length)throw Error('Generate a drawing first.');const combined=await chooseCombinedDrawings();if(!combined){notice('Combined download cancelled.');return;}download(combined.dxf,'application/dxf',combinedFilename($('projectname').value));notice(combined.panelCount+' selected drawings downloaded in one DXF.');});
 
