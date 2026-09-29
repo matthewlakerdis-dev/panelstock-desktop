@@ -523,6 +523,7 @@ function fabricationReadiness(panel,issues=[]){
  const reasons=[];const drawing=panel.result,v=drawing?.validation||{};
  if(!panel.spec)reasons.push('Read or complete the sketch.');
  if(panel.correctionRecovery)reasons.push('Apply or review the saved outline edits.');
+ if(drawing?.dxf&&!panel.generatedSpec)reasons.push('Regenerate to verify this drawing matches the current panel.');
  if(!drawing?.dxf)reasons.push(panel.generatedSpec?'Details changed or generation failed. Generate a fresh drawing.':'Generate a drawing.');
  if(panel.generatedSpec&&panel.spec&&panel.generatedSpec!==drawingSpecKey(panel.spec))reasons.push('Details changed since generation. Generate a fresh drawing.');
  if(!panel.reviewed)reasons.push('Review the panel dimensions and edge types.');
@@ -544,7 +545,7 @@ function panelDrawingReadiness(panel){
 }
 const readinessButton=document.createElement('button');readinessButton.type='button';projectIcon(readinessButton,'Fabrication readiness','M8 4H5v18h14V4h-3M9 2h6v4H9V2ZM8 14l3 3 5-6');summaryButton.after(readinessButton);
 readinessButton.onclick=()=>{
- if(busy)return;rememberPanel();
+ if(busy)return;rememberPanel();queueProjectSave();
  const finderKey=projectId||panels[0]||'empty',preferences=panelFinderPreferences.get(finderKey)||{query:'',status:'all'};
  const rows=panels.map((p,index)=>{let issues=[];try{if(p.spec)issues=currentIssues(structuredClone(p.spec));}catch{issues=['Review the panel geometry.'];}return {p,index,reasons:fabricationReadiness(p,issues)};});
  const ready=rows.filter(row=>!row.reasons.length).length,attention=rows.length-ready;
@@ -595,7 +596,7 @@ document.addEventListener('keydown',event=>{
 });
 
 findPanelsButton.onclick=()=>{
- if(busy)return;rememberPanel();
+ if(busy)return;rememberPanel();queueProjectSave();
  const finderKey=projectId||panels[0]||'empty',preferences=panelFinderPreferences.get(finderKey)||{query:'',status:'all'};
  const rows=panels.map((p,index)=>{let issues=[];try{if(p.spec)issues=currentIssues(structuredClone(p.spec));}catch{issues=['Review geometry.'];}return {p,index,reasons:fabricationReadiness(p,issues)};});
  const dialog=document.createElement('dialog');dialog.className='project-picker panel-finder';dialog.setAttribute('aria-labelledby','panel-finder-title');
