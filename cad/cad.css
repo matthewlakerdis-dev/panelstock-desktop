@@ -466,3 +466,8 @@ dialog.readiness-dialog{width:min(720px,calc(100vw - 32px))}
 .panel-arrow-dialog::backdrop{background:#14232e66}
 .panel-arrow-choices{display:flex;flex-wrap:wrap;gap:10px;margin:20px 0}
 .panel-arrow-choices [aria-pressed=true]{background:#2e6074;color:white;border-color:#2e6074}
+
+.manual-hole-dialog{width:min(1500px,96vw);max-width:96vw;max-height:94vh}
+.manual-hole-dialog .manual-hole-body{grid-template-columns:minmax(0,1fr) 280px;min-height:0}
+.manual-hole-dialog .manual-hole-body svg{height:65vh;max-height:none;min-height:420px}
+@media(max-width:700px){.manual-hole-dialog .manual-hole-body{grid-template-columns:1fr}.manual-hole-dialog .manual-hole-body svg{height:45vh;min-height:280px}}
