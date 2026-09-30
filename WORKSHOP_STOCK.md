@@ -14,4 +14,6 @@ Workshop data is stored separately from legacy panel records in the same invento
 
 Deploy the mobile repository's Worker before publishing these frontends. No new bindings, secrets or migration are required. The endpoint is additive; old clients continue operating. Keep `workshop-stock.js` and `workshop-stock.css` identical in both repositories. iOS 10 and earlier continue using their existing legacy interface; the new workshop screen is available in the modern mobile app and desktop.
 
-This release adds manual job allocations for general stock. Automatic allocations from non-panel schedules, barcode scanning, purchase-order matching and item photographs are not included.
+This release adds manual job allocations for general stock. Automatic allocations from non-panel schedules, barcode scanning and purchase-order matching are not included.
+
+Administrators can add, replace or remove an optional profile/product image when creating a stock item or editing its details. PNG, JPEG and WebP files up to 8 MB are resized in the browser (up to 1600 pixels) and stored as a validated image under 500 KB. Thumbnails open an enlarged view. Images are included in workshop backups and preserved by unrelated detail edits.
