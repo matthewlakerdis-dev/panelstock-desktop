@@ -611,9 +611,6 @@ video {
 .top-1\/2 {
   top: 50%;
 }
-.top-3 {
-  top: 0.75rem;
-}
 .top-4 {
   top: 1rem;
 }
@@ -1893,9 +1890,6 @@ video {
 .text-white {
   --tw-text-opacity: 1;
   color: rgb(255 255 255 / var(--tw-text-opacity, 1));
-}
-.text-white\/80 {
-  color: rgb(255 255 255 / 0.8);
 }
 .line-through {
   text-decoration-line: line-through;

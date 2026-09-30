@@ -1,0 +1,7 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
+test('timeline separates overlapping bookings and gaps adjacent bookings',()=>{
+ const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8'),a=html.indexOf('    const horizontalTimeline='),b=html.indexOf('    return e("div",null,',a),entries=[{id:'a',startTime:'05:00',endTime:'08:00',title:'Deliver brackets',project:'Airport',assignedUsername:'p'},{id:'b',startTime:'06:00',endTime:'07:00',title:'Overlapping delivery',project:'Site',assignedUsername:'p'},{id:'c',startTime:'08:00',endTime:'09:00',title:'Next task',project:'Site',assignedUsername:'p'}];
+ const tree=vm.runInNewContext(html.slice(a,b)+';horizontalTimeline',{e:(type,props,...children)=>({type,props:props||{},children}),hours:[5,6,7,8,9],visiblePeople:[{username:'p',displayName:'Person'}],visibleEntries:entries,ScheduleAvatar:()=>{},startHour:5,endHour:9,dayMinutes:240,minutes:v=>{const [h,m]=v.split(':').map(Number);return h*60+m},canEditEntry:()=>true,setEditor(){}});
+ const walk=n=>!n||typeof n!=='object'?[]:[n,...(n.children||[]).flat(Infinity).flatMap(walk)],cards=walk(tree).filter(n=>n.type==='button');
+ assert.equal(cards.length,3);assert.equal(cards[0].props.style.top,cards[2].props.style.top);assert.ok(cards[1].props.style.top>cards[0].props.style.top);assert.match(cards[0].props.style.width,/- 6px/);assert.ok(walk(cards[0]).some(n=>n.props.style?.WebkitLineClamp===2));
+});
