@@ -22,7 +22,7 @@ test('SOH orders existing custom Steel correctly and preserves panel detail acti
  const tabs=nodes.find(n=>n.props['aria-label']==='Stock categories');
  assert.deepEqual(walk(tabs).filter(n=>n.type==='button').map(n=>n.children[0]),['All Stock','Panels','Offcuts','Extrusions','Steel','Fixings','Consumables','Other']);
  nodes.find(n=>n.props['aria-label']==='Stock action for Panel').props.onChange({target:{value:'panels'}});assert.equal(opened.id,'variant:p');
- assert.ok(nodes.some(n=>n.type==='button'&&n.children.includes('Add panel offcut')));
+ assert.ok(nodes.some(n=>n.type==='button'&&n.props['aria-label']==='Add panel offcut'));
 });
 test('workers select named stocktakes and only see unsubmitted items in the count',()=>{
  const states=[];let cursor=0;const storage=new Map();
