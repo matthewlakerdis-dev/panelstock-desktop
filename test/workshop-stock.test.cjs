@@ -24,3 +24,18 @@ test('SOH orders existing custom Steel correctly and preserves panel detail acti
  nodes.find(n=>n.props['aria-label']==='Stock action for Panel').props.onChange({target:{value:'panels'}});assert.equal(opened.id,'variant:p');
  assert.ok(nodes.some(n=>n.type==='button'&&n.children.includes('Add panel offcut')));
 });
+test('workers select named stocktakes and only see unsubmitted items in the count',()=>{
+ const states=[];let cursor=0;const storage=new Map();
+ const React={createElement:(type,props,...children)=>({type,props:props||{},children}),useState:v=>{const i=cursor++;if(!(i in states))states[i]=typeof v==='function'?v():v;return [states[i],v=>states[i]=typeof v==='function'?v(states[i]):v];},useEffect(){},Fragment:'fragment'};
+ const context={window:{},PanelStock:{username:'worker',apiFetch:async()=>({ok:true,json:async()=>states[0]})},localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)}};
+ vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../workshop-stock.js'),'utf8'),context);
+ const Component=context.window.createWorkshopStock(React),render=()=>{cursor=0;return Component({isAdmin:false,taskAccess:{'factory.stock':true}});};
+ const walk=n=>!n||typeof n!=='object'?[]:[n,...(n.children||[]).flat(Infinity).flatMap(walk)];
+ render();states[0]={items:['a','b','c'].map(id=>({id,name:id,sku:id,category:'fixings',qty:2,available:2,unit:'each'})),movements:[],stocktakes:[{id:'count1',name:'October fixings',categories:['fixings'],itemIds:['a','b'],counts:{a:{quantity:2}},status:'open'}]};
+ let nodes=walk(render());nodes.find(n=>n.type==='button'&&n.children.includes('Stocktake')).props.onClick();nodes=walk(render());
+ assert.ok(!nodes.some(n=>n.type==='button'&&n.children.includes('Create stocktake')));
+ nodes.find(n=>n.type==='button'&&n.children.includes('Continue count')).props.onClick();nodes=walk(render());
+ assert.ok(nodes.some(n=>n.type==='h3'&&n.children.includes('October fixings')));
+ const inputs=nodes.filter(n=>n.props['data-count-input']);assert.equal(inputs.length,1);assert.match(inputs[0].props['aria-label'],/Count b/);
+ inputs[0].props.onChange({target:{value:'0'}});assert.ok(storage.has('panelstock:stocktake:worker:count1'));
+});
