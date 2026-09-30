@@ -164,8 +164,8 @@ test('web navigation uses exclusive parent sections with CNC settings under CNC'
  const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
  assert.doesNotMatch(html,/syncStatus === "synced"/);
  const navigation=html.slice(html.indexOf('const navGroups = ['),html.indexOf('const pageLabels ='));
- assert.match(navigation,/label:"Panel SOH"/);
- assert.match(navigation,/label:"Workshop stock"/);
+ assert.doesNotMatch(navigation,/label:"Panel SOH"/);
+ assert.match(navigation,/label:"SOH"/);
  assert.match(html,/PageHeading, \{ icon:[^\n]+Layers, \{ size: 18 \}[^\n]+title: "Stock on Hand"/);
  assert.match(navigation,/key:"cncGroup",label:"CNC"/);
  assert.match(navigation,/label:"CNC Tracker",target:"cnc"/);
