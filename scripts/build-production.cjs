@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const out = path.join(root, 'dist-production');
-const files = ['index.html','panelstock-client.js','tailwind.css','icon-192.png','PanelStock_SOP.pdf','push-sw.js','CNAME'];
+const files = ['index.html','workshop-stock.js','workshop-stock.css','panelstock-client.js','tailwind.css','icon-192.png','PanelStock_SOP.pdf','push-sw.js','CNAME'];
 fs.mkdirSync(out,{recursive:true});
 for (const file of files) fs.copyFileSync(path.join(root,file),path.join(out,file));
 fs.cpSync(path.join(root,'cad'),path.join(out,'cad'),{recursive:true});
