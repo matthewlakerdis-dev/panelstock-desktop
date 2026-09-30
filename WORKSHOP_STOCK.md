@@ -17,3 +17,6 @@ Deploy the mobile repository's Worker before publishing these frontends. No new 
 This release adds manual job allocations for general stock. Automatic allocations from non-panel schedules, barcode scanning and purchase-order matching are not included.
 
 Administrators can add, replace or remove an optional profile/product image when creating a stock item or editing its details. PNG, JPEG and WebP files up to 8 MB are resized in the browser (up to 1600 pixels) and stored as a validated image under 500 KB. Thumbnails open an enlarged view. Images are included in workshop backups and preserved by unrelated detail edits.
+
+## Profile variants
+Use Manage → Add colour / length variant to reuse a profile code. Code + colour + length must be unique (case and repeated spaces are ignored). Each variant keeps its own stock, reservations, location and reorder level. The profile name, image and dimensions are reused; editing the image or dimensions updates every variant with that code. Categories and stock units must match. Existing records and movement IDs are preserved.
