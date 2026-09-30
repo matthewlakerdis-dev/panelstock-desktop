@@ -13635,6 +13635,7 @@ ${xrefStart}
 
   const catalogKey = item => `${String(item.color || "").trim().toLowerCase()}|${String(item.material || "").trim().toLowerCase()}|${Number(item.thickness)}`;
   const WorkshopStock = window.createWorkshopStock(import_react.default);
+  const PurchaseOrderReceiving = window.createPurchaseOrderReceiving(import_react.default);
   function App() {
     const [tab, setTab] = useState("workshop");
     const [navSelection, setNavSelection] = useState("workshop");
@@ -14504,6 +14505,7 @@ ${xrefStart}
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("main", { className: "flex-1 overflow-y-auto p-8", children: [
           tab === "cad" && (isAdmin || taskAccess["factory.cad"] === true) && (0, import_jsx_runtime.jsx)("iframe", {src:"cad/?embedded=1",title:"Panel CAD editor",style:{width:"100%",height:"calc(100vh - 130px)",minHeight:"640px",border:0},allow:""}),
           tab === "workshop" && can("factory.stock") && (0,import_jsx_runtime.jsx)(WorkshopStock,{workerUrl:BAKED_WORKER_URL,isAdmin,taskAccess,stockRevision:PanelStock.revision,onPanels:item=>{const type=item.id.startsWith('variant:')?'variant':'offcut',id=item.id.slice(item.id.indexOf(':')+1),record=(type==='variant'?variants:offcuts).find(row=>row.id===id);if(record)setDetailItem({...record,itemType:type});},onAddOffcut:()=>setModal({type:'offcut'}),onExportExcel:exportExcel,onExportPDF:exportSOHPDF}),
+          tab === "receive" && (isAdmin || taskAccess["factory.receive"] === true) && (0, import_jsx_runtime.jsx)(PurchaseOrderReceiving,{workerUrl:BAKED_WORKER_URL,isAdmin,launcher:true}),
           tab === "receive" && can("factory.receive") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReceivePage, { catalog, variants, onSubmit: receiveStock }),
           tab === "dispatch" && can("factory.dispatch") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DispatchCenter, { variants, offcuts, onSubmit: dispatchItem }),
           tab === "transfer" && can("factory.transfer") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TransferPage, { variants, onSubmit: transferStock }),
