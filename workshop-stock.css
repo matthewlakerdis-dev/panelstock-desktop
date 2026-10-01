@@ -188,3 +188,21 @@
 @media(max-width:640px){.ws-delivery-heading{align-items:flex-start;flex-direction:column;gap:8px}.ws-po-dialog .ws-delivery-heading h4{font-size:20px}.ws-delivery-guide{padding:12px}.ws-delivery-shortcuts{display:grid;grid-template-columns:1fr;width:100%}.ws-delivery-shortcuts button{justify-content:center;width:100%}.ws-delivery-review-summary{padding:12px;flex-direction:column;align-items:flex-start}.ws-delivery-balance summary{min-height:44px;display:flex;align-items:center}}
 
 .ws-po-files>summary{cursor:pointer;font-weight:600;color:#244358;font-size:13px;padding:12px 0;min-height:44px}.ws-po-files[open]>summary{margin-bottom:8px}.ws-po-dialog details.ws-po-files{padding-bottom:8px}.ws-po-files>summary:focus-visible{outline:2px solid #0891b2;outline-offset:2px}
+
+/* One full-width purchase order per row on the receiving screen. */
+.ws.ws-po-launcher-section{max-width:none;width:100%}
+.ws-receiving-list{grid-template-columns:minmax(0,1fr)}
+@media(min-width:901px){
+ .ws-receiving-card{display:grid;grid-template-columns:minmax(260px,1fr) minmax(260px,1.25fr) minmax(190px,.65fr);grid-template-rows:auto auto 1fr;align-items:stretch}
+ .ws-receiving-card> *{min-width:0}
+ .ws-receiving-card-top{grid-column:1;grid-row:1;flex-wrap:wrap;padding:18px 20px 10px;gap:8px 12px}
+ .ws-receiving-card-top>div{min-width:0}
+ .ws-receiving-card-top h3{font-size:19px}
+ .ws-receiving-date{grid-column:1;grid-row:2;padding:0 20px 10px}
+ .ws-receiving-progress{grid-column:1;grid-row:3;padding:0 20px 18px}
+ .ws-receiving-items{grid-column:2;grid-row:1/4;display:flex;flex-direction:column;justify-content:center;padding:18px 24px;border-top:0;border-bottom:0;border-left:1px solid #e3eaf0;border-right:1px solid #e3eaf0}
+ .ws-receiving-items>div{font-size:13px;gap:18px;margin:8px 0;line-height:1.6}
+ .ws-receiving-card-bottom{grid-column:3;grid-row:1/4;flex-direction:column;align-items:stretch;justify-content:center;padding:20px;gap:16px}
+ .ws-receiving-card-bottom>div{gap:7px}
+ .ws .ws-receiving-card-bottom button{width:100%;min-height:46px;justify-content:center}
+}
