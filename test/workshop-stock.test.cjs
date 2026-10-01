@@ -53,11 +53,29 @@ test('restocking overview uses available stock and incoming quantities without m
   {id:'b',name:'Rivets',category:'fixings',qty:0,available:0,reorderLevel:2,onOrder:4,unit:'boxes'},
   {id:'c',name:'Healthy',category:'fixings',qty:20,available:20,reorderLevel:2,unit:'each'}
  ],movements:[]};
- const nodes=walk(render()),overview=nodes.find(n=>n.props.className==='ws-restock');
+ let nodes=walk(render()),overview=nodes.find(n=>n.props.className==='ws-restock');
  assert.match(text(overview),/2 low-stock items · 2 awaiting deliveries · 1 to review/);
  const cards=walk(overview).filter(n=>n.type==='article');assert.equal(cards.length,2);
  const angle=cards.find(n=>text(n).includes('Angle'));
- assert.match(text(angle),/Shortfall 5 lengths/);assert.match(text(angle),/Delivery will not cover/);
- assert.match(text(cards.find(n=>text(n).includes('Rivets'))),/Shortfall 0 boxes/);
- assert.ok(!walk(overview).some(n=>n.type==='button'&&text(n)==='Edit reorder level'));
+ assert.match(text(angle),/Shortfall 5/);assert.match(text(angle),/More stock needed/);
+ assert.match(text(cards.find(n=>text(n).includes('Rivets'))),/Shortfall 0/);
+ assert.ok(!walk(overview).some(n=>n.type==='button'&&text(n)==='Edit level'));
+ states[0].items.push(...Array.from({length:12},(_,n)=>({id:'setup'+n,name:'Unset '+n,sku:'X'+n,category:'fixings',qty:0,available:0,reorderLevel:0,unit:'each'})));
+ overview=walk(render()).find(n=>n.props.className==='ws-restock');
+ assert.equal(walk(overview).filter(n=>n.type==='article').length,8);
+ assert.match(text(overview),/12 need a reorder level/);
+ walk(overview).find(n=>n.type==='button'&&text(n)==='Next').props.onClick();
+ overview=walk(render()).find(n=>n.props.className==='ws-restock');
+ assert.match(text(overview),/Showing 9–14 of 14 items/);
+ walk(overview).find(n=>n.type==='button'&&text(n).startsWith('Set reorder level')).props.onClick();
+ overview=walk(render()).find(n=>n.props.className==='ws-restock');
+ assert.match(text(overview),/Showing 1–8 of 12 items/);
+ const unset=walk(overview).find(n=>n.type==='article');
+ assert.match(text(unset),/Reorder at — On order 0 Shortfall —/);
+ assert.match(text(unset),/No reorder level set/);
+ walk(overview).find(n=>n.props['aria-label']==='Search restocking items').props.onChange({target:{value:'X11'}});
+ overview=walk(render()).find(n=>n.props.className==='ws-restock');
+ assert.equal(walk(overview).filter(n=>n.type==='article').length,1);
+ assert.match(text(overview),/Unset 11/);
+
 });
