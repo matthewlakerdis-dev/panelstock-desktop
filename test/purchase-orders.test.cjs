@@ -252,3 +252,26 @@ test('receipt history shows corrected values and preserves original values and r
  assert.ok(walk(card).some(n=>n.children.includes('1 lengths')));assert.ok(walk(card).some(n=>n.children.includes('3 lengths · Angle')));assert.ok(walk(card).some(n=>n.children.includes('Fixed typo')));
  assert.ok(!nodes.some(n=>n.children.includes('Correct receipt')));
 });
+
+test('matching PO warns before save, requires explicit override and reason, and clears approval when identity changes',async()=>{
+ const x=harness(true);x.states[1]={orders:[order],items:[],restoreEpoch:0,duplicateReview:true};
+ let nodes=x.render();nodes.find(n=>n.children.includes('New purchase order')).props.onClick();
+ const field=(placeholder,value)=>{x.render().find(n=>n.props.placeholder===placeholder).props.onChange({target:{value}});};
+ field('e.g. PO-2026-104',' po-42 ');field('Supplier name',' SUPPLIER ');nodes=x.render();
+ assert.ok(nodes.some(n=>n.children.includes('Matching purchase order found')));assert.equal(nodes.find(n=>n.children.includes('Save draft')).props.disabled,true);assert.ok(nodes.some(n=>n.children.includes('Part received')));
+ nodes.find(n=>n.type==='input'&&n.props.type==='checkbox').props.onChange({target:{checked:true}});nodes=x.render();assert.equal(nodes.find(n=>n.children.includes('Save draft')).props.disabled,true);
+ field('Explain why a separate order is needed','Supplier reused the number');nodes=x.render();assert.equal(nodes.find(n=>n.children.includes('Save draft')).props.disabled,false);
+ await nodes.find(n=>n.children.includes('Save draft')).props.onClick();assert.equal(x.requests[0].body.duplicateOverride.reason,'Supplier reused the number');assert.deepEqual(Array.from(x.requests[0].body.duplicateOverride.orderIds),['po']);
+ x.states[2]=null;x.states[3]={reference:'PO-42',supplier:'Supplier',notes:'',lines:[],duplicateOverride:{confirmed:true,reason:'Reviewed',orderIds:['po']}};field('e.g. PO-2026-104','PO-42');nodes=x.render();assert.equal(nodes.find(n=>n.children.includes('Save draft')).props.disabled,true);
+});
+test('inspect existing PO preserves unsaved draft and staged import, then restores them',()=>{
+ const x=harness(true);x.states[1]={orders:[order],items:[],restoreEpoch:0,duplicateReview:true};x.states[3]={reference:'PO-42',supplier:'Supplier',notes:'Keep me',lines:[]};x.states[19]={name:'new.pdf',data:'encoded'};x.states[20]=[{key:0,sku:'NEW',description:'New',ordered:1,itemId:''}];
+ let nodes=x.render();nodes.find(n=>n.children.includes('Open existing PO')).props.onClick();assert.equal(x.states[2],'po');assert.equal(x.states[19],null);assert.equal(x.states[20],null);
+ nodes=x.render();nodes.find(n=>n.children.includes('Return to unsaved PO')).props.onClick();assert.equal(x.states[2],null);assert.equal(x.states[3].notes,'Keep me');assert.equal(x.states[19].name,'new.pdf');assert.equal(x.states[20][0].sku,'NEW');assert.equal(x.requests.length,0);
+});
+test('duplicate warning excludes self, includes cancelled orders and detects new matches after approval',()=>{
+ const x=harness(true);x.states[1]={orders:[{...order,status:'cancelled'}],items:[],restoreEpoch:0,duplicateReview:true};x.states[3]={reference:'PO-42',supplier:'Supplier',notes:'',lines:[],duplicateOverride:{confirmed:true,reason:'Reviewed',orderIds:['po']}};
+ let nodes=x.render();assert.equal(nodes.find(n=>n.children.includes('Save draft')).props.disabled,false);
+ x.states[1].orders.push({...order,id:'new-match'});nodes=x.render();assert.equal(nodes.find(n=>n.children.includes('Save draft')).props.disabled,true);
+ x.states[2]='po';x.states[1].orders=[order];nodes=x.render();assert.ok(!nodes.some(n=>n.children.includes('Matching purchase order found')));
+});

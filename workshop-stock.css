@@ -288,3 +288,16 @@
 .ws-po-correction-history p{overflow-wrap:anywhere;white-space:pre-wrap;color:#526478}
 .ws-po-receipt>.ws-po-dockets{margin-top:14px}
 @media(max-width:640px){.ws-po-correction-overlay{padding:8px}.ws .ws-po-correction-dialog{padding:16px;max-height:96vh;max-height:96dvh}.ws-po-correction-line{grid-template-columns:1fr;gap:10px;padding:12px}.ws-po-correction-dialog input,.ws-po-correction-dialog textarea{font-size:16px;min-height:46px}.ws-po-correction-dialog button{min-height:44px}.ws-po-correction-dialog .ws-actions{position:sticky;bottom:-16px;background:#fff;padding:12px 0;margin-bottom:-16px;border-top:1px solid #dce5ed}.ws-po-correction-dialog .ws-actions button{flex:1;justify-content:center}}
+
+/* Duplicate PO review */
+.ws-po-duplicate-warning{border:1px solid #d89b38;border-radius:14px;background:#fff8e9;color:#583b13;padding:18px;margin:14px 0;overflow-wrap:anywhere}
+.ws-po-duplicate-warning h4{margin:0 0 8px;font-size:17px}
+.ws-po-duplicate-warning p{margin:8px 0}
+.ws-po-duplicate-match{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0;border-top:1px solid #e9d4ad}
+.ws-po-duplicate-match>div{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-width:0}
+.ws-po-duplicate-match small{flex-basis:100%}
+.ws-po-duplicate-match button{flex-shrink:0;min-height:44px}
+.ws-po-duplicate-override{border-top:1px solid #e9d4ad;padding-top:14px;display:grid;gap:12px}
+.ws-po-duplicate-override>label:first-child{display:flex;align-items:center;gap:12px;min-height:44px;font-weight:700}
+.ws-po-duplicate-override input[type=checkbox]{width:22px;height:22px;flex-shrink:0;accent-color:#996219}
+@media(max-width:600px){.ws-po-duplicate-warning{padding:14px}.ws-po-duplicate-match{align-items:stretch;flex-direction:column}.ws-po-duplicate-match button{width:100%}}
