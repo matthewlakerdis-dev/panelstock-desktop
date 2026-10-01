@@ -206,3 +206,43 @@
  .ws-receiving-card-bottom>div{gap:7px}
  .ws .ws-receiving-card-bottom button{width:100%;min-height:46px;justify-content:center}
 }
+
+/* Compact receiving rows with clear stock quantities. */
+.ws-receiving-card{border-color:#cddce6;box-shadow:0 2px 5px #183d5010}
+.ws-receiving-card-top h3{font-size:22px;letter-spacing:-.4px;margin:3px 0}
+.ws-receiving-card-top p{font-size:13px;margin:3px 0 0;line-height:1.5}
+.ws-receiving-card-top .ws-eyebrow{font-size:9px;letter-spacing:1.2px}
+.ws-receiving-items{background:#f7fafc}
+.ws-receiving-items-label{display:block;color:#657c8c;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px}
+.ws-receiving-items>.ws-receiving-item{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0;padding:10px 0}
+.ws-receiving-item+.ws-receiving-item{border-top:1px solid #e0e9ef}
+.ws-receiving-item-identity{min-width:0;flex:1}
+.ws-receiving-item-identity>strong{display:block;font-size:15px;font-weight:650;line-height:1.5;white-space:normal;overflow-wrap:anywhere;color:#233f52}
+.ws-receiving-item-identity>small{display:block;font-size:11px;line-height:1.5;color:#607789;margin-top:4px;overflow-wrap:anywhere}
+.ws-receiving-item-identity>small:empty{display:none}
+.ws-receiving-quantity{flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:78px;padding:9px 13px;background:#e8f2f6;border:1px solid #c9dde6;border-radius:9px;color:#155e75}
+.ws-receiving-quantity>strong{font-size:25px;line-height:1.15;font-variant-numeric:tabular-nums;color:#155e75}
+.ws-receiving-quantity>span{font-size:11px;line-height:1.5;margin-top:3px}
+.ws-receiving-card-bottom>div>strong{font-size:13px}
+.ws-receiving-progress{font-size:10px}
+.ws-receiving-progress>div{height:4px;margin-top:6px}
+@media(min-width:901px){
+ .ws-receiving-card{grid-template-columns:minmax(240px,.9fr) minmax(300px,1.65fr) 220px;grid-template-rows:auto auto 1fr}
+ .ws-receiving-card-top{padding:16px 18px 7px;gap:7px}
+ .ws-receiving-card-top .ws-po-status{font-size:10px;padding:4px 8px}
+ .ws-receiving-date{padding:0 18px 9px}
+ .ws-receiving-date .ws-po-delivery-date{font-size:11px;padding:6px 8px}
+ .ws-receiving-date .ws-po-delivery-date.undated{padding:0}
+ .ws-receiving-date .ws-po-delivery-date strong{font-size:11px}
+ .ws-receiving-progress{padding:0 18px 15px}
+ .ws-receiving-items{padding:16px 22px}
+ .ws-receiving-card-bottom{padding:18px;gap:14px}
+ .ws .ws-receiving-card-bottom button{font-size:13px;min-height:44px}
+}
+@media(max-width:640px){
+ .ws-receiving-items-label{margin:3px 0 5px}
+ .ws-receiving-item-identity>strong{font-size:14px}
+ .ws-receiving-items>.ws-receiving-item{gap:12px}
+ .ws-receiving-quantity{min-width:66px;padding:8px 10px}
+ .ws-receiving-quantity>strong{font-size:22px}
+}
