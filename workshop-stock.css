@@ -301,3 +301,54 @@
 .ws-po-duplicate-override>label:first-child{display:flex;align-items:center;gap:12px;min-height:44px;font-weight:700}
 .ws-po-duplicate-override input[type=checkbox]{width:22px;height:22px;flex-shrink:0;accent-color:#996219}
 @media(max-width:600px){.ws-po-duplicate-warning{padding:14px}.ws-po-duplicate-match{align-items:stretch;flex-direction:column}.ws-po-duplicate-match button{width:100%}}
+
+/* SOH incoming purchase orders */
+.ws button.ws-on-order-link{min-width:52px;min-height:44px;padding:5px 9px;background:#edf7fa;border-color:#b8d8e1;color:#155e75;font-weight:750;font-variant-numeric:tabular-nums}
+.ws button.ws-on-order-link:hover{background:#d9eef4;border-color:#659faf}
+.ws-on-order-link span{font-size:12px}
+.ws .ws-incoming-table th:last-child{text-align:right}
+.ws-incoming-overlay{z-index:13000}
+.ws .ws-incoming-dialog{width:760px;padding:0;display:flex;flex-direction:column;overflow:hidden;max-height:90dvh}
+.ws-incoming-header{padding:22px 24px 16px;border-bottom:1px solid #dfe8ee}
+.ws-incoming-header .ws-heading{margin:0;flex-wrap:nowrap;align-items:flex-start}
+.ws-incoming-header h3{overflow-wrap:anywhere}
+.ws-incoming-header button{flex-shrink:0;min-height:44px}
+.ws-incoming-body{padding:20px 24px;overflow:auto;min-height:0}
+.ws-incoming-total{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px;border:1px solid #c7dfe7;border-radius:12px;background:#eff8fa;margin-bottom:18px}
+.ws-incoming-total strong{display:block;font-size:24px;color:#155e75}
+.ws-incoming-total span{display:block;color:#486478;font-size:12px}
+.ws-incoming-total>small{max-width:200px;color:#486478}
+.ws-incoming-order{border:1px solid #dce6ed;border-radius:12px;padding:18px;margin-top:12px}
+.ws-incoming-order-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px}
+.ws-incoming-order-heading strong{font-size:17px;overflow-wrap:anywhere}
+.ws-incoming-quantities{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:16px 0;gap:10px}
+.ws-incoming-quantities>div{padding:10px;background:#f5f8fa;border-radius:8px;min-width:0}
+.ws-incoming-quantities>div:last-child{background:#eaf5f8;color:#155e75}
+.ws-incoming-quantities dt{font-size:11px;color:#5b7084}
+.ws-incoming-quantities dd{margin:5px 0 0;font-size:22px;font-weight:750;overflow-wrap:anywhere}
+.ws-incoming-quantities small{display:block;font-size:11px;font-weight:500}
+.ws-incoming-order>button{min-height:44px;margin-left:auto}
+.ws-incoming-footer{padding:14px 24px;border-top:1px solid #dfe8ee;display:flex;justify-content:space-between;align-items:center;gap:12px;background:#f8fafc}
+.ws-incoming-footer small,.ws-incoming-access{color:#5b7084}
+.ws-incoming-empty{padding:20px 0}
+.ws-po-linked-item{outline:2px solid #53a2b8;outline-offset:-2px;background:#f0fafc!important}
+@media(max-width:640px){
+ .ws .ws-incoming-table td.ws-on-order-cell{grid-column:1/-1;grid-row:4;display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid #edf1f5;text-align:left}
+ .ws .ws-incoming-table td.ws-on-order-cell:before{content:'On order';font-size:11px;color:#526b80;font-weight:600}
+ .ws .ws-incoming-table td.ws-on-order-cell small{margin-left:auto}
+ .ws .ws-incoming-table td:nth-child(6),.ws .ws-incoming-table td:nth-child(7),.ws .ws-incoming-table td:nth-child(8){grid-row:5}
+ .ws-incoming-overlay{padding:0}
+ .ws .ws-incoming-dialog{width:100%;height:100dvh;max-height:100dvh;border-radius:0}
+ .ws-incoming-header{padding:18px 16px}
+ .ws-incoming-body{padding:16px;flex:1}
+ .ws-incoming-total{flex-direction:column;align-items:flex-start;gap:8px}
+ .ws-incoming-total>small{max-width:none}
+ .ws-incoming-order{padding:14px}
+ .ws-incoming-order-heading{flex-wrap:wrap}
+ .ws-incoming-quantities{gap:6px}
+ .ws-incoming-quantities>div{padding:8px 6px}
+ .ws-incoming-quantities dt{font-size:10px}
+ .ws-incoming-quantities dd{font-size:20px}
+ .ws-incoming-order>button{width:100%;justify-content:center}
+ .ws-incoming-footer{padding:12px 16px max(12px,env(safe-area-inset-bottom))}
+}

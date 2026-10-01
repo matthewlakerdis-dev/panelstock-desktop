@@ -2,12 +2,12 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),fs=requir
 const source=fs.readFileSync(path.join(__dirname,'../workshop-stock.js'),'utf8');
 const walk=n=>!n||typeof n!=='object'?[]:[n,...(n.children||[]).flat(Infinity).flatMap(walk)];
 function harness(admin=false,factory='createPurchaseOrderReceiving',props={}){
- const states=[],saved=new Map(),requests=[];let cursor=0;
- const React={createElement:(type,props,...children)=>({type,props:props||{},children}),useState:v=>{const i=cursor++;if(!(i in states))states[i]=typeof v==='function'?v():v;return [states[i],v=>states[i]=typeof v==='function'?v(states[i]):v];},useEffect(){},Fragment:'fragment'};
+ const states=[],saved=new Map(),requests=[],effects=[];let cursor=0;
+ const React={createElement:(type,props,...children)=>({type,props:props||{},children}),useState:v=>{const i=cursor++;if(!(i in states))states[i]=typeof v==='function'?v():v;return [states[i],v=>states[i]=typeof v==='function'?v(states[i]):v];},useEffect(fn){effects.push(fn);},Fragment:'fragment'};
  const context={window:{},crypto:{randomUUID:()=> '12345678-1234-4234-a234-123456789012'},PanelStock:{username:'tester',apiFetch:async(url,options)=>{requests.push({url,body:JSON.parse(options.body)});return {ok:true,json:async()=>({...states[1],orderId:'po'})};}},localStorage:{getItem:k=>saved.get(k)||null,setItem:(k,v)=>saved.set(k,v),removeItem:k=>saved.delete(k)}};
  vm.runInNewContext(source,context);const Component=context.window[factory](React);
- const render=()=>{cursor=0;return walk(Component({isAdmin:admin,workerUrl:'https://api.test',taskAccess:{'factory.receive':true,'factory.stock':true},...props}));};
- render();return {states,saved,requests,render,context};
+ const render=()=>{cursor=0;effects.length=0;return walk(Component({isAdmin:admin,workerUrl:'https://api.test',taskAccess:{'factory.receive':true,'factory.stock':true},...props}));};
+ render();return {states,saved,requests,effects,render,context};
 }
 const order={id:'po',reference:'PO-42',supplier:'Supplier',status:'partial',version:4,notes:'',attachments:[{id:'pdf',name:'PO.pdf'}],receipts:[],lines:[{itemId:'angle',name:'Angle',sku:'ANG',unit:'lengths',ordered:10,received:3}]};
 const stock=[{id:'black',name:'Angle',sku:'ANG',colour:'Black',lengthMm:6000,unit:'lengths'},{id:'white',name:'Angle',sku:'ANG',colour:'White',lengthMm:6000,unit:'lengths'}];
@@ -274,4 +274,52 @@ test('duplicate warning excludes self, includes cancelled orders and detects new
  let nodes=x.render();assert.equal(nodes.find(n=>n.children.includes('Save draft')).props.disabled,false);
  x.states[1].orders.push({...order,id:'new-match'});nodes=x.render();assert.equal(nodes.find(n=>n.children.includes('Save draft')).props.disabled,true);
  x.states[2]='po';x.states[1].orders=[order];nodes=x.render();assert.ok(!nodes.some(n=>n.children.includes('Matching purchase order found')));
+});
+
+const incomingStock={id:'angle',name:'Black aluminium angle',sku:'ANG',category:'extrusions',unit:'lengths',qty:4,reserved:1,available:3,reorderLevel:10,onOrder:7,colour:'Black',lengthMm:6000,incomingOrders:[
+ {orderId:'later',reference:'PO-LATER',supplier:'Supplier B',status:'open',expectedDelivery:'2026-10-20',ordered:2,received:0,outstanding:2},
+ {orderId:'early',reference:'PO-EARLY',supplier:'Supplier A',status:'partial',expectedDelivery:'2026-09-29',ordered:8,received:3,outstanding:5}
+]};
+function incomingHarness(admin,receive){
+ const x=harness(admin,'createWorkshopStock',{taskAccess:{'factory.stock':true,'factory.receive':receive}});
+ x.states[0]={items:[structuredClone(incomingStock)],movements:[],revision:1};
+ const calls=[];x.context.PanelStock.apiFetch=async(url,options)=>{calls.push({url,options});return {ok:true,json:async()=>x.states[0]};};
+ return {...x,calls};
+}
+test('SOH on-order link refreshes read-only summaries, sorts by due date and respects receiving access',async()=>{
+ const x=incomingHarness(false,false);let nodes=x.render();assert.ok(nodes.some(n=>n.type==='th'&&n.children.includes('On order')));
+ await nodes.find(n=>n.props.className==='ws-on-order-link').props.onClick();nodes=x.render();
+ const dialog=nodes.find(n=>n.props['aria-label']==='Stock on order'),rows=walk(dialog).filter(n=>n.type==='article');
+ assert.equal(rows.length,2);assert.ok(walk(rows[0]).some(n=>n.children.includes('PO-EARLY')));assert.ok(walk(rows[1]).some(n=>n.children.includes('PO-LATER')));
+ assert.ok(walk(dialog).some(n=>n.children.includes('7 lengths')));assert.ok(walk(dialog).some(n=>n.children.includes('Outstanding')));assert.ok(!walk(dialog).some(n=>n.children.includes('Receive delivery')||n.children.includes('Open PO')));
+ assert.equal(x.calls.length,1);assert.equal(x.calls[0].options,undefined);assert.ok(x.calls[0].url.endsWith('/workshop-stock'));
+ x.states[0].items[0].onOrder=0;x.states[0].items[0].incomingOrders=[];nodes=x.render();
+ assert.ok(nodes.some(n=>n.children.includes('No outstanding purchase orders')));assert.ok(!nodes.some(n=>n.props.className==='ws-on-order-link'));
+});
+test('SOH and Restocking link the exact PO and variant to receiving without posting a stock change',async()=>{
+ for(const admin of [true,false]){
+  const x=incomingHarness(admin,true);let nodes=x.render();
+  nodes.find(n=>n.props.className?.startsWith('ws-metric ')&&walk(n).some(c=>c.children.includes('Needs restocking'))).props.onClick();nodes=x.render();
+  await nodes.find(n=>n.props.className==='ws-on-order-link').props.onClick();nodes=x.render();
+  const dialog=nodes.find(n=>n.props['aria-label']==='Stock on order');walk(dialog).find(n=>n.children.includes(admin?'Open PO':'Receive delivery')).props.onClick();nodes=x.render();
+  const component=nodes.find(n=>typeof n.type==='function');assert.equal(component.props.initialOrderId,'early');assert.equal(component.props.initialItemId,'angle');
+  assert.ok(!nodes.some(n=>n.props['aria-label']==='Stock on order'));assert.ok(x.calls.every(c=>!c.options));
+  await component.props.onClose();nodes=x.render();assert.ok(nodes.some(n=>n.props['aria-label']==='Stock on order'));
+ }
+});
+test('linked PO uses fresh data, highlights the selected item and never pre-fills a receipt',()=>{
+ const x=harness(true,'createPurchaseOrderReceiving',{initialOrderId:'po',initialItemId:'angle'});
+ x.states[1]={orders:[order],items:[],restoreEpoch:0};x.render();x.effects[2]();let nodes=x.render();
+ assert.equal(x.states[2],'po');assert.ok(nodes.some(n=>n.props.className?.includes('ws-po-linked-item')));
+ assert.equal(nodes.find(n=>n.props['aria-label']==='Receive ANG Angle').props.value,'');assert.equal(x.requests.length,0);
+ // Later refreshes must not overwrite quantities the receiver is entering.
+ nodes.find(n=>n.props['aria-label']==='Receive ANG Angle').props.onChange({target:{value:'2'}});x.render();x.effects[2]();nodes=x.render();
+ assert.equal(nodes.find(n=>n.props['aria-label']==='Receive ANG Angle').props.value,'2');
+ const missing=harness(true,'createPurchaseOrderReceiving',{initialOrderId:'missing'});missing.states[1]={orders:[],items:[],restoreEpoch:0};missing.render();missing.effects[2]();nodes=missing.render();
+ assert.ok(nodes.some(n=>n.children.includes('This purchase order is no longer available. Close this screen and refresh incoming stock.')));assert.equal(missing.requests.length,0);
+});
+test('linked PO waits for an uncertain save and closed orders cannot be received',()=>{
+ const x=harness(true,'createPurchaseOrderReceiving',{initialOrderId:'po',initialItemId:'angle'});x.states[1]={orders:[{...order,status:'received'}],items:[],restoreEpoch:0};x.states[27]={action:'receive'};
+ x.render();x.effects[2]();assert.equal(x.states[2],null);
+ x.states[27]=null;x.render();x.effects[2]();const nodes=x.render();assert.equal(x.states[2],'po');assert.ok(!nodes.some(n=>n.props['aria-label']==='Receive ANG Angle'));assert.equal(x.requests.length,0);
 });
