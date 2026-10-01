@@ -164,3 +164,27 @@
 .ws-po-card .ws-po-delivery-date{margin-top:9px}
 .ws-po-editor .ws-po-date-field small{font-size:11px;line-height:1.5;color:#63768a}
 @media(max-width:640px){.ws-receiving-date{padding:0 14px 12px}.ws-delivery-summary{gap:6px 12px;padding:10px;font-size:11px}.ws-po-delivery-date{font-size:12px;padding:8px 10px}.ws-po-date-field input{width:100%;min-width:0;-webkit-appearance:none;appearance:none}}
+
+/* Receive-all preparation and a clear, separate stock confirmation. */
+.ws-delivery-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:20px 0 12px}
+.ws-po-dialog .ws-delivery-heading h4{font-size:20px;margin:5px 0;color:#193b50}
+.ws-delivery-guide{padding:15px 16px;border:1px solid #cadce7;background:#f0f7fa;border-radius:10px;margin-bottom:16px}
+.ws-delivery-guide p{color:#36566c;font-size:13px;margin:0 0 10px;line-height:1.6}
+.ws-delivery-guide small{display:block;color:#526478;font-size:12px;line-height:1.5;margin-top:10px}
+.ws-delivery-shortcuts{display:flex;flex-wrap:wrap;gap:8px}
+.ws .ws-delivery-shortcuts button:first-child{background:#fff;border-color:#87adbf;color:#155e75}
+.ws-delivery-guide .ws-delivery-issue-alert{border-top:1px solid #d9c79e;padding-top:10px;margin:12px 0 0;color:#875815}
+.ws-delivery-review-summary{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding:16px;background:#edf8f2;border:1px solid #b9d9c9;border-radius:10px;color:#285d45;margin-bottom:16px}
+.ws-delivery-review-summary span{font-size:12px}
+.ws-po-receive-line>div>strong{display:block;font-size:15px;line-height:1.5}
+.ws-delivery-accepted{display:flex;flex-direction:column;gap:5px;padding:12px;background:#edf8f2;border:1px solid #c4dece;border-radius:8px;color:#285d45}
+.ws-delivery-accepted strong{font-size:21px}
+.ws-delivery-accepted small{font-size:11px;line-height:1.5}
+.ws-delivery-balance{padding:14px;background:#fff8ed;border:1px solid #e4d4b7;border-radius:9px;margin:16px 0}
+.ws-delivery-balance summary{font-size:13px;color:#79571e;font-weight:600;cursor:pointer;min-height:28px}
+.ws-delivery-balance>div{display:flex;justify-content:space-between;gap:12px;margin-top:12px;font-size:12px}
+.ws-delivery-balance>div>span{min-width:0;overflow-wrap:anywhere}
+.ws-delivery-balance>div>strong{white-space:nowrap}
+@media(max-width:640px){.ws-delivery-heading{align-items:flex-start;flex-direction:column;gap:8px}.ws-po-dialog .ws-delivery-heading h4{font-size:20px}.ws-delivery-guide{padding:12px}.ws-delivery-shortcuts{display:grid;grid-template-columns:1fr;width:100%}.ws-delivery-shortcuts button{justify-content:center;width:100%}.ws-delivery-review-summary{padding:12px;flex-direction:column;align-items:flex-start}.ws-delivery-balance summary{min-height:44px;display:flex;align-items:center}}
+
+.ws-po-files>summary{cursor:pointer;font-weight:600;color:#244358;font-size:13px;padding:12px 0;min-height:44px}.ws-po-files[open]>summary{margin-bottom:8px}.ws-po-dialog details.ws-po-files{padding-bottom:8px}.ws-po-files>summary:focus-visible{outline:2px solid #0891b2;outline-offset:2px}

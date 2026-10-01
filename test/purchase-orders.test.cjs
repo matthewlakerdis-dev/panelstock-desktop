@@ -181,3 +181,25 @@ test('admin edits expected dates while duplicate POs start without an old delive
  const y=harness(true);nodes=open(y,value);nodes.find(n=>n.children.includes('Duplicate PO')).props.onClick();nodes=y.render();
  assert.equal(nodes.find(n=>n.type==='input'&&n.props.type==='date').props.value,'');
 });
+
+test('receive all prepares only outstanding quantities and does not submit until reviewed and confirmed',async()=>{
+ const x=harness(false),po={...order,lines:[...order.lines,{itemId:'variant:panel',sku:'ACP',name:'Panel',unit:'sheets',ordered:5,received:2},{itemId:'done',sku:'DONE',name:'Completed',unit:'each',ordered:2,received:2},{itemId:'metres',sku:'M',name:'Cable',unit:'metres',ordered:1,received:0.7}]};
+ let nodes=open(x,po);nodes.find(n=>n.children.includes('Receive all outstanding')).props.onClick();nodes=x.render();
+ assert.equal(x.requests.length,0);assert.equal(x.states[12].quantities.angle,'7');assert.equal(x.states[12].quantities['variant:panel'],'3');assert.equal(x.states[12].quantities.metres,'0.3');assert.equal(x.states[12].quantities.done,undefined);
+ nodes.find(n=>n.props['aria-label']==='Receive ANG Angle').props.onChange({target:{value:'4'}});nodes=x.render();
+ nodes.find(n=>n.children.includes('Review delivery')).props.onClick();nodes=x.render();
+ assert.equal(x.requests.length,0);assert.ok(!nodes.some(n=>n.children.includes('Receive all outstanding')));assert.ok(nodes.some(n=>n.children.includes('Still outstanding after this delivery (1)')));
+ await nodes.find(n=>n.children.includes('Confirm receipt — add to stock')).props.onClick();
+ assert.equal(x.requests.length,1);assert.deepEqual(JSON.parse(JSON.stringify(x.requests[0].body.lines)),[{itemId:'angle',quantity:'4'},{itemId:'variant:panel',quantity:'3'},{itemId:'metres',quantity:'0.3'}]);
+});
+test('clear quantities keeps delivery details and prevents confirmation; invalid sheet and precision values cannot proceed',()=>{
+ const x=harness(),po={...order,lines:[...order.lines,{itemId:'variant:panel',sku:'ACP',name:'Panel',unit:'sheets',ordered:5,received:0}]};
+ let nodes=open(x,po);x.states[12]={quantities:{},reference:'DOCKET-1',notes:'Checked'};nodes=x.render();
+ nodes.find(n=>n.children.includes('Receive all outstanding')).props.onClick();nodes=x.render();nodes.find(n=>n.children.includes('Clear quantities')).props.onClick();nodes=x.render();
+ assert.equal(x.states[12].reference,'DOCKET-1');assert.equal(x.states[12].notes,'Checked');assert.equal(nodes.find(n=>n.children.includes('Review delivery')).props.disabled,true);
+ for(const quantities of [{'variant:panel':'1.5'},{angle:'0.0001'},{angle:'8'},{angle:'-1'}]){x.states[12]={...x.states[12],quantities};nodes=x.render();assert.equal(nodes.find(n=>n.children.includes('Review delivery')).props.disabled,true);}
+});
+test('bulk fill is unavailable for closed POs and cannot modify a pending retry',()=>{
+ const x=harness();let nodes=open(x,{...order,status:'received'});assert.ok(!nodes.some(n=>n.children.includes('Receive all outstanding')));
+ const y=harness();nodes=open(y);const fill=nodes.find(n=>n.children.includes('Receive all outstanding'));y.states[4]=true;nodes=y.render();assert.equal(nodes.find(n=>n.children.includes('Receive all outstanding')).props.disabled,true);nodes.find(n=>n.children.includes('Receive all outstanding')).props.onClick();assert.equal(Object.keys(y.states[12].quantities).length,0);assert.equal(y.requests.length,0);
+});
