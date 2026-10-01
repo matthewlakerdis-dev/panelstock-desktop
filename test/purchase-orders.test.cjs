@@ -11,6 +11,22 @@ function harness(admin=false,factory='createPurchaseOrderReceiving'){
 }
 const order={id:'po',reference:'PO-42',supplier:'Supplier',status:'partial',version:4,notes:'',attachments:[{id:'pdf',name:'PO.pdf'}],receipts:[],lines:[{itemId:'angle',name:'Angle',sku:'ANG',unit:'lengths',ordered:10,received:3}]};
 const stock=[{id:'black',name:'Angle',sku:'ANG',colour:'Black',lengthMm:6000,unit:'lengths'},{id:'white',name:'Angle',sku:'ANG',colour:'White',lengthMm:6000,unit:'lengths'}];
+test('admin creates missing stock from an imported row and keeps the PO details and quantity',async()=>{
+ const x=harness(true),calls=[];x.states[1]={orders:[],items:stock,restoreEpoch:0};
+ x.context.FileReader=class{readAsDataURL(){this.result='data:application/pdf;base64,JVBERi0xLjc=';this.onload();}};
+ x.context.PanelStock.apiFetch=async(url,options)=>{const body=JSON.parse(options.body);calls.push(body);return {ok:true,json:async()=>url.endsWith('/analyse')?{reference:'PO-CREATE',supplier:'New supplier',lines:[{sku:'NEW-ANG',description:'New angle',colour:'Silver',lengthMm:3000,quantity:7,unit:'lengths'}]}:{orders:[],items:[...stock,{...body.item,id:'created-stock',qty:0}],restoreEpoch:0,itemId:'created-stock'}};};
+ let nodes=x.render();nodes.find(n=>n.children.includes('New purchase order')).props.onClick();nodes=x.render();await nodes.find(n=>n.type==='input'&&n.props.type==='file').props.onChange({target:{files:[{name:'PO.pdf',size:8}],value:''}});nodes=x.render();nodes.find(n=>n.children.includes('Create stock item')).props.onClick();nodes=x.render();
+ const dialog=nodes.find(n=>n.props['aria-label']==='Create stock item from PO');assert.ok(dialog);assert.ok(walk(dialog).some(n=>n.type==='input'&&n.props.value==='NEW-ANG'));
+ await walk(dialog).find(n=>n.children.includes('Create & select item')).props.onClick();nodes=x.render();assert.equal(calls[1].action,'create_item');assert.equal(calls[1].item.qty,0);assert.equal(calls[1].sourceRowKey,0);
+ nodes.find(n=>n.children.includes('Change stock item')).props.onClick();nodes=x.render();assert.ok(nodes.some(n=>n.type==='select'&&n.props.value==='created-stock'));assert.ok(nodes.some(n=>n.type==='input'&&n.props.value==='PO-CREATE'));assert.ok(nodes.some(n=>n.type==='input'&&n.props.value===7));assert.ok(!nodes.some(n=>n.props['aria-label']==='Create stock item from PO'));assert.equal(nodes.find(n=>n.children.includes('Use reviewed items')).props.disabled,true);
+});
+test('manual new-stock entry selects the created item without clearing unsaved PO fields',async()=>{
+ const x=harness(true);x.states[1]={orders:[],items:[],restoreEpoch:0};let nodes=x.render();nodes.find(n=>n.children.includes('New purchase order')).props.onClick();nodes=x.render();nodes.find(n=>n.props.placeholder==='e.g. PO-2026-104').props.onChange({target:{value:'PO-MANUAL'}});nodes=x.render();nodes.find(n=>n.children.includes('Create stock item')).props.onClick();nodes=x.render();
+ const set=(label,value)=>{const field=nodes.find(n=>n.type==='label'&&n.children.includes(label));walk(field).find(n=>n.type==='input').props.onChange({target:{value}});nodes=x.render();};set('Stock code','NEW');set('Item name','New item');
+ x.context.PanelStock.apiFetch=async(url,options)=>{const body=JSON.parse(options.body);return {ok:true,json:async()=>({orders:[],items:[{...body.item,id:'new',qty:0}],restoreEpoch:0,itemId:'new'})};};
+ await nodes.find(n=>n.children.includes('Create & select item')).props.onClick();nodes=x.render();assert.ok(nodes.some(n=>n.props.value==='PO-MANUAL'));assert.ok(nodes.some(n=>n.type==='select'&&n.props.value==='new'));
+});
+test('receiving workers cannot see stock creation actions',()=>{const x=harness(false);const nodes=open(x);assert.ok(!nodes.some(n=>n.children.includes('Create stock item')));});
 test('matching does not choose between colour variants or conflicting source attributes',()=>{
  const x=harness(true),match=x.context.window.matchPurchaseOrderLine;
  assert.equal(match({sku:'ANG'},stock).itemId,'');assert.equal(match({sku:'ANG',colour:'Black',lengthMm:6000},stock).itemId,'black');
