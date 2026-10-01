@@ -53,7 +53,13 @@ test('restocking overview uses available stock and incoming quantities without m
   {id:'b',name:'Rivets',category:'fixings',qty:0,available:0,reorderLevel:2,onOrder:4,unit:'boxes'},
   {id:'c',name:'Healthy',category:'fixings',qty:20,available:20,reorderLevel:2,unit:'each'}
  ],movements:[]};
- let nodes=walk(render()),overview=nodes.find(n=>n.props.className==='ws-restock');
+ let nodes=walk(render());
+ assert.ok(!nodes.some(n=>n.props.className==='ws-restock'));
+ assert.ok(nodes.some(n=>n.props.className==='ws-inventory'));
+ nodes.find(n=>n.type==='button'&&n.children[0]==='Restocking').props.onClick();
+ nodes=walk(render());
+ assert.ok(!nodes.some(n=>n.props.className==='ws-inventory'));
+ let overview=nodes.find(n=>n.props.className==='ws-restock');
  assert.match(text(overview),/2 low-stock items · 2 awaiting deliveries · 1 to review/);
  const cards=walk(overview).filter(n=>n.type==='article');assert.equal(cards.length,2);
  const angle=cards.find(n=>text(n).includes('Angle'));
