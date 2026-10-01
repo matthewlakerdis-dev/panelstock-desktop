@@ -120,3 +120,37 @@ test('bulk edit applies only checked fields to selected stock IDs',async()=>{
 test('admin editing an issued PO exposes save changes and protects received lines',()=>{
  const x=harness(true);x.states[1]={orders:[order],items:[{id:'angle',name:'Angle',sku:'ANG',unit:'lengths'}],restoreEpoch:0};let nodes=x.render();nodes.find(n=>n.type==='button'&&n.props.className==='ws-po-card').props.onClick();nodes=x.render();nodes.find(n=>n.children.includes('Edit PO')).props.onClick();nodes=x.render();assert.ok(nodes.some(n=>n.children.includes('Save changes')));assert.equal(nodes.find(n=>n.children.includes('Remove')).props.disabled,true);assert.equal(nodes.find(n=>n.props['aria-label']==='Ordered quantity for ANG').props.min,3);assert.ok(!nodes.some(n=>n.children.includes('Review delivery')));
 });
+
+test('remembered supplier matches are isolated by supplier and full variant details and expire when stock identity changes',()=>{
+ const x=harness(true),match=x.context.window.matchPurchaseOrderLine,key=x.context.window.purchaseOrderStockKey;
+ const line={sku:'SUP',description:'Black angle',colour:'Black',lengthMm:6000,unit:'lengths'};
+ const identity=i=>JSON.stringify([i.sku,i.colour||i.color,i.dimensions,i.lengthMm,i.unit,i.width,i.height,i.thickness,i.material].map(v=>String(v??'').trim().toLowerCase().replace(/\s+/g,' ')));
+ const ref={key:key('Supplier',line),itemId:'black',itemIdentity:identity(stock[0])};
+ assert.equal(match(line,stock,' SUPPLIER ',[ref]).itemId,'black');
+ assert.equal(match(line,stock,'Other',[ref]).itemId,'');
+ assert.equal(match({...line,colour:'White'},stock,'Supplier',[ref]).itemId,'');
+ assert.equal(match({...line,unit:'boxes'},stock,'Supplier',[ref]).itemId,'');
+ assert.equal(match(line,[{...stock[0],lengthMm:3000}],'Supplier',[ref]).itemId,'');
+ assert.equal(match(line,[],'Supplier',[ref]).itemId,'');
+});
+test('admin explicitly reviews optional stock name updates and submits learning only with PO save',async()=>{
+ const x=harness(true),calls=[];x.states[1]={orders:[],items:stock,restoreEpoch:0,stockLearning:true,stockReferences:[]};
+ x.context.FileReader=class{readAsDataURL(){this.result='data:application/pdf;base64,JVBERi0xLjc=';this.onload();}};
+ x.context.PanelStock.apiFetch=async(url,options)=>{const body=JSON.parse(options.body);calls.push(body);return {ok:true,json:async()=>url.endsWith('/analyse')?{reference:'LEARN',supplier:'Supplier',lines:[{sku:'ANG',description:'Black supplier angle',colour:'Black',lengthMm:6000,quantity:4,unit:'lengths'}]}:{...x.states[1],orderId:body.orderId}};};
+ let nodes=x.render();nodes.find(n=>n.children.includes('New purchase order')).props.onClick();nodes=x.render();
+ await nodes.find(n=>n.type==='input'&&n.props.type==='file').props.onChange({target:{files:[{name:'PO.pdf',size:8}],value:''}});
+ nodes=x.render();const checkbox=label=>walk(nodes.find(n=>n.type==='label'&&walk(n).some(c=>c.children.includes(label)))).find(n=>n.type==='input');
+ assert.equal(checkbox('Remember supplier details for future POs').props.checked,true);
+ assert.equal(checkbox('Also update stock name and supplier').props.checked,false);
+ checkbox('Also update stock name and supplier').props.onChange({target:{checked:true}});nodes=x.render();
+ checkbox('I checked the stock matches, colours, sizes, units and quantities against the document.').props.onChange({target:{checked:true}});
+ nodes=x.render();nodes.find(n=>n.children.includes('Use reviewed items')).props.onClick();nodes=x.render();
+ assert.equal(calls.length,1);assert.ok(nodes.some(n=>n.children.includes('Skip stock updates')));
+ await nodes.find(n=>n.children.includes('Save draft')).props.onClick();
+ const saved=calls.find(c=>c.action==='save');assert.equal(saved.stockUpdates.length,1);assert.equal(saved.stockUpdates[0].updateDetails,true);assert.equal(saved.stockUpdates[0].expectedName,'Angle');assert.equal(saved.stockUpdates[0].source.description,'Black supplier angle');assert.equal(saved.stockUpdates[0].supplier,'Supplier');assert.equal(saved.lines[0].ordered,4);
+});
+test('removing a reviewed PO line prevents its pending stock changes from being saved',async()=>{
+ const x=harness(true);x.states[1]={orders:[],items:stock,restoreEpoch:0,stockLearning:true};x.states[3]={reference:'X',supplier:'Supplier',notes:'',lines:[],stockUpdates:[{itemId:'black',source:{sku:'SUP'}}]};
+ let nodes=x.render();await nodes.find(n=>n.children.includes('Save draft')).props.onClick();
+ assert.equal(x.requests[0].body.stockUpdates.length,0);
+});

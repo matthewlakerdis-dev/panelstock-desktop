@@ -136,3 +136,14 @@
 
 .ws-po-more-actions,.ws-po-more-options{display:contents}.ws .ws-po-more-toggle{display:none}
 @media(max-width:640px){.ws-po-dialog .ws-po-more-actions{display:block;flex:1 1 calc(50% - 8px);order:0}.ws-po-dialog .ws-po-more-toggle{display:block;width:100%;min-height:44px}.ws-po-more-options{display:none}.ws-po-more-actions.is-expanded{flex-basis:100%}.ws-po-more-actions.is-expanded .ws-po-more-options{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding-top:8px}.ws-po-more-options button{width:100%}.ws-po-dialog .ws-count-footer>button.ws-primary{flex-basis:calc(50% - 8px)}.ws-po-dialog .ws-count-footer>button.ws-primary:last-of-type{flex-basis:100%}}
+
+/* Reviewed supplier references attached to stock during PO save. */
+.ws-po-learn{padding:12px;border:1px solid #cbdde5;border-radius:9px;background:#f4f9fb;display:flex;flex-direction:column;gap:10px}
+.ws-po-learn label{display:flex;align-items:flex-start;gap:10px;font-size:13px;color:#244358;cursor:pointer}
+.ws-po-learn input[type=checkbox]{appearance:auto;flex:0 0 22px;width:22px;height:22px;min-height:22px;margin:0;accent-color:#155e75}
+.ws-po-learn small{font-size:12px;color:#526478;line-height:1.5}
+.ws-po-learn-preview{padding-top:9px;border-top:1px solid #d3e0e8;display:flex;flex-direction:column;gap:6px;overflow-wrap:anywhere}
+.ws-po-learn-summary{padding:14px;border:1px solid #bcd7ce;background:#eef8f3;border-radius:9px;color:#255b47}
+.ws-po-learn-summary p{font-size:12px;color:#435e54}
+.ws-po-learn-summary button{margin-top:8px}
+@media(max-width:640px){.ws-po-learn label{min-height:44px;align-items:center}.ws-po-learn-summary button{width:100%;justify-content:center}}
