@@ -28,3 +28,6 @@ test('bulk edit applies only checked fields to selected stock IDs',async()=>{
  const form=nodes.find(n=>n.type==='form');assert.ok(form);await form.props.onSubmit({preventDefault(){}});
  assert.deepEqual(JSON.parse(JSON.stringify(x.requests[0].body.changes)),{supplier:'New supplier'});assert.deepEqual(JSON.parse(JSON.stringify(x.requests[0].body.itemIds)),['angle']);assert.equal(x.requests[0].body.expectedRevision,2);
 });
+test('admin editing an issued PO exposes save changes and protects received lines',()=>{
+ const x=harness(true);x.states[1]={orders:[order],items:[{id:'angle',name:'Angle',sku:'ANG',unit:'lengths'}],restoreEpoch:0};let nodes=x.render();nodes.find(n=>n.type==='button'&&n.props.className==='ws-po-card').props.onClick();nodes=x.render();nodes.find(n=>n.children.includes('Edit PO')).props.onClick();nodes=x.render();assert.ok(nodes.some(n=>n.children.includes('Save changes')));assert.equal(nodes.find(n=>n.children.includes('Remove')).props.disabled,true);assert.equal(nodes.find(n=>n.props['aria-label']==='Ordered quantity for ANG').props.min,3);assert.ok(!nodes.some(n=>n.children.includes('Review delivery')));
+});
