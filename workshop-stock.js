@@ -1,3 +1,9 @@
+/* Keep wheel gestures from changing a focused numeric value. */
+if(typeof document!=='undefined')document.addEventListener('wheel',event=>{
+ const input=event.target;
+ if(input?.tagName==='INPUT'&&input.type==='number'&&document.activeElement===input)event.preventDefault();
+},{capture:true,passive:false});
+
 /* Shared desktop/mobile workshop inventory screen. */
 window.createWorkshopStock = function(React) {
  const h=React.createElement, {useState,useEffect}=React;
