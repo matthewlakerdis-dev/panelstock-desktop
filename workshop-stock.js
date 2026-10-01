@@ -71,6 +71,10 @@ window.createWorkshopStock = function(React) {
   const button=(label,onClick,disabled=false)=>h('button',{type:'button',onClick,disabled},label);
   const allItems=data?.items||[];
   const items=allItems.filter(i=>(category==='all'||i.category===category)&&(status==='all'||status==='reorder'&&i.available<=Number(i.reorderLevel||0)||status==='reserved'&&i.reserved>0||status==='unassigned'&&!i.location)&&[i.name,i.sku,i.location,i.supplier,i.details,i.lengthMm,i.dimensions,i.colour].join(' ').toLowerCase().includes(search.trim().toLowerCase())).sort((a,b)=>sort==='available'?a.available-b.available:sort==='location'?String(a.location||'').localeCompare(String(b.location||'')):a.name.localeCompare(b.name,undefined,{numeric:true}));
+  const lowItems=allItems.filter(i=>i.available<=Number(i.reorderLevel||0)).sort((a,b)=>(a.available>0)-(b.available>0)||a.name.localeCompare(b.name,undefined,{numeric:true}));
+  const shortfall=i=>Math.max(0,Math.round((Number(i.reorderLevel||0)-i.available-Number(i.onOrder||0))*1000)/1000);
+  const waitingItems=lowItems.filter(i=>Number(i.onOrder)>0);
+  const uncoveredItems=lowItems.filter(i=>shortfall(i)>0||!Number(i.onOrder));
   const selectedStock=allItems.filter(i=>selectedIds.includes(i.id));
   function toggleSelected(id,checked){setSelectedIds(ids=>checked?[...new Set([...ids,id])]:ids.filter(value=>value!==id));}
   function openBulk(){setError('');setNotice('');setForm({action:'bulk_metadata',itemIds:selectedStock.map(i=>i.id),changes:{}});}
@@ -98,6 +102,16 @@ window.createWorkshopStock = function(React) {
    error&&h('div',{className:'ws-error',role:'alert'},error),notice&&h('div',{className:'ws-notice',role:'status'},notice),
    !data?h('p',null,'Loading workshop stock…'):h(React.Fragment,null,
     h('div',{className:'ws-summary'},metric('all','Stock items',allItems.length,'Across all categories','box'),metric('reorder','Needs restocking',allItems.filter(i=>i.available<=Number(i.reorderLevel||0)).length,'At or below reorder level','alert'),metric('reserved','Allocated to jobs',allItems.filter(i=>i.reserved>0).length,'Items with reserved stock','job'),metric('unassigned','Location needed',allItems.filter(i=>!i.location).length,'Assign a rack, shelf or bin','pin')),
+    h('details',{className:'ws-restock',open:status==='reorder'?true:undefined},
+     h('summary',null,h('span',null,h('strong',null,'Restocking overview'),h('small',null,lowItems.length+' low-stock items · '+waitingItems.length+' awaiting deliveries · '+uncoveredItems.length+' to review')),h('span',{className:'ws-restock-prompt'},'View items')),
+     h('p',{className:'ws-restock-help'},'On order includes outstanding quantities on open and partially received POs. Shortfall is the amount needed to reach the reorder level after those deliveries; it is not a recommended order quantity.'),
+     !lowItems.length?h('p',{className:'ws-notice'},'No items are at or below their reorder level.'):h('div',{className:'ws-restock-list'},lowItems.map(i=>h('article',{className:'ws-restock-item',key:i.id},
+      h('div',{className:'ws-restock-identity'},h('strong',null,i.name),h('small',null,[i.sku,i.colour,i.lengthMm?i.lengthMm+' mm':null,i.dimensions,i.supplier].filter(Boolean).join(' · ')),h('span',{className:'ws-badge '+(i.available<=0?'empty':'low')},i.available<=0?'Out of stock':'Low stock')),
+      h('dl',null,[['Available',i.available],['Reorder at',i.reorderLevel||0],['On order',i.onOrder||0],['Shortfall',shortfall(i)]].map(([label,value])=>h('div',{key:label},h('dt',null,label),h('dd',null,qty(value),h('small',null,i.unit))))),
+      h('div',{className:'ws-restock-next'},h('span',null,Number(i.onOrder)>0?(shortfall(i)>0?'Delivery will not cover the reorder level':'Awaiting delivery'):shortfall(i)>0?'Review replenishment':'At reorder point — review quantity'),isAdmin&&button('Edit reorder level',()=>open(i,'metadata')))
+     ))),
+     can('factory.receive')&&h('div',{className:'ws-restock-footer'},button('Open purchase orders',()=>setPoOpen(true)))
+    ),
     h('div',{className:'ws-actions',style:{marginBottom:16}},onExportExcel&&iconButton('Export panels Excel','excel',onExportExcel),onExportPDF&&iconButton('Export panels PDF','pdf',onExportPDF),isAdmin&&onAddOffcut&&iconButton('Add panel offcut','offcut',onAddOffcut)),
     h('div',{className:'ws-inventory'},
      h('div',{className:'ws-tabs',role:'group','aria-label':'Stock categories'},Object.entries(categories).map(([key,label])=>h('button',{type:'button',key,className:category===key?'is-active':'','aria-pressed':category===key,onClick:()=>setCategory(key)},label,h('span',null,key==='all'?allItems.length:allItems.filter(i=>i.category===key).length)))),
@@ -150,7 +164,7 @@ window.createWorkshopStock = function(React) {
     selected?.reservations&&Object.values(selected.reservations).some(q=>q>0)&&h('p',{className:'ws-field-hint'},'Reserved for jobs: '+Object.entries(selected.reservations).filter(([,q])=>q>0).map(([j,q])=>j+': '+q).join(', ')),
     error&&h('div',{className:'ws-error',role:'alert'},error),pending&&!busy&&h('p',null,'Save status is uncertain. Retry this unchanged request before starting another movement.'),
     h('div',{className:'ws-actions'},button('Cancel',()=>setForm(null),busy||imageBusy||!!pending),h('button',{type:'submit',disabled:busy||imageBusy||(form.action==='bulk_metadata'&&!Object.keys(form.changes).length)},imageBusy?'Preparing image…':busy?'Saving…':pending?'Retry save':form.action==='create'?'Create stock item':form.action==='bulk_metadata'?'Apply to '+form.itemIds.length+' items':'Save')))),
-   poOpen&&h(PurchaseOrderReceiving,{workerUrl,isAdmin,onClose:()=>setPoOpen(false),onReceived:load}),
+   poOpen&&h(PurchaseOrderReceiving,{workerUrl,isAdmin,onClose:()=>{setPoOpen(false);load();},onReceived:load}),
    preview&&h('div',{className:'ws-overlay',onClick:e=>{if(e.target===e.currentTarget)setPreview(null);}},h('div',{className:'ws-dialog ws-image-viewer',role:'dialog','aria-modal':true,'aria-label':'Stock image'},h('div',{className:'ws-heading'},h('div',null,h('h3',null,preview.name),h('p',null,preview.sku)),h('button',{type:'button',autoFocus:true,onClick:()=>setPreview(null),'aria-label':'Close image'},'Close')),h('div',{className:'ws-preview-tools'},h('button',{type:'button','aria-pressed':enhanceOutline,onClick:()=>setEnhanceOutline(v=>!v)},enhanceOutline?'Original image':'Enhance outline'),h('span',null,'Use Enhance outline for pale profile drawings.')),h('img',{className:enhanceOutline?'ws-outline-enhanced':'',src:preview.image,alt:preview.name+' profile'})))
   );
  };
