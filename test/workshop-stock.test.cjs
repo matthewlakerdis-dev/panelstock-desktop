@@ -56,7 +56,7 @@ test('restocking overview uses available stock and incoming quantities without m
  let nodes=walk(render());
  assert.ok(!nodes.some(n=>n.props.className==='ws-restock'));
  assert.ok(nodes.some(n=>n.props.className==='ws-inventory'));
- nodes.find(n=>n.type==='button'&&n.children[0]==='Restocking').props.onClick();
+ nodes.find(n=>n.type==='button'&&n.props.className?.startsWith('ws-metric')&&text(n).includes('Needs restocking')).props.onClick();
  nodes=walk(render());
  assert.ok(!nodes.some(n=>n.props.className==='ws-inventory'));
  let overview=nodes.find(n=>n.props.className==='ws-restock');
@@ -83,5 +83,13 @@ test('restocking overview uses available stock and incoming quantities without m
  overview=walk(render()).find(n=>n.props.className==='ws-restock');
  assert.equal(walk(overview).filter(n=>n.type==='article').length,1);
  assert.match(text(overview),/Unset 11/);
+ nodes=walk(render());
+ assert.ok(!nodes.some(n=>n.props['aria-label']==='SOH areas'));
+ assert.equal(nodes.find(n=>n.props.className?.startsWith('ws-metric')&&text(n).includes('Needs restocking')).props['aria-pressed'],true);
+ nodes.find(n=>n.props.className?.startsWith('ws-metric')&&text(n).includes('Stock items')).props.onClick();
+ nodes=walk(render());
+ assert.ok(nodes.some(n=>n.props.className==='ws-inventory'));
+ assert.ok(!nodes.some(n=>n.props.className==='ws-restock'));
+
 
 });
