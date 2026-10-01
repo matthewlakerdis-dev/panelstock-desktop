@@ -1,16 +1,31 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const source=fs.readFileSync(path.join(__dirname,'../workshop-stock.js'),'utf8');
 const walk=n=>!n||typeof n!=='object'?[]:[n,...(n.children||[]).flat(Infinity).flatMap(walk)];
-function harness(admin=false,factory='createPurchaseOrderReceiving'){
+function harness(admin=false,factory='createPurchaseOrderReceiving',props={}){
  const states=[],saved=new Map(),requests=[];let cursor=0;
  const React={createElement:(type,props,...children)=>({type,props:props||{},children}),useState:v=>{const i=cursor++;if(!(i in states))states[i]=typeof v==='function'?v():v;return [states[i],v=>states[i]=typeof v==='function'?v(states[i]):v];},useEffect(){},Fragment:'fragment'};
  const context={window:{},crypto:{randomUUID:()=> '12345678-1234-4234-a234-123456789012'},PanelStock:{username:'tester',apiFetch:async(url,options)=>{requests.push({url,body:JSON.parse(options.body)});return {ok:true,json:async()=>({...states[1],orderId:'po'})};}},localStorage:{getItem:k=>saved.get(k)||null,setItem:(k,v)=>saved.set(k,v),removeItem:k=>saved.delete(k)}};
  vm.runInNewContext(source,context);const Component=context.window[factory](React);
- const render=()=>{cursor=0;return walk(Component({isAdmin:admin,workerUrl:'https://api.test',taskAccess:{'factory.receive':true,'factory.stock':true}}));};
+ const render=()=>{cursor=0;return walk(Component({isAdmin:admin,workerUrl:'https://api.test',taskAccess:{'factory.receive':true,'factory.stock':true},...props}));};
  render();return {states,saved,requests,render,context};
 }
 const order={id:'po',reference:'PO-42',supplier:'Supplier',status:'partial',version:4,notes:'',attachments:[{id:'pdf',name:'PO.pdf'}],receipts:[],lines:[{itemId:'angle',name:'Angle',sku:'ANG',unit:'lengths',ordered:10,received:3}]};
 const stock=[{id:'black',name:'Angle',sku:'ANG',colour:'Black',lengthMm:6000,unit:'lengths'},{id:'white',name:'Angle',sku:'ANG',colour:'White',lengthMm:6000,unit:'lengths'}];
+test('receiving home prioritises open POs and lets workers open a delivery without a stock mutation',()=>{
+ const x=harness(false,'createPurchaseOrderReceiving',{launcher:true});x.states[1]={items:[],restoreEpoch:0,orders:[{...order,id:'open',reference:'PO-OPEN',status:'open',lines:order.lines.map(l=>({...l,received:0}))},{...order,id:'partial',reference:'PO-PART'},{...order,id:'done',reference:'PO-DONE',status:'received'}]};let nodes=x.render();
+ assert.equal(nodes.filter(n=>n.type==='article'&&n.props.className==='ws-receiving-card').length,2);assert.ok(!nodes.some(n=>n.props.role==='dialog'));assert.ok(!nodes.some(n=>n.children.includes('New purchase order')));
+ nodes.find(n=>n.children.includes('Receive delivery')).props.onClick();nodes=x.render();assert.ok(nodes.some(n=>n.props.role==='dialog'));assert.ok(nodes.some(n=>n.props['aria-label']==='Receive ANG Angle'));assert.equal(x.requests.length,0);
+});
+test('receiving tabs separate part received and completed orders and search matches supplier or item',()=>{
+ const x=harness(true,'createPurchaseOrderReceiving',{launcher:true});x.states[1]={items:[],restoreEpoch:0,orders:[{...order,id:'open',status:'open'},{...order,id:'part'},{...order,id:'done',status:'received'},{...order,id:'short',status:'closed_short'},{...order,id:'draft',status:'draft'},{...order,id:'cancel',status:'cancelled'}]};
+ let nodes=x.render();const choose=label=>{nodes.find(n=>n.type==='button'&&n.props['aria-pressed']!==undefined&&walk(n).some(c=>c.children.includes(label))).props.onClick();nodes=x.render();};
+ choose('Part received');assert.equal(nodes.filter(n=>n.type==='article').length,1);choose('Completed');assert.equal(nodes.filter(n=>n.type==='article').length,2);assert.ok(!nodes.some(n=>n.children.includes('Receive delivery')));
+ choose('To receive');nodes.find(n=>n.props.placeholder==='Search PO number, supplier or item').props.onChange({target:{value:'Angle'}});nodes=x.render();assert.equal(nodes.filter(n=>n.type==='article').length,2);
+ nodes.find(n=>n.props.placeholder==='Search PO number, supplier or item').props.onChange({target:{value:'not found'}});nodes=x.render();assert.ok(nodes.some(n=>n.children.includes('No matching purchase orders')));
+});
+test('empty receiving home gives admins a direct new-PO action and completed quantities keep their units',()=>{
+ const x=harness(true,'createPurchaseOrderReceiving',{launcher:true});x.states[1]={items:[],orders:[],restoreEpoch:0};let nodes=x.render();assert.ok(nodes.some(n=>n.children.includes('No deliveries waiting here')));nodes.find(n=>n.children.includes('New purchase order')).props.onClick();nodes=x.render();assert.ok(nodes.some(n=>n.props.role==='dialog'));assert.ok(nodes.some(n=>n.children.includes('Start with your PO')));
+});
 test('admin creates missing stock from an imported row and keeps the PO details and quantity',async()=>{
  const x=harness(true),calls=[];x.states[1]={orders:[],items:stock,restoreEpoch:0};
  x.context.FileReader=class{readAsDataURL(){this.result='data:application/pdf;base64,JVBERi0xLjc=';this.onload();}};
