@@ -223,3 +223,32 @@ test('docket files appear only under their own receipt and are excluded from the
  assert.ok(!walk(cards[0]).some(n=>n.type==='input'));assert.ok(walk(cards[1]).some(n=>n.type==='input'));
  const original=nodes.find(n=>n.props.className==='ws-po-files');assert.ok(!walk(original).some(n=>n.children.includes('Docket 0.pdf')));assert.ok(walk(original).some(n=>n.children.includes('PO.pdf')));
 });
+
+const correctionReceipt={id:'receipt-1',reference:'D-100',at:'2026-10-01T05:00:00Z',user:'receiver',lines:[{itemId:'angle',quantity:3}]};
+function correctionOpen(admin=true){
+ const x=harness(admin);open(x,{...order,receipts:[correctionReceipt]});x.states[1].receiptCorrections=true;
+ return x;
+}
+test('only admins can correct receipts and review is required before posting exact corrected totals',async()=>{
+ const worker=correctionOpen(false);assert.ok(!worker.render().some(n=>n.children.includes('Correct receipt')));
+ const x=correctionOpen();let nodes=x.render();nodes.find(n=>n.children.includes('Correct receipt')).props.onClick();nodes=x.render();
+ assert.ok(nodes.some(n=>n.props['aria-label']==='Correct delivery receipt'));assert.equal(nodes.find(n=>n.children.includes('Review correction')).props.disabled,true);
+ nodes.find(n=>n.props['aria-label']==='Correct quantity for Angle').props.onChange({target:{value:'1'}});nodes=x.render();
+ const modal=nodes.find(n=>n.props['aria-label']==='Correct delivery receipt');walk(modal).find(n=>n.type==='textarea').props.onChange({target:{value:'Three entered instead of one'}});nodes=x.render();
+ assert.equal(x.requests.length,0);nodes.find(n=>n.children.includes('Review correction')).props.onClick();nodes=x.render();assert.ok(nodes.some(n=>n.children.includes('Remove 2 lengths from stock')));
+ await nodes.find(n=>n.children.includes('Confirm correction')).props.onClick();
+ assert.equal(x.requests.length,1);const b=x.requests[0].body;assert.equal(b.action,'correct_receipt');assert.equal(b.receiptId,'receipt-1');assert.equal(b.expectedVersion,4);assert.deepEqual(JSON.parse(JSON.stringify(b.lines)),[{itemId:'angle',quantity:1}]);assert.equal(b.reason,'Three entered instead of one');
+});
+test('correction conflict requires reloading the receipt and never silently advances the expected version',async()=>{
+ const x=correctionOpen();let nodes=x.render();nodes.find(n=>n.children.includes('Correct receipt')).props.onClick();nodes=x.render();
+ nodes.find(n=>n.props['aria-label']==='Correct quantity for Angle').props.onChange({target:{value:'2'}});nodes=x.render();walk(nodes.find(n=>n.props['aria-label']==='Correct delivery receipt')).find(n=>n.type==='textarea').props.onChange({target:{value:'Fix error'}});
+ const calls=[];x.context.PanelStock.apiFetch=async(url,options)=>{if(!options)return {ok:true,json:async()=>({...x.states[1],orders:x.states[1].orders.map(o=>({...o,version:5}))})};calls.push(JSON.parse(options.body));return {ok:false,status:409,json:async()=>({error:'Purchase order changed'})};};
+ nodes=x.render();nodes.find(n=>n.children.includes('Review correction')).props.onClick();nodes=x.render();await nodes.find(n=>n.children.includes('Confirm correction')).props.onClick();nodes=x.render();
+ assert.equal(calls[0].expectedVersion,4);assert.ok(nodes.some(n=>n.children.includes('Reload receipt')));assert.equal(nodes.find(n=>n.children.includes('Review correction')).props.disabled,true);
+});
+test('receipt history shows corrected values and preserves original values and reasons for workers',()=>{
+ const x=harness(false),receipt={...correctionReceipt,currentLines:[{itemId:'angle',quantity:1}],corrections:[{id:'c1',user:'admin',at:'2026-10-01T06:00:00Z',reason:'Fixed typo',lines:[{itemId:'angle',name:'Angle',unit:'lengths',before:3,after:1,delta:-2}]}]};
+ const nodes=open(x,{...order,receipts:[receipt]});const card=nodes.find(n=>n.props.className==='ws-po-receipt');
+ assert.ok(walk(card).some(n=>n.children.includes('1 lengths')));assert.ok(walk(card).some(n=>n.children.includes('3 lengths · Angle')));assert.ok(walk(card).some(n=>n.children.includes('Fixed typo')));
+ assert.ok(!nodes.some(n=>n.children.includes('Correct receipt')));
+});
