@@ -203,3 +203,23 @@ test('bulk fill is unavailable for closed POs and cannot modify a pending retry'
  const x=harness();let nodes=open(x,{...order,status:'received'});assert.ok(!nodes.some(n=>n.children.includes('Receive all outstanding')));
  const y=harness();nodes=open(y);const fill=nodes.find(n=>n.children.includes('Receive all outstanding'));y.states[4]=true;nodes=y.render();assert.equal(nodes.find(n=>n.children.includes('Receive all outstanding')).props.disabled,true);nodes.find(n=>n.children.includes('Receive all outstanding')).props.onClick();assert.equal(Object.keys(y.states[12].quantities).length,0);assert.equal(y.requests.length,0);
 });
+
+test('receipt docket upload and retry retain the receipt and PO without submitting another receipt',async()=>{
+ const x=harness(),r={id:'receipt-1',reference:'D-100',at:'2026-10-01T05:00:00Z',user:'receiver',notes:'Checked',lines:[{itemId:'angle',quantity:3}]};
+ let nodes=open(x,{...order,receipts:[r]});const calls=[];let fail=true;
+ x.context.FileReader=class{readAsDataURL(){this.result='data:application/pdf;base64,JVBERi0xLjc=';this.onload();}};
+ x.context.PanelStock.apiFetch=async(url,options)=>{const body=JSON.parse(options.body);calls.push({url,body});return fail?{ok:false,status:503,json:async()=>({error:'Temporary upload problem'})}:{ok:true,json:async()=>x.states[1]};};
+ const input=nodes.find(n=>n.props['aria-label']==='Add docket for D-100');assert.ok(input);
+ await input.props.onChange({target:{files:[{name:'docket.pdf',size:12}],value:''}});nodes=x.render();
+ assert.equal(calls[0].body.receiptId,'receipt-1');assert.equal(calls[0].body.orderId,'po');assert.equal(calls[0].body.action,undefined);
+ fail=false;await nodes.find(n=>n.children.includes('Retry upload')).props.onClick();
+ assert.deepEqual(calls[0],calls[1]);assert.equal(x.requests.length,0);assert.ok(x.render().some(n=>n.children.includes('Delivery docket saved to this receipt.')));
+});
+test('docket files appear only under their own receipt and are excluded from the original PO document list',()=>{
+ const x=harness(),r=id=>({id,reference:id,at:'2026-10-01T05:00:00Z',user:'receiver',lines:[{itemId:'angle',quantity:1}]}),files=Array.from({length:5},(_,i)=>({id:'f'+i,receiptId:'R1',name:'Docket '+i+'.pdf',uploadedBy:'receiver',uploadedAt:'2026-10-01T05:01:00Z'}));
+ const nodes=open(x,{...order,receipts:[r('R1'),r('R2')],attachments:[...order.attachments,...files]});
+ const cards=nodes.filter(n=>n.props.className==='ws-po-receipt');assert.equal(cards.length,2);
+ assert.equal(walk(cards[0]).filter(n=>n.props.className==='ws-po-docket-file').length,5);assert.equal(walk(cards[1]).filter(n=>n.props.className==='ws-po-docket-file').length,0);
+ assert.ok(!walk(cards[0]).some(n=>n.type==='input'));assert.ok(walk(cards[1]).some(n=>n.type==='input'));
+ const original=nodes.find(n=>n.props.className==='ws-po-files');assert.ok(!walk(original).some(n=>n.children.includes('Docket 0.pdf')));assert.ok(walk(original).some(n=>n.children.includes('PO.pdf')));
+});

@@ -246,3 +246,24 @@
  .ws-receiving-quantity{min-width:66px;padding:8px 10px}
  .ws-receiving-quantity>strong{font-size:22px}
 }
+
+/* Each accepted delivery owns its own docket attachments. */
+.ws-po-history>summary{min-height:44px;padding:12px 0;color:#244358;font-size:15px}
+.ws-po-receipt{margin:12px 0;padding:16px;border:1px solid #ccdde6;border-radius:11px;background:#fff}
+.ws-po-receipt-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
+.ws-po-receipt-heading>div{min-width:0;display:flex;flex-direction:column;gap:5px}
+.ws-po-receipt-heading strong{font-size:15px;color:#244358;overflow-wrap:anywhere}
+.ws-po-receipt-heading small,.ws-po-dockets small{font-size:11px;color:#607589;line-height:1.5}
+.ws-po-receipt-notes{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}
+.ws-po-receipt-lines{margin:14px 0;border-top:1px solid #e0e8ef}
+.ws-po-receipt-lines>div{display:flex;justify-content:space-between;gap:14px;padding:9px 0;border-bottom:1px solid #e0e8ef;font-size:12px}
+.ws-po-receipt-lines>div>span{min-width:0;overflow-wrap:anywhere}
+.ws-po-receipt-lines strong{white-space:nowrap;color:#244358}
+.ws-po-dockets>strong{font-size:13px;color:#244358}
+.ws-po-dockets>p,.ws-po-docket-hint{font-size:12px;color:#526478!important;line-height:1.6}
+.ws-po-docket-file{margin:10px 0;display:flex;flex-direction:column;align-items:flex-start;gap:4px}
+.ws-po-docket-file button{max-width:100%;white-space:normal;overflow-wrap:anywhere;text-align:left}
+.ws-po-docket-upload{padding:12px;background:#f2f8fb;border:1px dashed #b4cddc;border-radius:9px;margin-top:12px}
+.ws-po-docket-upload input{width:100%;min-width:0;max-width:100%}
+.ws-po-docket-upload input::file-selector-button{padding:9px 12px;border:0;border-radius:7px;background:#155e75;color:#fff;margin-right:10px;font:inherit;cursor:pointer}
+@media(max-width:640px){.ws-po-receipt{padding:12px}.ws-po-receipt-heading{flex-direction:column;gap:8px}.ws-po-docket-file{align-items:stretch}.ws-po-docket-file button{width:100%}.ws-po-docket-upload{padding:10px}}
