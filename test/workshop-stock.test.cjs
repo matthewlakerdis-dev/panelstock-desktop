@@ -39,3 +39,25 @@ test('workers select named stocktakes and only see unsubmitted items in the coun
  const inputs=nodes.filter(n=>n.props['data-count-input']);assert.equal(inputs.length,1);assert.match(inputs[0].props['aria-label'],/Count b/);
  inputs[0].props.onChange({target:{value:'0'}});assert.ok(storage.has('panelstock:stocktake:worker:count1'));
 });
+
+test('restocking overview uses available stock and incoming quantities without mixing units',()=>{
+ const states=[];let cursor=0;
+ const React={createElement:(type,props,...children)=>({type,props:props||{},children}),useState:v=>{const i=cursor++;if(!(i in states))states[i]=typeof v==='function'?v():v;return [states[i],v=>states[i]=typeof v==='function'?v(states[i]):v];},useEffect(){},Fragment:'fragment'};
+ const context={window:{},PanelStock:{username:'worker'},localStorage:{getItem:()=>null}};
+ vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../workshop-stock.js'),'utf8'),context);
+ const Component=context.window.createWorkshopStock(React),render=()=>{cursor=0;return Component({isAdmin:false,taskAccess:{'factory.stock':true}});};
+ const walk=n=>!n||typeof n!=='object'?[]:[n,...(n.children||[]).flat(Infinity).flatMap(walk)];
+ const text=n=>n==null||n===false?'':typeof n!=='object'?String(n):(n.children||[]).flat(Infinity).map(text).join(' ');
+ render();states[0]={items:[
+  {id:'a',name:'Angle',category:'extrusions',qty:10,reserved:8,available:2,reorderLevel:10,onOrder:3,unit:'lengths'},
+  {id:'b',name:'Rivets',category:'fixings',qty:0,available:0,reorderLevel:2,onOrder:4,unit:'boxes'},
+  {id:'c',name:'Healthy',category:'fixings',qty:20,available:20,reorderLevel:2,unit:'each'}
+ ],movements:[]};
+ const nodes=walk(render()),overview=nodes.find(n=>n.props.className==='ws-restock');
+ assert.match(text(overview),/2 low-stock items · 2 awaiting deliveries · 1 to review/);
+ const cards=walk(overview).filter(n=>n.type==='article');assert.equal(cards.length,2);
+ const angle=cards.find(n=>text(n).includes('Angle'));
+ assert.match(text(angle),/Shortfall 5 lengths/);assert.match(text(angle),/Delivery will not cover/);
+ assert.match(text(cards.find(n=>text(n).includes('Rivets'))),/Shortfall 0 boxes/);
+ assert.ok(!walk(overview).some(n=>n.type==='button'&&text(n)==='Edit reorder level'));
+});
