@@ -7,9 +7,42 @@ function harness(admin=false,factory='createPurchaseOrderReceiving'){
  const context={window:{},crypto:{randomUUID:()=> '12345678-1234-4234-a234-123456789012'},PanelStock:{username:'tester',apiFetch:async(url,options)=>{requests.push({url,body:JSON.parse(options.body)});return {ok:true,json:async()=>({...states[1],orderId:'po'})};}},localStorage:{getItem:k=>saved.get(k)||null,setItem:(k,v)=>saved.set(k,v),removeItem:k=>saved.delete(k)}};
  vm.runInNewContext(source,context);const Component=context.window[factory](React);
  const render=()=>{cursor=0;return walk(Component({isAdmin:admin,workerUrl:'https://api.test',taskAccess:{'factory.receive':true,'factory.stock':true}}));};
- render();return {states,saved,requests,render};
+ render();return {states,saved,requests,render,context};
 }
 const order={id:'po',reference:'PO-42',supplier:'Supplier',status:'partial',version:4,notes:'',attachments:[{id:'pdf',name:'PO.pdf'}],receipts:[],lines:[{itemId:'angle',name:'Angle',sku:'ANG',unit:'lengths',ordered:10,received:3}]};
+const stock=[{id:'black',name:'Angle',sku:'ANG',colour:'Black',lengthMm:6000,unit:'lengths'},{id:'white',name:'Angle',sku:'ANG',colour:'White',lengthMm:6000,unit:'lengths'}];
+test('matching does not choose between colour variants or conflicting source attributes',()=>{
+ const x=harness(true),match=x.context.window.matchPurchaseOrderLine;
+ assert.equal(match({sku:'ANG'},stock).itemId,'');assert.equal(match({sku:'ANG',colour:'Black',lengthMm:6000},stock).itemId,'black');
+ assert.equal(match({sku:'ANG',colour:'Red'},stock).itemId,'');assert.equal(match({sku:'ANG',lengthMm:3000},stock).itemId,'');assert.equal(match({description:'Angle Black'},stock).itemId,'');
+});
+test('duplicate PO resets the reference and retains only editable supplier and ordered items',async()=>{
+ const x=harness(true);let nodes=open(x);nodes.find(n=>n.children.includes('Duplicate PO')).props.onClick();nodes=x.render();
+ const ref=nodes.find(n=>n.type==='input'&&n.props.placeholder==='e.g. PO-2026-104');assert.equal(ref.props.value,'');
+ ref.props.onChange({target:{value:'PO-NEW'}});nodes=x.render();await nodes.find(n=>n.children.includes('Save draft')).props.onClick();
+ const body=x.requests[0].body;assert.equal(body.reference,'PO-NEW');assert.equal(body.expectedVersion,0);assert.notEqual(body.orderId,'po');assert.equal(body.lines[0].ordered,10);assert.equal(body.receipts,undefined);assert.equal(body.attachments,undefined);assert.equal(body.issues,undefined);
+});
+test('uploaded document is reviewed before save, attached, then explicitly released',async()=>{
+ const x=harness(true),calls=[];x.states[1]={orders:[],items:stock,restoreEpoch:0};let saved;
+ x.context.FileReader=class{readAsDataURL(){this.result='data:application/pdf;base64,JVBERi0xLjc=';this.onload();}};
+ x.context.PanelStock.apiFetch=async(url,options)=>{const body=JSON.parse(options.body);calls.push({url,body});let value;
+  if(url.endsWith('/analyse'))value={reference:'PO-IMPORTED',supplier:'Supplier',notes:'',warnings:[],lines:[{sku:'ANG',description:'Black angle',colour:'Black',lengthMm:6000,quantity:4,unit:'lengths'}]};
+  else {if(body.action==='save')saved={...order,id:body.orderId,status:'draft',version:1,reference:body.reference,lines:body.lines.map(l=>({...l,name:'Angle',sku:'ANG',unit:'lengths',received:0})),attachments:[],receipts:[]};else if(url.endsWith('/files')){saved.attachments=[{id:body.id,name:body.name}];saved.version++;}else if(body.action==='publish'){saved.status='open';saved.version++;}value={orders:[saved],items:stock,restoreEpoch:0,orderId:saved.id};}return {ok:true,json:async()=>value};};
+ let nodes=x.render();nodes.find(n=>n.children.includes('New purchase order')).props.onClick();nodes=x.render();await nodes.find(n=>n.type==='input'&&n.props.type==='file').props.onChange({target:{files:[{name:'PO.pdf',size:8}],value:''}});nodes=x.render();
+ assert.equal(calls.length,1);assert.equal(nodes.find(n=>n.children.includes('Save draft')).props.disabled,true);assert.equal(nodes.find(n=>n.children.includes('Use reviewed items')).props.disabled,true);
+ nodes.find(n=>n.type==='input'&&n.props.type==='checkbox').props.onChange({target:{checked:true}});nodes=x.render();nodes.find(n=>n.children.includes('Use reviewed items')).props.onClick();nodes=x.render();
+ const release=nodes.find(n=>n.children.includes('Save & make available'));assert.equal(release.props.disabled,false);await release.props.onClick();
+ assert.equal(calls.length,4);assert.equal(calls[1].body.action,'save');assert.equal(calls[1].body.lines[0].itemId,'black');assert.equal(calls[1].body.lines[0].ordered,4);assert.ok(calls[2].url.endsWith('/files'));assert.equal(calls[3].body.action,'publish');assert.equal(calls[3].body.expectedVersion,2);assert.equal(x.saved.size,0);
+});
+test('document upload failure leaves a retryable draft and never publishes it',async()=>{
+ const x=harness(true),calls=[];x.states[1]={orders:[],items:stock,restoreEpoch:0};let saved,fail=true;
+ x.context.FileReader=class{readAsDataURL(){this.result='data:application/pdf;base64,JVBERi0xLjc=';this.onload();}};
+ x.context.PanelStock.apiFetch=async(url,options)=>{const body=JSON.parse(options.body);calls.push({url,body});let value;
+  if(url.endsWith('/analyse'))value={reference:'PO-RETRY',supplier:'Supplier',lines:[{sku:'ANG',colour:'Black',quantity:4,unit:'lengths'}]};
+  else {if(body.action==='save')saved={...order,id:body.orderId,status:'draft',version:1,reference:body.reference,lines:body.lines,attachments:[]};else if(url.endsWith('/files')){if(fail)return {ok:false,status:503,json:async()=>({error:'Temporary upload problem'})};saved.attachments=[{id:body.id,name:body.name}];saved.version++;}value={orders:[saved],items:stock,restoreEpoch:0,orderId:saved.id};}return {ok:true,json:async()=>value};};
+ let nodes=x.render();nodes.find(n=>n.children.includes('New purchase order')).props.onClick();nodes=x.render();await nodes.find(n=>n.type==='input'&&n.props.type==='file').props.onChange({target:{files:[{name:'PO.pdf',size:8}],value:''}});nodes=x.render();nodes.find(n=>n.type==='input'&&n.props.type==='checkbox').props.onChange({target:{checked:true}});nodes=x.render();nodes.find(n=>n.children.includes('Use reviewed items')).props.onClick();nodes=x.render();await nodes.find(n=>n.children.includes('Save & make available')).props.onClick();nodes=x.render();
+ assert.ok(!calls.some(c=>c.body.action==='publish'));assert.ok(nodes.some(n=>n.children.includes('Retry upload')));const original=calls[2];fail=false;await nodes.find(n=>n.children.includes('Retry upload')).props.onClick();assert.equal(calls[3].url,original.url);assert.equal(calls[3].body.id,original.body.id);assert.ok(!calls.some(c=>c.body.action==='publish'));
+});
 const issue={id:'issue-1',itemId:'angle',name:'Angle',unit:'lengths',kind:'damaged',quantity:2,notes:'Bent lengths',status:'open',user:'receiver',at:'2026-10-01T05:00:00Z'};
 function open(x,value=order){x.states[2]=null;x.states[1]={orders:[value],items:[],restoreEpoch:0};let nodes=x.render();if(!['open','partial'].includes(value.status)){nodes.find(n=>n.type==='select'&&n.props.value==='outstanding').props.onChange({target:{value:'all'}});nodes=x.render();}nodes.find(n=>n.type==='button'&&n.props.className==='ws-po-card').props.onClick();return x.render();}
 test('worker reports an issue with its own quantity and notes, without posting a receipt',async()=>{
