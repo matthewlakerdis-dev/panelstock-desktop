@@ -154,3 +154,30 @@ test('removing a reviewed PO line prevents its pending stock changes from being 
  let nodes=x.render();await nodes.find(n=>n.children.includes('Save draft')).props.onClick();
  assert.equal(x.requests[0].body.stockUpdates.length,0);
 });
+
+test('delivery urgency uses Brisbane midnight and suppresses overdue warnings for closed and draft orders',()=>{
+ const x=harness(),today=x.context.window.purchaseOrderToday,timing=x.context.window.purchaseOrderDeliveryTiming;
+ assert.equal(today(new Date('2026-10-01T13:59:59Z')),'2026-10-01');
+ assert.equal(today(new Date('2026-10-01T14:00:00Z')),'2026-10-02');
+ for(const [date,key] of [['2026-09-30','overdue'],['2026-10-01','today'],['2026-10-02','soon'],['2026-10-08','soon'],['2026-10-09','upcoming'],['','undated'],['2026-02-30','undated']])assert.equal(timing({...order,expectedDelivery:date},'2026-10-01').key,key);
+ assert.equal(timing({...order,expectedDelivery:'2026-09-30'},'2026-10-01').label,'1 day overdue');
+ for(const status of ['received','closed_short','cancelled','draft'])assert.equal(timing({...order,status,expectedDelivery:'2026-09-30'},'2026-10-01').key,'scheduled');
+});
+test('receiving prioritises earliest outstanding delivery dates and lists undated POs last',()=>{
+ const x=harness(false,'createPurchaseOrderReceiving',{launcher:true});
+ const today=x.context.window.purchaseOrderToday(),offset=n=>new Date(new Date(today+'T00:00:00Z').getTime()+n*86400000).toISOString().slice(0,10);
+ x.states[1]={items:[],orders:[{...order,id:'none',reference:'UNDATED'},{...order,id:'future',reference:'FUTURE',expectedDelivery:offset(5)},{...order,id:'today',reference:'TODAY',expectedDelivery:today},{...order,id:'late',reference:'LATE',expectedDelivery:offset(-3)},{...order,id:'done',reference:'DONE',status:'received',expectedDelivery:offset(-5)}],restoreEpoch:0};
+ const nodes=x.render(),cards=nodes.filter(n=>n.type==='article');
+ assert.deepEqual(cards.map(n=>walk(n).find(c=>c.type==='h3').children[0]),['LATE','TODAY','FUTURE','UNDATED']);
+ assert.ok(walk(cards[0]).some(n=>n.children.includes('3 days overdue')));
+ const counts=nodes.find(n=>n.props.className==='ws-delivery-summary');assert.deepEqual(walk(counts).filter(n=>n.type==='strong').map(n=>n.children[0]),[1,1,1]);
+});
+test('admin edits expected dates while duplicate POs start without an old delivery deadline',async()=>{
+ const x=harness(true),value={...order,expectedDelivery:'2026-10-05'};let nodes=open(x,value);
+ nodes.find(n=>n.children.includes('Edit PO')).props.onClick();nodes=x.render();
+ const input=nodes.find(n=>n.type==='input'&&n.props.type==='date');assert.equal(input.props.value,'2026-10-05');
+ input.props.onChange({target:{value:'2026-10-09'}});nodes=x.render();await nodes.find(n=>n.children.includes('Save changes')).props.onClick();
+ assert.equal(x.requests[0].body.expectedDelivery,'2026-10-09');
+ const y=harness(true);nodes=open(y,value);nodes.find(n=>n.children.includes('Duplicate PO')).props.onClick();nodes=y.render();
+ assert.equal(nodes.find(n=>n.type==='input'&&n.props.type==='date').props.value,'');
+});

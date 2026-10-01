@@ -147,3 +147,20 @@
 .ws-po-learn-summary p{font-size:12px;color:#435e54}
 .ws-po-learn-summary button{margin-top:8px}
 @media(max-width:640px){.ws-po-learn label{min-height:44px;align-items:center}.ws-po-learn-summary button{width:100%;justify-content:center}}
+
+/* Expected delivery dates and receiving urgency. */
+.ws-delivery-summary{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 14px;margin:0 0 12px;border:1px solid #d5e2eb;border-radius:9px;background:#f5f9fc;color:#526478;font-size:12px}
+.ws-delivery-summary strong{font-size:15px;color:#244358}
+.ws-delivery-summary .is-overdue,.ws-delivery-summary .is-overdue strong{color:#a83429}
+.ws-receiving-date{padding:0 20px 14px}
+.ws-po-delivery-date{display:flex;flex-wrap:wrap;align-items:center;gap:5px 12px;padding:9px 12px;border-radius:7px;background:#f0f4f8;color:#536478;font-size:12px;line-height:1.5}
+.ws-po-delivery-date strong{font-size:12px}
+.ws-po-delivery-date.overdue{background:#fff0ed;color:#a83429;border:1px solid #edc3ba}
+.ws-po-delivery-date.today{background:#fff5dd;color:#805c12;border:1px solid #e8d39d}
+.ws-po-delivery-date.soon{background:#eaf5fa;color:#155e75;border:1px solid #c6dee7}
+.ws-po-delivery-date.undated{background:transparent;padding:2px 0;color:#68788a}
+.ws-po-delivery-date.undated strong{font-weight:400}
+.ws-po-dialog .ws-count-header>.ws-po-delivery-date{margin-top:9px}
+.ws-po-card .ws-po-delivery-date{margin-top:9px}
+.ws-po-editor .ws-po-date-field small{font-size:11px;line-height:1.5;color:#63768a}
+@media(max-width:640px){.ws-receiving-date{padding:0 14px 12px}.ws-delivery-summary{gap:6px 12px;padding:10px;font-size:11px}.ws-po-delivery-date{font-size:12px;padding:8px 10px}.ws-po-date-field input{width:100%;min-width:0;-webkit-appearance:none;appearance:none}}
