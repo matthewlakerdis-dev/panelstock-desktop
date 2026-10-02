@@ -60,7 +60,9 @@ async function process(job,{request,save,planner,progress=()=>{},sync=()=>{},can
  const timed=async(stage,action,page)=>{const started=now();try{return await action();}finally{const elapsed=Math.max(0,now()-started);job.timings[stage]=(job.timings[stage]||0)+elapsed;if(page){page.timings||={};page.timings[stage]=(page.timings[stage]||0)+elapsed;}}};
  let saving=Promise.resolve();
  const checkpoint=()=>{saving=saving.then(async()=>{await save(job);sync(job);});return saving;};
- const checkCancel=()=>{if(cancelled())throw Error('Paused. Your completed steps are saved; use Resume to continue.');};
+ let providerPause=null;
+ const checkCancel=()=>{if(providerPause)throw providerPause;if(cancelled())throw Error('Paused. Your completed steps are saved; use Resume to continue.');};
+ const providerLimit=error=>/OpenAI rate limit reached|OpenAI API quota is exhausted/i.test(error.message);
  const transientReadError=error=>/Drawing reader timed out|OpenAI rate limit reached|Cannot reach OpenAI or the request timed out|OpenAI service request failed \(HTTP 50[234]\)/i.test(error.message);
  const readPage=async (payload,page)=>{
   page.readJobs||={};const mode=payload.mode;
@@ -82,6 +84,11 @@ async function process(job,{request,save,planner,progress=()=>{},sync=()=>{},can
     }
     throw Error('This reading is taking longer than expected. Resume to check its saved job.');
    }catch(error){
+    if(providerLimit(error)){
+     providerPause=error;
+     progress(error.message+' Pack paused. Completed readings are saved; resume after the limit clears.');
+     throw error;
+    }
     if(!transientReadError(error)||attempt>=3)throw error;
     const seconds=[20,40,60][attempt];progress(error.message+' Retrying in '+seconds+' seconds…');
     for(let elapsed=0;elapsed<seconds;elapsed++){checkCancel();await wait(1000);}
@@ -134,7 +141,7 @@ async function process(job,{request,save,planner,progress=()=>{},sync=()=>{},can
     const saved={savedAt:Date.now()};for(const field of checkedFields)if(page[field]!==undefined)saved[field]=structuredClone(page[field]);
     try{await cache.put(cacheKey,saved);}catch{} // Optional optimisation; journal remains authoritative.
    }
-  }catch(error){page.issues=[error.message||'Page could not be read.'];page.retryable=transientReadError(error)||!!Object.keys(page.readJobs||{}).length;}
+  }catch(error){page.issues=[error.message||'Page could not be read.'];page.retryable=providerLimit(error)||transientReadError(error)||!!Object.keys(page.readJobs||{}).length;}
   await checkpoint();
  };
  // Match the converter's two reading slots; never fan out the whole pack.

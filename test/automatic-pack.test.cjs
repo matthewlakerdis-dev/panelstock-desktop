@@ -132,18 +132,23 @@ test('cancellation stops before the next operation',async()=>{
  const j=job(),h=harness(j);await assert.rejects(pack.process(j,{...h,cancelled:()=>true}),/Paused/);assert.equal(h.calls.length,0);
 });
 
-test('rate limits retry the same page with bounded backoff and operator policy',async()=>{
- const j=job(),h=harness(j);j.settings.policy={thickness:3,missingDirection:'non-directional'};let attempts=0;const waits=[];
- const request=async(path,body)=>{if(path==='/cad/analyse'&&body.mode==='pack-read'){attempts++;assert.equal(body.policy.thickness,3);if(attempts<3)throw Error('OpenAI rate limit reached. Wait briefly and retry.');}return h.request(path,body);};
- await pack.process(j,{...h,request,wait:async ms=>waits.push(ms)});assert.equal(attempts,3);assert.equal(waits.length,60);assert.equal(j.sent,true);
+test('provider limits pause the entire queue before later pages start',async()=>{
+ for(const message of ['OpenAI rate limit reached. Wait briefly and retry.','OpenAI API quota is exhausted.']){
+ const j=job(),h=harness(j);j.pages=Array.from({length:7},(_,i)=>({file:new File(['page'],i+'.png',{type:'image/png'})}));let attempts=0;const waits=[];
+ await assert.rejects(pack.process(j,{...h,request:async()=>{attempts++;throw Error(message);},wait:async ms=>waits.push(ms)}),/OpenAI/);
+ assert.ok(attempts<=2);assert.equal(waits.length,0);assert.equal(j.sent,undefined);assert.ok(j.pages.slice(2).every(p=>!p.inventory&&!p.readJobs));
+ }
 });
 test('exhausted retries and quota errors never schedule',async()=>{
  for(const message of ['OpenAI rate limit reached. Wait briefly and retry.','OpenAI API quota is exhausted.']){
- const j=job(),h=harness(j);let attempts=0;await assert.rejects(pack.process(j,{...h,wait:async()=>{},request:async()=>{attempts++;throw Error(message);}}),/pages need attention/);assert.equal(attempts,message.includes('rate limit')?4:1);assert.equal(j.sent,undefined);
+ const j=job(),h=harness(j);let attempts=0;await assert.rejects(pack.process(j,{...h,wait:async()=>{},request:async()=>{attempts++;throw Error(message);}}),/OpenAI/);assert.equal(attempts,1);assert.equal(j.sent,undefined);
  }
 });
-test('pause during rate-limit backoff prevents another request',async()=>{
- const j=job(),h=harness(j);let paused=false,calls=0;await assert.rejects(pack.process(j,{...h,cancelled:()=>paused,wait:async()=>{paused=true;},request:async()=>{calls++;throw Error('OpenAI rate limit reached.');}}),/pages need attention|Paused/);assert.equal(calls,1);assert.ok(!j.sent);
+test('resuming after a provider limit preserves the successful first reading',async()=>{
+ const j=job(),h=harness(j);let limited=true,reads=0;
+ const request=async(path,body)=>{if(body?.mode==='pack-read')reads++;if(body?.mode==='pack-verify'&&limited)throw Error('OpenAI rate limit reached.');return h.request(path,body);};
+ await assert.rejects(pack.process(j,{...h,request}),/OpenAI/);assert.ok(j.pages[0].inventory);assert.equal(j.pages[0].retryable,true);assert.ok(!j.sent);
+ limited=false;await pack.process(j,{...h,request});assert.equal(reads,1);assert.equal(j.sent,true);
 });
 
 test('reader upgrades invalidate unsent cached approvals but preserve submitted packets',async()=>{
@@ -158,3 +163,4 @@ test('resume after exhausted verification timeouts retains the successful first 
  const j=job(),h=harness(j);let reads=0,fail=true;const request=async(path,body)=>{if(body?.mode==='pack-read')reads++;if(body?.mode==='pack-verify'&&fail)throw Error('Cannot reach OpenAI or the request timed out. Retry later.');return h.request(path,body);};
  await assert.rejects(pack.process(j,{...h,request,wait:async()=>{}}),/pages need attention/);assert.equal(j.pages[0].retryable,true);fail=false;await pack.process(j,{...h,request});assert.equal(reads,1);assert.equal(j.sent,true);
 });
+
