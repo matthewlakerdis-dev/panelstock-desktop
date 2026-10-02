@@ -53,3 +53,17 @@ test('omitted holes and measurement mismatches are exceptions',()=>{
 test('cancellation stops before the next operation',async()=>{
  const j=job(),h=harness(j);await assert.rejects(pack.process(j,{...h,cancelled:()=>true}),/Paused/);assert.equal(h.calls.length,0);
 });
+
+test('rate limits retry the same page with bounded backoff and operator policy',async()=>{
+ const j=job(),h=harness(j);j.settings.policy={thickness:3,missingDirection:'non-directional'};let attempts=0;const waits=[];
+ const request=async(path,body)=>{if(path==='/cad/analyse'&&body.mode==='pack-read'){attempts++;assert.equal(body.policy.thickness,3);if(attempts<3)throw Error('OpenAI rate limit reached. Wait briefly and retry.');}return h.request(path,body);};
+ await pack.process(j,{...h,request,wait:async ms=>waits.push(ms)});assert.equal(attempts,3);assert.equal(waits.length,60);assert.equal(j.sent,true);
+});
+test('exhausted retries and quota errors never schedule',async()=>{
+ for(const message of ['OpenAI rate limit reached. Wait briefly and retry.','OpenAI API quota is exhausted.']){
+ const j=job(),h=harness(j);let attempts=0;await assert.rejects(pack.process(j,{...h,wait:async()=>{},request:async()=>{attempts++;throw Error(message);}}),/pages need attention/);assert.equal(attempts,message.includes('rate limit')?4:1);assert.equal(j.sent,undefined);
+ }
+});
+test('pause during rate-limit backoff prevents another request',async()=>{
+ const j=job(),h=harness(j);let paused=false,calls=0;await assert.rejects(pack.process(j,{...h,cancelled:()=>paused,wait:async()=>{paused=true;},request:async()=>{calls++;throw Error('OpenAI rate limit reached.');}}),/pages need attention|Paused/);assert.equal(calls,1);assert.ok(!j.sent);
+});
