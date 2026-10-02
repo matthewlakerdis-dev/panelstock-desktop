@@ -1,0 +1,55 @@
+const {test}=require('node:test'),assert=require('node:assert/strict');
+const pack=require('../cad/automatic-pack.js');
+const makeDrawing=()=>({dxf:'drawing',svg:'<svg/>',validation:{closedCut:true,checks:['Closed cut'],measurements:[{status:'pass'}],warnings:['Test drawing: tooling width and depth remain unspecified.'],fabricationTags:[],stiffeners:[]}});
+const spec=()=>({panelId:'A',panelDirection:'right',packManufacturing:{material:'Aluminium',thickness:3,finish:'White'}});
+function job(){const file=new File(['page'],'page.pdf',{type:'application/pdf'});return {id:'run',settings:{projectName:'Notre Dame',orderNumber:'11',stockKey:'aluminium-3-milled',powderCoat:true,policy:{}},pages:[{file,original:file}],panels:[],exceptions:[]};}
+function harness(j){
+ const calls=[],saves=[];let failMutation=false,inventoryFailure=false,unplaced=[];
+ const stock={material:'Aluminium',thickness:3,color:'Milled',id:'stock',type:'variant',quantity:20,width:3000,height:1200};
+ const planner={availableStock:()=>[stock],groupKey:()=>j.settings.stockKey,trackerPacket:()=>({mutationId:'stable-id',changes:[{id:'panel'}]})};
+ const request=async(path,body)=>{calls.push({path,body});
+  if(path==='/data')return {cncPanels:[]};
+  if(path==='/cad/analyse')return body.mode==='pack-read'?{inventory:{groups:[]}}:inventoryFailure?{verified:false,issues:['Unclear dimension.'],groups:[]}:{verified:true,issues:[],groups:[{panels:[{id:'A',quantity:1},{id:'B',quantity:1}],spec:spec()}]};
+  if(path==='/cad/generate')return body.sheetPlan?{sheets:[{number:1,stock,panels:[{name:'A'},{name:'B'}],dxf:'sheet'}],unplaced}:makeDrawing();
+  if(path==='/mutations'){if(failMutation)throw Error('Lost response');return {ok:true};}
+  throw Error('Unexpected request');
+ };
+ return {calls,saves,planner,request,save:async value=>saves.push(structuredClone(value)),setFailMutation:v=>failMutation=v,setInventoryFailure:v=>inventoryFailure=v,setUnplaced:v=>unplaced=v};
+}
+test('full workflow expands every ID, generates, plans, journals before sending',async()=>{
+ const j=job(),h=harness(j);await pack.process(j,h);assert.equal(j.sent,true);assert.deepEqual(j.panels.map(p=>p.name),['A','B']);assert.equal(h.calls.filter(c=>c.path==='/mutations').length,1);assert.ok(h.saves.some(s=>s.packet&&!s.sent));
+ const before=h.calls.length;await pack.process(j,h);assert.equal(h.calls.length,before);
+});
+test('lost submission response retries the identical saved packet without re-reading or re-planning',async()=>{
+ const j=job(),h=harness(j);h.setFailMutation(true);await assert.rejects(pack.process(j,h),/Lost response/);const packet=structuredClone(j.packet),before=h.calls.length;h.setFailMutation(false);await pack.process(j,h);assert.equal(h.calls.length,before+1);assert.deepEqual(h.calls.at(-1).body,packet);assert.equal(j.sent,true);
+});
+test('page uncertainty blocks all tracker changes and preserves a specific exception',async()=>{
+ const j=job(),h=harness(j);h.setInventoryFailure(true);await assert.rejects(pack.process(j,h),/pages need attention/);assert.match(j.exceptions[0],/Page 1: Unclear/);assert.ok(!h.calls.some(c=>c.path==='/mutations'));
+});
+test('unplaced panels are named and never sent',async()=>{
+ const j=job(),h=harness(j);h.setUnplaced([{name:'B',copy:1}]);await assert.rejects(pack.process(j,h),/Not all panels fit/);assert.match(j.exceptions[0],/^B:/);assert.ok(!j.packet);assert.ok(!h.calls.some(c=>c.path==='/mutations'));
+});
+test('journal failure prevents external mutation',async()=>{
+ const j=job(),h=harness(j);h.save=async value=>{if(value.packet)throw Error('Disk full');};await assert.rejects(pack.process(j,h),/Disk full/);assert.ok(!h.calls.some(c=>c.path==='/mutations'));
+});
+test('journal failure also prevents retrying an unsaved in-memory packet',async()=>{
+ const j=job(),h=harness(j);j.packet={mutationId:'not-yet-saved'};h.save=async()=>{throw Error('Disk full');};await assert.rejects(pack.process(j,h),/Disk full/);assert.ok(!h.calls.some(c=>c.path==='/mutations'));
+});
+test('definitively rejected submission clears its packet so fresh stock can be checked',async()=>{
+ const j=job(),h=harness(j);j.packet={mutationId:'rejected'};h.request=async()=>{throw Object.assign(Error('Stock conflict'),{status:409});};await assert.rejects(pack.process(j,h),/Stock conflict/);assert.equal(j.packet,undefined);assert.equal(h.saves.at(-1).packet,undefined);
+});
+test('saved CAD projects preserve the run identity and readiness for resume',()=>{
+ const vm=require('node:vm'),fs=require('node:fs'),path=require('node:path');const context={window:{},structuredClone};vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../cad/cad-projects.js'),'utf8'),context);const saved=context.window.PanelCadProjects.snapshot([{name:'A',automationRunId:'run-1',spec:spec(),reviewed:true}],0,'Order 11',[],{},()=>({version:1,ready:true}));assert.equal(saved.panels[0].automationRunId,'run-1');assert.equal(saved.panels[0].drawingReadiness.ready,true);
+});
+test('duplicate IDs on separate pages cannot be silently combined',()=>{
+ const page={verified:true,original:{name:'pack.pdf'},groups:[{panels:[{id:'A',quantity:1}],spec:spec()}]};assert.throws(()=>pack.inventoryPanels([page,page],'run'),/more than once/);
+});
+test('existing order panels block scheduling even under a different sheet number',()=>{
+ assert.throws(()=>pack.ensureNotScheduled({cncPanels:[{jobReference:'NOTRE DAME',orderNumber:'11',sheetNumber:'9',panelNumber:'A'}]},[{name:'A',quantity:1}],job().settings),/already/);
+});
+test('omitted holes and measurement mismatches are exceptions',()=>{
+ const result=makeDrawing();result.validation.warnings.push('Holes omitted where required spacing cannot fit: sections 1.');result.validation.measurements.push({label:'Width',status:'mismatch'});assert.equal(pack.drawingIssues(result).length,2);
+});
+test('cancellation stops before the next operation',async()=>{
+ const j=job(),h=harness(j);await assert.rejects(pack.process(j,{...h,cancelled:()=>true}),/Paused/);assert.equal(h.calls.length,0);
+});

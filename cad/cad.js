@@ -428,6 +428,14 @@ $('correctoutline').onclick=()=>{if(busy)return;const file=panels[panelIndex]?.f
 $('correctionsketch').onchange=()=>{const file=$('correctionsketch').files[0];$('correctionsketch').value='';if(file)run(async()=>{if(!['image/png','image/jpeg'].includes(file.type)||file.size>6*1024*1024)throw Error('Choose a PNG or JPEG sketch up to 6 MB.');await correctOutline(file);});};
 $('file').multiple=true;
 const uploadFileButton=document.createElement('button');uploadFileButton.type='button';uploadFileButton.className='project-upload-button';uploadFileButton.textContent='Upload file';uploadFileButton.setAttribute('aria-label','Upload PDF or sketch image');uploadFileButton.onclick=()=>{if(!busy)$('file').click();};const fileLabel=$('file').closest('label');fileLabel.hidden=true;fileLabel.before(uploadFileButton);
+const automaticPackButton=document.createElement('button');automaticPackButton.type='button';automaticPackButton.textContent='Process drawing pack';automaticPackButton.className='primary';uploadFileButton.after(automaticPackButton);
+automaticPackButton.onclick=()=>run(async()=>{
+ rememberPanel();const owner=projectOwner(),details=projectDetails();
+ await PanelAutomaticPack.open({files:uploadedSketchFiles,owner,request:api,projectName:details.projectName,orderNumber:details.orderNumber,canSendCnc:!!(session?.isAdmin||session?.taskAccess?.['factory.cnc']===true),existing:panels,download,sync:job=>{
+  if(projectOwner()!==owner||!job.panels?.length)return;
+  panelIndex=-1;panels.splice(0,panels.length,...structuredClone(job.panels));selectPanel(0);rememberPanel();queueProjectSave();
+ }});
+});
 $('file').onchange=async()=>{if(busy)return;const files=[...$('file').files];if(!files.length)return;await run(async()=>{
  for(const file of files){const pdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name);if(!pdf&&!['image/png','image/jpeg'].includes(file.type))throw Error('Choose PDF, PNG or JPEG files.');if(file.size>(pdf?25:6)*1024*1024)throw Error(file.name+': maximum '+(pdf?25:6)+' MB per file.');}
  uploadedSketchFiles=files;updateProjectPdf();queueProjectSave();notice(files.length===1?'File loaded. Click Highlight panels when ready.':files.length+' files loaded. Click Highlight panels when ready.');
