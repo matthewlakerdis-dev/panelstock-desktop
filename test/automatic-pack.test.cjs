@@ -67,3 +67,16 @@ test('exhausted retries and quota errors never schedule',async()=>{
 test('pause during rate-limit backoff prevents another request',async()=>{
  const j=job(),h=harness(j);let paused=false,calls=0;await assert.rejects(pack.process(j,{...h,cancelled:()=>paused,wait:async()=>{paused=true;},request:async()=>{calls++;throw Error('OpenAI rate limit reached.');}}),/pages need attention|Paused/);assert.equal(calls,1);assert.ok(!j.sent);
 });
+
+test('reader upgrades invalidate unsent cached approvals but preserve submitted packets',async()=>{
+ const j=job(),h=harness(j);j.pages[0].verified=true;j.pages[0].groups=[{panels:[{id:'OLD',quantity:1}],spec:spec()}];
+ await pack.process(j,h);assert.equal(j.readerRevision,'independent-v2');assert.deepEqual(j.panels.map(p=>p.name),['A','B']);assert.ok(h.calls.some(c=>c.body?.mode==='pack-read'));
+});
+
+test('temporary reader timeout retries without resubmitting CNC mutations',async()=>{
+ const j=job(),h=harness(j);let attempts=0;await pack.process(j,{...h,wait:async()=>{},request:async(path,body)=>{if(body?.mode==='pack-verify'&&attempts++===0)throw Error('Cannot reach OpenAI or the request timed out. Retry later.');return h.request(path,body);}});assert.equal(j.sent,true);assert.equal(h.calls.filter(c=>c.path==='/mutations').length,1);
+});
+test('resume after exhausted verification timeouts retains the successful first read',async()=>{
+ const j=job(),h=harness(j);let reads=0,fail=true;const request=async(path,body)=>{if(body?.mode==='pack-read')reads++;if(body?.mode==='pack-verify'&&fail)throw Error('Cannot reach OpenAI or the request timed out. Retry later.');return h.request(path,body);};
+ await assert.rejects(pack.process(j,{...h,request,wait:async()=>{}}),/pages need attention/);assert.equal(j.pages[0].retryable,true);fail=false;await pack.process(j,{...h,request});assert.equal(reads,1);assert.equal(j.sent,true);
+});

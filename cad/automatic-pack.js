@@ -37,25 +37,31 @@ async function base64(file){const bytes=new Uint8Array(await file.arrayBuffer())
 async function process(job,{request,save,planner,progress=()=>{},sync=()=>{},cancelled=()=>false,wait=ms=>new Promise(resolve=>setTimeout(resolve,ms))}){
  const checkpoint=async()=>{await save(job);sync(job);};
  const checkCancel=()=>{if(cancelled())throw Error('Paused. Your completed steps are saved; use Resume to continue.');};
- const readPage=async payload=>{for(let attempt=0;;attempt++){checkCancel();try{return await request('/cad/analyse',payload);}catch(error){if(!/OpenAI rate limit reached/i.test(error.message)||attempt>=3)throw error;const seconds=[20,40,60][attempt];progress('Drawing reader is busy. Retrying this page in '+seconds+' seconds…');for(let elapsed=0;elapsed<seconds;elapsed++){checkCancel();await wait(1000);}}}};
+ const transientReadError=error=>/OpenAI rate limit reached|Cannot reach OpenAI or the request timed out|OpenAI service request failed \(HTTP 50[234]\)/i.test(error.message);
+ const readPage=async payload=>{for(let attempt=0;;attempt++){checkCancel();try{return await request('/cad/analyse',payload);}catch(error){if(!transientReadError(error)||attempt>=3)throw error;const seconds=[20,40,60][attempt];progress('Drawing reader temporarily unavailable. Retrying this page in '+seconds+' seconds…');for(let elapsed=0;elapsed<seconds;elapsed++){checkCancel();await wait(1000);}}}};
  if(job.sent){sync(job);progress('Already sent to the CNC tracker.');return job;}
  const submit=async()=>{await checkpoint();try{await request('/mutations',job.packet);}catch(error){if([400,403,409,422].includes(error.status)){delete job.packet;await checkpoint();}throw error;}job.sent=true;await checkpoint();};
  // A saved submission is always retried verbatim, including its mutation ID.
  if(job.packet){progress('Checking the saved CNC submission…');await submit();return job;}
+ // Re-read unsent pages after reader changes; never invalidate an in-flight submission.
+ if(job.readerRevision!=='independent-v2'){
+  for(const page of job.pages){if(page.readerVersion==='independent-v2')continue;delete page.inventory;delete page.independentInventory;page.verified=false;page.groups=[];page.issues=[];page.notes=[];}
+  job.readerRevision='independent-v2';await checkpoint();
+ }
  job.exceptions=[];
  for(let i=0;i<job.pages.length;i++){
   checkCancel();const page=job.pages[i];if(page.verified)continue;
   progress('Reading and checking page '+(i+1)+' of '+job.pages.length+'…');
   try{
    const upload={filename:page.file.name,mime:page.file.type,data:await base64(page.file)};
-   if(page.issues?.length){delete page.inventory;page.issues=[];}
+   if(page.issues?.length){if(!page.retryable)delete page.inventory;delete page.independentInventory;page.groups=[];page.notes=[];page.issues=[];page.retryable=false;}
    if(!page.inventory){const reading=await readPage({...upload,mode:'pack-read',policy:job.settings.policy});page.inventory=reading.inventory;page.readerVersion=reading.readerVersion;page.readerModel=reading.readerModel;if(reading.sourceImage?.startsWith('data:image/png;base64,')&&reading.sourceImage.length<12*1024*1024){const bytes=Uint8Array.from(atob(reading.sourceImage.split(',')[1]),c=>c.charCodeAt(0));page.previewFile=new File([bytes],page.file.name.replace(/\.[^.]+$/,'')+'.png',{type:'image/png'});}await checkpoint();}
    checkCancel();
    const checked=await readPage({...upload,mode:'pack-verify',inventory:page.inventory,policy:job.settings.policy});
    page.independentInventory=checked.independentInventory;page.notes=checked.notes||[];
    page.issues=checked.issues||[];page.verified=checked.verified===true&&!page.issues.length;page.groups=checked.groups||[];
    if(!page.verified&&!page.issues.length)page.issues=['Page verification did not pass.'];
-  }catch(error){page.issues=[error.message||'Page could not be read.'];}
+  }catch(error){page.issues=[error.message||'Page could not be read.'];page.retryable=transientReadError(error);}
   await checkpoint();
  }
  job.exceptions=job.pages.flatMap((p,i)=>(p.issues||[]).map(issue=>'Page '+(i+1)+': '+issue));
@@ -121,7 +127,7 @@ async function open({files,owner,request,projectName,orderNumber,canSendCnc,sync
  const exceptions=document.createElement('ul'),downloads=document.createElement('div');
  body.append(label,directionLabel,coatLabel,allowance,status,exceptions,downloads);
  const footer=document.createElement('footer'),start=document.createElement('button'),close=document.createElement('button');start.textContent='Process drawing pack';start.className='primary';close.textContent='Close';footer.append(start,close);dialog.append(header,body,footer);document.body.append(dialog);dialog.showModal();
- const report=document.createElement('button');report.textContent='View check report';report.disabled=true;footer.prepend(report);report.onclick=()=>{const view=document.createElement('dialog'),content=document.createElement('pre'),done=document.createElement('button');view.style.cssText='width:min(960px,95vw);max-height:90vh';content.style.cssText='white-space:pre-wrap;max-height:70vh;overflow:auto';content.textContent=JSON.stringify({settings:job.settings,sent:job.sent,exceptions:job.exceptions,pages:job.pages.map(p=>({name:p.file.name,readerVersion:p.readerVersion,readerModel:p.readerModel,verified:p.verified,issues:p.issues,notes:p.notes,inventory:p.inventory,independentInventory:p.independentInventory,groups:p.groups}))},null,2);done.textContent='Close report';done.onclick=()=>{view.close();view.remove();};view.append(content,done);document.body.append(view);view.showModal();};
+ const report=document.createElement('button');report.textContent='View check report';report.disabled=true;footer.prepend(report);report.onclick=()=>{const view=document.createElement('dialog'),content=document.createElement('pre'),done=document.createElement('button');view.style.cssText='width:min(960px,95vw);max-height:90vh';content.style.cssText='white-space:pre-wrap;max-height:70vh;overflow:auto';content.textContent=JSON.stringify({settings:job.settings,sent:job.sent,exceptions:job.exceptions,drawings:(job.panels||[]).map(p=>({name:p.name,quantity:p.quantity,reviewed:p.reviewed,error:p.error,checks:drawingIssues(p.result),validation:p.result?.validation})),plan:job.plan?{gap:job.plan.gap,stockChanged:job.plan.stockChanged,unplaced:job.plan.unplaced,sheets:job.plan.sheets.map(s=>({number:s.number,stock:s.stock,panels:s.panels,utilisation:s.utilisation}))}:null,pages:job.pages.map(p=>({name:p.file.name,readerVersion:p.readerVersion,readerModel:p.readerModel,verified:p.verified,issues:p.issues,notes:p.notes,inventory:p.inventory,independentInventory:p.independentInventory,groups:p.groups}))},null,2);const heading=document.createElement('h2');heading.textContent='Drawing pack checks';const summary=document.createElement('p');summary.textContent=job.pages.filter(p=>p.verified).length+' of '+job.pages.length+' pages checked · '+job.panels.length+' panels · '+(job.plan?.sheets?.length||0)+' sheets';const pageList=document.createElement('ul');for(const page of job.pages){const row=document.createElement('li');row.textContent=page.file.name+': '+(page.verified?'Checked':page.issues?.length?page.issues.join(' '):'Waiting for check');pageList.append(row);}const details=document.createElement('details'),detailTitle=document.createElement('summary');detailTitle.textContent='Detailed readings and measurements';details.append(detailTitle,content);done.textContent='Close report';done.onclick=()=>{view.close();view.remove();};view.append(heading,summary,pageList,details,done);document.body.append(view);view.showModal();};
  let working=false,paused=false,job=null,key=null;
  const render=()=>{exceptions.replaceChildren();for(const message of job?.exceptions||[]){const row=document.createElement('li');row.textContent=message;exceptions.append(row);}downloads.replaceChildren();for(const [i,sheet]of (job?.plan?.sheets||[]).entries()){const button=document.createElement('button');button.textContent='Download sheet '+((job.firstSheet||1)+i);button.onclick=()=>download(sheet.dxf,'application/dxf',projectName.replace(/[^a-z0-9_-]/gi,'_')+'-order-'+orderNumber.replace(/[^a-z0-9_-]/gi,'_')+'-sheet-'+((job.firstSheet||1)+i)+'.dxf');downloads.append(button);}};
  const setStatus=message=>{status.textContent=message;};
@@ -151,4 +157,7 @@ const api={process,inventoryPanels,drawingIssues,firstSheet,ensureNotScheduled,o
 if(typeof module!=='undefined')module.exports=api;
 if(typeof window!=='undefined')window.PanelAutomaticPack=api;
 })();
+
+
+
 
