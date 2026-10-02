@@ -2,6 +2,28 @@ const {test}=require('node:test'),assert=require('node:assert/strict');
 const pack=require('../cad/automatic-pack.js');
 const makeDrawing=()=>({dxf:'drawing',svg:'<svg/>',validation:{closedCut:true,checks:['Closed cut'],measurements:[{status:'pass'}],warnings:['Test drawing: tooling width and depth remain unspecified.'],fabricationTags:[],stiffeners:[]}});
 const spec=()=>({panelId:'A',panelDirection:'right',packManufacturing:{material:'Aluminium',thickness:3,finish:'White'}});
+test('checked page cache skips AI reads but still generates and checks stock before scheduling',async()=>{
+ const values=new Map(),cache={get:async key=>values.get(key),put:async(key,value)=>values.set(key,structuredClone(value))};
+ const first=job(),h=harness(first);let clock=0;
+ const request=async(path,body)=>{const result=await h.request(path,body);if(path==='/cad/analyse')return {...result,readerVersion:'independent-v2',independentInventory:{groups:[]}};return result;};
+ await pack.process(first,{...h,request,cache,now:()=>clock+=100});
+ assert.equal(values.size,1);assert.ok(first.timings.Reading>0);assert.ok(first.timings['Independent checks']>0);assert.ok(first.timings['Drawing generation']>0);assert.ok(first.timings.Nesting>0);assert.ok(first.timings.Scheduling>0);
+ const next=job(),second=harness(next);await pack.process(next,{...second,cache});
+ assert.equal(second.calls.filter(c=>c.path==='/cad/analyse').length,0);assert.equal(next.pages[0].reusedReading,true);
+ assert.ok(second.calls.some(c=>c.path==='/data'));assert.ok(second.calls.some(c=>c.path==='/cad/generate'));assert.equal(next.sent,true);
+ assert.match(pack.timingText(next),/1 unchanged page/);
+});
+test('cache keys change with source bytes and material or direction policy',async()=>{
+ const j=job(),key=await pack.checkedPageKey(j.pages[0],j.settings);
+ for(const settings of [{...j.settings,stockKey:'other'},{...j.settings,policy:{thickness:4}},{...j.settings,policy:{missingDirection:'required'}}])assert.notEqual(await pack.checkedPageKey(j.pages[0],settings),key);
+ assert.notEqual(await pack.checkedPageKey({...j.pages[0],file:new File(['changed'],'page.pdf',{type:'application/pdf'})},j.settings),key);
+});
+test('expired, failed or incomplete cached readings are never trusted',async()=>{
+ const valid={verified:true,readerVersion:'independent-v2',inventory:{},independentInventory:{},groups:[{}],issues:[],savedAt:Date.now()};
+ assert.equal(pack.validCachedPage(valid),true);
+ for(const change of [{savedAt:Date.now()-8*86400000},{verified:false},{issues:['Unclear']},{independentInventory:null},{readerVersion:'old'},{groups:[]}])assert.equal(pack.validCachedPage({...valid,...change}),false);
+ const j=job(),h=harness(j);await pack.process(j,{...h,cache:{get:async()=>{throw Error('Storage unavailable');},put:async()=>{throw Error('Storage unavailable');}}});assert.equal(j.sent,true);assert.equal(h.calls.filter(c=>c.path==='/cad/analyse').length,2);
+});
 test('pack uses two reading slots, checks every page twice and serializes checkpoints',async()=>{
  const j=job(),h=harness(j);j.pages=Array.from({length:4},(_,i)=>({...j.pages[0],file:new File(['page'],'page-'+i+'.pdf',{type:'application/pdf'})}));
  let active=0,maxActive=0,saving=0,maxSaving=0;const seen=[],pending=[];

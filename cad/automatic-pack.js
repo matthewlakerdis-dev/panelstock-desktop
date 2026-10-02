@@ -34,7 +34,9 @@ function ensureNotScheduled(data,panels,settings){
  if((data.cncPanels||[]).some(p=>normal(p.jobReference)===normal(settings.projectName)&&normal(p.orderNumber)===normal(settings.orderNumber)&&names.has(normal(p.panelNumber))))throw Error('Some panels from this order are already in the CNC tracker. Nothing was added.');
 }
 async function base64(file){const bytes=new Uint8Array(await file.arrayBuffer());let binary='';for(let i=0;i<bytes.length;i+=32768)binary+=String.fromCharCode(...bytes.subarray(i,i+32768));return btoa(binary);}
-async function process(job,{request,save,planner,progress=()=>{},sync=()=>{},cancelled=()=>false,wait=ms=>new Promise(resolve=>setTimeout(resolve,ms))}){
+async function process(job,{request,save,planner,progress=()=>{},sync=()=>{},cancelled=()=>false,wait=ms=>new Promise(resolve=>setTimeout(resolve,ms)),cache=null,now=()=>performance.now()}){
+ job.timings||={};
+ const timed=async(stage,action,page)=>{const started=now();try{return await action();}finally{const elapsed=Math.max(0,now()-started);job.timings[stage]=(job.timings[stage]||0)+elapsed;if(page){page.timings||={};page.timings[stage]=(page.timings[stage]||0)+elapsed;}}};
  let saving=Promise.resolve();
  const checkpoint=()=>{saving=saving.then(async()=>{await save(job);sync(job);});return saving;};
  const checkCancel=()=>{if(cancelled())throw Error('Paused. Your completed steps are saved; use Resume to continue.');};
@@ -66,7 +68,7 @@ async function process(job,{request,save,planner,progress=()=>{},sync=()=>{},can
   }
  };
  if(job.sent){sync(job);progress('Already sent to the CNC tracker.');return job;}
- const submit=async()=>{await checkpoint();try{await request('/mutations',job.packet);}catch(error){if([400,403,409,422].includes(error.status)){delete job.packet;await checkpoint();}throw error;}job.sent=true;await checkpoint();};
+ const submit=async()=>{await checkpoint();try{await timed('Scheduling',()=>request('/mutations',job.packet));}catch(error){if([400,403,409,422].includes(error.status)){delete job.packet;await checkpoint();}throw error;}job.sent=true;await checkpoint();};
  // A saved submission is always retried verbatim, including its mutation ID.
  if(job.packet){progress('Checking the saved CNC submission…');await submit();return job;}
  // Re-read unsent pages after reader changes; never invalidate an in-flight submission.
@@ -79,14 +81,27 @@ async function process(job,{request,save,planner,progress=()=>{},sync=()=>{},can
   checkCancel();const page=job.pages[i];if(page.verified)return;
   progress('Reading and checking page '+(i+1)+' of '+job.pages.length+'…');
   try{
+   const cacheKey=cache?await checkedPageKey(page,job.settings):null;
+   if(cache&&!Object.keys(page.readJobs||{}).length){
+    let saved;try{saved=await cache.get(cacheKey);}catch{} // Cache failure must not prevent a fresh checked reading.
+    if(validCachedPage(saved)){
+     for(const field of checkedFields)if(saved[field]!==undefined)page[field]=structuredClone(saved[field]);
+     page.reusedReading=true;progress('Page '+(i+1)+': reused both checked readings for this unchanged page.');await checkpoint();return;
+    }
+   }
+   page.reusedReading=false;
    const upload={filename:page.file.name,mime:page.file.type,data:await base64(page.file)};
    if(page.issues?.length){if(!page.retryable)delete page.inventory;delete page.independentInventory;page.groups=[];page.notes=[];page.issues=[];page.retryable=false;}
-   if(!page.inventory){const reading=await readPage({...upload,mode:'pack-read',policy:job.settings.policy},page);page.inventory=reading.inventory;page.readerVersion=reading.readerVersion;page.readerModel=reading.readerModel;if(reading.sourceImage?.startsWith('data:image/png;base64,')&&reading.sourceImage.length<12*1024*1024){const bytes=Uint8Array.from(atob(reading.sourceImage.split(',')[1]),c=>c.charCodeAt(0));page.previewFile=new File([bytes],page.file.name.replace(/\.[^.]+$/,'')+'.png',{type:'image/png'});}await checkpoint();}
+   if(!page.inventory){const reading=await timed('Reading',()=>readPage({...upload,mode:'pack-read',policy:job.settings.policy},page),page);page.inventory=reading.inventory;page.readerVersion=reading.readerVersion;page.readerModel=reading.readerModel;if(reading.sourceImage?.startsWith('data:image/png;base64,')&&reading.sourceImage.length<12*1024*1024){const bytes=Uint8Array.from(atob(reading.sourceImage.split(',')[1]),c=>c.charCodeAt(0));page.previewFile=new File([bytes],page.file.name.replace(/\.[^.]+$/,'')+'.png',{type:'image/png'});}await checkpoint();}
    checkCancel();
-   const checked=await readPage({...upload,mode:'pack-verify',inventory:page.inventory,policy:job.settings.policy},page);
+   const checked=await timed('Independent checks',()=>readPage({...upload,mode:'pack-verify',inventory:page.inventory,policy:job.settings.policy},page),page);
    page.independentInventory=checked.independentInventory;page.notes=checked.notes||[];
    page.issues=checked.issues||[];page.verified=checked.verified===true&&!page.issues.length;page.groups=checked.groups||[];
    if(!page.verified&&!page.issues.length)page.issues=['Page verification did not pass.'];
+   if(cache&&page.verified&&page.independentInventory&&page.readerVersion==='independent-v2'){
+    const saved={savedAt:Date.now()};for(const field of checkedFields)if(page[field]!==undefined)saved[field]=structuredClone(page[field]);
+    try{await cache.put(cacheKey,saved);}catch{} // Optional optimisation; journal remains authoritative.
+   }
   }catch(error){page.issues=[error.message||'Page could not be read.'];page.retryable=transientReadError(error)||!!Object.keys(page.readJobs||{}).length;}
   await checkpoint();
  };
@@ -106,7 +121,7 @@ async function process(job,{request,save,planner,progress=()=>{},sync=()=>{},can
   checkCancel();const panel=job.panels[i];if(panel.result&&!drawingIssues(panel.result).length)continue;
   progress('Generating '+panel.name+' ('+(i+1)+' of '+job.panels.length+')…');
   try{
-   panel.result=await request('/cad/generate',{...panel.spec,reviewed:true});
+   panel.result=await timed('Drawing generation',()=>request('/cad/generate',{...panel.spec,reviewed:true}));
    const issues=drawingIssues(panel.result);if(issues.length)throw Error(issues.join(' '));
    panel.generatedSpec=specKey(panel.spec);panel.reviewed=true;panel.error=null;panel.message='Automatically read and checked against the source page.';
   }catch(error){panel.result=null;panel.reviewed=false;panel.error=error.message;job.exceptions.push(panel.name+': '+error.message);}
@@ -122,7 +137,7 @@ async function process(job,{request,save,planner,progress=()=>{},sync=()=>{},can
   if(!manufacturing||Number(manufacturing.thickness)!==Number(stock[0].thickness))throw Error(panel.name+': stock thickness does not match.');
   if(normal(manufacturing.finish)!==normal(stock[0].color)&&!(job.settings.powderCoat&&['milled','mill','mill finish','milled finish'].includes(normal(stock[0].color))))throw Error(panel.name+': the required finish differs from the selected stock.');
  }
- job.plan=await request('/cad/generate',{sheetPlan:true,panels:job.panels.map(p=>({name:p.name,quantity:p.quantity,direction:p.spec.panelDirection,dxf:p.result.dxf})),stock:stock.map(s=>({id:s.id,type:s.type,sku:s.sku,material:s.material,color:s.color,thickness:s.thickness,width:s.width,height:s.height,quantity:s.quantity}))});
+ job.plan=await timed('Nesting',()=>request('/cad/generate',{sheetPlan:true,panels:job.panels.map(p=>({name:p.name,quantity:p.quantity,direction:p.spec.panelDirection,dxf:p.result.dxf})),stock:stock.map(s=>({id:s.id,type:s.type,sku:s.sku,material:s.material,color:s.color,thickness:s.thickness,width:s.width,height:s.height,quantity:s.quantity}))}));
  await checkpoint();
  if(job.plan.unplaced?.length){job.exceptions=job.plan.unplaced.map(p=>p.name+(p.copy>1?' (copy '+p.copy+')':'')+': could not fit available stock.');await checkpoint();throw Error('Not all panels fit. No panels have been scheduled.');}
  checkCancel();progress('Adding the planned panels to the CNC tracker…');
@@ -137,6 +152,29 @@ async function journal(mode,id,value){
  try{return await new Promise((resolve,reject)=>{const tx=db.transaction('runs',mode),r=value===undefined?tx.objectStore('runs').get(id):tx.objectStore('runs').put(value,id);tx.oncomplete=()=>resolve(r.result);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||Error('Could not save progress.'));});}finally{db.close();}
 }
 async function hash(value){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',value)),b=>b.toString(16).padStart(2,'0')).join('');}
+const checkedFields=['inventory','independentInventory','readerVersion','readerModel','verified','issues','notes','groups','previewFile'];
+async function checkedPageKey(page,settings){
+ const source=await hash(await page.file.arrayBuffer());
+ return hash(new TextEncoder().encode(JSON.stringify({revision:'independent-v2-cache1',source,mime:page.file.type,settings})));
+}
+function validCachedPage(value){return !!(value?.verified===true&&value.readerVersion==='independent-v2'&&value.inventory&&value.independentInventory&&Array.isArray(value.groups)&&value.groups.length&&Array.isArray(value.issues)&&!value.issues.length&&Number.isFinite(value.savedAt)&&Date.now()>=value.savedAt&&Date.now()-value.savedAt<7*86400000);}
+function timingText(job){
+ const entries=Object.entries(job.timings||{}).map(([stage,ms])=>stage+': '+Math.round(ms/1000)+' s');
+ const reused=job.pages.filter(p=>p.reusedReading).length;
+ return (entries.length?entries.join(' · ')+'. Reading times include retries and are combined across parallel pages.':'No new reading timings recorded yet.')+(reused?' '+reused+' unchanged page(s) reused.':'');
+}
+function checkedCache(owner){
+ const access=async(key,value)=>{
+  const db=await new Promise((resolve,reject)=>{const r=indexedDB.open('panelstock-checked-pages',1);r.onupgradeneeded=()=>r.result.createObjectStore('pages');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
+  try{return await new Promise((resolve,reject)=>{
+   const tx=db.transaction('pages',value===undefined?'readonly':'readwrite'),store=tx.objectStore('pages'),scoped=owner+'|'+key;
+   const r=value===undefined?store.get(scoped):store.put(value,scoped);
+   if(value!==undefined){const all=store.getAll();const keys=store.getAllKeys();keys.onsuccess=()=>{const ordered=keys.result.map((key,i)=>({key,date:all.result[i].savedAt||0})).sort((a,b)=>a.date-b.date);for(const item of ordered.slice(0,Math.max(0,ordered.length-32)))store.delete(item.key);};}
+   tx.oncomplete=()=>resolve(r.result);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||Error('Cache unavailable'));
+  });}finally{db.close();}
+ };
+ return {get:key=>access(key),put:(key,value)=>access(key,value)};
+}
 async function open({files,owner,request,projectName,orderNumber,canSendCnc,sync,existing=[],download}){
  if(!canSendCnc)throw Error('CNC tracker access is required to process a complete drawing pack.');
  if(!files.length)throw Error('Upload a drawing pack first.');
@@ -159,7 +197,7 @@ async function open({files,owner,request,projectName,orderNumber,canSendCnc,sync
  const exceptions=document.createElement('ul'),downloads=document.createElement('div');
  body.append(label,directionLabel,coatLabel,allowance,status,exceptions,downloads);
  const footer=document.createElement('footer'),start=document.createElement('button'),close=document.createElement('button');start.textContent='Process drawing pack';start.className='primary';close.textContent='Close';footer.append(start,close);dialog.append(header,body,footer);document.body.append(dialog);dialog.showModal();
- const report=document.createElement('button');report.textContent='View check report';report.disabled=true;footer.prepend(report);report.onclick=()=>{const view=document.createElement('dialog'),content=document.createElement('pre'),done=document.createElement('button');view.style.cssText='width:min(960px,95vw);max-height:90vh';content.style.cssText='white-space:pre-wrap;max-height:70vh;overflow:auto';content.textContent=JSON.stringify({settings:job.settings,sent:job.sent,exceptions:job.exceptions,drawings:(job.panels||[]).map(p=>({name:p.name,quantity:p.quantity,reviewed:p.reviewed,error:p.error,checks:drawingIssues(p.result),validation:p.result?.validation})),plan:job.plan?{gap:job.plan.gap,stockChanged:job.plan.stockChanged,unplaced:job.plan.unplaced,sheets:job.plan.sheets.map(s=>({number:s.number,stock:s.stock,panels:s.panels,utilisation:s.utilisation}))}:null,pages:job.pages.map(p=>({name:p.file.name,readerVersion:p.readerVersion,readerModel:p.readerModel,verified:p.verified,issues:p.issues,notes:p.notes,inventory:p.inventory,independentInventory:p.independentInventory,groups:p.groups}))},null,2);const heading=document.createElement('h2');heading.textContent='Drawing pack checks';const summary=document.createElement('p');summary.textContent=job.pages.filter(p=>p.verified).length+' of '+job.pages.length+' pages checked · '+job.panels.length+' panels · '+(job.plan?.sheets?.length||0)+' sheets';const pageList=document.createElement('ul');for(const page of job.pages){const row=document.createElement('li');row.textContent=page.file.name+': '+(page.verified?'Checked':page.issues?.length?page.issues.join(' '):'Waiting for check');pageList.append(row);}const details=document.createElement('details'),detailTitle=document.createElement('summary');detailTitle.textContent='Detailed readings and measurements';details.append(detailTitle,content);done.textContent='Close report';done.onclick=()=>{view.close();view.remove();};view.append(heading,summary,pageList,details,done);document.body.append(view);view.showModal();};
+ const report=document.createElement('button');report.textContent='View check report';report.disabled=true;footer.prepend(report);report.onclick=()=>{const view=document.createElement('dialog'),content=document.createElement('pre'),done=document.createElement('button');view.style.cssText='width:min(960px,95vw);max-height:90vh';content.style.cssText='white-space:pre-wrap;max-height:70vh;overflow:auto';content.textContent=JSON.stringify({settings:job.settings,timingsMs:job.timings,sent:job.sent,exceptions:job.exceptions,drawings:(job.panels||[]).map(p=>({name:p.name,quantity:p.quantity,reviewed:p.reviewed,error:p.error,checks:drawingIssues(p.result),validation:p.result?.validation})),plan:job.plan?{gap:job.plan.gap,stockChanged:job.plan.stockChanged,unplaced:job.plan.unplaced,sheets:job.plan.sheets.map(s=>({number:s.number,stock:s.stock,panels:s.panels,utilisation:s.utilisation}))}:null,pages:job.pages.map(p=>({name:p.file.name,timingsMs:p.timings,reusedReading:p.reusedReading===true,readerVersion:p.readerVersion,readerModel:p.readerModel,verified:p.verified,issues:p.issues,notes:p.notes,inventory:p.inventory,independentInventory:p.independentInventory,groups:p.groups}))},null,2);const heading=document.createElement('h2');heading.textContent='Drawing pack checks';const summary=document.createElement('p');summary.textContent=job.pages.filter(p=>p.verified).length+' of '+job.pages.length+' pages checked · '+job.panels.length+' panels · '+(job.plan?.sheets?.length||0)+' sheets';const timingSummary=document.createElement('p');timingSummary.textContent=timingText(job);const pageList=document.createElement('ul');for(const page of job.pages){const row=document.createElement('li');row.textContent=page.file.name+': '+(page.verified?(page.reusedReading?'Checked — reused unchanged page':'Checked'):page.issues?.length?page.issues.join(' '):'Waiting for check');pageList.append(row);}const details=document.createElement('details'),detailTitle=document.createElement('summary');detailTitle.textContent='Detailed readings and measurements';details.append(detailTitle,content);done.textContent='Close report';done.onclick=()=>{view.close();view.remove();};view.append(heading,summary,timingSummary,pageList,details,done);document.body.append(view);view.showModal();};
  let working=false,paused=false,job=null,key=null;
  const render=()=>{exceptions.replaceChildren();for(const message of job?.exceptions||[]){const row=document.createElement('li');row.textContent=message;exceptions.append(row);}downloads.replaceChildren();for(const [i,sheet]of (job?.plan?.sheets||[]).entries()){const button=document.createElement('button');button.textContent='Download sheet '+((job.firstSheet||1)+i);button.onclick=()=>download(sheet.dxf,'application/dxf',projectName.replace(/[^a-z0-9_-]/gi,'_')+'-order-'+orderNumber.replace(/[^a-z0-9_-]/gi,'_')+'-sheet-'+((job.firstSheet||1)+i)+'.dxf');downloads.append(button);}};
  const setStatus=message=>{status.textContent=message;};
@@ -178,14 +216,14 @@ async function open({files,owner,request,projectName,orderNumber,canSendCnc,sync
     if(existing.length&&existing.some(p=>p.automationRunId!==job.id||!job.panels.some(saved=>saved.name===p.name&&specKey(saved.spec)===specKey(p.spec)))){job=null;throw Error('Start an empty CAD project to process this pack. Existing or manually edited panels will not be replaced.');}
    }
    if(!globalThis.navigator?.locks)throw Error('This browser cannot safely lock a pack run. Use a current browser to process automatically.');
-   await navigator.locks.request('panelstock-pack:'+key,{ifAvailable:true},async lock=>{if(!lock)throw Error('This pack is already processing in another tab.');const latest=await journal('readonly',key);if(latest)job=latest;await process(job,{request,planner,save:value=>journal('readwrite',key,value),sync:value=>{sync(value);render();report.disabled=false;},progress:setStatus,cancelled:()=>paused});});
+   await navigator.locks.request('panelstock-pack:'+key,{ifAvailable:true},async lock=>{if(!lock)throw Error('This pack is already processing in another tab.');const latest=await journal('readonly',key);if(latest)job=latest;await process(job,{request,planner,cache:owner?checkedCache(owner):null,save:value=>journal('readwrite',key,value),sync:value=>{sync(value);render();report.disabled=false;},progress:setStatus,cancelled:()=>paused});});
    setStatus(job.panels.length+' panel'+(job.panels.length===1?'':'s')+' sent to CNC on '+job.plan.sheets.length+' sheet'+(job.plan.sheets.length===1?'':'s')+'. Stock is deducted when cutting is completed.');
   }catch(error){status.classList.add('cad-error-message');setStatus(error.message||'Pack processing failed.');render();}
   finally{working=false;close.disabled=false;close.textContent='Close';start.disabled=!!job?.sent;start.textContent=job?.sent?'Sent to CNC':'Resume';if(!job)select.disabled=direction.disabled=coat.disabled=false;}
  };
  await finished;
 }
-const api={process,inventoryPanels,drawingIssues,firstSheet,ensureNotScheduled,open};
+const api={checkedPageKey,validCachedPage,timingText,process,inventoryPanels,drawingIssues,firstSheet,ensureNotScheduled,open};
 if(typeof module!=='undefined')module.exports=api;
 if(typeof window!=='undefined')window.PanelAutomaticPack=api;
 })();
