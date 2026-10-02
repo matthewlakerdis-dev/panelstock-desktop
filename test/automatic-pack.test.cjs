@@ -2,6 +2,23 @@ const {test}=require('node:test'),assert=require('node:assert/strict');
 const pack=require('../cad/automatic-pack.js');
 const makeDrawing=()=>({dxf:'drawing',svg:'<svg/>',validation:{closedCut:true,checks:['Closed cut'],measurements:[{status:'pass'}],warnings:['Test drawing: tooling width and depth remain unspecified.'],fabricationTags:[],stiffeners:[]}});
 const spec=()=>({panelId:'A',panelDirection:'right',packManufacturing:{material:'Aluminium',thickness:3,finish:'White'}});
+test('pack uses two reading slots, checks every page twice and serializes checkpoints',async()=>{
+ const j=job(),h=harness(j);j.pages=Array.from({length:4},(_,i)=>({...j.pages[0],file:new File(['page'],'page-'+i+'.pdf',{type:'application/pdf'})}));
+ let active=0,maxActive=0,saving=0,maxSaving=0;const seen=[],pending=[];
+ const request=async(path,body)=>{
+  assert.equal(path,'/cad/analyse');active++;maxActive=Math.max(maxActive,active);seen.push(body.filename+':'+body.mode);
+  await new Promise(resolve=>pending.push(resolve));active--;
+  return body.mode==='pack-read'?{inventory:{groups:[]}}:{verified:false,issues:['Needs review'],groups:[]};
+ };
+ let done=false;
+ const result=pack.process(j,{...h,request,save:async()=>{saving++;maxSaving=Math.max(maxSaving,saving);await new Promise(resolve=>setImmediate(resolve));saving--;}});
+ const checked=assert.rejects(result,/pages need attention/).finally(()=>{done=true;});
+ let firstBatch=true;
+ while(!done){await new Promise(resolve=>setImmediate(resolve));if(pending.length&&(!firstBatch||pending.length===2)){firstBatch=false;pending.splice(0).forEach(resolve=>resolve());}}
+ await checked;assert.equal(maxActive,2);assert.equal(maxSaving,1);assert.equal(seen.length,8);
+ for(let i=0;i<4;i++){assert.ok(seen.includes('page-'+i+'.pdf:pack-read'));assert.ok(seen.includes('page-'+i+'.pdf:pack-verify'));}
+ assert.equal(j.sent,undefined);
+});
 test('background reads poll the same saved job and preserve it across a lost connection',async()=>{
  const j=job(),h=harness(j);let dropped=false;const starts=[],polls=[];
  const request=async(path,body)=>{

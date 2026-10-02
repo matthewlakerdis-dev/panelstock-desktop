@@ -35,7 +35,8 @@ function ensureNotScheduled(data,panels,settings){
 }
 async function base64(file){const bytes=new Uint8Array(await file.arrayBuffer());let binary='';for(let i=0;i<bytes.length;i+=32768)binary+=String.fromCharCode(...bytes.subarray(i,i+32768));return btoa(binary);}
 async function process(job,{request,save,planner,progress=()=>{},sync=()=>{},cancelled=()=>false,wait=ms=>new Promise(resolve=>setTimeout(resolve,ms))}){
- const checkpoint=async()=>{await save(job);sync(job);};
+ let saving=Promise.resolve();
+ const checkpoint=()=>{saving=saving.then(async()=>{await save(job);sync(job);});return saving;};
  const checkCancel=()=>{if(cancelled())throw Error('Paused. Your completed steps are saved; use Resume to continue.');};
  const transientReadError=error=>/Drawing reader timed out|OpenAI rate limit reached|Cannot reach OpenAI or the request timed out|OpenAI service request failed \(HTTP 50[234]\)/i.test(error.message);
  const readPage=async (payload,page)=>{
@@ -45,7 +46,7 @@ async function process(job,{request,save,planner,progress=()=>{},sync=()=>{},can
    if(!page.readJobs[mode]){page.readJobs[mode]={id:crypto.randomUUID(),started:false};await checkpoint();}
    const ref=page.readJobs[mode];
    try{
-    for(let poll=0;poll<160;poll++){
+    for(let poll=0;poll<400;poll++){
      checkCancel();
      const value=await request('/cad/analyse',ref.started?{jobAction:'poll',jobId:ref.id}:{...payload,jobAction:'start',jobId:ref.id});
      if(!value.jobState)return value; // Compatible with the previous server during rollout.
@@ -53,8 +54,8 @@ async function process(job,{request,save,planner,progress=()=>{},sync=()=>{},can
      if(value.jobState==='failed'||value.jobState==='expired'){delete page.readJobs[mode];await checkpoint();throw Error(value.error);}
      if(!['running','busy'].includes(value.jobState))throw Error('Unexpected drawing job status. Resume to check this reading.');
      if(value.jobState==='running'&&!ref.started){ref.started=true;await checkpoint();}
-     progress(value.jobState==='busy'?'Drawing reader is busy with other pages. Waiting for a free slot…':'Reading this page in the background. '+(mode==='pack-verify'?'Checking the independent second reading…':'Extracting dimensions, folds and holes…'));
-     for(let second=0;second<5;second++){checkCancel();await wait(1000);}
+     progress('Page '+(job.pages.indexOf(page)+1)+' of '+job.pages.length+': '+(value.jobState==='busy'?'Drawing reader is busy with other pages. Waiting for a free slot…':'Reading this page in the background. '+(mode==='pack-verify'?'Checking the independent second reading…':'Extracting dimensions, folds and holes…')));
+     for(let second=0;second<2;second++){checkCancel();await wait(1000);}
     }
     throw Error('This reading is taking longer than expected. Resume to check its saved job.');
    }catch(error){
@@ -74,8 +75,8 @@ async function process(job,{request,save,planner,progress=()=>{},sync=()=>{},can
   job.readerRevision='independent-v2';await checkpoint();
  }
  job.exceptions=[];
- for(let i=0;i<job.pages.length;i++){
-  checkCancel();const page=job.pages[i];if(page.verified)continue;
+ const processPage=async i=>{
+  checkCancel();const page=job.pages[i];if(page.verified)return;
   progress('Reading and checking page '+(i+1)+' of '+job.pages.length+'…');
   try{
    const upload={filename:page.file.name,mime:page.file.type,data:await base64(page.file)};
@@ -88,7 +89,12 @@ async function process(job,{request,save,planner,progress=()=>{},sync=()=>{},can
    if(!page.verified&&!page.issues.length)page.issues=['Page verification did not pass.'];
   }catch(error){page.issues=[error.message||'Page could not be read.'];page.retryable=transientReadError(error)||!!Object.keys(page.readJobs||{}).length;}
   await checkpoint();
- }
+ };
+ // Match the converter's two reading slots; never fan out the whole pack.
+ let nextPage=0,stopped=false;
+ const worker=async()=>{try{while(!stopped&&nextPage<job.pages.length){const i=nextPage++;await processPage(i);}}catch(error){stopped=true;throw error;}};
+ const reads=await Promise.allSettled(Array.from({length:Math.min(2,job.pages.length)},worker));
+ const failed=reads.find(result=>result.status==='rejected');if(failed)throw failed.reason;
  checkCancel();
  job.exceptions=job.pages.flatMap((p,i)=>(p.issues||[]).map(issue=>'Page '+(i+1)+': '+issue));
  const extracted=inventoryPanels(job.pages,job.id),previous=new Map((job.panels||[]).map(p=>[normal(p.name),p]));
