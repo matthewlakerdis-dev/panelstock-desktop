@@ -2,10 +2,29 @@ const {test}=require('node:test'),assert=require('node:assert/strict');
 const pack=require('../cad/automatic-pack.js');
 const makeDrawing=()=>({dxf:'drawing',svg:'<svg/>',validation:{closedCut:true,checks:['Closed cut'],measurements:[{status:'pass'}],warnings:['Test drawing: tooling width and depth remain unspecified.'],fabricationTags:[],stiffeners:[]}});
 const spec=()=>({panelId:'A',panelDirection:'right',packManufacturing:{material:'Aluminium',thickness:3,finish:'White'}});
+test('approved CAD skips AI reads and regeneration but still checks stock and journals scheduling',async()=>{
+ const j=job();j.pages=[];j.approvedDxf=new File(['dxf'],'approved.dxf');j.settings.policy={missingDirection:'non-directional',thickness:3};j.settings.rawFinish='Milled';const h=harness(j);
+ const request=async(path,body)=>{
+  if(path==='/cad/analyse'){assert.equal(body.mode,'approved-dxf');return {panels:[{name:'A',quantity:1,spec:spec(),result:makeDrawing(),reviewed:true}]};}
+  return h.request(path,body);
+ };
+ await pack.process(j,{...h,request});assert.equal(j.sent,true);assert.equal(j.approvedImported,true);
+ assert.equal(h.calls.filter(c=>c.path==='/cad/generate'&&!c.body.sheetPlan).length,0);
+ assert.ok(h.calls.some(c=>c.path==='/data'));assert.ok(h.saves.some(s=>s.packet&&!s.sent));
+});
+test('whole pack reconciles cover quantities and cross-page references',()=>{
+ const cover={verified:true,groups:[],inventory:{pageKind:'cover',declaredPackPageCount:3,listedPanels:[{id:'Template 1',quantity:1},{id:'Template 3',quantity:1}]}};
+ const drawing=id=>({verified:true,groups:[{panels:[{id,quantity:1}]}],inventory:{referencedPanelIds:['Template 1','Template 3']}});
+ const pages=[cover,drawing('Template 1'),drawing('Template 3')];assert.deepEqual(pack.packContextIssues(pages),[]);
+ const missing=structuredClone(pages);missing[2].verified=false;assert.match(pack.packContextIssues(missing).join(' '),/Template 3 has no checked drawing/);
+ const quantity=structuredClone(pages);quantity[1].groups[0].panels[0].quantity=2;assert.match(pack.packContextIssues(quantity).join(' '),/quantity differs/);
+ const shared=structuredClone(pages);shared[0].inventory.sharedManufacturingRequirements=['Use 75mm staggered tags.'];assert.match(pack.packContextIssues(shared).join(' '),/needs mapping/);
+ assert.match(pack.packContextIssues(pages.slice(0,2)).join(' '),/3 pages, but 2/);
+});
 test('checked page cache skips AI reads but still generates and checks stock before scheduling',async()=>{
  const values=new Map(),cache={get:async key=>values.get(key),put:async(key,value)=>values.set(key,structuredClone(value))};
  const first=job(),h=harness(first);let clock=0;
- const request=async(path,body)=>{const result=await h.request(path,body);if(path==='/cad/analyse')return {...result,readerVersion:'independent-v2',independentInventory:{groups:[]}};return result;};
+ const request=async(path,body)=>{const result=await h.request(path,body);if(path==='/cad/analyse')return {...result,readerVersion:'pack-context-v3',independentInventory:{groups:[]}};return result;};
  await pack.process(first,{...h,request,cache,now:()=>clock+=100});
  assert.equal(values.size,1);assert.ok(first.timings.Reading>0);assert.ok(first.timings['Independent checks']>0);assert.ok(first.timings['Drawing generation']>0);assert.ok(first.timings.Nesting>0);assert.ok(first.timings.Scheduling>0);
  const next=job(),second=harness(next);await pack.process(next,{...second,cache});
@@ -19,7 +38,7 @@ test('cache keys change with source bytes and material or direction policy',asyn
  assert.notEqual(await pack.checkedPageKey({...j.pages[0],file:new File(['changed'],'page.pdf',{type:'application/pdf'})},j.settings),key);
 });
 test('expired, failed or incomplete cached readings are never trusted',async()=>{
- const valid={verified:true,readerVersion:'independent-v2',inventory:{},independentInventory:{},groups:[{}],issues:[],savedAt:Date.now()};
+ const valid={verified:true,readerVersion:'pack-context-v3',inventory:{},independentInventory:{},groups:[{}],issues:[],savedAt:Date.now()};
  assert.equal(pack.validCachedPage(valid),true);
  for(const change of [{savedAt:Date.now()-8*86400000},{verified:false},{issues:['Unclear']},{independentInventory:null},{readerVersion:'old'},{groups:[]}])assert.equal(pack.validCachedPage({...valid,...change}),false);
  const j=job(),h=harness(j);await pack.process(j,{...h,cache:{get:async()=>{throw Error('Storage unavailable');},put:async()=>{throw Error('Storage unavailable');}}});assert.equal(j.sent,true);assert.equal(h.calls.filter(c=>c.path==='/cad/analyse').length,2);
@@ -129,7 +148,7 @@ test('pause during rate-limit backoff prevents another request',async()=>{
 
 test('reader upgrades invalidate unsent cached approvals but preserve submitted packets',async()=>{
  const j=job(),h=harness(j);j.pages[0].verified=true;j.pages[0].groups=[{panels:[{id:'OLD',quantity:1}],spec:spec()}];
- await pack.process(j,h);assert.equal(j.readerRevision,'independent-v2');assert.deepEqual(j.panels.map(p=>p.name),['A','B']);assert.ok(h.calls.some(c=>c.body?.mode==='pack-read'));
+ await pack.process(j,h);assert.equal(j.readerRevision,'pack-context-v3');assert.deepEqual(j.panels.map(p=>p.name),['A','B']);assert.ok(h.calls.some(c=>c.body?.mode==='pack-read'));
 });
 
 test('temporary reader timeout retries without resubmitting CNC mutations',async()=>{
