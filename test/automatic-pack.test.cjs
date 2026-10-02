@@ -2,6 +2,26 @@ const {test}=require('node:test'),assert=require('node:assert/strict');
 const pack=require('../cad/automatic-pack.js');
 const makeDrawing=()=>({dxf:'drawing',svg:'<svg/>',validation:{closedCut:true,checks:['Closed cut'],measurements:[{status:'pass'}],warnings:['Test drawing: tooling width and depth remain unspecified.'],fabricationTags:[],stiffeners:[]}});
 const spec=()=>({panelId:'A',panelDirection:'right',packManufacturing:{material:'Aluminium',thickness:3,finish:'White'}});
+test('background reads poll the same saved job and preserve it across a lost connection',async()=>{
+ const j=job(),h=harness(j);let dropped=false;const starts=[],polls=[];
+ const request=async(path,body)=>{
+  if(path!=='/cad/analyse')return h.request(path,body);
+  if(body.jobAction==='start'){starts.push(structuredClone(body));return {jobState:'running'};}
+  polls.push(body.jobId);
+  if(!dropped){dropped=true;throw Error('Connection lost');}
+  const original=starts.find(s=>s.jobId===body.jobId);assert.ok(original);
+  return {jobState:'completed',result:await h.request(path,original)};
+ };
+ await assert.rejects(pack.process(j,{...h,request,wait:async()=>{}}),/pages need attention/);
+ assert.equal(starts.length,1);assert.equal(j.pages[0].readJobs['pack-read'].started,true);
+ await pack.process(j,{...h,request,wait:async()=>{}});
+ assert.equal(starts.length,2);assert.equal(polls[0],polls[1]);assert.equal(j.sent,true);
+});
+test('pausing a background read preserves its identifier for resume',async()=>{
+ const j=job(),h=harness(j);let paused=false;
+ await assert.rejects(pack.process(j,{...h,cancelled:()=>paused,wait:async()=>{paused=true;},request:async()=>({jobState:'running'})}),/Paused/);
+ assert.ok(j.pages[0].readJobs['pack-read'].id);assert.equal(j.sent,undefined);
+});
 function job(){const file=new File(['page'],'page.pdf',{type:'application/pdf'});return {id:'run',settings:{projectName:'Notre Dame',orderNumber:'11',stockKey:'aluminium-3-milled',powderCoat:true,policy:{}},pages:[{file,original:file}],panels:[],exceptions:[]};}
 function harness(j){
  const calls=[],saves=[];let failMutation=false,inventoryFailure=false,unplaced=[];

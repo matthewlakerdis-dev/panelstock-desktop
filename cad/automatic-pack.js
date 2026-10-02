@@ -37,8 +37,33 @@ async function base64(file){const bytes=new Uint8Array(await file.arrayBuffer())
 async function process(job,{request,save,planner,progress=()=>{},sync=()=>{},cancelled=()=>false,wait=ms=>new Promise(resolve=>setTimeout(resolve,ms))}){
  const checkpoint=async()=>{await save(job);sync(job);};
  const checkCancel=()=>{if(cancelled())throw Error('Paused. Your completed steps are saved; use Resume to continue.');};
- const transientReadError=error=>/OpenAI rate limit reached|Cannot reach OpenAI or the request timed out|OpenAI service request failed \(HTTP 50[234]\)/i.test(error.message);
- const readPage=async payload=>{for(let attempt=0;;attempt++){checkCancel();try{return await request('/cad/analyse',payload);}catch(error){if(!transientReadError(error)||attempt>=3)throw error;const seconds=[20,40,60][attempt];progress('Drawing reader temporarily unavailable. Retrying this page in '+seconds+' seconds…');for(let elapsed=0;elapsed<seconds;elapsed++){checkCancel();await wait(1000);}}}};
+ const transientReadError=error=>/Drawing reader timed out|OpenAI rate limit reached|Cannot reach OpenAI or the request timed out|OpenAI service request failed \(HTTP 50[234]\)/i.test(error.message);
+ const readPage=async (payload,page)=>{
+  page.readJobs||={};const mode=payload.mode;
+  for(let attempt=0;;attempt++){
+   checkCancel();
+   if(!page.readJobs[mode]){page.readJobs[mode]={id:crypto.randomUUID(),started:false};await checkpoint();}
+   const ref=page.readJobs[mode];
+   try{
+    for(let poll=0;poll<160;poll++){
+     checkCancel();
+     const value=await request('/cad/analyse',ref.started?{jobAction:'poll',jobId:ref.id}:{...payload,jobAction:'start',jobId:ref.id});
+     if(!value.jobState)return value; // Compatible with the previous server during rollout.
+     if(value.jobState==='completed'){delete page.readJobs[mode];return value.result;}
+     if(value.jobState==='failed'||value.jobState==='expired'){delete page.readJobs[mode];await checkpoint();throw Error(value.error);}
+     if(!['running','busy'].includes(value.jobState))throw Error('Unexpected drawing job status. Resume to check this reading.');
+     if(value.jobState==='running'&&!ref.started){ref.started=true;await checkpoint();}
+     progress(value.jobState==='busy'?'Drawing reader is busy with other pages. Waiting for a free slot…':'Reading this page in the background. '+(mode==='pack-verify'?'Checking the independent second reading…':'Extracting dimensions, folds and holes…'));
+     for(let second=0;second<5;second++){checkCancel();await wait(1000);}
+    }
+    throw Error('This reading is taking longer than expected. Resume to check its saved job.');
+   }catch(error){
+    if(!transientReadError(error)||attempt>=3)throw error;
+    const seconds=[20,40,60][attempt];progress(error.message+' Retrying in '+seconds+' seconds…');
+    for(let elapsed=0;elapsed<seconds;elapsed++){checkCancel();await wait(1000);}
+   }
+  }
+ };
  if(job.sent){sync(job);progress('Already sent to the CNC tracker.');return job;}
  const submit=async()=>{await checkpoint();try{await request('/mutations',job.packet);}catch(error){if([400,403,409,422].includes(error.status)){delete job.packet;await checkpoint();}throw error;}job.sent=true;await checkpoint();};
  // A saved submission is always retried verbatim, including its mutation ID.
@@ -55,15 +80,16 @@ async function process(job,{request,save,planner,progress=()=>{},sync=()=>{},can
   try{
    const upload={filename:page.file.name,mime:page.file.type,data:await base64(page.file)};
    if(page.issues?.length){if(!page.retryable)delete page.inventory;delete page.independentInventory;page.groups=[];page.notes=[];page.issues=[];page.retryable=false;}
-   if(!page.inventory){const reading=await readPage({...upload,mode:'pack-read',policy:job.settings.policy});page.inventory=reading.inventory;page.readerVersion=reading.readerVersion;page.readerModel=reading.readerModel;if(reading.sourceImage?.startsWith('data:image/png;base64,')&&reading.sourceImage.length<12*1024*1024){const bytes=Uint8Array.from(atob(reading.sourceImage.split(',')[1]),c=>c.charCodeAt(0));page.previewFile=new File([bytes],page.file.name.replace(/\.[^.]+$/,'')+'.png',{type:'image/png'});}await checkpoint();}
+   if(!page.inventory){const reading=await readPage({...upload,mode:'pack-read',policy:job.settings.policy},page);page.inventory=reading.inventory;page.readerVersion=reading.readerVersion;page.readerModel=reading.readerModel;if(reading.sourceImage?.startsWith('data:image/png;base64,')&&reading.sourceImage.length<12*1024*1024){const bytes=Uint8Array.from(atob(reading.sourceImage.split(',')[1]),c=>c.charCodeAt(0));page.previewFile=new File([bytes],page.file.name.replace(/\.[^.]+$/,'')+'.png',{type:'image/png'});}await checkpoint();}
    checkCancel();
-   const checked=await readPage({...upload,mode:'pack-verify',inventory:page.inventory,policy:job.settings.policy});
+   const checked=await readPage({...upload,mode:'pack-verify',inventory:page.inventory,policy:job.settings.policy},page);
    page.independentInventory=checked.independentInventory;page.notes=checked.notes||[];
    page.issues=checked.issues||[];page.verified=checked.verified===true&&!page.issues.length;page.groups=checked.groups||[];
    if(!page.verified&&!page.issues.length)page.issues=['Page verification did not pass.'];
-  }catch(error){page.issues=[error.message||'Page could not be read.'];page.retryable=transientReadError(error);}
+  }catch(error){page.issues=[error.message||'Page could not be read.'];page.retryable=transientReadError(error)||!!Object.keys(page.readJobs||{}).length;}
   await checkpoint();
  }
+ checkCancel();
  job.exceptions=job.pages.flatMap((p,i)=>(p.issues||[]).map(issue=>'Page '+(i+1)+': '+issue));
  const extracted=inventoryPanels(job.pages,job.id),previous=new Map((job.panels||[]).map(p=>[normal(p.name),p]));
  job.panels=extracted.map(p=>{const old=previous.get(normal(p.name));return old&&specKey(old.spec)===specKey(p.spec)?old:p;});
