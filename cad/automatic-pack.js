@@ -49,7 +49,7 @@ async function process(job,{request,save,planner,progress=()=>{},sync=()=>{},can
   try{
    const upload={filename:page.file.name,mime:page.file.type,data:await base64(page.file)};
    if(page.issues?.length){delete page.inventory;page.issues=[];}
-   if(!page.inventory){const reading=await readPage({...upload,mode:'pack-read',policy:job.settings.policy});page.inventory=reading.inventory;if(reading.sourceImage?.startsWith('data:image/png;base64,')&&reading.sourceImage.length<12*1024*1024){const bytes=Uint8Array.from(atob(reading.sourceImage.split(',')[1]),c=>c.charCodeAt(0));page.previewFile=new File([bytes],page.file.name.replace(/\.[^.]+$/,'')+'.png',{type:'image/png'});}await checkpoint();}
+   if(!page.inventory){const reading=await readPage({...upload,mode:'pack-read',policy:job.settings.policy});page.inventory=reading.inventory;page.readerVersion=reading.readerVersion;page.readerModel=reading.readerModel;if(reading.sourceImage?.startsWith('data:image/png;base64,')&&reading.sourceImage.length<12*1024*1024){const bytes=Uint8Array.from(atob(reading.sourceImage.split(',')[1]),c=>c.charCodeAt(0));page.previewFile=new File([bytes],page.file.name.replace(/\.[^.]+$/,'')+'.png',{type:'image/png'});}await checkpoint();}
    checkCancel();
    const checked=await readPage({...upload,mode:'pack-verify',inventory:page.inventory,policy:job.settings.policy});
    page.independentInventory=checked.independentInventory;page.notes=checked.notes||[];
@@ -121,7 +121,7 @@ async function open({files,owner,request,projectName,orderNumber,canSendCnc,sync
  const exceptions=document.createElement('ul'),downloads=document.createElement('div');
  body.append(label,directionLabel,coatLabel,allowance,status,exceptions,downloads);
  const footer=document.createElement('footer'),start=document.createElement('button'),close=document.createElement('button');start.textContent='Process drawing pack';start.className='primary';close.textContent='Close';footer.append(start,close);dialog.append(header,body,footer);document.body.append(dialog);dialog.showModal();
- const report=document.createElement('button');report.textContent='Download check report';report.disabled=true;footer.prepend(report);report.onclick=()=>download(JSON.stringify({settings:job.settings,sent:job.sent,exceptions:job.exceptions,pages:job.pages.map(p=>({name:p.file.name,verified:p.verified,issues:p.issues,notes:p.notes,inventory:p.inventory,independentInventory:p.independentInventory,groups:p.groups}))},null,2),'application/json','drawing-pack-check.json');
+ const report=document.createElement('button');report.textContent='View check report';report.disabled=true;footer.prepend(report);report.onclick=()=>{const view=document.createElement('dialog'),content=document.createElement('pre'),done=document.createElement('button');view.style.cssText='width:min(960px,95vw);max-height:90vh';content.style.cssText='white-space:pre-wrap;max-height:70vh;overflow:auto';content.textContent=JSON.stringify({settings:job.settings,sent:job.sent,exceptions:job.exceptions,pages:job.pages.map(p=>({name:p.file.name,readerVersion:p.readerVersion,readerModel:p.readerModel,verified:p.verified,issues:p.issues,notes:p.notes,inventory:p.inventory,independentInventory:p.independentInventory,groups:p.groups}))},null,2);done.textContent='Close report';done.onclick=()=>{view.close();view.remove();};view.append(content,done);document.body.append(view);view.showModal();};
  let working=false,paused=false,job=null,key=null;
  const render=()=>{exceptions.replaceChildren();for(const message of job?.exceptions||[]){const row=document.createElement('li');row.textContent=message;exceptions.append(row);}downloads.replaceChildren();for(const [i,sheet]of (job?.plan?.sheets||[]).entries()){const button=document.createElement('button');button.textContent='Download sheet '+((job.firstSheet||1)+i);button.onclick=()=>download(sheet.dxf,'application/dxf',projectName.replace(/[^a-z0-9_-]/gi,'_')+'-order-'+orderNumber.replace(/[^a-z0-9_-]/gi,'_')+'-sheet-'+((job.firstSheet||1)+i)+'.dxf');downloads.append(button);}};
  const setStatus=message=>{status.textContent=message;};
@@ -151,3 +151,4 @@ const api={process,inventoryPanels,drawingIssues,firstSheet,ensureNotScheduled,o
 if(typeof module!=='undefined')module.exports=api;
 if(typeof window!=='undefined')window.PanelAutomaticPack=api;
 })();
+
