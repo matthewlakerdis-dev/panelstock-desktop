@@ -284,7 +284,14 @@ async function open({files,owner,request,projectName,orderNumber,canSendCnc,sync
  };
  await finished;
 }
+async function ensureCopilotSupport(request){
+ let capability;
+ try{capability=await request('/cad/capabilities');}
+ catch(error){throw Error('Manual Copilot is not available on this server yet. Update the backend before continuing. '+(error.message||''));}
+ if(capability?.manualCopilot!=='manual-copilot-v1')throw Error('This server does not support the manual Copilot handoff yet. No drawing was sent for AI reading.');
+}
 async function copilotHandoff({payload,page,checkpoint,request,download,pageNumber,cancelled}){
+ await ensureCopilotSupport(request);
  const reading=payload.mode==='pack-read'?1:2;
  const upload={filename:payload.filename,mime:payload.mime,data:payload.data,policy:payload.policy};
  const prepared=await request('/cad/analyse',{...upload,mode:'copilot-prepare',reading});
@@ -325,7 +332,7 @@ async function copilotHandoff({payload,page,checkpoint,request,download,pageNumb
   };
  });
 }
-const api={packContextIssues,checkedPageKey,validCachedPage,timingText,process,inventoryPanels,drawingIssues,firstSheet,ensureNotScheduled,open};
+const api={ensureCopilotSupport,packContextIssues,checkedPageKey,validCachedPage,timingText,process,inventoryPanels,drawingIssues,firstSheet,ensureNotScheduled,open};
 if(typeof module!=='undefined')module.exports=api;
 if(typeof window!=='undefined')window.PanelAutomaticPack=api;
 })();

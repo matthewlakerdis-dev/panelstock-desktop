@@ -208,3 +208,12 @@ test('manual mismatch cannot generate or submit',async()=>{
  await assert.rejects(pack.process(j,{...h,manualRead:async payload=>payload.mode==='pack-read'?{inventory:{},readerVersion:'pack-dimensions-v8'}:{verified:false,issues:['Endpoint disagreement'],groups:[]}}),/pages need attention/);
  assert.equal(h.calls.length,0);assert.ok(!j.readyForReview);assert.ok(!j.sent);
 });
+
+test('Copilot capability check fails closed on old or unavailable backends',async()=>{
+ for(const result of [{ok:true},{manualCopilot:'old'},null]){
+  const calls=[];await assert.rejects(pack.ensureCopilotSupport(async(path,body)=>{calls.push({path,body});return result;}),/does not support/);
+  assert.deepEqual(calls,[{path:'/cad/capabilities',body:undefined}]);
+ }
+ await assert.rejects(pack.ensureCopilotSupport(async()=>{throw Error('Not found');}),/not available/);
+ await pack.ensureCopilotSupport(async()=>({manualCopilot:'manual-copilot-v1'}));
+});
