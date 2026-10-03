@@ -56,7 +56,9 @@ function ensureNotScheduled(data,panels,settings){
  if((data.cncPanels||[]).some(p=>normal(p.jobReference)===normal(settings.projectName)&&normal(p.orderNumber)===normal(settings.orderNumber)&&names.has(normal(p.panelNumber))))throw Error('Some panels from this order are already in the CNC tracker. Nothing was added.');
 }
 async function base64(file){const bytes=new Uint8Array(await file.arrayBuffer());let binary='';for(let i=0;i<bytes.length;i+=32768)binary+=String.fromCharCode(...bytes.subarray(i,i+32768));return btoa(binary);}
-async function process(job,{request,save,planner,progress=()=>{},sync=()=>{},cancelled=()=>false,wait=ms=>new Promise(resolve=>setTimeout(resolve,ms)),cache=null,now=()=>performance.now()}){
+async function process(job,{request,save,planner,progress=()=>{},sync=()=>{},cancelled=()=>false,wait=ms=>new Promise(resolve=>setTimeout(resolve,ms)),cache=null,manualRead=null,now=()=>performance.now()}){
+ const manual=job.settings.reader==='copilot-manual';
+ if(manual)cache=null; // User transfers are never replaced by cached AI readings.
  job.timings||={};
  const timed=async(stage,action,page)=>{const started=now();try{return await action();}finally{const elapsed=Math.max(0,now()-started);job.timings[stage]=(job.timings[stage]||0)+elapsed;if(page){page.timings||={};page.timings[stage]=(page.timings[stage]||0)+elapsed;}}};
  let saving=Promise.resolve();
@@ -66,6 +68,10 @@ async function process(job,{request,save,planner,progress=()=>{},sync=()=>{},can
  const providerLimit=error=>/OpenAI rate limit reached|OpenAI API quota is exhausted/i.test(error.message);
  const transientReadError=error=>/Drawing reader timed out|OpenAI rate limit reached|Cannot reach OpenAI or the request timed out|OpenAI service request failed \(HTTP 50[234]\)/i.test(error.message);
  const readPage=async (payload,page)=>{
+  if(manual){
+   if(typeof manualRead!=='function')throw Error('Open the Copilot handoff to supply both readings.');
+   try{return await manualRead(payload,page,checkpoint);}catch(error){providerPause=error;throw error;}
+  }
   page.readJobs||={};const mode=payload.mode;
   for(let attempt=0;;attempt++){
    checkCancel();
@@ -119,6 +125,7 @@ async function process(job,{request,save,planner,progress=()=>{},sync=()=>{},can
  job.exceptions=[];
  const processPage=async i=>{
   checkCancel();const page=job.pages[i];if(page.verified)return;
+  if(manual){job.readyForReview=false;job.manualReviewAccepted=false;}
   progress('Reading and checking page '+(i+1)+' of '+job.pages.length+'…');
   try{
    const cacheKey=cache?await checkedPageKey(page,job.settings):null;
@@ -142,13 +149,13 @@ async function process(job,{request,save,planner,progress=()=>{},sync=()=>{},can
     const saved={savedAt:Date.now()};for(const field of checkedFields)if(page[field]!==undefined)saved[field]=structuredClone(page[field]);
     try{await cache.put(cacheKey,saved);}catch{} // Optional optimisation; journal remains authoritative.
    }
-  }catch(error){page.issues=[error.message||'Page could not be read.'];page.retryable=providerLimit(error)||transientReadError(error)||!!Object.keys(page.readJobs||{}).length;}
+  }catch(error){page.issues=[error.message||'Page could not be read.'];page.retryable=manual||providerLimit(error)||transientReadError(error)||!!Object.keys(page.readJobs||{}).length;}
   await checkpoint();
  };
  // Match the converter's two reading slots; never fan out the whole pack.
  let nextPage=0,stopped=false;
  const worker=async()=>{try{while(!stopped&&nextPage<job.pages.length){const i=nextPage++;await processPage(i);}}catch(error){stopped=true;throw error;}};
- const reads=await Promise.allSettled(Array.from({length:Math.min(2,job.pages.length)},worker));
+ const reads=await Promise.allSettled(Array.from({length:Math.min(manual?1:2,job.pages.length)},worker));
  const failed=reads.find(result=>result.status==='rejected');if(failed)throw failed.reason;
  checkCancel();
  job.exceptions=[...job.pages.flatMap((p,i)=>(p.issues||[]).map(issue=>'Page '+(i+1)+': '+issue)),...packContextIssues(job.pages)];
@@ -164,11 +171,13 @@ async function process(job,{request,save,planner,progress=()=>{},sync=()=>{},can
   try{
    panel.result=await timed('Drawing generation',()=>request('/cad/generate',{...panel.spec,reviewed:true}));
    const issues=drawingIssues(panel.result);if(issues.length)throw Error(issues.join(' '));
-   panel.generatedSpec=specKey(panel.spec);panel.reviewed=true;panel.error=null;panel.message='Automatically read and checked against the source page.';
+   panel.generatedSpec=specKey(panel.spec);panel.reviewed=!manual;panel.error=null;panel.message=manual?'Two manually supplied Copilot readings agree. Review against the original drawing.':'Automatically read and checked against the source page.';
   }catch(error){panel.result=null;panel.reviewed=false;panel.error=error.message;job.exceptions.push(panel.name+': '+error.message);}
   await checkpoint();
  }
  if(job.exceptions.length)throw Error('Some drawings need attention. No panels have been scheduled.');
+ if(manual&&!job.manualReviewAccepted){job.readyForReview=true;await checkpoint();progress('Drawings are ready. Review them against the original pages before planning or CNC submission.');return job;}
+ if(manual){for(const panel of job.panels)panel.reviewed=true;await checkpoint();}
  checkCancel();progress('Checking stock and arranging the panels…');
  const data=await request('/data'),stock=stockFor(data,job.settings,planner);
  ensureNotScheduled(data,job.panels,job.settings);
@@ -239,21 +248,27 @@ async function open({files,owner,request,projectName,orderNumber,canSendCnc,sync
  const allowance=document.createElement('p');allowance.textContent='Fold allowance: 1 mm per side, using the existing drawing rules. Written dimensions stay unchanged.';
  const status=document.createElement('p');status.setAttribute('role','status');status.setAttribute('aria-live','polite');
  const exceptions=document.createElement('ul'),downloads=document.createElement('div');
- body.append(label,directionLabel,coatLabel,allowance,approvedLabel,approvedNote,status,exceptions,downloads);
+ const readerLabel=document.createElement('label');readerLabel.textContent='Drawing reader';
+ const reader=document.createElement('select');reader.append(new Option('Microsoft 365 Copilot — manual handoff','copilot-manual'),new Option('OpenAI — automatic reading','openai'));readerLabel.append(reader);
+ const readerNote=document.createElement('p');readerNote.textContent='Copilot: download each source image and prompt, use two separate new chats, then paste the results here. Review the drawings before planning and sending to CNC. No Microsoft admin setup is needed.';
+ const reviewLabel=document.createElement('label'),review=document.createElement('input');review.type='checkbox';reviewLabel.style.cssText='display:none;gap:10px;align-items:center';review.style.cssText='width:18px;height:18px;min-height:18px';reviewLabel.append(review,document.createTextNode('I have checked every generated drawing against the original pages, including amendments and fold allowances.'));reviewLabel.hidden=true;
+ body.append(readerLabel,readerNote,label,directionLabel,coatLabel,allowance,approvedLabel,approvedNote,status,exceptions,downloads,reviewLabel);
  const footer=document.createElement('footer'),start=document.createElement('button'),close=document.createElement('button');start.textContent='Process drawing pack';start.className='primary';close.textContent='Close';footer.append(start,close);dialog.append(header,body,footer);document.body.append(dialog);dialog.showModal();
  const report=document.createElement('button');report.textContent='View check report';report.disabled=true;footer.prepend(report);report.onclick=()=>{const view=document.createElement('dialog'),content=document.createElement('pre'),done=document.createElement('button');view.style.cssText='width:min(960px,95vw);max-height:90vh';content.style.cssText='white-space:pre-wrap;max-height:70vh;overflow:auto';content.textContent=JSON.stringify({settings:job.settings,approvedCad:job.approvedDxf?.name||null,timingsMs:job.timings,sent:job.sent,exceptions:job.exceptions,drawings:(job.panels||[]).map(p=>({name:p.name,quantity:p.quantity,reviewed:p.reviewed,error:p.error,checks:drawingIssues(p.result),validation:p.result?.validation})),plan:job.plan?{gap:job.plan.gap,stockChanged:job.plan.stockChanged,unplaced:job.plan.unplaced,sheets:job.plan.sheets.map(s=>({number:s.number,stock:s.stock,panels:s.panels,utilisation:s.utilisation}))}:null,pages:job.pages.map(p=>({name:p.file.name,timingsMs:p.timings,reusedReading:p.reusedReading===true,readerVersion:p.readerVersion,readerModel:p.readerModel,verified:p.verified,issues:p.issues,notes:p.notes,inventory:p.inventory,independentInventory:p.independentInventory,groups:p.groups}))},null,2);const heading=document.createElement('h2');heading.textContent='Drawing pack checks';const summary=document.createElement('p');summary.textContent=job.approvedDxf?job.panels.length+' approved CAD panels · '+(job.plan?.sheets?.length||0)+' sheets':job.pages.filter(p=>p.verified).length+' of '+job.pages.length+' pages checked · '+job.panels.length+' panels · '+(job.plan?.sheets?.length||0)+' sheets';const timingSummary=document.createElement('p');timingSummary.textContent=timingText(job);const pageList=document.createElement('ul');for(const page of job.pages){const row=document.createElement('li');row.textContent=page.file.name+': '+(page.verified?(page.reusedReading?'Checked — reused unchanged page':'Checked'):page.issues?.length?page.issues.join(' '):'Waiting for check');pageList.append(row);}const details=document.createElement('details'),detailTitle=document.createElement('summary');detailTitle.textContent='Detailed readings and measurements';details.append(detailTitle,content);done.textContent='Close report';done.onclick=()=>{view.close();view.remove();};view.append(heading,summary,timingSummary,pageList,details,done);document.body.append(view);view.showModal();};
  let working=false,paused=false,job=null,key=null;
- const render=()=>{exceptions.replaceChildren();for(const message of job?.exceptions||[]){const row=document.createElement('li');row.textContent=message;exceptions.append(row);}downloads.replaceChildren();for(const [i,sheet]of (job?.plan?.sheets||[]).entries()){const button=document.createElement('button');button.textContent='Download sheet '+((job.firstSheet||1)+i);button.onclick=()=>download(sheet.dxf,'application/dxf',projectName.replace(/[^a-z0-9_-]/gi,'_')+'-order-'+orderNumber.replace(/[^a-z0-9_-]/gi,'_')+'-sheet-'+((job.firstSheet||1)+i)+'.dxf');downloads.append(button);}};
+ const render=()=>{reviewLabel.hidden=!(job?.readyForReview&&!job?.sent);reviewLabel.style.display=reviewLabel.hidden?'none':'flex';exceptions.replaceChildren();for(const message of job?.exceptions||[]){const row=document.createElement('li');row.textContent=message;exceptions.append(row);}downloads.replaceChildren();if(job?.settings.reader==='copilot-manual')for(const panel of job.panels||[]){if(!panel.result)continue;const button=document.createElement('button');button.textContent='Review '+panel.name;button.onclick=()=>{const view=document.createElement('dialog');view.style.cssText='width:min(1000px,95vw);max-height:90vh';const title=document.createElement('h2');title.textContent=panel.name+' — compare with original';const drawing=document.createElement('img'),original=document.createElement('img');const url=URL.createObjectURL(new Blob([panel.result.svg],{type:'image/svg+xml'})),source=URL.createObjectURL(panel.file);drawing.src=url;drawing.alt='Generated drawing';original.src=source;original.alt='Original source page';for(const img of [original,drawing])img.style.cssText='display:block;max-width:100%;max-height:65vh;object-fit:contain';const done=document.createElement('button');done.textContent='Close review';done.onclick=()=>view.close();view.onclose=()=>{URL.revokeObjectURL(url);URL.revokeObjectURL(source);view.remove();};view.append(title,original,drawing,done);document.body.append(view);view.showModal();};downloads.append(button);}for(const [i,sheet]of (job?.plan?.sheets||[]).entries()){const button=document.createElement('button');button.textContent='Download sheet '+((job.firstSheet||1)+i);button.onclick=()=>download(sheet.dxf,'application/dxf',projectName.replace(/[^a-z0-9_-]/gi,'_')+'-order-'+orderNumber.replace(/[^a-z0-9_-]/gi,'_')+'-sheet-'+((job.firstSheet||1)+i)+'.dxf');downloads.append(button);}};
  const setStatus=message=>{status.textContent=message;};
  const finished=new Promise(resolve=>{close.onclick=()=>{if(working){paused=true;close.disabled=true;setStatus('Pausing after the current request…');return;}dialog.close();dialog.remove();resolve();};dialog.oncancel=e=>{e.preventDefault();close.click();};});
  start.onclick=async()=>{
   if(working||job?.sent)return;
   if(!select.value){setStatus('Choose the raw stock to use for this pack.');return;}
-  working=true;paused=false;status.classList.remove('cad-error-message');start.disabled=true;close.textContent='Pause';select.disabled=direction.disabled=coat.disabled=approvedFile.disabled=true;
+  if(job?.readyForReview&&!review.checked){setStatus('Review each drawing and tick the confirmation before planning and sending to CNC.');return;}
+  if(job?.readyForReview)job.manualReviewAccepted=true;
+  working=true;paused=false;status.classList.remove('cad-error-message');start.disabled=true;close.textContent='Pause';reader.disabled=select.disabled=direction.disabled=coat.disabled=approvedFile.disabled=true;
   try{
    if(!job){
     const approved=approvedFile.files?.[0];if(approved&&approved.size>6*1024*1024)throw Error('Approved DXF must be no larger than 6 MB.');
-    const item=groups.get(select.value),settings={projectName,orderNumber,stockKey:select.value,rawFinish:item.color,approvedDxfHash:approved?await hash(await approved.arrayBuffer()):null,powderCoat:coat.checked,policy:{thickness:item.thickness,foldAllowance:'current-1mm',missingDirection:direction.value}};
+    const item=groups.get(select.value),settings={reader:approved?'approved-dxf':reader.value,projectName,orderNumber,stockKey:select.value,rawFinish:item.color,approvedDxfHash:approved?await hash(await approved.arrayBuffer()):null,powderCoat:coat.checked,policy:{thickness:item.thickness,foldAllowance:'current-1mm',missingDirection:direction.value}};
     const hashes=[];for(const file of files)hashes.push(await hash(await file.arrayBuffer()));
     key=owner+'|'+await hash(new TextEncoder().encode(JSON.stringify({hashes,settings})));
     job=await journal('readonly',key);
@@ -261,14 +276,63 @@ async function open({files,owner,request,projectName,orderNumber,canSendCnc,sync
     if(existing.length&&existing.some(p=>p.automationRunId!==job.id||!job.panels.some(saved=>saved.name===p.name&&specKey(saved.spec)===specKey(p.spec)))){job=null;throw Error('Start an empty CAD project to process this pack. Existing or manually edited panels will not be replaced.');}
    }
    if(!globalThis.navigator?.locks)throw Error('This browser cannot safely lock a pack run. Use a current browser to process automatically.');
-   await navigator.locks.request('panelstock-pack:'+key,{ifAvailable:true},async lock=>{if(!lock)throw Error('This pack is already processing in another tab.');const latest=await journal('readonly',key);if(latest)job=latest;await process(job,{request,planner,cache:owner?checkedCache(owner):null,save:value=>journal('readwrite',key,value),sync:value=>{if(!value.approvedDxf)sync(value);render();report.disabled=false;},progress:setStatus,cancelled:()=>paused});});
+   await navigator.locks.request('panelstock-pack:'+key,{ifAvailable:true},async lock=>{if(!lock)throw Error('This pack is already processing in another tab.');const latest=await journal('readonly',key);if(latest)job=latest;if(job.readyForReview&&review.checked)job.manualReviewAccepted=true;await process(job,{request,planner,manualRead:(payload,page,checkpoint)=>copilotHandoff({payload,page,checkpoint,request,download,pageNumber:job.pages.indexOf(page)+1,cancelled:()=>paused}),cache:owner?checkedCache(owner):null,save:value=>journal('readwrite',key,value),sync:value=>{if(!value.approvedDxf)sync(value);render();report.disabled=false;},progress:setStatus,cancelled:()=>paused});});
+   if(job.readyForReview&&!job.sent){setStatus('Drawings are ready for review. Open each review, check against the source, then confirm below.');return;}
    setStatus(job.panels.length+' panel'+(job.panels.length===1?'':'s')+' sent to CNC on '+job.plan.sheets.length+' sheet'+(job.plan.sheets.length===1?'':'s')+'. Stock is deducted when cutting is completed.');
   }catch(error){status.classList.add('cad-error-message');setStatus(error.message||'Pack processing failed.');render();}
-  finally{working=false;close.disabled=false;close.textContent='Close';start.disabled=!!job?.sent;start.textContent=job?.sent?'Sent to CNC':'Resume';if(!job)select.disabled=direction.disabled=coat.disabled=approvedFile.disabled=false;}
+  finally{working=false;close.disabled=false;close.textContent='Close';start.disabled=!!job?.sent;start.textContent=job?.sent?'Sent to CNC':job?.readyForReview?'Plan sheets and send to CNC':'Resume';if(!job)reader.disabled=select.disabled=direction.disabled=coat.disabled=approvedFile.disabled=false;}
  };
  await finished;
 }
-const api={packContextIssues,checkedPageKey,validCachedPage,timingText,process,inventoryPanels,drawingIssues,firstSheet,ensureNotScheduled,open};
+async function ensureCopilotSupport(request){
+ let capability;
+ try{capability=await request('/cad/capabilities');}
+ catch(error){throw Error('Manual Copilot is not available on this server yet. Update the backend before continuing. '+(error.message||''));}
+ if(capability?.manualCopilot!=='manual-copilot-v1')throw Error('This server does not support the manual Copilot handoff yet. No drawing was sent for AI reading.');
+}
+async function copilotHandoff({payload,page,checkpoint,request,download,pageNumber,cancelled}){
+ await ensureCopilotSupport(request);
+ const reading=payload.mode==='pack-read'?1:2;
+ const upload={filename:payload.filename,mime:payload.mime,data:payload.data,policy:payload.policy};
+ const prepared=await request('/cad/analyse',{...upload,mode:'copilot-prepare',reading});
+ if(cancelled())throw Error('Paused. Resume to continue the Copilot handoff.');
+ if(!prepared.prompt||!prepared.sourceImage?.startsWith('data:image/png;base64,'))throw Error('Copilot handoff is unavailable. Update the converter before using this reader.');
+ if(!page.previewFile){const bytes=Uint8Array.from(atob(prepared.sourceImage.split(',')[1]),c=>c.charCodeAt(0));page.previewFile=new File([bytes],payload.filename.replace(/\.[^.]+$/,'')+'.png',{type:'image/png'});}
+ page.manualDrafts||={};page.manualResponses||={};
+ const dialog=document.createElement('dialog');dialog.style.cssText='width:min(900px,95vw);max-height:90vh;overflow:auto';
+ const heading=document.createElement('h2');heading.textContent='Copilot · Page '+pageNumber+' · Reading '+reading+' of 2';
+ const help=document.createElement('p');help.textContent='Open a new Copilot chat. Attach this page image and paste the full prompt. Copy its complete JSON answer below.'+(reading===2?' Use a separate new chat without the first answer, so this is a fresh reading.':'');
+ const actions=document.createElement('div');actions.style.cssText='display:flex;gap:10px;flex-wrap:wrap';
+ const imageButton=document.createElement('button');imageButton.textContent='Download page image';imageButton.onclick=()=>download(page.previewFile,'image/png','panelstock-page-'+pageNumber+'.png');
+ const promptButton=document.createElement('button');promptButton.textContent='Copy prompt';
+ const promptDownload=document.createElement('button');promptDownload.textContent='Download prompt';promptDownload.onclick=()=>download(prepared.prompt,'text/plain','panelstock-page-'+pageNumber+'-reading-'+reading+'.txt');
+ const link=document.createElement('a');link.href='https://m365.cloud.microsoft/chat';link.target='_blank';link.rel='noopener noreferrer';link.textContent='Open Copilot';
+ actions.append(imageButton,promptButton,promptDownload,link);
+ const detail=document.createElement('details'),summary=document.createElement('summary'),prompt=document.createElement('textarea');summary.textContent='View full prompt';prompt.value=prepared.prompt;prompt.readOnly=true;prompt.style.cssText='width:100%;min-height:160px';detail.append(summary,prompt);
+ const label=document.createElement('label');label.textContent='Paste the complete Copilot response';
+ const input=document.createElement('textarea');input.value=page.manualDrafts[reading]||'';input.placeholder='Paste JSON here';input.style.cssText='display:block;width:100%;min-height:220px;box-sizing:border-box';input.maxLength=524288;label.append(input);
+ const independentLabel=document.createElement('label'),independent=document.createElement('input');independent.type='checkbox';independent.style.cssText='width:18px;min-height:18px';independentLabel.append(independent,document.createTextNode('I used a separate new chat for this second reading without providing the first answer.'));independentLabel.hidden=reading!==2;
+ const error=document.createElement('p');error.setAttribute('role','alert');
+ promptButton.onclick=async()=>{try{await navigator.clipboard.writeText(prepared.prompt);promptButton.textContent='Prompt copied';}catch{detail.open=true;prompt.focus();prompt.select();error.textContent='Copy the selected prompt, or download it as a text file.';}};
+ const footer=document.createElement('div');footer.style.cssText='display:flex;gap:10px;margin-top:16px';const accept=document.createElement('button'),pause=document.createElement('button');accept.textContent='Validate response';accept.className='primary';pause.textContent='Save and pause';footer.append(accept,pause);
+ dialog.append(heading,help,actions,detail,label,independentLabel,error,footer);document.body.append(dialog);dialog.showModal();
+ return new Promise((resolve,reject)=>{
+  const finish=(value,failure)=>{dialog.close();dialog.remove();failure?reject(failure):resolve(value);};
+  const persist=async()=>{page.manualDrafts[reading]=input.value;await checkpoint();};
+  pause.onclick=async()=>{try{await persist();finish(null,Error('Paused. Your pasted response is saved; resume to continue.'));}catch(e){error.textContent=e.message;}};
+  dialog.oncancel=e=>{e.preventDefault();if(!pause.disabled)pause.click();};
+  accept.onclick=async()=>{
+   if(reading===2&&!independent.checked){error.textContent='Confirm that the second reading used a separate new chat.';return;}
+   accept.disabled=pause.disabled=true;error.textContent='Validating…';
+   try{
+    await persist();
+    const result=await request('/cad/analyse',{...upload,mode:reading===1?'copilot-read':'copilot-verify',response:input.value,firstResponse:page.manualResponses[1],independentConfirmed:independent.checked});
+    page.manualResponses[reading]=input.value;await checkpoint();finish(result);
+   }catch(e){error.textContent=e.message||'Could not validate this response.';accept.disabled=pause.disabled=false;}
+  };
+ });
+}
+const api={ensureCopilotSupport,packContextIssues,checkedPageKey,validCachedPage,timingText,process,inventoryPanels,drawingIssues,firstSheet,ensureNotScheduled,open};
 if(typeof module!=='undefined')module.exports=api;
 if(typeof window!=='undefined')window.PanelAutomaticPack=api;
 })();

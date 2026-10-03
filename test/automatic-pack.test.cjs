@@ -183,3 +183,37 @@ test('dimension-basis upgrade refuses previously checked v5, v6 and v7 caches',(
  assert.equal(pack.validCachedPage({...old,readerVersion:'pack-dimensions-v6'}),false);
  assert.equal(pack.validCachedPage({...old,readerVersion:'pack-dimensions-v7'}),false);
 });
+
+test('manual Copilot uses no AI/cache requests and requires review before nesting or CNC',async()=>{
+ const j=job();j.settings.reader='copilot-manual';const h=harness(j),readings=[];
+ const manualRead=async(payload,page,checkpoint)=>{readings.push(payload.mode);return payload.mode==='pack-read'?{inventory:{groups:[]},readerVersion:'pack-dimensions-v8'}:{verified:true,issues:[],groups:[{panels:[{id:'A',quantity:1}],spec:spec()}],independentInventory:{groups:[]}};};
+ const request=async(path,body)=>{assert.notEqual(path,'/cad/analyse');return h.request(path,body);};
+ await pack.process(j,{...h,request,manualRead,cache:{get:()=>{throw Error('Must not use cache');},put:()=>{throw Error('Must not write cache');}}});
+ assert.deepEqual(readings,['pack-read','pack-verify']);assert.equal(j.readyForReview,true);assert.equal(j.panels[0].reviewed,false);assert.ok(!j.sent);
+ assert.ok(!h.calls.some(c=>c.path==='/mutations'||c.path==='/data'||c.body.sheetPlan));
+ await pack.process(j,{...h,request,manualRead});assert.ok(!j.sent);assert.equal(readings.length,2);
+ j.manualReviewAccepted=true;await pack.process(j,{...h,request,manualRead});assert.equal(j.sent,true);assert.equal(j.panels[0].reviewed,true);assert.equal(readings.length,2);
+});
+
+test('manual pause stops page queue and retains first reading on resume',async()=>{
+ const j=job();j.settings.reader='copilot-manual';j.pages.push({...j.pages[0],file:new File(['next'],'next.pdf',{type:'application/pdf'})});const h=harness(j);let first=0;
+ const manualRead=async(payload,page,checkpoint)=>{if(payload.mode==='pack-read'){first++;return {inventory:{groups:[]},readerVersion:'pack-dimensions-v8'};}page.manualDrafts={2:'saved partial answer'};await checkpoint();throw Error('Paused.');};
+ await assert.rejects(pack.process(j,{...h,manualRead}),/Paused/);assert.equal(first,1);assert.ok(j.pages[0].inventory);assert.equal(j.pages[0].manualDrafts[2],'saved partial answer');assert.ok(!j.pages[1].inventory);
+ const seen=[];await pack.process(j,{...h,manualRead:async(payload,page)=>{seen.push(payload.mode);return payload.mode==='pack-read'?{inventory:{groups:[]},readerVersion:'pack-dimensions-v8'}:{verified:true,issues:[],groups:[{panels:[{id:page===j.pages[0]?'A':'B',quantity:1}],spec:spec()}],independentInventory:{groups:[]}};}});
+ assert.deepEqual(seen,['pack-verify','pack-read','pack-verify']);assert.ok(j.readyForReview);assert.ok(!j.sent);
+});
+
+test('manual mismatch cannot generate or submit',async()=>{
+ const j=job();j.settings.reader='copilot-manual';const h=harness(j);
+ await assert.rejects(pack.process(j,{...h,manualRead:async payload=>payload.mode==='pack-read'?{inventory:{},readerVersion:'pack-dimensions-v8'}:{verified:false,issues:['Endpoint disagreement'],groups:[]}}),/pages need attention/);
+ assert.equal(h.calls.length,0);assert.ok(!j.readyForReview);assert.ok(!j.sent);
+});
+
+test('Copilot capability check fails closed on old or unavailable backends',async()=>{
+ for(const result of [{ok:true},{manualCopilot:'old'},null]){
+  const calls=[];await assert.rejects(pack.ensureCopilotSupport(async(path,body)=>{calls.push({path,body});return result;}),/does not support/);
+  assert.deepEqual(calls,[{path:'/cad/capabilities',body:undefined}]);
+ }
+ await assert.rejects(pack.ensureCopilotSupport(async()=>{throw Error('Not found');}),/not available/);
+ await pack.ensureCopilotSupport(async()=>({manualCopilot:'manual-copilot-v1'}));
+});
