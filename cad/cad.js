@@ -297,7 +297,7 @@ function selectPanel(index){if(index<0||index>=panels.length)return;rememberPane
 function addPanel(draft,name){rememberPanel();panels.push({spec:draft,name,reviewed:false});panelIndex=-1;selectPanel(panels.length-1);}
 $('previouspanel').onclick=()=>{if(!busy)selectPanel(panelIndex-1);};$('nextpanel').onclick=()=>{if(!busy)selectPanel(panelIndex+1);};
 updateNavigator();
-const codes=['B','S','NT','RE','FE','CR'],directions=['right','up','left','down'];
+const codes=['B','S','ES','NT','RE','FE','CR'],directions=['right','up','left','down'];
 function notice(message,error=false){const box=$('notice');box.classList.toggle('cad-error-message',error);box.setAttribute('role',error?'alert':'status');box.textContent=message;}
 function renderDrawingChecks(drawing){
  const box=$('validation');box.replaceChildren();const v=drawing.validation||{};
@@ -348,7 +348,7 @@ function recalculateOutline(draft){
  }
 
  initialiseSiteFolds(draft);
- const es=draft.edges,v={right:[1,0],up:[0,1],left:[-1,0],down:[0,-1]},tags=['B','S','NT','RE'];
+ const es=draft.edges,v={right:[1,0],up:[0,1],left:[-1,0],down:[0,-1]},tags=['B','S','ES','NT','RE'];
  draft.calculationError='Complete a valid closed outline to recalculate. Existing measurements have been kept.';
  if(!Array.isArray(draft.siteFolds)){draft.calculationError='Enter the original site fold heights to recalculate this older draft.';return true;}
  if(draft.unsupported||es.length<4||es.length>32)return true;
@@ -692,8 +692,3 @@ $('save').onclick=()=>{try{download(JSON.stringify({...collect(),reviewed:false}
 $('import').onchange=()=>run(async()=>{const file=$('import').files[0];if(!file||file.size>128*1024)throw Error('Choose a panel draft smaller than 128 KB.');const data=JSON.parse(await file.text());if(data.correctionDraft?(!Array.isArray(data.outlineSections)||data.outlineSections.length>32||!data.outlineSections.every(s=>s?.start&&Number.isFinite(s.start.x)&&Number.isFinite(s.start.y))):data.measuredEdges?PanelMeasuredOutline.validate(data).length:(!Array.isArray(data.edges)||data.edges.length<4||data.edges.length>32||!data.edges.every(e=>e&&codes.includes(e.code)&&directions.includes(e.direction))))throw Error('Invalid panel draft.');addPanel(data,file.name);notice('Draft loaded. Review it before generating.');});
 (async()=>{for(const key of (window.parent!==window?['panelstock:session:v2']:[KEY,'panelstock:session:v2','panelstock:site-orders:session:v1'])){try{const saved=JSON.parse(sessionStorage.getItem(key)||'null');if(saved?.token&&saved.expiresAt>Date.now()){session=saved;break;}}catch{}}showSession();if(session)await run(async()=>{await verify();const saved=await PanelCadProjects.list(projectOwner()).catch(()=>[]);notice(saved.length?'Ready. Select Open project to restore your saved work.':'Ready. Upload a sketch or load a test panel.');});})();
 })();
-
-
-
-
-

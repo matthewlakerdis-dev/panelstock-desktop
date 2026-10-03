@@ -157,7 +157,7 @@ function mergeReadMeasurements(values,edges){
     v[key]=e[key];v.readMeasurements={...v.readMeasurements,[key]:e[key]};
    }
   }
-  if(!v.code&&['B','S','NT','RE','FE','CR'].includes(e.code))v.code=e.code;
+  if(!v.code&&['B','S','ES','NT','RE','FE','CR'].includes(e.code))v.code=e.code;
   return v;
  });
 }
@@ -176,7 +176,7 @@ function build(points,values,folds=[],constraints={}){
  let x=0,y=0;const ps=[];
  const edges=values.map((v,i)=>{const a=points[i],b=points[(i+1)%points.length],k=v.kind||kind(a,b);ps.push({x,y});
  const w=k==='vertical'?0:k==='horizontal'?v.site:v.width,h=k==='horizontal'?0:k==='vertical'?v.site:v.height;
- if(!Number.isFinite(w)||!Number.isFinite(h)||w<0||h<0||w>10000||h>10000||Math.hypot(w,h)<.001||!['B','S','NT','RE','FE','CR'].includes(v.code))throw Error('Check section '+(i+1)+' written measurements and tag.');
+ if(!Number.isFinite(w)||!Number.isFinite(h)||w<0||h<0||w>10000||h>10000||Math.hypot(w,h)<.001||!['B','S','ES','NT','RE','FE','CR'].includes(v.code))throw Error('Check section '+(i+1)+' written measurements and tag.');
  const dx=(v.xSign??sign(b.x-a.x))*w,dy=(v.ySign??sign(a.y-b.y))*h;x+=dx;y+=dy;return {dx,dy,code:v.code,withTag:v.code==='FE'&&!!v.withTag};});
  if(Math.hypot(x,y)>.001)throw Error('The written measurements leave a gap of '+Number(Math.abs(x).toFixed(3))+' mm across and '+Number(Math.abs(y).toFixed(3))+' mm vertically. Check the section measurements.');
  for(const c of constraints.measurementConstraints||[]){if(c.fold==null&&c.edge==null)continue;

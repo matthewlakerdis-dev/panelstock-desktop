@@ -1,6 +1,6 @@
 /* Explicit measured components; sketch pixels are never converted to mm. */
 (()=>{'use strict';
-const dirs={right:[1,0],left:[-1,0],up:[0,1],down:[0,-1]},codes=['B','S','NT','RE','FE','CR'];
+const dirs={right:[1,0],left:[-1,0],up:[0,1],down:[0,-1]},codes=['B','S','ES','NT','RE','FE','CR'];
 function points(d){let x=0,y=0;return d.measuredEdges.map(e=>{const p={x,y};x+=Number(e.dx);y+=Number(e.dy);return p;});}
 function resolveFolds(d){const ps=points(d);for(const f of d.measuredFolds||[]){if(Number.isInteger(f.startPoint)&&ps[f.startPoint])f.start={...ps[f.startPoint]};if(Number.isInteger(f.endPoint)&&ps[f.endPoint])f.end={...ps[f.endPoint]};}return d;}
 function splitEdge(d,i){
@@ -107,6 +107,7 @@ async function open(original,file){return new Promise(resolve=>{
  const d=fromDraft(original),dialog=document.createElement('dialog');dialog.className='outline-correction measured-dialog';
  dialog.innerHTML='<header><h2>Measured outline</h2><button data-cancel>Close</button></header><p>Enter the written horizontal and vertical distances between points. Right and up are positive; left and down are negative. Sloping edge length is calculated from both distances.</p><div class="trace-layout"><div><svg aria-label="Measured panel outline"></svg><button data-mark>Mark fold between two points</button><p data-mark-status></p><img data-reference alt="Original sketch" style="max-width:100%"></div><div><label>Panel ID<input data-id></label><label>Arrow<select data-arrow></select></label><div data-edges></div><button data-add>Add edge</button><h3>Folds and marked corners</h3><div data-folds></div></div></div><p role="status" data-status></p><footer><button data-cancel-bottom>Cancel</button><button data-apply>Apply measured outline</button></footer>';
  document.body.append(dialog);const q=s=>dialog.querySelector(s),svg=q('svg');let marking=false,start=null,url;
+ const basis=document.createElement('p');basis.textContent=d.dimensionBasis==='developed'?'Already-developed face dimensions: no further fold deductions. Standard edge returns and holes are still generated.':'Site dimensions: standard fold allowances apply.';dialog.querySelector('header').after(basis);
  if(file){url=URL.createObjectURL(file);q('[data-reference]').src=url;}else q('[data-reference]').hidden=true;
  q('[data-id]').value=d.panelId;for(const v of ['none','up','down','left','right']){const o=new Option(v,v);q('[data-arrow]').append(o);}q('[data-arrow]').value=d.panelDirection;
  const finish=value=>{if(url)URL.revokeObjectURL(url);dialog.close();dialog.remove();resolve(value);};
