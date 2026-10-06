@@ -16760,8 +16760,8 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
     const phoneNumber=phone.trim().replace(/[\s().-]/g,'').replace(/^00/,'+');
     const validPhone=/^\+?[0-9]{7,15}$/.test(phoneNumber);
     const validEmail=/^[^\s@?&#]+@[^\s@?&#]+\.[^\s@?&#]+$/.test(email.trim());
-    const inviteUrl=invite?workerUrl.replace(/\/$/,'')+'/invite#'+invite.token:'';
-    const message=invite?`Hi ${user.displayName||user.username}, you're invited to PanelStock.\nUsername: ${user.username}\nChoose your PIN: ${inviteUrl}\nThis single-use link expires ${new Date(invite.expiresAt).toLocaleString()}. Keep it private.`:'';
+    const inviteUrl=invite?(invite.url||workerUrl.replace(/\/$/,'')+'/invite#'+invite.token):'';
+    const message=invite?`Hi ${user.displayName||user.username},\n\nWelcome to PanelStock!\nSet up your account:\n${inviteUrl}\n\nUsername: ${user.username}\nValid until ${new Date(invite.expiresAt).toLocaleString()}. Just for you.`:'';
     const apple=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
     const sms=validPhone&&invite?'sms:'+phoneNumber+(apple?'&':'?')+'body='+encodeURIComponent(message):'';
     const mail=validEmail&&invite?'mailto:'+encodeURIComponent(email.trim())+'?subject='+encodeURIComponent('Your PanelStock invite')+'&body='+encodeURIComponent(message):'';
