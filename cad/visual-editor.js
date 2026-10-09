@@ -51,10 +51,25 @@ function measurementErrors(all){
  return {bad,messages:[...new Set(messages)]};
 }
 function choose(i){selected=i;editing=true;render(true);controls.querySelector('input[type=number]')?.focus();}
-let panelPreviewZoom=null;
+let panelPreviewZoom=null,importedSvg=null;
+window.addEventListener('panel-sketch-reference',event=>{
+ const next=event.detail.importedSvg||null;
+ if(next===importedSvg)return;
+ importedSvg=next;editing=false;render(true);
+});
 function render(rebuild=true){
  const all=fields();selected=Math.max(0,Math.min(selected,all.length-1));svg.replaceChildren();picker.replaceChildren();
  if(rebuild)controls.replaceChildren();
+ host.querySelector('.drawing-heading strong').textContent=importedSvg?'Review your panel':'Edit your panel';
+ host.querySelector('.editor-hint').textContent=importedSvg?'Imported DXF · read-only':'Select a dimension or edge to edit';
+ proposedHeading.querySelector('small').textContent=importedSvg?'Imported cuts, folds and holes':'Panel dimensions and folds';
+ if(importedSvg){
+  inspector.hidden=true;
+  svg.setAttribute('viewBox','0 0 760 540');svg.setAttribute('aria-label','Imported panel drawing');svg.style.aspectRatio='760 / 540';
+  svg.append(el('image',{href:'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(importedSvg),x:12,y:12,width:736,height:516,preserveAspectRatio:'xMidYMid meet'}));
+  panelPreviewZoom?.reset();status.textContent='Original DXF geometry. Upload a revised DXF to change this drawing.';return;
+ }
+ svg.setAttribute('aria-label','Interactive site outline');
  if(!all.length){inspector.hidden=true;svg.setAttribute('viewBox','0 0 760 540');panelPreviewZoom?.reset();svg.style.aspectRatio='760 / 540';svg.append(el('text',{x:380,y:270,'text-anchor':'middle','dominant-baseline':'middle',fill:'#64748b','font-size':20,'font-weight':600,'letter-spacing':1.5},'NO FILE UPLOADED'));status.textContent='Load a sketch or start a rectangle to begin.';return;}
  if(all.some(f=>!['right','up','left','down'].includes(f[1].value))){svg.setAttribute('viewBox','0 0 760 540');panelPreviewZoom?.reset();svg.append(el('text',{x:380,y:270,'text-anchor':'middle',fill:'#b45309','font-size':18},'Outline could not be traced. Review edge directions or read the sketch again.'));status.textContent='Missing edge directions — no outline drawn.';inspector.hidden=true;return;}
  const errors=measurementErrors(all);
@@ -154,6 +169,7 @@ new MutationObserver(()=>{editing=false;render(true);}).observe(rows,{childList:
 render();
 panelPreviewZoom=window.PanelMeasuredOutline.addPreviewZoom(drawingCanvas,svg,proposedHeading);
 })();
+
 
 
 
