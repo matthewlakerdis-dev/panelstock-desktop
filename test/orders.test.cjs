@@ -24,7 +24,7 @@ test('desktop web exposes permission-aware order management',()=>{
  assert.match(html,/projectRecords/);
  assert.match(html,/method: "DELETE"/);
  assert.match(html,/Delete Order/);
- assert.match(html,/changeStatus\(order, event\.target\.value\)/);
+ assert.match(html,/changeStatus\(order,statusChoices\[order.id\]\)/);
  assert.match(html,/Select a project/);
  assert.match(html,/Project order numbering/);
  assert.match(html,/Select an active project/);
