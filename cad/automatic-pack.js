@@ -216,6 +216,30 @@ function checkedCache(owner){
  };
  return {get:key=>access(key),put:(key,value)=>access(key,value)};
 }
+async function importFiles({files,pdf,request,existing=[],progress=()=>{}}){
+ if(!pdf||!(/\.pdf$/i.test(pdf.name))||pdf.size>25*1024*1024||!pdf.size)throw Error('Choose the order PDF (up to 25 MB) for traceability.');
+ if(!files?.length||files.length>30)throw Error('Choose 1 to 30 DXF files.');
+ for(const file of files)if(!/\.dxf$/i.test(file.name)||!file.size||file.size>6*1024*1024)throw Error(file.name+': choose a DXF up to 6 MB.');
+ const names=new Set(existing.map(p=>normal(p.name||p.spec?.panelId))),panels=[];
+ const pdfHash=await hash(await pdf.arrayBuffer());
+ for(const [i,file] of files.entries()){
+  progress('Checking '+file.name+' ('+(i+1)+' of '+files.length+')…');
+  const sourceHash=await hash(await file.arrayBuffer());
+  const response=await request('/cad/analyse',{mode:'approved-dxf',approved:true,nonDirectional:true,filename:file.name,data:await base64(file)});
+  if(!response.panels?.length)throw Error(file.name+': no valid panels found.');
+  for(const panel of response.panels){
+   if(names.has(normal(panel.name)))throw Error('Duplicate panel ID: '+panel.name+'. No files were imported.');
+   names.add(normal(panel.name));
+   const issues=drawingIssues(panel.result);if(issues.length)throw Error(panel.name+': '+issues.join(' '));
+   panel.sourcePdf=pdf;panel.sourcePdfName=pdf.name;
+   panel.spec={...panel.spec,edges:[],folds:[],questions:[],importedDxf:true,sourceDxfName:file.name,sourceDxfSha256:sourceHash,sourcePdfSha256:pdfHash};
+   panel.generatedSpec=specKey(panel.spec);panel.reviewed=true;
+   panel.message='Imported DXF. Order PDF is reference only; geometry has not been regenerated.';
+   panels.push(panel);if(panels.length+existing.length>30)throw Error('Use up to 30 panels per CAD project.');
+  }
+ }
+ return panels;
+}
 async function open({files,owner,request,projectName,orderNumber,canSendCnc,sync,existing=[],download}){
  if(!canSendCnc)throw Error('CNC tracker access is required to process a complete drawing pack.');
  if(!files.length)throw Error('Upload a drawing pack first.');
@@ -268,7 +292,7 @@ async function open({files,owner,request,projectName,orderNumber,canSendCnc,sync
  };
  await finished;
 }
-const api={packContextIssues,checkedPageKey,validCachedPage,timingText,process,inventoryPanels,drawingIssues,firstSheet,ensureNotScheduled,open};
+const api={importFiles,packContextIssues,checkedPageKey,validCachedPage,timingText,process,inventoryPanels,drawingIssues,firstSheet,ensureNotScheduled,open};
 if(typeof module!=='undefined')module.exports=api;
 if(typeof window!=='undefined')window.PanelAutomaticPack=api;
 })();
