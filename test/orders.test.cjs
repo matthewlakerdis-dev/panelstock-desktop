@@ -12,7 +12,7 @@ test('desktop web exposes permission-aware order management',()=>{
  assert.match(html,/Project details/);
  assert.match(html,/projectsOnly && isAdmin && e\("form"/);
  assert.match(html,/projectsOnly && canManage && e\("form"/);
- assert.match(html,/!projectsOnly && e\("div", \{ className: "mb-4 flex flex-wrap gap-2"/);
+ assert.match(html,/!projectsOnly && orderSection==="orders" && e\("div", \{ className: "ps-order-status-filters"/);
  assert.match(html,/Project notes/);
  assert.match(html,/Delete project/);
  assert.match(html,/async function deleteProject/);
