@@ -647,6 +647,9 @@ video {
 .col-start-2 {
   grid-column-start: 2;
 }
+.m-6 {
+  margin: 1.5rem;
+}
 .mx-6 {
   margin-left: 1.5rem;
   margin-right: 1.5rem;
@@ -687,6 +690,9 @@ video {
 }
 .mr-2 {
   margin-right: 0.5rem;
+}
+.mr-3 {
+  margin-right: 0.75rem;
 }
 .mr-auto {
   margin-right: auto;
