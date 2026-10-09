@@ -5,7 +5,7 @@ const path=require('node:path');
 
 test('desktop uses its local production stylesheet',()=>{
  const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
- assert.match(html,/href="tailwind\.css"/);
+ assert.match(html,/href="tailwind\.css\?v=[^" ]+"/);
  assert.doesNotMatch(html,/cdn\.tailwindcss\.com/);
  assert.ok(fs.statSync(path.join(__dirname,'../tailwind.css')).size>10000);
 });
@@ -29,10 +29,6 @@ test('desktop scripts parse and do not contain the shared backend credential',()
  assert.match(html,/\/admin\/unlock-user/);
  assert.match(html,/children:"Unlock account"/);
  assert.match(html,/Number\(u\.lockedUntil\)>Date\.now\(\)\?"Locked"/);
- assert.match(html,/tempPin=temporaryPins\[selectedUser\.username\]\|\|""/);
- assert.match(html,/type:tempPinShown\?"text":"password"/);
- assert.match(html,/children:tempPinShown\?"Hide":"Show"/);
- assert.match(html,/onClick:\(\)=>resetPin\(selectedUser\.username,false\)/);
  assert.match(html,/lg:grid-cols-\[minmax\(0,1fr\)_minmax\(380px,520px\)\]/);
  assert.match(html,/status\?\.kind!=="ok"[\s\S]*setTimeout\(\(\)=>setStatus\(null\),2600\)/);
  assert.match(html,/fixed bottom-6 left-1\/2 z-50 -translate-x-1\/2/);
@@ -168,3 +164,5 @@ test('CNC tracker shows estimated off-cuts and audits the operator decision',()=
  assert.match(html,/Proposed CNC off-cut not saved/);
  assert.match(html,/offcutDetails:savedOffcut/);
 });
+
+ test("temporary PIN controls are removed",()=>{const html=fs.readFileSync(path.join(__dirname,"../index.html"),"utf8");assert.doesNotMatch(html,/generateTemporaryPin|setTemporaryPins|newUser\.temporaryPin/);assert.match(html,/Send PIN reset link/);});

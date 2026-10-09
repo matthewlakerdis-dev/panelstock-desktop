@@ -206,14 +206,10 @@ test('administrators create users and the login screen has no self-registration 
  assert.match(html,/children:u\.active\?"Deactivate":"Activate"/);
  assert.match(html,/Number\(a\.active===false\)-Number\(b\.active===false\)/);
  assert.doesNotMatch(html,/children:\s*"Default reset PIN"/);
- assert.match(html,/targetUsername, temporaryPin/);
- assert.match(html,/children:\s*"Temporary PIN"/);
- assert.match(html,/temporaryPins\[u\.username\]/);
  assert.match(html,/children:"View Roles"/);
  assert.match(html,/if\(rolesOpen\)return/);
- assert.match(html,/resetPin\(u\.username,true\)/);
- assert.match(html,/"Create and show temporary PIN"/);
- assert.match(html,/sessionStorage\.setItem\("panelstock-admin-temporary-pins"/);
+ assert.match(html,/"Send PIN reset link"/);
+ assert.match(html,/sessionStorage\.removeItem\("panelstock-admin-temporary-pins"/);
  assert.match(html,/placeholder:"e\.g\. Site Supervisor"/);
  assert.match(html,/placeholder:"e\.g\. Factory or Brisbane"/);
  assert.match(html,/\/admin\/roles/);
@@ -255,9 +251,7 @@ test('new user login names use first initial and surname',()=>{
  assert.match(html,/function standardiseLogin\(user\)/);
  assert.match(html,/\/admin\/rename-user/);
  assert.match(html,/old login will work as an alias for 14 days/);
- assert.match(html,/function generateTemporaryPin\(\)/);
- assert.match(html,/crypto\.getRandomValues/);
- assert.match(html,/children:"Generate PIN"/);
+ assert.match(html,/resetLink:true/);
  assert.match(html,/checked:newUser\.makeAdmin,disabled:busy,onChange:next/);
  assert.match(html,/title:newUser\.title,location:newUser\.location,email:newUser\.email/);
  assert.match(html,/label:"Email address \(optional\)"/);
