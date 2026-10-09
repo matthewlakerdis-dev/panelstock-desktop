@@ -45,6 +45,32 @@
   }
   .fixed.bottom-6.left-1\/2 { min-width: 280px; max-width: min(90vw, 520px); padding: 16px 24px; transform: translateX(-50%); border-radius: 12px; font-size: 16px; line-height: 1.5; text-align: center; animation: panelstock-toast-enter-exit 2.6s ease-out both; }
   @media (prefers-reduced-motion: reduce) { .fixed.bottom-6.left-1\/2 { animation: none; } }
+
+.ps-drafts-list{border:1px solid #cbd5e1;border-radius:12px;background:#fff;overflow:hidden}
+.ps-drafts-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 20px;background:#f8fafc;border-bottom:1px solid #e2e8f0}
+.ps-drafts-heading h2{margin:0;color:#0f172a;font-size:16px;font-weight:700}
+.ps-drafts-heading p{margin:4px 0 0;color:#64748b;font-size:12px}
+.ps-drafts-total{flex-shrink:0;padding:4px 9px;border-radius:999px;background:#e2e8f0;color:#475569;font-size:11px;font-weight:600}
+.ps-draft-card{display:grid;grid-template-columns:minmax(0,1fr) 180px auto;align-items:center;gap:24px;padding:16px 20px}
+.ps-draft-card+.ps-draft-card{border-top:1px solid #e2e8f0}
+.ps-draft-details{min-width:0}
+.ps-draft-type{display:inline-block;color:#155e75;background:#ecfeff;border-radius:5px;padding:2px 6px;font-size:10px;font-weight:600}
+.ps-draft-details h3{margin:5px 0 3px;color:#0f172a;font-size:14px;font-weight:600;overflow-wrap:anywhere}
+.ps-draft-details p{margin:0;color:#64748b;font-size:12px}
+.ps-draft-saved{display:flex;flex-direction:column;gap:4px;font-size:12px;color:#334155}
+.ps-draft-saved span{color:#64748b;font-size:11px}
+.ps-draft-actions{display:flex;align-items:center;gap:8px}
+.ps-draft-actions button{min-height:36px;padding:7px 12px;border-radius:7px;font-size:12px;font-weight:600;white-space:nowrap}
+.ps-draft-continue{border:1px solid #155e75;background:#155e75;color:#fff}
+.ps-draft-delete{border:1px solid #fecaca;background:#fff;color:#b91c1c}
+.ps-draft-actions button:disabled{opacity:.5;cursor:wait}
+.ps-draft-actions button:focus-visible{outline:3px solid #67e8f9;outline-offset:2px}
+.ps-drafts-empty{padding:32px 20px;text-align:center;color:#64748b;font-size:13px}
+.ps-drafts-empty strong{color:#334155}
+.ps-drafts-empty p{margin:6px 0 0}
+@media(max-width:760px){.ps-draft-card{grid-template-columns:minmax(0,1fr) auto;gap:12px;padding:14px}.ps-draft-actions{grid-column:1/-1;justify-content:flex-end}.ps-drafts-heading{padding:14px}.ps-drafts-heading p{line-height:1.5}.ps-draft-saved{align-items:flex-end}}
+@media(max-width:420px){.ps-draft-card{grid-template-columns:minmax(0,1fr)}.ps-draft-saved{align-items:flex-start;flex-direction:row;gap:8px}.ps-draft-actions{justify-content:stretch}.ps-draft-continue{flex:1}}
+
 </style>
 
 <!-- Cloudflare Web Analytics -->
@@ -16279,7 +16305,14 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
         )
       ),
       !projectsOnly && e("nav",{className:"ps-order-sections","aria-label":"Order sections"},orderSections.map(([key,label])=>e("button",{key,type:"button","aria-current":orderSection===key?"page":undefined,onClick:()=>setOrderSection(key),className:orderSection===key?"is-active":""},label,key==="issues"&&e("span",null,deliveryQueue.filter(issue=>issue.status!=="resolved").length)))),
-      !projectsOnly && orderSection==="drafts" && canCreate && e("section",{className:"ps-order-list overflow-hidden rounded-xl border border-slate-300 bg-white"},e("div",{className:"ps-order-intro"},e("h2",null,"My drafts"),e("p",null,"Private drafts are saved to your account. They are not submitted or emailed until you create the order.")),drafts.length?drafts.map(draft=>e("article",{key:draft.id,className:"ps-order-row"},e("div",{className:"ps-order-identity"},e("strong",{className:"text-sm text-slate-900"},draft.project||"Untitled draft"),e("div",{className:"mt-1 text-xs text-slate-500"},(draft.orderType||"Other")+" · "+draft.itemCount+" item"+(draft.itemCount===1?"":"s")+" · "+draft.fileCount+" file"+(draft.fileCount===1?"":"s"))),e("div",{className:"ps-order-delivery"},e("span",null,"Last saved"),e("strong",null,new Date(draft.updatedAt).toLocaleString("en-AU",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit",timeZone:"Australia/Brisbane"}))),e("div",{className:"ps-order-toolbar"},e("button",{type:"button",disabled:saving,onClick:()=>openDraft(draft),className:"rounded-lg border border-cyan-700 px-3 py-2 text-xs font-semibold text-cyan-800"},"Continue draft"),e("button",{type:"button",disabled:saving,onClick:()=>discardDraft(draft),className:"rounded-lg border border-red-300 px-3 py-2 text-xs font-semibold text-red-700"},"Delete")))):e("p",{className:"p-8 text-center text-sm text-slate-500"},"No saved drafts. Choose Create order, then Save draft to finish it later.")),
+      !projectsOnly && orderSection==="drafts" && canCreate && e("section",{className:"ps-drafts-list","aria-label":"My saved drafts"},
+        e("div",{className:"ps-drafts-heading"},e("div",null,e("h2",null,"My drafts"),e("p",null,"Saved privately. Continue when you’re ready to submit.")),e("span",{className:"ps-drafts-total"},drafts.length+" saved")),
+        drafts.length?drafts.map(draft=>e("article",{key:draft.id,className:"ps-draft-card"},
+          e("div",{className:"ps-draft-details"},e("span",{className:"ps-draft-type"},draft.orderType||"Other"),e("h3",null,draft.project||"Untitled draft"),e("p",null,draft.itemCount+" item"+(draft.itemCount===1?"":"s")+" · "+draft.fileCount+" file"+(draft.fileCount===1?"":"s"))),
+          e("div",{className:"ps-draft-saved"},e("span",null,"Last saved"),e("time",{dateTime:draft.updatedAt},new Date(draft.updatedAt).toLocaleString("en-AU",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit",timeZone:"Australia/Brisbane"}))),
+          e("div",{className:"ps-draft-actions"},e("button",{type:"button",disabled:saving,onClick:()=>openDraft(draft),className:"ps-draft-continue","aria-label":"Continue draft for "+(draft.project||"Untitled draft")},"Continue draft"),e("button",{type:"button",disabled:saving,onClick:()=>discardDraft(draft),className:"ps-draft-delete","aria-label":"Delete draft for "+(draft.project||"Untitled draft")},"Delete"))
+        )):e("div",{className:"ps-drafts-empty"},e("strong",null,"No drafts yet"),e("p",null,"Start an order and choose Save draft to finish it later."))
+      ),
       !projectsOnly && orderSection==="settings" && isAdmin && e("div",{className:"ps-order-intro"},e("h2",null,"Order settings"),e("p",null,"Manage order types, email recipients and notification delivery.")),
       !projectsOnly && orderSection==="settings" && isAdmin && orderMailView(),
       !projectsOnly && orderSection==="settings" && isAdmin && e("details",{className:"mb-4 rounded-xl border border-slate-300 bg-white p-4"},e("summary",{className:"cursor-pointer text-sm font-semibold"},"Order types"),e("p",{className:"mt-3 mb-3 text-sm text-slate-600"},orderTypes.join(" · ")),e("form",{onSubmit:saveOrderType,className:"flex flex-wrap items-end gap-3"},e("label",{className:"text-sm"},"New order type",e("input",{required:true,maxLength:80,value:newOrderType,onChange:event=>setNewOrderType(event.target.value),className:"mt-1 block h-10 rounded-lg border border-slate-300 px-3"})),e("button",{type:"submit",disabled:savingType,className:"rounded-lg bg-cyan-800 px-4 py-2.5 text-sm font-semibold text-white"},savingType?"Adding…":"Add order type"))),
