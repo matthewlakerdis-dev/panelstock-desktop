@@ -432,13 +432,33 @@ const automaticPackButton=document.createElement('button');automaticPackButton.t
 automaticPackButton.onclick=()=>{
  if(busy)return;
  const details=projectDetails();if(!details.projectName||!details.orderNumber){notice('Select a project and enter its order number first.',true);return;}
- const dialog=document.createElement('dialog');dialog.className='combine-picker';
- const title=document.createElement('h2');title.textContent='Import panel drawings';
- const help=document.createElement('p');help.textContent='Upload the developed DXFs generated in Codex. The order PDF is saved for traceability only and is not read to generate geometry. Existing cuts, folds and holes are retained. Import does not send panels to CNC.';
- const makeFile=(text,accept,multiple)=>{const label=document.createElement('label');label.textContent=text;const input=document.createElement('input');input.type='file';input.accept=accept;input.multiple=multiple;label.append(input);dialog.append(label);return input;};
- dialog.append(title,help);const dxfs=makeFile('Panel DXFs (up to 30 files)','.dxf',true),pdf=makeFile('Order PDF','.pdf',false);
- const confirmLabel=document.createElement('label'),confirmed=document.createElement('input');confirmed.type='checkbox';confirmLabel.append(confirmed,document.createTextNode('These are developed drawings for non-directional material. Do not add allowances.'));dialog.append(confirmLabel);
- const status=document.createElement('p');status.setAttribute('role','status');const add=document.createElement('button'),close=document.createElement('button');add.textContent='Import panels';add.className='primary';close.textContent='Cancel';dialog.append(status,add,close);
+ const dialog=document.createElement('dialog');dialog.className='combine-picker panel-import';
+ const header=document.createElement('header'),body=document.createElement('div'),footer=document.createElement('footer');body.className='combine-body';
+ const style=document.createElement('style');style.textContent=`
+ .panel-import{width:min(720px,calc(100vw - 32px))}
+ .panel-import .combine-body{display:grid;gap:18px}
+ .panel-import .import-file{display:grid;gap:8px;margin:0;padding:16px;border:1px solid #dce5eb;border-radius:12px;background:#f8fafc;min-width:0}
+ .panel-import .import-file strong{font-size:15px;color:#172f3b}
+ .panel-import small{font-size:13px;line-height:1.5;color:#64748b}
+ .panel-import input[type=file]{box-sizing:border-box;width:100%;min-width:0;margin:0;padding:10px;background:white;font-size:14px}
+ .panel-import .import-confirm{display:flex;align-items:flex-start;gap:12px;margin:0;cursor:pointer;font-size:14px;line-height:1.5}
+ .panel-import input[type=checkbox]{appearance:auto;width:18px;height:18px;min-width:18px;min-height:18px;flex:0 0 18px;margin:2px 0 0;padding:0;accent-color:#2c5d70}
+ .panel-import .import-confirm strong,.panel-import .import-confirm small{display:block}
+ .panel-import .combine-status{margin:0;overflow-wrap:anywhere}
+ .panel-import .combine-status:empty{display:none}
+ .panel-import footer{justify-content:flex-end}
+ .panel-import footer button{width:auto;flex:0 1 auto;min-width:100px;margin:0}
+ .panel-import footer .primary{margin-left:0;flex-basis:auto}
+ `;
+ const title=document.createElement('h2');title.id='panel-import-title';title.textContent='Import panel drawings';dialog.setAttribute('aria-labelledby',title.id);
+ const help=document.createElement('p');help.id='panel-import-description';help.textContent='Add your DXFs and keep the order PDF with them for reference.';dialog.setAttribute('aria-describedby',help.id);header.append(title,help);
+ dialog.append(style,header,body,footer);
+ const makeFile=(text,hint,accept,multiple)=>{const label=document.createElement('label');label.className='import-file';const heading=document.createElement('strong');heading.textContent=text;const note=document.createElement('small');note.textContent=hint;const input=document.createElement('input');input.type='file';input.accept=accept;input.multiple=multiple;label.append(heading,note,input);body.append(label);return input;};
+ const dxfs=makeFile('Panel drawings','Select up to 30 DXF files · 6 MB each','.dxf',true),pdf=makeFile('Order PDF','Saved for traceability · 25 MB maximum','.pdf',false);
+ const confirmLabel=document.createElement('label'),confirmed=document.createElement('input'),confirmText=document.createElement('span'),confirmTitle=document.createElement('strong'),confirmHelp=document.createElement('small');confirmLabel.className='import-confirm';confirmed.type='checkbox';confirmTitle.textContent='Ready-to-cut drawings · non-directional material';confirmHelp.textContent='Keep the existing cuts, folds and holes. No allowances will be added.';confirmText.append(confirmTitle,confirmHelp);confirmLabel.append(confirmed,confirmText);body.append(confirmLabel);
+ const note=document.createElement('small');note.textContent='Import now, then review and plan sheets before sending to CNC.';body.append(note);
+ const status=document.createElement('p');status.className='combine-status';status.setAttribute('role','status');status.setAttribute('aria-live','polite');body.append(status);
+ const add=document.createElement('button'),close=document.createElement('button');add.type=close.type='button';add.textContent='Import panels';add.className='primary';close.textContent='Cancel';footer.append(close,add);
  let importing=false,applied=false;close.onclick=()=>{if(!importing){dialog.close();dialog.remove();}};dialog.oncancel=e=>{e.preventDefault();close.click();};
  add.onclick=async()=>{if(importing)return;if(!confirmed.checked){status.textContent='Confirm the developed drawings and material direction before importing.';return;}
   importing=true;busy=true;add.disabled=close.disabled=true;const owner=projectOwner(),target=projectId;
@@ -446,7 +466,7 @@ automaticPackButton.onclick=()=>{
    if(projectOwner()!==owner||projectId!==target)throw Error('The active project changed. Import again into the intended order.');
    const first=panels.length;panels.push(...incoming);applied=true;uploadedSketchFiles=[...uploadedSketchFiles,file];panelIndex=-1;selectPanel(first);rememberPanel();queueProjectSave();await saveProject();
    dialog.close();dialog.remove();notice(incoming.length+' panels imported with the order PDF. Review, then plan sheets when ready.');
-  }catch(error){status.textContent=applied?'Panels imported on this device, but account saving failed. Close and use Retry save. '+error.message:error.message||'Import failed.';}finally{importing=false;busy=false;add.disabled=applied;close.disabled=false;}
+  }catch(error){status.textContent=applied?'Panels imported on this device, but account saving failed. Close and use Retry save. '+error.message:error.message||'Import failed.';}finally{importing=false;busy=false;updateNavigator();add.disabled=applied;close.disabled=false;}
  };
  document.body.append(dialog);dialog.showModal();
 };
