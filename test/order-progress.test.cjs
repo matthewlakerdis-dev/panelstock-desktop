@@ -17,6 +17,7 @@ test('quick status applies once, retains a failed choice and blocks panel writes
  vm.runInNewContext(helpers+source.slice(start,end)+'globalThis.apply=changeStatus;',ctx);
  const order={id:'a',orderType:'Fixings',status:'ordered',updatedAt:'v1'};
  await ctx.apply({...order,orderType:'Panels'},'in_stock');assert.equal(calls,0);
+ await ctx.apply({...order,status:'completed'},'ordered');assert.equal(calls,0);
  const saved=ctx.apply(order,'in_stock');assert.equal(busy,true);
  await ctx.apply(order,'completed');assert.equal(calls,1);
  finish({status:200,ok:true,json:async()=>({ok:true})});await saved;
