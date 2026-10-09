@@ -39,7 +39,8 @@ test('desktop web exposes permission-aware order management',()=>{
  assert.match(html,/site\.orders\.view/);
  assert.match(html,/site\.orders\.create/);
  assert.match(html,/site\.orders\.manage/);
- assert.match(html,/Submitted \/ Ordered/);
+ assert.match(html,/pill\("active", "Active"\)/);
+ assert.match(html,/pill\("completed", "Completed"\)/);
  assert.match(html,/Create order/);
  assert.match(html,/Save changes/);
  assert.match(html,/\/pdf-link/);
