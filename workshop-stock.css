@@ -352,3 +352,121 @@
  .ws-incoming-order>button{width:100%;justify-content:center}
  .ws-incoming-footer{padding:12px 16px max(12px,env(safe-area-inset-bottom))}
 }
+
+/* SOH responds to the space beside navigation as well as the device width. */
+.ws-stock-screen{container:stock-screen/inline-size;width:100%;min-width:0;padding:24px 24px 100px}
+.ws-stock-screen>.ws-stock-heading{gap:16px;margin-bottom:20px;align-items:flex-start}
+.ws-stock-screen .ws-stock-heading h2{font-size:28px;line-height:1.2;margin:6px 0}
+.ws-stock-screen .ws-stock-heading p{font-size:13px;color:#526478;max-width:480px}
+.ws-stock-screen .ws-stock-actions{gap:8px}
+.ws-stock-screen .ws-stock-actions>button{display:flex;align-items:center;justify-content:center;gap:7px;min-height:44px;font-size:13px}
+.ws-stock-screen .ws-summary{gap:12px;margin-bottom:20px}
+.ws-stock-screen button.ws-metric{padding:14px 16px}
+.ws-stock-screen .ws-metric-top{color:#526478}
+.ws-stock-screen .ws-metric small{color:#607589}
+.ws-stock-screen .ws-metric.is-selected{box-shadow:inset 0 0 0 1px #8eb7c6}
+.ws-stock-screen .ws-filters{display:grid;grid-template-columns:auto minmax(180px,1fr) minmax(145px,.45fr) minmax(160px,.45fr);padding:16px 20px 8px}
+.ws-stock-screen .ws-filters>button{grid-column:1;grid-row:1;font-size:12px;min-height:44px}
+.ws-stock-screen .ws-search{grid-column:2;grid-row:1;min-width:0}
+.ws-stock-screen .ws-search input{min-height:44px}
+.ws-stock-screen .ws-filters select{width:100%;min-width:0;max-width:none;min-height:44px}
+.ws-stock-screen .ws-list-caption{padding:4px 20px 12px;gap:12px;flex-wrap:wrap;font-size:12px;color:#607589}
+.ws-stock-screen .ws-list-caption>span{margin-right:auto}
+.ws-stock-screen .ws-list-tools{display:flex;align-items:center;gap:6px}
+.ws-stock-screen .ws-list-tools button{display:flex;align-items:center;gap:6px;min-height:36px;padding:6px 9px;border:1px solid #d8e0e8;font-size:12px;color:#526478}
+.ws-stock-screen .ws-list-tools svg{width:16px;height:16px;flex:none}
+.ws-stock-screen .ws-list-caption>button{min-height:36px;padding:6px 8px}
+.ws-stock-screen .ws-bulk-toolbar{padding:8px 20px;gap:10px;background:#f8fafc}
+.ws-stock-screen .ws-bulk-toolbar>button{font-size:12px;min-height:36px;padding:6px 10px}
+.ws-stock-screen .ws-incoming-table table{min-width:1080px}
+.ws-stock-screen .ws-incoming-table td:first-child{min-width:310px}
+.ws-stock-screen .ws-product{min-width:0;gap:12px}
+.ws-stock-screen .ws-product-icon{flex-shrink:0}
+.ws-stock-screen .ws-product>div{flex:1;min-width:0}
+.ws-stock-screen .ws-table-footer{color:#607589;font-size:11px}
+
+@container stock-screen (max-width:1080px){
+ .ws-stock-screen>.ws-stock-heading{display:block}
+ .ws-stock-screen .ws-stock-heading>div:first-child{margin-bottom:14px}
+ .ws-stock-screen .ws-stock-heading .ws-stock-actions{display:flex;justify-content:flex-start;flex-wrap:wrap;width:100%}
+ .ws-stock-screen .ws-stock-actions>button{width:auto;order:0}
+ .ws-stock-screen .ws-stock-actions>.ws-primary{order:-1}
+ .ws-stock-screen .ws-stock-actions>.ws-receive-po{order:1}
+ .ws-stock-screen .ws-stock-actions>.ws-start-stocktake{order:2}
+ .ws-stock-screen .ws-stock-actions>.ws-refresh{order:3}
+ .ws-stock-screen .ws-stock-actions>.ws-manage-categories{order:4}
+ .ws-stock-screen .ws-summary{grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+ .ws-stock-screen .ws-metric-top{font-size:11px}
+ .ws-stock-screen .ws-metric strong{font-size:26px}
+ .ws-stock-screen .ws-metric small{font-size:10px}
+ .ws-stock-screen .ws-metric-icon{width:26px;height:26px;flex-shrink:0}
+ .ws-stock-screen .ws-metric-icon svg{width:16px;height:16px}
+ .ws-stock-screen .ws-filters{grid-template-columns:auto minmax(0,1fr) minmax(0,1fr);gap:8px}
+ .ws-stock-screen .ws-search{grid-column:1/-1;grid-row:1}
+ .ws-stock-screen .ws-filters>button{grid-column:1;grid-row:2}
+ .ws-stock-screen .ws-filters select{grid-row:2}
+ .ws-stock-screen .ws-incoming-table{overflow:visible;padding:12px;background:#f5f8fa}
+ .ws-stock-screen .ws-incoming-table table{display:block;min-width:0;width:100%}
+ .ws-stock-screen .ws-incoming-table thead{display:none}
+ .ws-stock-screen .ws-incoming-table tbody{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;width:100%}
+ .ws-stock-screen .ws-incoming-table tr{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:0;min-width:0;border:1px solid #dce5ed;border-radius:10px;background:#fff;overflow:hidden}
+ .ws-stock-screen .ws-incoming-table td,.ws-stock-screen .ws-incoming-table td:first-child,.ws-stock-screen .ws-incoming-table td:last-child{min-width:0;padding:12px;border:0;font-size:13px}
+ .ws-stock-screen .ws-incoming-table td:first-child{grid-column:1/-1;grid-row:1;border-bottom:1px solid #edf1f5;padding:16px 12px}
+ .ws-stock-screen .ws-product strong{font-size:16px}
+ .ws-stock-screen .ws-product .ws-spec{font-size:13px;line-height:1.5}
+ .ws-stock-screen button.ws-thumbnail{width:72px;height:64px;min-height:0;flex-shrink:0}
+ .ws-stock-screen .ws-incoming-table td:nth-child(2){grid-column:1/-1;grid-row:2;padding:10px 12px 0}
+ .ws-stock-screen .ws-location{white-space:normal;overflow-wrap:anywhere}
+ .ws-stock-screen .ws-location svg{flex-shrink:0}
+ .ws-stock-screen button.ws-location-add{min-height:36px;font-size:11px}
+ .ws-stock-screen .ws-incoming-table td:nth-child(3),.ws-stock-screen .ws-incoming-table td:nth-child(4),.ws-stock-screen .ws-incoming-table td:nth-child(5){grid-row:3;text-align:left;font-size:18px}
+ .ws-stock-screen .ws-incoming-table td:nth-child(n+3):nth-child(-n+6):before{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.4px;font-weight:600;color:#607589;margin-bottom:6px}
+ .ws-stock-screen .ws-incoming-table td:nth-child(3):before{content:'On hand'}
+ .ws-stock-screen .ws-incoming-table td:nth-child(4):before{content:'Reserved'}
+ .ws-stock-screen .ws-incoming-table td:nth-child(5):before{content:'Available'}
+ .ws-stock-screen .ws-incoming-table td:nth-child(6){grid-column:1;grid-row:5;text-align:left;border-top:1px solid #edf1f5}
+ .ws-stock-screen .ws-incoming-table td:nth-child(6):before{content:'Reorder at'}
+ .ws-stock-screen .ws-incoming-table td:nth-child(7){grid-column:2;grid-row:5;display:flex;justify-content:center;align-items:center;border-top:1px solid #edf1f5;padding:8px 2px}
+ .ws-stock-screen .ws-incoming-table td:nth-child(8){grid-column:3;grid-row:5;display:flex;align-items:center;justify-content:flex-end;border-top:1px solid #edf1f5;padding:8px}
+ .ws-stock-screen .ws-incoming-table td.ws-on-order-cell{grid-column:1/-1;grid-row:4;display:flex;align-items:center;gap:8px;text-align:left;padding:8px 12px;border-top:1px solid #edf1f5;background:#f8fafc}
+ .ws-stock-screen .ws-incoming-table td.ws-on-order-cell:before{content:'On order';font-size:11px;color:#526b80;font-weight:600;margin-right:auto}
+ .ws-stock-screen .ws-incoming-table td.ws-on-order-cell small{margin-left:0}
+ .ws-stock-screen .ws-number small{font-size:11px;color:#607589}
+ .ws-stock-screen .ws-available{font-size:22px!important}
+ .ws-stock-screen .ws-badge{font-size:10px;padding:5px 7px}
+ .ws-stock-screen select.ws-action-select{width:100%;min-width:0;min-height:40px;font-size:12px}
+}
+@container stock-screen (max-width:720px){
+ .ws-stock-screen .ws-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .ws-stock-screen .ws-metric-top{font-size:12px}
+ .ws-stock-screen .ws-metric small{font-size:11px}
+ .ws-stock-screen .ws-incoming-table tbody{grid-template-columns:minmax(0,1fr)}
+ .ws-stock-screen .ws-tabs{padding:0 8px;gap:0}
+ .ws-stock-screen .ws-tabs button{min-height:48px;padding:12px 10px;font-size:12px}
+ .ws-stock-screen .ws-filters{padding:12px 12px 8px}
+ .ws-stock-screen .ws-filters select{font-size:12px;padding:8px}
+ .ws-stock-screen .ws-list-caption{padding:4px 12px 10px;font-size:11px;gap:8px}
+ .ws-stock-screen .ws-list-tools button{font-size:11px;padding:6px 7px}
+ .ws-stock-screen .ws-bulk-toolbar{padding:8px 12px}
+}
+@container stock-screen (max-width:420px){
+ .ws-stock-screen .ws-stock-heading h2{font-size:25px}
+ .ws-stock-screen .ws-stock-heading .ws-stock-actions{display:grid;grid-template-columns:1fr 1fr}
+ .ws-stock-screen .ws-stock-actions>button{width:100%;font-size:12px}
+ .ws-stock-screen .ws-stock-actions>.ws-primary{grid-column:1/-1}
+ .ws-stock-screen .ws-search input{font-size:16px}
+ .ws-stock-screen .ws-search input::placeholder{font-size:11px}
+ .ws-stock-screen .ws-filters{grid-template-columns:1fr 1fr}
+ .ws-stock-screen .ws-filters>button{grid-column:1/-1}
+ .ws-stock-screen .ws-filters select{grid-row:3}
+ .ws-stock-screen .ws-incoming-table td:first-child{padding:14px 10px}
+ .ws-stock-screen .ws-product{gap:8px}
+ .ws-stock-screen button.ws-thumbnail{width:58px;height:58px}
+ .ws-stock-screen .ws-product strong{font-size:15px}
+ .ws-stock-screen .ws-product .ws-item-meta{font-size:11px;gap:6px}
+}
+@media(max-width:640px){.ws.ws-stock-screen{padding:16px 12px 100px}}
+/* Compact the existing mobile app chrome while the stock workspace is open. */
+body:has(.ws-stock-screen) #root header.sticky:has(img[alt="Lennox Facades"]){padding-top:max(12px,env(safe-area-inset-top))!important;padding-bottom:12px}
+body:has(.ws-stock-screen) #root header.sticky img[alt="Lennox Facades"]{height:64px}
+body:has(.ws-stock-screen) #root header.sticky:has(img[alt="Lennox Facades"]) .mr-8{margin-right:0}
