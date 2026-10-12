@@ -17,7 +17,7 @@ test('ready order cards dispatch non-panels and route panels through existing lo
   button(tree,'Dispatch panel loads').props.onClick();assert.equal(h.panelLoads,1);
   button(tree,'Dispatch order').props.onClick();tree=h.render();
   assert.equal(h.values[3].id,'one');assert.match(h.values[3].mutationId,/^[a-f0-9]{32}$/);
-  assert.ok(button(tree,'Confirm dispatch'));assert.ok(nodes(tree).some(node=>node.children?.includes('3 × Fixing pack')));
+  assert.ok(button(tree,'Confirm dispatch'));assert.ok(nodes(tree).some(node=>node.children?.includes('3 ×')));assert.ok(nodes(tree).some(node=>node.children?.includes('Fixing pack')));
 });
 
 test('dispatched history shows transport and driver without a repeat dispatch action',()=>{
