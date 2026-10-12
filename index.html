@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#0f172a" />
 <link rel="icon" href="icon-192.png" />
 
-<link rel="stylesheet" href="tailwind.css?v=20261012-dispatch-layout" />
+<link rel="stylesheet" href="tailwind.css?v=20261012-app-access" />
 <style>
 .order-attachments{margin-top:20px;padding:18px;border:1px solid #dbe3ec;border-radius:12px;background:#f8fafc}
 .order-attachments h3{margin:0 0 6px;font-size:15px;font-weight:600;color:#0f172a}
@@ -17049,13 +17049,25 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
         h('button',{type:'button',disabled:busy,onClick:generate,className:'rounded-lg bg-cyan-800 px-4 py-2 text-sm font-semibold text-white'},busy?'Preparing…':invite?'Replace link':reset?'Create reset link':'Create invite link'),
         h('button',{type:'button',disabled:busy,onClick:onClose,className:buttonClass},'Back to users')));
   }
-    function AppAccessControls(props) {
-    var h=import_react.createElement,access=props.access||{};
-    return h('section',{'aria-label':'App access',className:'mb-5 rounded-xl border border-slate-300 bg-white p-4'},
-      h('h3',{className:'text-sm font-semibold text-slate-800'},'App access'),
-      h('p',{className:'mb-3 mt-1 text-xs text-slate-500'},props.isAdmin?'Administrators can sign in to every app.':'Choose where this user can sign in. Roles and task access still control what they can do. Changes sign them out; saved work is retained.'),
-      h('div',{className:'space-y-2'},[['web','Web'],['app','Mobile App'],['site','Site']].map(function(item){return h('label',{key:item[0],className:'flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2'},h('span',{className:'text-sm font-medium text-slate-700'},item[1]),h('input',{type:'checkbox',className:'h-4 w-4',checked:props.isAdmin||access[item[0]]!==false,disabled:props.disabled||props.isAdmin,onChange:function(event){props.onToggle(item[0],event.target.checked);}}));})))
+  function AppAccessControls(props) {
+    var h=import_react.createElement,access=props.access||{},apps=[['web','Web','Desktop browser'],['app','Mobile App','Workshop on mobile'],['site','Site','Site orders and CNC']];
+    var count=apps.filter(function(item){return props.isAdmin||access[item[0]]!==false;}).length;
+    function icon(app){
+      var shapes=app==='web'?[h('rect',{key:'screen',x:3,y:4,width:18,height:13,rx:2}),h('path',{key:'stand',d:'M8 21h8m-4-4v4'})]:app==='app'?[h('rect',{key:'phone',x:6,y:2,width:12,height:20,rx:2}),h('path',{key:'home',d:'M11 18h2'})]:[h('path',{key:'site',d:'m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zM9 21v-8h6v8'})];
+      return h('svg',{viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:1.7,strokeLinecap:'round',strokeLinejoin:'round','aria-hidden':true},shapes);
+    }
+    return h('section',{'aria-label':'App access',className:'ps-app-access'},
+      h('div',{className:'ps-app-access-heading'},h('div',null,h('h3',null,'App access'),h('p',null,props.isAdmin?'Administrators can sign in to every app.':'Choose where this user can sign in.')),h('span',{className:'ps-app-access-count'},props.isAdmin?'Administrator':count+' of 3 allowed')),
+      h('div',{className:'ps-app-access-options'},apps.map(function(item){
+        var checked=props.isAdmin||access[item[0]]!==false;
+        return h('label',{key:item[0],className:'ps-app-access-card'+(checked?' is-selected':'')+(props.isAdmin?' is-locked':'')+(props.disabled?' is-busy':'')},
+          h('span',{className:'ps-app-access-icon'},icon(item[0])),
+          h('span',{className:'ps-app-access-copy'},h('strong',null,item[1]),h('small',null,item[2]),h('span',{className:'ps-app-access-state'},props.isAdmin?'Always allowed':checked?'Allowed':'Not allowed')),
+          h('input',{type:'checkbox','aria-label':item[1],checked:checked,disabled:props.disabled||props.isAdmin,onChange:function(event){props.onToggle(item[0],event.target.checked);}}));
+      })),
+      !props.isAdmin&&h('p',{className:'ps-app-access-help'},h('span',null,'Roles and task access still control what they can do.'),h('span',null,'Changes sign them out; saved work is retained.')));
   }
+
   function AdminPanel({ username, workerUrl, secret, onLogTxn }) {
     const [inviteUser,setInviteUser]=useState(null);
     const emptyEmployeeProfile=()=>({employeeNumber:"",employmentType:"",department:"",supervisorUsername:"",workLocations:[],startDate:"",finishDate:"",emergencyContact:{name:"",relationship:"",phone:""},licenses:[],inductions:[],profilePhoto:"",notes:""});
