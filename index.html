@@ -14844,7 +14844,7 @@ ${xrefStart}
     return str.replace(/(^|\s)\S/g, (c) => c.toUpperCase());
   }
   function projectTitleCase(value) {
-    return String(value||"").trim().replace(/\s+/g," ").toLocaleLowerCase("en-AU").replace(/(^|[\s/()-])\p{L}/gu,letter=>letter.toLocaleUpperCase("en-AU"));
+    return String(value||"").trim().replace(/\s+/g," ");
   }
   function CapitalizedInput({ value, onChange, className, ...props }) {
     const ref = useRef(null);
