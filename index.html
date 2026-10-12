@@ -13142,7 +13142,7 @@
     reasons: "panelstock:reasons",
     username: "panelstock:username",
     isAdmin: "panelstock:isAdmin",
-    lastUsername: "panelstock:lastUsername",
+    lastUsername: "panelstock:rememberedUsername:v2",
     lastHiddenAt: "panelstock:lastHiddenAt",
     lastActivityAt: "panelstock:lastActivityAt",
     pendingSync: "panelstock:pendingSync",
@@ -16459,7 +16459,7 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
     const [mode, setMode] = useState("login");
     const [step, setStep] = useState("form");
     const [username, setUsernameField] = useState(defaultUsername || "");
-    const [rememberMe, setRememberMe] = useState(true);
+    const [rememberMe, setRememberMe] = useState(Boolean(defaultUsername));
     const [pin, setPin] = useState("");
     const [failedAttempts, setFailedAttempts] = useState(0);
     const [newPin, setNewPin] = useState("");
@@ -16491,7 +16491,7 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
       setBusy(true);
       setError("");
       try {
-        const result = await callWorker("/login", { username: uname, pin });
+        const result = await callWorker("/login", { username: uname, pin, app: "web" });
         setBusy(false);
         if (!result.ok) {
           setPin("");
@@ -16523,7 +16523,7 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
       setBusy(true);
       setError("");
       try {
-        const result = await callWorker("/login", { username: uname, pin });
+        const result = await callWorker("/login", { username: uname, pin, app: "web" });
         setBusy(false);
         if (!result.ok) {
           setError("Incorrect registration code, or that username is already taken \u2014 try Log in instead.");
@@ -16551,7 +16551,7 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
       setBusy(true);
       setError("");
       try {
-        const result = await callWorker("/set-pin", { username: username.trim(), oldPin: pin, newPin });
+        const result = await callWorker("/set-pin", { username: username.trim(), oldPin: pin, newPin, app: "web" });
         setBusy(false);
         if (!result.ok) {
           setError(result.error || "Could not set PIN.");
@@ -17025,7 +17025,7 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
       try{const response=await PanelStock.apiFetch(workerUrl.replace(/\/$/,'')+(reset?'/admin/reset-pin':'/admin/create-invite'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({targetUsername:user.username})});const result=await response.json();if(!response.ok||!result.ok)throw Error(result.error||'Could not create invite.');setInvite(result);}
       catch(error){setNotice(error.message||'Could not reach the server.');}finally{setBusy(false);}
     }
-    async function copy(){try{await navigator.clipboard.writeText(message);setNotice('Invite copied. Paste it into your messaging app.');}catch{setNotice('Select and copy the message below, then paste it into your messaging app.');}}
+    async function copy(){try{await navigator.clipboard.writeText(message);setNotice(reset?'PIN reset message and link copied.':'Invite message and link copied.');PanelStock.showCopy({title:reset?'PIN reset link copied':'Invite link copied',message:'The full '+(reset?'PIN reset':'invite')+' message and link for '+(user.displayName||user.username)+' were copied. Paste them into your messaging or email app.',value:inviteUrl});}catch{setNotice('Select and copy the message below, then paste it into your messaging app.');}}
     async function share(){try{await navigator.share({title:'PanelStock invite',text:message});}catch(error){if(error.name!=='AbortError')setNotice('Sharing is unavailable. Use Copy invite instead.');}}
     return h('section',{className:'max-w-3xl rounded-xl border border-slate-300 bg-white p-6'},
       h('h2',{className:'text-lg font-semibold text-slate-900'},reset?'Send PIN reset link':'Send invite'),
@@ -17049,10 +17049,17 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
         h('button',{type:'button',disabled:busy,onClick:generate,className:'rounded-lg bg-cyan-800 px-4 py-2 text-sm font-semibold text-white'},busy?'Preparing…':invite?'Replace link':reset?'Create reset link':'Create invite link'),
         h('button',{type:'button',disabled:busy,onClick:onClose,className:buttonClass},'Back to users')));
   }
+    function AppAccessControls(props) {
+    var h=import_react.createElement,access=props.access||{};
+    return h('section',{'aria-label':'App access',className:'mb-5 rounded-xl border border-slate-300 bg-white p-4'},
+      h('h3',{className:'text-sm font-semibold text-slate-800'},'App access'),
+      h('p',{className:'mb-3 mt-1 text-xs text-slate-500'},props.isAdmin?'Administrators can sign in to every app.':'Choose where this user can sign in. Roles and task access still control what they can do. Changes sign them out; saved work is retained.'),
+      h('div',{className:'space-y-2'},[['web','Web'],['app','Mobile App'],['site','Site']].map(function(item){return h('label',{key:item[0],className:'flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2'},h('span',{className:'text-sm font-medium text-slate-700'},item[1]),h('input',{type:'checkbox',className:'h-4 w-4',checked:props.isAdmin||access[item[0]]!==false,disabled:props.disabled||props.isAdmin,onChange:function(event){props.onToggle(item[0],event.target.checked);}}));})))
+  }
   function AdminPanel({ username, workerUrl, secret, onLogTxn }) {
     const [inviteUser,setInviteUser]=useState(null);
     const emptyEmployeeProfile=()=>({employeeNumber:"",employmentType:"",department:"",supervisorUsername:"",workLocations:[],startDate:"",finishDate:"",emergencyContact:{name:"",relationship:"",phone:""},licenses:[],inductions:[],profilePhoto:"",notes:""});
-    const emptyNewUser=()=>({username:"",displayName:"",title:"",location:"",email:"",phone:"",employeeProfile:emptyEmployeeProfile(),makeAdmin:false,roleIds:[]});
+    const emptyNewUser=()=>({username:"",displayName:"",title:"",location:"",email:"",phone:"",employeeProfile:emptyEmployeeProfile(),makeAdmin:false,roleIds:[],appAccess:{web:true,app:true,site:true}});
     const [loaded, setLoaded] = useState(false);
     const [users, setUsers] = useState([]);
     const [tasks, setTasks] = useState([]);
@@ -17110,10 +17117,20 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
     async function createUser(event) {
       event.preventDefault();setBusy(true);setStatus(null);
       try {
-        const result=await callWorker("/admin/create-user",{username,targetUsername:newUser.username,displayName:newUser.displayName,title:newUser.title,location:newUser.location,email:newUser.email,phone:newUser.phone,employeeProfile:newUser.employeeProfile,makeAdmin:newUser.makeAdmin,roleIds:newUser.roleIds});
+        const result=await callWorker("/admin/create-user",{username,targetUsername:newUser.username,displayName:newUser.displayName,title:newUser.title,location:newUser.location,email:newUser.email,phone:newUser.phone,employeeProfile:newUser.employeeProfile,makeAdmin:newUser.makeAdmin,roleIds:newUser.roleIds,appAccess:newUser.appAccess});
         setBusy(false);if(!result.ok){setStatus({kind:"err",msg:result.error||"Could not create user."});return;}
         setUsers(prev=>[...prev,result.user].sort((a,b)=>a.username.localeCompare(b.username)));setNewUser(emptyNewUser());setCreateOpen(false);setInviteUser(result.user);setStatus(null);onLogTxn({type:"user",desc:`Created user ${result.user.username}`,qty:""});
       } catch {setBusy(false);setStatus({kind:"err",msg:"Could not reach the server."});}
+    }
+        function toggleAppAccess(targetUsername,app,allowed) {
+      setBusy(true);setStatus(null);
+      return callWorker('/admin/set-app-access',{targetUsername:targetUsername,app:app,allowed:allowed}).then(function(result){
+        setBusy(false);if(!result.ok){setStatus({kind:'err',msg:result.error||'Could not update app access.'});return;}
+        setUsers(function(previous){return previous.map(function(user){return user.username===targetUsername?Object.assign({},user,{appAccess:result.appAccess}):user;});});
+        setEditUser(function(value){return value&&value.username===targetUsername?Object.assign({},value,{appAccess:result.appAccess}):value;});
+        setStatus({kind:'ok',msg:'App access updated for '+targetUsername+'. They will need to sign in again.'});
+        onLogTxn({type:'user',desc:'Updated '+app+' app access for '+targetUsername,qty:''});
+      }).catch(function(){setBusy(false);setStatus({kind:'err',msg:'Could not reach the server.'});});
     }
     async function toggleAdmin(targetUsername, makeAdmin) {
       setBusy(true);
@@ -17225,6 +17242,7 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
       status&&/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div",{className:status.kind==="err"?"mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-800":"fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-lg",children:status.msg}),
 /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section",{className:"mb-5 rounded-xl border border-slate-300 bg-white p-6",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div",{className:"mb-4 text-sm font-semibold text-slate-800",children:"Account information"}),/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"grid grid-cols-2 gap-4",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field,{label:"Display name",children:/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input",{className:inputCls,value:editUser.displayName||"",onChange:event=>setEditUser(value=>({...value,displayName:event.target.value}))})}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field,{label:"Email address (optional)",children:/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input",{className:inputCls,type:"email",value:editUser.email||"",onChange:event=>setEditUser(value=>({...value,email:event.target.value})),placeholder:"name@example.com"})}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field,{label:"Title",children:/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input",{className:inputCls,value:editUser.title||"",onChange:event=>setEditUser(value=>({...value,title:event.target.value})),placeholder:"e.g. Site Supervisor"})}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field,{label:"Primary location",children:/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input",{className:inputCls,value:editUser.location||"",onChange:event=>setEditUser(value=>({...value,location:event.target.value})),placeholder:"e.g. Factory or Brisbane"})}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field,{label:"Roles",children:/* @__PURE__ */ (0, import_jsx_runtime.jsx)(RolePicker,{selected:editUser.roleIds||[],onChange:roleIds=>setEditUser(value=>({...value,roleIds})),disabled:editUser.isAdmin})}),/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span",{className:"text-sm font-medium text-slate-700",children:"Administrator"}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ToggleSwitch,{checked:!!editUser.isAdmin,disabled:busy,onChange:next=>setEditUser(value=>({...value,isAdmin:next}))})]})]}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div",{className:"mt-4 border-t border-slate-100 pt-2",children:EmployeeProfileFields({value:editUser.employeeProfile,onChange:employeeProfile=>setEditUser(value=>({...value,employeeProfile}))})}),/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"mt-5 flex flex-wrap gap-2 border-t border-slate-100 pt-5",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button",{type:"button",onClick:()=>saveUser(editUser,true),disabled:busy,className:"rounded-lg bg-cyan-800 px-4 py-2 text-sm font-semibold text-white",children:"Save account"}),loginNameFor(selectedUser.displayName,selectedUser.username)!==selectedUser.username&&/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button",{type:"button",onClick:()=>standardiseLogin(selectedUser),disabled:busy,className:"rounded-lg border border-cyan-300 bg-white px-4 py-2 text-sm font-semibold text-cyan-800",children:`Change login to ${loginNameFor(selectedUser.displayName,selectedUser.username)}`})]})]}),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section",{className:"mb-5 rounded-xl border border-slate-300 bg-white p-6",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div",{className:"mb-3 text-sm font-semibold text-slate-800",children:"Account history and security"}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("dl",{className:"grid grid-cols-2 gap-x-6 gap-y-3 text-sm",children:[["Account created",editUser.createdAt],["Last account update",editUser.updatedAt],["Last login",editUser.lastLoginAt],["Last activity",editUser.lastActivityAt],["Last PIN change",editUser.lastPinChangeAt],["Failed login attempts",String(editUser.failedLoginAttempts||0)],["Locked until",editUser.lockedUntil?new Date(editUser.lockedUntil).toLocaleString():null],["Account status",editUser.active?"Active":"Inactive"]].map(([label,value])=>/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"flex justify-between gap-3 border-b border-slate-100 pb-2",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("dt",{className:"text-slate-500",children:label}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("dd",{className:"text-right font-medium text-slate-800",children:value&&label!=="Failed login attempts"&&label!=="Account status"?new Date(value).toLocaleString():value||"Never"})]},label))})]}),
+      import_react.createElement(AppAccessControls,{access:selectedUser.appAccess,isAdmin:selectedUser.isAdmin,disabled:busy,onToggle:function(app,allowed){toggleAppAccess(selectedUser.username,app,allowed);}}),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section",{className:"rounded-xl border border-slate-300 bg-white p-6",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div",{className:"text-sm font-semibold text-slate-800",children:"Task access"}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p",{className:"mb-4 mt-1 text-xs text-slate-500",children:selectedUser.isAdmin?"Administrators automatically have every task.":selectedUser.roleIds?.length?"Task access is combined from all assigned roles.":"Choose which Factory, Site and Web tasks this user can access."}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)(TaskAccessGroups,{access:selectedUser.taskAccess,onToggle:(codes,next)=>toggleTask(selectedUser.username,codes,next),disabled:selectedUser.isAdmin||!!selectedUser.roleIds?.length})]})
     ]});}
     if(createOpen)return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"max-w-4xl",children:[
@@ -17237,6 +17255,7 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field,{label:"Location",children:/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input",{className:inputCls,value:newUser.location,onChange:event=>setNewUser(value=>({...value,location:event.target.value})),placeholder:"e.g. Factory or Brisbane"})}),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field,{label:"Email address (optional)",children:/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input",{className:inputCls,type:"email",value:newUser.email,onChange:event=>setNewUser(value=>({...value,email:event.target.value})),placeholder:"name@example.com"})}),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div",{className:"mb-5",children:EmployeeProfileFields({value:newUser.employeeProfile,onChange:employeeProfile=>setNewUser(value=>({...value,employeeProfile}))})}),
+        import_react.createElement(AppAccessControls,{access:newUser.appAccess,isAdmin:newUser.makeAdmin,disabled:busy,onToggle:function(app,allowed){setNewUser(function(value){return Object.assign({},value,{appAccess:Object.assign({},value.appAccess,{[app]:allowed})});});}}),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field,{label:"Roles",children:/* @__PURE__ */ (0, import_jsx_runtime.jsx)(RolePicker,{selected:newUser.roleIds,onChange:roleIds=>setNewUser(value=>({...value,roleIds})),disabled:newUser.makeAdmin})}),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"mb-5 flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2.5",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span",{className:"text-sm font-medium text-slate-700",children:"Administrator"}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ToggleSwitch,{checked:newUser.makeAdmin,disabled:busy,onChange:next=>setNewUser(value=>({...value,makeAdmin:next}))})]}),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"flex justify-end gap-2 border-t border-slate-100 pt-5",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button",{type:"button",onClick:closeCreateUser,className:"rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-600",children:"Cancel"}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button",{type:"submit",disabled:busy,className:"rounded-lg bg-cyan-800 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50",children:busy?"Creating…":"Create user"})]})
