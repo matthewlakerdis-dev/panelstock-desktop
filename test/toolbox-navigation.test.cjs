@@ -15,11 +15,11 @@ test('web toolbox requires explicit permission despite the existing fallback tas
  assert.equal(toolbox(false,{'factory.toolbox':true}).href,worker+'/toolbox?app=web');assert.equal(toolbox(true,{}).label,'Toolbox Talks');
 });
 test('the Work group forwards the external URL and renders a safe link without selecting an internal page',()=>{
- const c=context(false,{'factory.toolbox':true});c.ChevronRight=()=>{};
+ let launches=0;const c=context(false,{'factory.toolbox':true});c.ChevronRight=()=>{};c.window={PanelStockToolbox:{open(){launches++}}};
  const functions=source.slice(source.indexOf('  function SideNavGroup('),source.indexOf('  function Toast('));vm.runInNewContext(functions+'globalThis.components={SideNavGroup,SideNavItem};',c);
  const item=toolbox(false,{'factory.toolbox':true}),selected=[],group=c.components.SideNavGroup({label:'Work',items:[item],activeKey:'schedule',onSelect:i=>selected.push(i.key),open:true,onToggle(){}});
  const descriptor=group.props.children[1].props.children[0];assert.equal(descriptor.props.href,item.href);
- const link=c.components.SideNavItem(descriptor.props);assert.equal(link.type,'a');assert.equal(link.props.href,item.href);assert.equal(link.props.target,'_blank');assert.equal(link.props.rel,'noopener noreferrer');assert.equal(link.props.onClick,undefined);
+ const link=c.components.SideNavItem(descriptor.props);assert.equal(link.type,'a');assert.equal(link.props.href,item.href);assert.equal(link.props.target,'_blank');assert.equal(link.props.rel,'noopener noreferrer');link.props.onClick({preventDefault(){}});assert.equal(launches,1);
  const button=c.components.SideNavItem({label:'Schedule',onClick:()=>selected.push('schedule')});assert.equal(button.type,'button');button.props.onClick();assert.deepEqual(selected,['schedule']);
 });
 test('administrators can grant the toolbox permission through the shared user and role access controls',()=>{
