@@ -7,6 +7,7 @@ test('panel identity is normalized and stock and completion have readable labels
  for(const orderType of ['Fixings','Plant / Equipment','Other','Custom type',''])assert.equal(ctx.helpers.isPanelOrder({orderType}),false);
  assert.equal(ctx.helpers.orderStatusLabel('in_stock'),'In stock');
  assert.equal(ctx.helpers.orderStatusLabel('completed'),'Ready for dispatch');
+ assert.equal(ctx.helpers.orderStatusLabel('dispatched'),'Dispatched');
 });
 test('quick status applies once, retains a failed choice and blocks panel writes',async()=>{
  const start=source.indexOf('    async function changeStatus(order, status)'),end=source.indexOf('    async function deleteOrder(order)',start);
@@ -18,6 +19,7 @@ test('quick status applies once, retains a failed choice and blocks panel writes
  const order={id:'a',orderType:'Fixings',status:'ordered',updatedAt:'v1'};
  await ctx.apply({...order,orderType:'Panels'},'in_stock');assert.equal(calls,0);
  await ctx.apply({...order,status:'completed'},'ordered');assert.equal(calls,0);
+ await ctx.apply({...order,status:'dispatched'},'ordered');assert.equal(calls,0);
  const saved=ctx.apply(order,'in_stock');assert.equal(busy,true);
  await ctx.apply(order,'completed');assert.equal(calls,1);
  finish({status:200,ok:true,json:async()=>({ok:true})});await saved;
@@ -28,9 +30,9 @@ test('quick status applies once, retains a failed choice and blocks panel writes
  assert.match(notice,/ready for dispatch/);
 });
 test('web uses Apply for status changes and hides edit controls on panel orders',()=>{
- assert.match(source,/canManage && !isPanelOrder\(order\) && e\("button", \{ onClick: \(\) => openPanel\("edit"/);
+ assert.match(source,/canManage && !isPanelOrder\(order\) && order.status!=="dispatched" && e\("button", \{ onClick: \(\) => openPanel\("edit"/);
  assert.match(source,/onChange: \(event\) => setStatusChoices/);
  assert.match(source,/onClick:\(\)=>changeStatus\(order,statusChoices\[order.id\]\)/);
  assert.doesNotMatch(source,/onChange: \(event\) => changeStatus\(order/);
- assert.match(source,/if\(mode==="edit"&&isPanelOrder\(order\)\)mode="view"/);
+ assert.match(source,/if\(mode==="edit"&&\(isPanelOrder\(order\)\|\|order.status==="dispatched"\)\)mode="view"/);
 });
