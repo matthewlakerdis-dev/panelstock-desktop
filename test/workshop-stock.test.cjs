@@ -93,3 +93,24 @@ test('restocking overview uses available stock and incoming quantities without m
 
 
 });
+
+test('creating a stocktake offers suppliers and sends the selected filter',async()=>{
+ const states=[];let cursor=0,payload;
+ const React={createElement:(type,props,...children)=>({type,props:props||{},children}),useState:v=>{const i=cursor++;if(!(i in states))states[i]=typeof v==='function'?v():v;return [states[i],v=>states[i]=typeof v==='function'?v(states[i]):v];},useEffect(){},Fragment:'fragment'};
+ const context={window:{},crypto:{randomUUID:()=> 'mutation'},PanelStock:{username:'admin',apiFetch:async(url,options)=>{if(options)payload=JSON.parse(options.body);return {ok:true,json:async()=>states[0]};}},localStorage:{getItem:()=>null,setItem(){},removeItem(){}}};
+ vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../workshop-stock.js'),'utf8'),context);
+ const Component=context.window.createWorkshopStock(React),render=()=>{cursor=0;return Component({isAdmin:true,workerUrl:'/api'});};
+ const walk=n=>!n||typeof n!=='object'?[]:[n,...(n.children||[]).flat(Infinity).flatMap(walk)];
+ render();states[0]={revision:1,items:[{id:'a',name:'A',category:'fixings',supplier:'Supplier A',qty:1,available:1},{id:'b',name:'B',category:'fixings',supplier:'Supplier B',qty:1,available:1},{id:'p',name:'Panel',category:'panels',legacy:true,supplier:'Panel only',qty:1,available:1}],movements:[]};
+ let nodes=walk(render());nodes.find(n=>n.type==='button'&&n.children.includes('Stocktake')).props.onClick();
+ nodes=walk(render());nodes.find(n=>n.type==='button'&&n.children.includes('Create stocktake')).props.onClick();
+ nodes=walk(render());const supplier=nodes.find(n=>n.type==='label'&&n.props.key==='supplier');
+ assert.deepEqual(walk(supplier).filter(n=>n.type==='option').map(n=>n.children[0]),['All suppliers','Supplier A','Supplier B']);
+ walk(supplier).find(n=>n.type==='select').props.onChange({target:{value:'Supplier A'}});
+ nodes=walk(render());const fixings=nodes.find(n=>n.type==='label'&&n.props.key==='fixings');
+ assert.ok(walk(fixings).some(n=>n.type==='small'&&n.children.includes(' (1 items)')));
+ walk(fixings).find(n=>n.type==='input').props.onChange({target:{checked:true}});
+ nodes.find(n=>n.type==='label'&&n.props.key==='name').children.find(n=>n?.type==='input').props.onChange({target:{value:'Supplier count'}});
+ nodes=walk(render());await nodes.find(n=>n.type==='form').props.onSubmit({preventDefault(){}});
+ assert.equal(payload.supplier,'Supplier A');assert.deepEqual(payload.categories,['fixings']);
+});
