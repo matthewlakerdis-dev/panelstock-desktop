@@ -286,7 +286,7 @@ $('workspace').addEventListener('input',queueProjectSave);$('workspace').addEven
 window.addEventListener('beforeunload',e=>{if(projectDirty){e.preventDefault();e.returnValue='';}});
 
 function generatedDrawings(){return panels.map((p,i)=>i===panelIndex?result:p.result).filter(r=>r?.dxf);}
-function updateNavigator(){duplicatePanelButton.disabled=busy||panelIndex<0||!spec||panels.length>=30;deletePanelButton.disabled=busy||panelIndex<0;window.dispatchEvent(new CustomEvent('panel-sketch-reference',{detail:{importedSvg:panels[panelIndex]?.spec?.importedDxf?panels[panelIndex]?.result?.svg||null:null,file:panels[panelIndex]?.file||null,name:panels[panelIndex]?.spec?.panelId||panels[panelIndex]?.name||'Panel sketch'}}));updateSourcePdfButton();if($('downloadall')){$('downloadall').disabled=busy||!generatedDrawings().length;updateCombineIcon();} $('panelcount').textContent=panels.length?'Panel '+(panelIndex+1)+' of '+panels.length:'No panels';$('panelsource').textContent=panels[panelIndex]?.name||'';$('previouspanel').disabled=busy||panelIndex<=0;$('nextpanel').disabled=busy||panelIndex>=panels.length-1;}
+function updateNavigator(){if($('paneldirection'))$('paneldirection').disabled=busy||!spec;if($('applypaneldirection'))$('applypaneldirection').disabled=busy||!spec;duplicatePanelButton.disabled=busy||panelIndex<0||!spec||panels.length>=30;deletePanelButton.disabled=busy||panelIndex<0;window.dispatchEvent(new CustomEvent('panel-sketch-reference',{detail:{importedSvg:panels[panelIndex]?.spec?.importedDxf?panels[panelIndex]?.result?.svg||null:null,file:panels[panelIndex]?.file||null,name:panels[panelIndex]?.spec?.panelId||panels[panelIndex]?.name||'Panel sketch'}}));updateSourcePdfButton();if($('downloadall')){$('downloadall').disabled=busy||!generatedDrawings().length;updateCombineIcon();} $('panelcount').textContent=panels.length?'Panel '+(panelIndex+1)+' of '+panels.length:'No panels';$('panelsource').textContent=panels[panelIndex]?.name||'';$('previouspanel').disabled=busy||panelIndex<=0;$('nextpanel').disabled=busy||panelIndex>=panels.length-1;}
 function rememberPanel(){if(panelIndex<0)return;const p=panels[panelIndex];if(spec)spec.panelId=$('panelid').value.trim();Object.assign(p,{spec,result,reviewed:!!result,message:$('notice').textContent});}
 function selectPanel(index){if(index<0||index>=panels.length)return;rememberPanel();panelIndex=index;const p=panels[index];spec=p.spec||null;
  if(previewURL){URL.revokeObjectURL(previewURL);previewURL=null;}
@@ -412,7 +412,7 @@ function renderQuestions(){
   for(const item of items){const p=document.createElement('p');p.textContent=item;$('questions').append(p);}
  }
 }
-function renderSpec(){if(spec.importedDxf){PanelMeasuredOutline.show(null);$('panelid').value=spec.panelId;$('folds').value='';$('edges').replaceChildren();renderQuestions();return;}if(spec.measuredEdges)recalculateOutline(spec);PanelMeasuredOutline.show(spec);if(spec.measuredEdges){invalidate();$("panelid").value=spec.panelId||"";$("edges").replaceChildren();renderQuestions();return;}recalculateOutline(spec);invalidate();$('panelid').value=spec.panelId||'';$('folds').value=(spec.siteFolds||[]).join(', ');$('folds').setAttribute('aria-label','Site fold heights from bottom (mm)');const label=document.querySelector('label[for=folds]');if(label)label.textContent='Site fold heights from bottom (mm)';$('edges').replaceChildren(...spec.edges.map(edgeRow));renderQuestions();}
+function renderSpec(){$('paneldirection').value=spec.panelDirection||'none';if(spec.importedDxf){PanelMeasuredOutline.show(null);$('panelid').value=spec.panelId;$('folds').value='';$('edges').replaceChildren();renderQuestions();return;}if(spec.measuredEdges)recalculateOutline(spec);PanelMeasuredOutline.show(spec);if(spec.measuredEdges){invalidate();$("panelid").value=spec.panelId||"";$("edges").replaceChildren();renderQuestions();return;}recalculateOutline(spec);invalidate();$('panelid').value=spec.panelId||'';$('folds').value=(spec.siteFolds||[]).join(', ');$('folds').setAttribute('aria-label','Site fold heights from bottom (mm)');const label=document.querySelector('label[for=folds]');if(label)label.textContent='Site fold heights from bottom (mm)';$('edges').replaceChildren(...spec.edges.map(edgeRow));renderQuestions();}
 function example(){return {panelId:'Z3-130',edges:[['Bottom','right','NT',700,698],['Lower right','up','B',300,298],['Right shoulder','left','S',150,150],['Right stem','up','RE',200,200],['Top','left','RE',400,398],['Left stem','down','RE',200,200],['Left shoulder','left','S',150,150],['Lower left','down','B',300,298]].map(([name,direction,code,site,finished])=>({name,direction,code,site,finished})),folds:[],questions:[],unsupported:false};}
 function collect(){if(!spec)throw Error('Load a sketch or start a panel first.');return {...spec,panelId:$('panelid').value.trim(),reviewed:!!result};}
 function download(data,type,filename){const url=URL.createObjectURL(new Blob([data],{type}));const a=document.createElement('a');a.href=url;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
@@ -700,22 +700,31 @@ editFoldsButton.onclick=()=>{if(spec?.importedDxf){notice('Edit folds in Codex a
 };
 var manualHoleRetryLayout=null;
 const manualHolesButton=document.createElement('button');manualHolesButton.type='button';projectIcon(manualHolesButton,'Add or edit manual holes','M12 3v4m0 10v4M3 12h4m10 0h4M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z');$('generate').before(manualHolesButton);
-const arrowDirectionButton=document.createElement('button');arrowDirectionButton.type='button';projectIcon(arrowDirectionButton,'Set panel arrow direction','M4 12h16m-6-6 6 6-6 6');$('generate').before(arrowDirectionButton);
-arrowDirectionButton.onclick=()=>{
- if(busy)return;if(!spec){notice('Create or open a panel first.',true);return;}
- const dialog=document.createElement('dialog');dialog.className='panel-arrow-dialog';dialog.setAttribute('aria-label','Panel arrow direction');
- const title=document.createElement('h2');title.textContent='Panel arrow direction';
- const help=document.createElement('p');help.textContent='Choose the arrow shown on the drawing. Generate again to update the DXF.';
- const choices=document.createElement('div');choices.className='panel-arrow-choices';choices.setAttribute('role','group');choices.setAttribute('aria-label','Arrow direction');
- const close=()=>{dialog.close();dialog.remove();arrowDirectionButton.focus();};
- for(const [value,label,path] of [['up','Up','M12 20V4m-6 6 6-6 6 6'],['down','Down','M12 4v16m-6-6 6 6 6-6'],['left','Left','M20 12H4m6-6-6 6 6 6'],['right','Right','M4 12h16m-6-6 6 6-6 6'],['none','No arrow','M5 5l14 14M19 5 5 19']]){
-  const button=document.createElement('button');button.type='button';projectIcon(button,label,path);button.setAttribute('aria-pressed',String((spec.panelDirection||'none')===value));
-  button.onclick=()=>{spec.panelDirection=value;renderSpec();rememberPanel();queueProjectSave();close();notice(value==='none'?'Direction arrow removed. Generate again to update the drawing.':'Direction arrow set to '+value+'. Generate again to update the drawing.');};
-  choices.append(button);
+async function setPanelArrow(value){
+ if(busy||!spec)return;
+ if(!['up','down','left','right','none'].includes(value))return;
+ const previous=spec.panelDirection||'none';
+ if(value===previous&&!spec.importedDxf)return;
+ if(spec.importedDxf){
+  $('paneldirection').disabled=true;
+  await run(async()=>{
+   try{
+    if(!result?.dxf)throw Error('Open an imported drawing first.');
+    const drawing=await api('/cad/generate',{panelArrow:true,dxf:result.dxf,panelId:spec.panelId,panelDirection:value});
+    spec.panelDirection=value;result={...result,...drawing};
+    if(previewURL)URL.revokeObjectURL(previewURL);
+    previewURL=URL.createObjectURL(new Blob([result.svg],{type:'image/svg+xml'}));$('preview').src=previewURL;$('preview').hidden=false;
+    rememberPanel();renderDrawingChecks(result);
+    notice(value==='none'?'Direction arrow removed.':'Direction arrow set to '+value+'.'+(drawing.arrowExternal?' The arrow is outside the outline to avoid drawing details.':''));
+   }catch(error){$('paneldirection').value=previous;throw error;}
+  });
+ }else{
+  spec.panelDirection=value;invalidate();rememberPanel();queueProjectSave();
+  notice(value==='none'?'Direction arrow removed. Generate again to update the drawing.':'Direction arrow set to '+value+'. Generate again to update the drawing.');
  }
- const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Cancel';cancel.onclick=close;dialog.oncancel=e=>{e.preventDefault();close();};
- dialog.append(title,help,choices,cancel);document.body.append(dialog);dialog.showModal();
-};
+}
+$('paneldirection').onchange=()=>setPanelArrow($('paneldirection').value);
+$('applypaneldirection').onclick=()=>setPanelArrow($('paneldirection').value);
 
 const panelDrawingActions=$('generate').parentElement;panelDrawingActions.classList.add('panel-drawing-actions');panelDrawingActions.setAttribute('role','group');panelDrawingActions.setAttribute('aria-label','Panel drawing actions');
 manualHolesButton.onclick=()=>{if(spec?.importedDxf){notice('Edit holes in Codex and upload the revised DXF.',true);return;}const layout=result?.manualHoleLayout||(manualHoleRetryLayout?.spec===spec?manualHoleRetryLayout.layout:null);if(!spec||!layout){notice('Generate a fresh drawing first, then add manual holes.',true);return;}PanelManualHoles.open({layout,holes:spec.manualHoles||[],onApply:holes=>{spec.manualHoles=holes;invalidate();manualHoleRetryLayout={spec,layout};rememberPanel();queueProjectSave();$('generate').click();}});};
@@ -726,6 +735,7 @@ $('save').onclick=()=>{try{download(JSON.stringify({...collect(),reviewed:false}
 $('import').onchange=()=>run(async()=>{const file=$('import').files[0];if(!file||file.size>128*1024)throw Error('Choose a panel draft smaller than 128 KB.');const data=JSON.parse(await file.text());if(data.correctionDraft?(!Array.isArray(data.outlineSections)||data.outlineSections.length>32||!data.outlineSections.every(s=>s?.start&&Number.isFinite(s.start.x)&&Number.isFinite(s.start.y))):data.measuredEdges?PanelMeasuredOutline.validate(data).length:(!Array.isArray(data.edges)||data.edges.length<4||data.edges.length>32||!data.edges.every(e=>e&&codes.includes(e.code)&&directions.includes(e.direction))))throw Error('Invalid panel draft.');addPanel(data,file.name);notice('Draft loaded. Review it before generating.');});
 (async()=>{for(const key of (window.parent!==window?['panelstock:session:v2']:[KEY,'panelstock:session:v2','panelstock:site-orders:session:v1'])){try{const saved=JSON.parse(sessionStorage.getItem(key)||'null');if(saved?.token&&saved.expiresAt>Date.now()){session=saved;break;}}catch{}}showSession();if(session)await run(async()=>{await verify();const saved=await PanelCadProjects.list(projectOwner()).catch(()=>[]);notice(saved.length?'Ready. Select Open project to restore your saved work.':'Ready. Upload a sketch or load a test panel.');});})();
 })();
+
 
 
 
