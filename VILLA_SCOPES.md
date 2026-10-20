@@ -10,7 +10,7 @@ Both task permissions appear in the existing User Access role/user editor. The p
 
 Release the counterpart in `matthewlakerdis-dev/panelstock`, branch `codex/villa-scopes-module`, **before** this desktop change. The Worker supplies the authenticated API, shared register, management UI and iPad report. Full setup, import, storage and rollback notes are in that repository's `VILLA_SCOPES.md`.
 
-The existing Pages workflow publishes `main`; a push to this feature branch only runs verification. After release, refresh the desktop app, open Work → Villa Scopes, import the current populated workbook and use **iPad report link** to obtain the viewing URL. The link contains no credentials or register data; it requires a permitted PanelStock login. No private workbook or project data is bundled.
+The existing Pages workflow publishes `main`; a push to this feature branch only runs verification. After release, refresh the desktop app, open Work → Villa Scopes, import the current populated workbook and use **iPad report link** to obtain the viewing URL. Managers can create a private, revocable report link in the module. That link opens the read-only iPad report without sign-in and carries a report-only viewing key; it never carries the normal PanelStock session token or PIN. Share it only with intended viewers. No private workbook or project data is bundled.
 
 ## Validation
 
