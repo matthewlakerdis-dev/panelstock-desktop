@@ -9,7 +9,7 @@ test('offcut choice is optional and requires valid dimensions within stock',()=>
  assert.equal(c.cncOffcutError({...form,pendingOffcut:{length:200,width:500}}),'');
 });
 test('manual form checkbox clears a declined offcut and records a pending proposal',()=>{
- const jsx=(tag,props)=>({tag,...props});const c={import_jsx_runtime:{jsx},CapitalizedInput:'input',CncStockPicker:'picker',CncPanelTypeFields:'types'};
+ const jsx=(tag,props)=>({tag,...props});const c={import_jsx_runtime:{jsx},CapitalizedInput:'input',CncProjectPicker:'project-picker',CncStockPicker:'picker',CncPanelTypeFields:'types'};
  vm.runInNewContext(helper+source.slice(source.indexOf('  function CncSingleForm('),source.indexOf('  function CatalogSingleForm(')),c);
  let next;const form={orderNumber:'1',pendingOffcut:null};
  const tree=c.CncSingleForm({form,setForm:value=>next=value});

@@ -5,7 +5,7 @@ function source(name,indent=2){const start=html.indexOf(' '.repeat(indent)+'func
 function nodes(value){return Array.isArray(value)?value.flatMap(nodes):value&&typeof value==='object'?[value,...nodes(value.children)]:[];}
 function hooks(extra={}){
  const state=[];let cursor=0;const jsx=(type,props,key)=>({type,...props,key}),createElement=(type,props,...children)=>({type,...props,children:children.length?children:props?.children});
- const context={...extra,import_react:{createElement},import_jsx_runtime:{jsx,jsxs:jsx},useEffect(){},useRef:initial=>{const i=cursor++;if(!(i in state))state[i]={current:initial};return state[i];},useState:initial=>{const i=cursor++;if(!(i in state))state[i]=typeof initial==='function'?initial():initial;return[state[i],value=>state[i]=typeof value==='function'?value(state[i]):value];}};
+ const context={CncProjectPicker:"project-picker",...extra,import_react:{createElement},import_jsx_runtime:{jsx,jsxs:jsx},useEffect(){},useRef:initial=>{const i=cursor++;if(!(i in state))state[i]={current:initial};return state[i];},useState:initial=>{const i=cursor++;if(!(i in state))state[i]=typeof initial==='function'?initial():initial;return[state[i],value=>state[i]=typeof value==='function'?value(state[i]):value];}};
  return {context,render(fn,props){cursor=0;return fn(props);}};
 }
 const base={id:'a',jobReference:'Alpha',orderNumber:'01',sheetNumber:'1',panelNumber:'A',status:'pending'};

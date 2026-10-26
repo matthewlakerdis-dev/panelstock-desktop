@@ -57,15 +57,15 @@ test(repo+': mobile CNC entry keeps the remove button inside the form',()=>asser
   const cncPanels=[{id:'cnc-1',status:'pending',stockItemType:'variant',stockItemId:'stock-1'}];
   const refresh=()=>{cursor=0;refCursor=0;tree=render({variants,offcuts:[],cncPanels,onSave:rows=>saves.push(rows),onClose:()=>closed++});nodes=flatten(tree);};
   const button=text=>nodes.find(n=>n.tag==='button'&&n.children===text);
-  refresh();assert.equal(nodes.find(n=>typeof n.tag==='function'&&n.onSelect).cncPanels,cncPanels);button('+ Add line').onClick();refresh();assert.equal(nodes.filter(n=>n.tag==='input').length,8);
-  nodes.find(n=>n['aria-label']==='Remove line 2').onClick();refresh();assert.equal(nodes.filter(n=>n.tag==='input').length,5);
+  refresh();assert.equal(nodes.find(n=>typeof n.tag==='function'&&n.onSelect).cncPanels,cncPanels);button('+ Add line').onClick();refresh();assert.equal(nodes.filter(n=>n.tag==='input').length,7);
+  nodes.find(n=>n['aria-label']==='Remove line 2').onClick();refresh();assert.equal(nodes.filter(n=>n.tag==='input').length,4);
   nodes.find(n=>n.tag==='input'&&n.placeholder==='e.g. 001234').onChange({target:{value:'Order 7'}});refresh();
   nodes.find(n=>n['aria-label']==='Sheet number line 1').onChange({target:{value:'1'}});refresh();
   tree.onSubmit({preventDefault(){}});refresh();assert.equal(saves.length,0);assert.ok(nodes.some(n=>n.role==='alert'));
   nodes.find(n=>n['aria-label']==='Panel ID line 1').onChange({target:{value:'a1'}});refresh();
   nodes.find(n=>n['aria-label']==='Total panel area line 1').onChange({target:{value:'4.2'}});refresh();
   tree.onSubmit({preventDefault(){}});assert.equal(saves.length,0);refresh();
-  nodes.find(n=>n.tag==='input'&&n.placeholder==='e.g. Meridian Constructions').onChange({target:{value:'Test'}});refresh();
+  nodes.find(n=>typeof n.tag==='function'&&n.tag.name==='CncProjectPicker').onChange('Test');refresh();
   nodes.find(n=>typeof n.tag==='function'&&n.onSelect).onSelect(variants[0]);refresh();
   tree.onSubmit({preventDefault(){}});assert.equal(saves.length,1);assert.equal(closed,1);assert.equal(saves[0][0].panelNumber,'A1');
  });
