@@ -71,3 +71,23 @@ test('recut sheet changes keep the layout bottom-left and recalculate the usable
  const tooSmall=vm.runInNewContext(source('cncRecutSheetPlan')+';cncRecutSheetPlan({layout:{anchor:"bottom-left",usedLength:1800,usedWidth:900}},1700,1200)');
  assert.equal(tooSmall.fits,false);assert.equal(tooSmall.offcut,null);
 });
+
+test('PDF import keeps an offcut only when opted in, independently per sheet copy',async()=>{
+ const stock={id:'stock',sku:'SKU',qty:8,width:4000,height:1500,material:'ACM'};
+ const pdfPages=[{page:1,project:'Alpha',orderNumber:'21',sheetNumber:'1',panelIds:['A','B'],quantity:2,sheetWidth:4000,sheetHeight:1500,panelArea:4,material:'ACM',proposedOffcut:{length:1500,width:500,edge:'right',cutEdgeAllowance:10}}];
+ const saved=[];const runtime=hooks({PageHeading:'heading',Upload:'upload',Trash2:'trash',Field:'field',CncStockPicker:'picker',CncPanelTypeFields:'classification',inputCls:'input',BAKED_WORKER_URL:'https://example.invalid',projectTitleCase:v=>v,FileReader:class{readAsDataURL(){this.result='data:application/pdf;base64,AA==';this.onload();}},PanelStock:{apiFetch:async()=>({ok:true,json:async()=>({pages:pdfPages})})}});
+ const render=vm.runInNewContext(normalizers+source('expandCncPdfSheets')+source('cncRecutSheetPlan')+source('CncPdfImport')+';CncPdfImport',runtime.context),props={variants:[stock],offcuts:[],cncPanels:[],onSave:rows=>saved.push(rows),onClose:()=>{}},draw=()=>nodes(runtime.render(render,props));
+ const save=()=>draw().find(n=>n.children?.includes?.('Save reviewed sheets'));
+ let all=draw();await all.find(n=>n.accept==='application/pdf').onChange({target:{files:[{type:'application/pdf',size:1,name:'example.pdf'}]}});
+ assert.equal(draw().filter(n=>n['aria-label']?.startsWith('Keep offcut')).length,2);
+ assert.ok(draw().filter(n=>n['aria-label']?.startsWith('Keep offcut')).every(n=>n.checked===false));
+ assert.ok(!draw().some(n=>n['aria-label']==='Off-cut length'));
+ save().onClick();assert.equal(saved.length,1);assert.ok(saved[0].every(row=>row.pendingOffcut===null));
+ draw().find(n=>n['aria-label']==='Keep offcut for sheet 1').onChange({target:{checked:true}});
+ save().onClick();let rows=saved[1];assert.ok(rows.filter(row=>row.sheetNumber==='1').every(row=>row.pendingOffcut.length===1500&&row.pendingOffcut.width===500));assert.ok(rows.filter(row=>row.sheetNumber==='1.2').every(row=>row.pendingOffcut===null));
+ draw().find(n=>n['aria-label']==='Off-cut width').onChange({target:{value:'0'}});assert.equal(save().disabled,true);
+ draw().find(n=>n['aria-label']==='Keep offcut for sheet 1').onChange({target:{checked:false}});assert.equal(save().disabled,false);save().onClick();assert.ok(saved[2].every(row=>row.pendingOffcut===null));
+ draw().find(n=>n['aria-label']==='Keep offcut for sheet 1').onChange({target:{checked:true}});assert.equal(save().disabled,true);
+ draw().find(n=>n['aria-label']==='Off-cut width').onChange({target:{value:'5000'}});assert.equal(save().disabled,true);
+ draw().find(n=>n['aria-label']==='Off-cut width').onChange({target:{value:'450'}});assert.equal(save().disabled,false);save().onClick();assert.equal(saved[3][0].pendingOffcut.width,450);
+});
