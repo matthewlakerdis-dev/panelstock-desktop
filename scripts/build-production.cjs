@@ -5,10 +5,15 @@ const out = path.join(root, 'dist-production');
 const files = ['index.html','workshop-stock.js','workshop-stock.css','panelstock-client.js','toolbox-launcher.js','tailwind.css','icon-192.png','PanelStock_SOP.pdf','push-sw.js','CNAME'];
 fs.mkdirSync(out,{recursive:true});
 for (const file of files) fs.copyFileSync(path.join(root,file),path.join(out,file));
-// Version the workshop script whenever its content changes.
-const workshopVersion=require('node:crypto').createHash('sha256').update(fs.readFileSync(path.join(out,'workshop-stock.js'))).digest('hex').slice(0,12);
+// Version both workshop assets so published changes bypass browser caches.
 const indexPath=path.join(out,'index.html');
-fs.writeFileSync(indexPath,fs.readFileSync(indexPath,'utf8').replace(/workshop-stock\\.js\\?v=[^"']+/g,'workshop-stock.js?v='+workshopVersion));
+let indexHtml=fs.readFileSync(indexPath,'utf8');
+for(const extension of ['js','css']){
+ const asset='workshop-stock.'+extension;
+ const version=require('node:crypto').createHash('sha256').update(fs.readFileSync(path.join(out,asset))).digest('hex').slice(0,12);
+ indexHtml=indexHtml.replace(new RegExp('workshop-stock\\.'+extension+'\\?v=[^"\\x27]+','g'),asset+'?v='+version);
+}
+fs.writeFileSync(indexPath,indexHtml);
 fs.cpSync(path.join(root,'cad'),path.join(out,'cad'),{recursive:true});
 const pdfRoot=path.join(root,'node_modules/pdfjs-dist');
 const pdfOut=path.join(out,'cad/pdfjs');

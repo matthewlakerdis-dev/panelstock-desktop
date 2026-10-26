@@ -540,3 +540,7 @@ body:has(.ws-stock-screen,.ws-receiving-screen) #root header.sticky:has(img[alt=
  .ws-receiving-screen+.ws-receive-manual{width:calc(100% - 24px)}
  .ws-receiving-screen+.ws-receive-manual>summary{padding:14px 16px}
 }
+
+/* A size container establishes the containing block for fixed descendants in Safari.
+   Release it while a modal is open so the dialog centers in the viewport. */
+.ws-stock-screen:has(>.ws-overlay){container-type:normal}
