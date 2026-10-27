@@ -20,7 +20,7 @@ test('directional imports request explicit review instead of asserting non-direc
 });
 
 test('non-directional batch confirms every imported panel without bypassing drawing validation',async()=>{
- const {markPanelsNonDirectional}=require('./automatic-pack.js');
+ const {markPanelsNonDirectional}=require('../cad/automatic-pack.js');
  const input=['A','B'].map(name=>({...panel(name),reviewed:false,spec:{panelId:name,importedDxf:true,directionReviewed:false}}));
  const original=JSON.stringify(input);const calls=[];
  const updated=await markPanelsNonDirectional(input,async(_,body)=>{calls.push(body);return {dxf:'no arrow',svg:'<svg/>'};});
