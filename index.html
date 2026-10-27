@@ -17458,120 +17458,55 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
     const history=Array.isArray(item?.history)?item.history:[];
     return (history.length?history:item?.latest?[item.latest]:[]).slice().reverse();
   }
-  function qaReportTextLines(value,size=9) {
-    const maxLength=Math.max(1,Math.floor(680/(size*.6))),lines=[];
-    for(const paragraph of String(value??"").replace(/\t/g,"    ").replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g," ").split(/\r\n|\r|\n/)) {
-      let remaining=paragraph;
-      while(remaining.length>maxLength) {
-        const boundary=remaining.lastIndexOf(" ",maxLength),length=boundary>0?boundary:maxLength;
-        lines.push(remaining.slice(0,length).trimEnd());
-        remaining=remaining.slice(length).trimStart();
-      }
-      lines.push(remaining);
-    }
-    return lines;
-  }
-  function qaReportPhotoBlock(source) {
-    return new Promise((resolve,reject)=>{
-      if(!/^data:image\/(jpeg|png|webp);base64,[a-zA-Z0-9+/=]+$/.test(String(source||""))){reject(Error("A QA evidence photo could not be added to the PDF."));return;}
-      const image=new Image(),timeout=setTimeout(()=>reject(Error("A QA evidence photo timed out. Please retry the PDF download.")),15000);
-      image.onerror=()=>{clearTimeout(timeout);reject(Error("A QA evidence photo could not be opened. The PDF has not been downloaded."));};
-      image.onload=()=>{
-        clearTimeout(timeout);
-        try {
-          const width=image.naturalWidth||image.width,height=image.naturalHeight||image.height;
-          if(!(width>0&&height>0))throw Error("A QA evidence photo has invalid dimensions.");
-          const canvas=document.createElement("canvas"),scale=Math.min(1,1200/Math.max(width,height));
-          canvas.width=Math.max(1,Math.round(width*scale));canvas.height=Math.max(1,Math.round(height*scale));
-          const context=canvas.getContext("2d");
-          if(!context)throw Error("This browser could not prepare a QA evidence photo.");
-          context.fillStyle="#ffffff";context.fillRect(0,0,canvas.width,canvas.height);context.drawImage(image,0,0,canvas.width,canvas.height);
-          const jpeg=canvas.toDataURL("image/jpeg",.85);
-          if(!jpeg.startsWith("data:image/jpeg;base64,"))throw Error("A QA evidence photo could not be converted for the PDF.");
-          resolve({type:"image",jpegBytes:dataUrlToBytes(jpeg),width:canvas.width,height:canvas.height,...computeDisplaySize(canvas.width,canvas.height,300,200)});
-        }catch(error){reject(error);}
-      };
-      image.src=source;
-    });
-  }
-  async function buildQaOrderPdfBlocks(report) {
-    const blocks=[],items=report.items||[],labels=Object.fromEntries(report.checklists?.panel||[]);
-    const text=(value,size=9)=>{for(const line of qaReportTextLines(value,size))blocks.push({type:"text",text:line,size});};
-    const space=height=>blocks.push({type:"space",height});
-    text("PanelStock · Order QA report",16);
-    text(`${report.project||"No project"} · Order ${report.orderNumber}`,12);
-    text(`Generated ${qaReportDate(report.generatedAt)} (Brisbane) by ${report.generatedBy||"Unknown"}`);
-    text(`${items.length} panel${items.length===1?"":"s"} · Includes every scheduled panel in this order.`);
-    const counts=new Map();
-    for(const item of items){const label=qaReportStatusLabel(item);counts.set(label,(counts.get(label)||0)+1);}
-    text([...counts].map(([label,count])=>`${label}: ${count}`).join(" · "));
-    space(12);
-    for(const [index,item] of items.entries()) {
-      text(`${index+1}. Sheet ${item.sheetNumber||"Unknown"} · Panel ${item.reference||"Unknown"} · ${qaReportStatusLabel(item)}`,12);
-      const material=[item.material,item.colour,item.thickness?`${item.thickness} mm`:""].filter(Boolean).join(" · ");
-      if(material)text(`Material: ${material}`);
-      if(item.width>0&&item.height>0)text(`Panel size: ${item.width} x ${item.height} mm`);
-      text(`Cut by ${item.cutBy||"Unknown"} · CNC completed ${qaReportDate(item.cutAt)} (Brisbane)`);
-      if(item.isRemake||item.remakeOf)text(`Remake${item.remakeOfReference||item.remakeOf?` of ${item.remakeOfReference||item.remakeOf}`:""}${item.remakeReason?`: ${item.remakeReason}`:""}`);
-      if(item.replacementId)text(`Replacement: ${item.replacementReference||item.replacementId} · ${qaReportStatusLabel(item.replacementStatus)}`);
-      if(item.resolvedSeparatelyAt)text(`Recut completed separately by ${item.resolvedSeparatelyBy||"Unknown"} on ${qaReportDate(item.resolvedSeparatelyAt)} (Brisbane)${item.resolvedSeparatelyReason?`: ${item.resolvedSeparatelyReason}`:""}`);
-      const attempts=qaReportAttempts(item);
-      if(!attempts.length)text(item.status==="awaiting_routing"?"No QA inspection: panel is awaiting routing.":item.status==="pre_qa"?"No QA inspection recorded: panel was completed before QA tracking began.":"No QA inspection has been recorded for this panel.");
-      for(const [attemptIndex,attempt] of attempts.entries()) {
-        space(5);
-        text(`Inspection ${attempts.length-attemptIndex} · ${qaReportStatusLabel(attempt.status)}`,10);
-        text(`Checked by ${attempt.checkedBy||"Unknown"} · ${qaReportDate(attempt.checkedAt)} (Brisbane)`);
-        const results=Object.entries(attempt.results||{});
-        if(!results.length)text("No checklist results recorded.");
-        for(const [key,value] of results)text(`${value==="pass"?"PASS":value==="fail"?"FAIL":value==="na"?"N/A":String(value||"Not recorded")}: ${labels[key]||key}`);
-        if(attempt.notes)text(`Notes: ${attempt.notes}`);
-        if(attempt.overrideReason)text(`Administrator override: ${attempt.overrideReason}`);
-        if(attempt.photo){text(`QA evidence · Sheet ${item.sheetNumber||"Unknown"} · Panel ${item.reference||"Unknown"} · Inspection ${attempts.length-attemptIndex}`);blocks.push(await qaReportPhotoBlock(attempt.photo));}
-      }
-      space(14);
-    }
-    return blocks;
-  }
   function QaOrderReport({report,onClose}) {
     const h=import_react.createElement,[downloading,setDownloading]=useState(false),[error,setError]=useState("");
     const labels=Object.fromEntries(report.checklists?.panel||[]),panels=report.items||[],counts=panels.reduce((result,item)=>{const label=qaReportStatusLabel(item);result[label]=(result[label]||0)+1;return result;},{});
     const tone=status=>["approved","replaced"].includes(status)?"bg-green-100 text-green-800":status==="recut"?"bg-red-100 text-red-800":"bg-slate-100 text-slate-700";
     async function download(){
-      setDownloading(true);setError("");
+      setDownloading(true);setError("");let url,link;
       try{
-        const blocks=await buildQaOrderPdfBlocks(report),blob=buildRichPdfBlob(blocks),url=URL.createObjectURL(blob),link=document.createElement("a");
-        const safe=value=>String(value||"No project").replace(/[^a-zA-Z0-9._-]+/g,"_").slice(0,100);
-        link.href=url;link.download=`QA_Report_${safe(report.project)}_Order_${safe(report.orderNumber)}.pdf`;
-        document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
-      }catch(reason){setError(reason.message||"The QA report PDF could not be downloaded.");}finally{setDownloading(false);}
+        if(report.pdf?.mime!=="application/pdf"||!report.pdf.data)throw Error("The Lennox QA PDF is unavailable. Return to QA Centre and generate the report again.");
+        const raw=atob(report.pdf.data);
+        if(!raw.startsWith("%PDF-"))throw Error("The QA report PDF could not be read. Return to QA Centre and generate the report again.");
+        const bytes=Uint8Array.from(raw,value=>value.charCodeAt(0)),blob=new Blob([bytes],{type:"application/pdf"});
+        url=URL.createObjectURL(blob);link=document.createElement("a");
+        const fallback=`Lennox Facades - QA Report - ${report.project||"No project"} - Order ${report.orderNumber}.pdf`;
+        let filename=String(report.pdf.fileName||fallback).replace(/[<>:"/\\|?*\u0000-\u001f]/g,"_").trim().slice(0,200);
+        if(!filename.toLowerCase().endsWith(".pdf"))filename+=".pdf";
+        link.href=url;link.download=filename;document.body.append(link);link.click();
+      }catch(reason){setError(reason.message||"The QA report PDF could not be downloaded.");}finally{link?.remove();if(url)setTimeout(()=>URL.revokeObjectURL(url),60000);setDownloading(false);}
     }
     return h("div",{className:"mx-auto max-w-4xl px-4 py-5"},
-      h("button",{type:"button",onClick:onClose,className:"mb-4 text-sm font-semibold text-cyan-800"},"← Back to QA Centre"),
-      h("section",{className:"rounded-xl border border-slate-300 bg-white p-5"},
-        h("div",{className:"flex flex-wrap items-start justify-between gap-3"},
-          h("div",null,h("p",{className:"text-xs font-semibold uppercase tracking-wide text-slate-400"},"Order QA report"),h("h2",{className:"mt-1 text-xl font-semibold text-slate-900"},`${report.project||"No project"} · Order ${report.orderNumber}`)),
-          h("button",{type:"button",onClick:download,disabled:downloading,className:"rounded-lg bg-cyan-800 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"},downloading?"Preparing PDF…":"Download PDF")),
-        h("p",{className:"mt-3 text-sm text-slate-500"},`${panels.length} panel${panels.length===1?"":"s"} · Generated ${qaReportDate(report.generatedAt)} by ${report.generatedBy||"Unknown"}`),
-        h("p",{className:"mt-2 text-xs text-slate-500"},"Includes every scheduled panel in this order, including panels awaiting routing and Pre-QA panels."),
-        h("div",{className:"mt-4 flex flex-wrap gap-2"},Object.entries(counts).map(([label,count])=>h("span",{key:label,className:"rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700"},`${label}: ${count}`))),
-        error&&h("p",{role:"alert",className:"mt-3 text-sm text-red-700"},error)),
+      h("div",{className:"mb-4 flex flex-wrap items-center justify-between gap-3"},
+        h("button",{type:"button",onClick:onClose,className:"text-sm font-semibold text-cyan-800"},"← Back to QA Centre"),
+        h("button",{type:"button",onClick:download,disabled:downloading,className:"rounded-lg px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50",style:{backgroundColor:"#474a4d"}},downloading?"Preparing PDF…":"Download PDF")),
+      h("section",{className:"overflow-hidden rounded-xl border border-slate-300 bg-white",style:{borderTop:"4px solid #00abc4"}},
+        h("div",{className:"flex flex-wrap items-center gap-5 p-5",style:{borderBottom:"2px solid #00abc4"}},
+          h("img",{src:"lennox-logo.jpg",alt:"Lennox Facades",className:"h-auto w-40",style:{objectFit:"contain"}}),
+          h("div",{className:"min-w-0 flex-1"},h("h2",{className:"text-xl font-semibold uppercase tracking-wide",style:{color:"#474a4d"}},"Order QA report"),h("p",{className:"mt-2 text-sm font-semibold text-slate-700"},`${report.project||"No project"} · Order ${report.orderNumber}`),h("p",{className:"mt-1 text-xs text-slate-500"},"Panel inspection history and supporting evidence"))),
+        h("div",{className:"p-5"},
+          h("p",{className:"text-sm text-slate-600"},`${panels.length} panel${panels.length===1?"":"s"} · Generated ${qaReportDate(report.generatedAt)} AEST by ${report.generatedBy||"Unknown"}`),
+          h("p",{className:"mt-2 text-xs text-slate-500"},"Includes every scheduled panel in this order, including panels awaiting routing and Pre-QA panels."),
+          h("div",{className:"mt-4 flex flex-wrap gap-2"},Object.entries(counts).map(([label,count])=>h("span",{key:label,className:"rounded-full px-3 py-1 text-xs font-semibold",style:{backgroundColor:"#ebf7fa",color:"#383b3d"}},`${label}: ${count}`))),
+          error&&h("p",{role:"alert",className:"mt-3 text-sm text-red-700"},error))),
       h("div",{className:"mt-4 space-y-4"},panels.map(item=>{
         const attempts=qaReportAttempts(item),material=[item.material,item.colour,item.thickness?`${item.thickness} mm`:"",item.width&&item.height?`${item.width} × ${item.height} mm`:""].filter(Boolean).join(" · ");
         return h("section",{key:item.id,className:"overflow-hidden rounded-xl border border-slate-300 bg-white"},
-          h("div",{className:"border-b border-slate-200 bg-slate-50 p-4"},
-            h("div",{className:"flex flex-wrap items-center justify-between gap-3"},h("h3",{className:"text-sm font-semibold text-slate-900"},`Sheet ${item.sheetNumber||"—"} · Panel ${item.reference||"—"}`),h("span",{className:`rounded-full px-3 py-1 text-xs font-semibold ${tone(item.status)}`},qaReportStatusLabel(item))),
+          h("div",{className:"border-b border-slate-200 p-4",style:{backgroundColor:"#ebf7fa",borderLeft:"3px solid #00abc4"}},
+            h("div",{className:"flex flex-wrap items-center justify-between gap-3"},h("h3",{className:"text-sm font-semibold",style:{color:"#383b3d"}},`Sheet ${item.sheetNumber||"—"} · Panel ${item.reference||"—"}`),h("span",{className:`rounded-full px-3 py-1 text-xs font-semibold ${tone(item.status)}`},qaReportStatusLabel(item))),
             material&&h("p",{className:"mt-2 text-sm text-slate-600"},material),
-            h("p",{className:"mt-2 text-xs text-slate-500"},`Cut by ${item.cutBy||"Unknown"} · ${qaReportDate(item.cutAt)}`),
+            h("p",{className:"mt-2 text-xs text-slate-500"},`Cut by ${item.cutBy||"Unknown"} · ${qaReportDate(item.cutAt)}${item.cutAt?" AEST":""}`),
             item.isRemake&&h("p",{className:"mt-2 text-sm text-slate-700"},`Remake${item.remakeOfReference||item.remakeOf?` of ${item.remakeOfReference||item.remakeOf}`:""}${item.remakeReason?` · ${item.remakeReason}`:""}`),
             item.replacementId&&h("p",{className:"mt-2 text-sm text-slate-700"},`Replacement ${item.replacementReference||item.replacementId} · ${qaReportStatusLabel({status:item.replacementStatus})}`),
-            item.resolvedSeparatelyAt&&h("p",{className:"mt-2 text-sm text-slate-700"},`Recut completed separately by ${item.resolvedSeparatelyBy||"Unknown"} · ${qaReportDate(item.resolvedSeparatelyAt)}${item.resolvedSeparatelyReason?` · ${item.resolvedSeparatelyReason}`:""}`)),
-          h("div",{className:"space-y-4 p-4"},attempts.length?attempts.map((attempt,index)=>h("article",{key:attempt.id||index,className:"rounded-lg border border-slate-200 p-4"},
-            h("div",{className:"flex flex-wrap items-center justify-between gap-3"},h("h4",{className:"text-sm font-semibold text-slate-800"},`Inspection ${attempts.length-index}`),h("span",{className:`rounded-full px-3 py-1 text-xs font-semibold ${tone(attempt.status)}`},qaReportStatusLabel(attempt))),
-            h("p",{className:"mt-2 text-xs text-slate-500"},`Checked by ${attempt.checkedBy||"Unknown"} · ${qaReportDate(attempt.checkedAt)}`),
-            h("div",{className:"mt-3 divide-y divide-slate-100"},Object.entries(attempt.results||{}).map(([key,value])=>h("div",{key,className:"flex items-center justify-between gap-3 py-3 text-sm"},h("span",{className:"text-slate-700"},labels[key]||key),h("strong",{className:value==="fail"?"text-red-700":"text-slate-700"},value==="pass"?"Pass":value==="fail"?"Fail":value==="na"?"N/A":"Not recorded")))),
-            attempt.notes&&h("p",{className:"mt-3 whitespace-pre-wrap text-sm text-slate-700"},`Notes: ${attempt.notes}`),
-            attempt.overrideReason&&h("p",{className:"mt-3 whitespace-pre-wrap text-sm text-amber-900"},`Administrator override: ${attempt.overrideReason}`),
-            attempt.photo&&h("div",{className:"mt-3"},h("p",{className:"mb-2 text-xs font-semibold text-slate-500"},"QA photo"),h("img",{src:attempt.photo,alt:`QA evidence for panel ${item.reference}, inspection ${attempts.length-index}`,className:"max-h-96 w-full rounded-lg bg-slate-100 object-contain"})))):h("p",{className:"text-sm text-slate-500"},item.status==="awaiting_routing"?"Awaiting routing — no QA inspection recorded.":item.status==="pre_qa"?"Pre-QA — completed before QA was introduced; no QA inspection recorded.":"No QA inspection recorded.")));
+            item.resolvedSeparatelyAt&&h("p",{className:"mt-2 text-sm text-slate-700"},`Recut completed separately by ${item.resolvedSeparatelyBy||"Unknown"} · ${qaReportDate(item.resolvedSeparatelyAt)} AEST${item.resolvedSeparatelyReason?` · ${item.resolvedSeparatelyReason}`:""}`)),
+          h("div",{className:"space-y-4 p-4"},attempts.length?attempts.map((attempt,index)=>h("article",{key:attempt.id||index,className:"overflow-hidden rounded-lg border border-slate-200"},
+            h("div",{className:"flex flex-wrap items-center justify-between gap-3 px-4 py-3",style:{backgroundColor:"#474a4d"}},h("h4",{className:"text-sm font-semibold text-white"},`Inspection ${attempts.length-index}`),h("span",{className:`rounded-full px-3 py-1 text-xs font-semibold ${tone(attempt.status)}`},qaReportStatusLabel(attempt))),
+            h("div",{className:"p-4"},
+              h("p",{className:"text-xs text-slate-500"},`Checked by ${attempt.checkedBy||"Unknown"} · ${qaReportDate(attempt.checkedAt)}${attempt.checkedAt?" AEST":""}`),
+              h("div",{className:"mt-3 divide-y divide-slate-100"},Object.entries(attempt.results||{}).map(([key,value])=>h("div",{key,className:"flex items-center justify-between gap-3 py-3 text-sm"},h("span",{className:"text-slate-700"},labels[key]||key),h("strong",{className:value==="fail"?"text-red-700":"text-slate-700"},value==="pass"?"Pass":value==="fail"?"Fail":value==="na"?"N/A":"Not recorded")))),
+              attempt.notes&&h("p",{className:"mt-3 whitespace-pre-wrap text-sm text-slate-700"},`Notes: ${attempt.notes}`),
+              attempt.overrideReason&&h("p",{className:"mt-3 whitespace-pre-wrap text-sm text-amber-900"},`Administrator override: ${attempt.overrideReason}`),
+              attempt.photo&&h("div",{className:"mt-3"},h("p",{className:"mb-2 text-xs font-semibold text-slate-500"},"QA photo"),h("img",{src:attempt.photo,alt:`QA evidence for panel ${item.reference}, inspection ${attempts.length-index}`,className:"max-h-96 w-full rounded-lg bg-slate-100 object-contain"}))))):h("p",{className:"text-sm text-slate-500"},item.status==="awaiting_routing"?"Awaiting routing — no QA inspection recorded.":item.status==="pre_qa"?"Pre-QA — completed before QA was introduced; no QA inspection recorded.":"No QA inspection recorded.")));
       })));
   }
   function QaCenter({username,isAdmin,canManage,canDispatch}) {
@@ -17586,7 +17521,7 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
     const resolveRecut=async item=>{setSaving(true);setNotice("");try{const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/qa/recut/resolve",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:item.id,reason:"Recut completed and scheduled separately"})}),result=await response.json().catch(()=>({}));if(!response.ok)throw Error(result.error||"The recut could not be resolved.");setItems(result.items||[]);setDispatches(result.dispatches||[]);setPreQaCount(result.preQaCount||0);setResolving(null);setNotice("Recut marked as completed separately.");}catch(error){setNotice(error.message);}finally{setSaving(false);}};
     const choosePhoto=async event=>{const file=event.target.files?.[0];if(!file)return;setNotice("");try{if(!file.type.startsWith("image/"))throw Error("Choose an image from the camera or photo library.");const prepared=await processImageFile(file);setPhoto(prepared.data);}catch(error){setNotice(error.message||"The photo could not be read.");}finally{event.target.value="";}};
     const addMetalwork=async event=>{event.preventDefault();setSaving(true);setNotice("");try{const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/qa/metalwork",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(metalwork)}),result=await response.json().catch(()=>({}));if(!response.ok)throw Error(result.error||"Metalwork could not be added.");setItems(result.items||[]);setDispatches(result.dispatches||[]);setMetalwork({project:"",orderNumber:"",reference:"",quantity:1,fabricatedBy:""});setAdding(false);setStatusFilter("awaiting");setNotice("Metalwork added for QA.");}catch(error){setNotice(error.message);}finally{setSaving(false);}};
-    const generateOrderReport=async group=>{setReportingOrder(`${group.project}\u0000${group.orderNumber}`);setNotice("");try{const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/qa/report",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({project:group.project,orderNumber:group.orderNumber})}),result=await response.json().catch(()=>({}));if(!response.ok||!result.report)throw Error(result.error||"The order QA report could not be generated.");setOrderReport(result.report);}catch(error){setNotice(error.message);}finally{setReportingOrder(null);}};
+    const generateOrderReport=async group=>{setReportingOrder(`${group.project}\u0000${group.orderNumber}`);setNotice("");try{const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/qa/report",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({project:group.project,orderNumber:group.orderNumber,includePdf:true})}),result=await response.json().catch(()=>({}));if(!response.ok||!result.report||!result.pdf?.data)throw Error(result.error||"The order QA report could not be generated.");setOrderReport({...result.report,pdf:result.pdf});}catch(error){setNotice(error.message);}finally{setReportingOrder(null);}};
     if(orderReport)return h(QaOrderReport,{report:orderReport,onClose:()=>setOrderReport(null)});
     if(resolving)return h("div",{className:"mx-auto max-w-xl px-4 py-8"},h("section",{className:"rounded-xl border border-slate-300 bg-white p-6"},h("p",{className:"text-xs font-semibold uppercase tracking-wide text-slate-400"},"Resolve recut"),h("h2",{className:"mt-1 text-xl font-semibold text-slate-900"},`${resolving.project} · Order ${resolving.orderNumber}`),h("p",{className:"mt-2 text-sm text-slate-600"},`Sheet ${resolving.sheetNumber} · Panel ${resolving.reference}`),h("p",{className:"mt-4 rounded-lg bg-amber-50 p-4 text-sm text-amber-900"},"Confirm this panel was recut and scheduled separately. The failed panel and its QA history will be retained, but it will leave the Recut required list."),notice&&h("p",{className:"mt-3 text-sm text-red-700"},notice),h("div",{className:"mt-5 flex justify-end gap-3"},h("button",{type:"button",disabled:saving,onClick:()=>{setResolving(null);setNotice("");},className:"rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-600"},"Cancel"),h("button",{type:"button",disabled:saving,onClick:()=>resolveRecut(resolving),className:"rounded-lg bg-cyan-800 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"},saving?"Resolving…":"Confirm recut completed"))));
     if(report){const labels=Object.fromEntries(checklists[report.kind]||[]),attempts=[...(report.history||[])].reverse();return h("div",{className:"mx-auto max-w-4xl px-4 py-5"},h("button",{type:"button",onClick:()=>setReport(null),className:"mb-4 text-sm font-semibold text-cyan-800"},"← Back to QA Centre"),h("section",{className:"overflow-hidden rounded-xl border border-slate-300 bg-white"},h("div",{className:"border-b border-slate-200 p-5"},h("p",{className:"text-xs font-semibold uppercase tracking-wide text-slate-400"},"QA report"),h("div",{className:"mt-1 flex flex-wrap items-start justify-between gap-3"},h("div",null,h("h2",{className:"text-xl font-semibold text-slate-900"},`${report.project||"No project"} · Order ${report.orderNumber}`),h("p",{className:"mt-1 text-sm text-slate-500"},report.kind==="panel"?`Sheet ${report.sheetNumber} · Panel ${report.reference}`:report.reference)),h("span",{className:`rounded-full px-3 py-1 text-xs font-semibold ${statusTone(report.status)}`},statusLabel(report.status)))),h("div",{className:"space-y-4 p-5"},attempts.length?attempts.map((attempt,index)=>h("article",{key:attempt.id||index,className:"rounded-xl border border-slate-200"},h("div",{className:"flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-4 py-3"},h("strong",{className:"text-sm text-slate-800"},`Inspection ${attempts.length-index}`),h("span",{className:`rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone(attempt.status)}`},statusLabel(attempt.status))),h("div",{className:"grid gap-2 border-b border-slate-100 px-4 py-3 text-sm sm:grid-cols-2"},h("p",null,h("span",{className:"text-slate-400"},"Checked by "),h("strong",{className:"text-slate-700"},attempt.checkedBy||"Unknown")),h("p",null,h("span",{className:"text-slate-400"},"Checked "),h("strong",{className:"text-slate-700"},attempt.checkedAt?new Date(attempt.checkedAt).toLocaleString():"Unknown"))),h("div",{className:"divide-y divide-slate-100 px-4"},Object.entries(attempt.results||{}).map(([key,value])=>h("div",{key,className:"flex items-center justify-between gap-3 py-3 text-sm"},h("span",{className:"text-slate-700"},labels[key]||key),h("span",{className:`rounded-full px-2.5 py-1 text-xs font-semibold ${value==="pass"?"bg-green-100 text-green-800":value==="fail"?"bg-red-100 text-red-800":"bg-slate-100 text-slate-700"}`},value==="pass"?"Pass":value==="fail"?"Fail":"N/A"))),attempt.notes&&h("div",{className:"border-t border-slate-100 px-4 py-3"},h("p",{className:"text-xs font-semibold uppercase tracking-wide text-slate-400"},"Notes"),h("p",{className:"mt-1 whitespace-pre-wrap text-sm text-slate-700"},attempt.notes)),attempt.overrideReason&&h("div",{className:"border-t border-amber-100 bg-amber-50 px-4 py-3"},h("p",{className:"text-xs font-semibold uppercase tracking-wide text-amber-700"},"Administrator override"),h("p",{className:"mt-1 whitespace-pre-wrap text-sm text-amber-900"},attempt.overrideReason)),attempt.photo&&h("div",{className:"border-t border-slate-100 p-4"},h("p",{className:"mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400"},"QA photo"),h("img",{src:attempt.photo,alt:`QA evidence for inspection ${attempts.length-index}`,className:"max-h-96 w-full rounded-lg bg-slate-100 object-contain"}))))):h("p",{className:"py-8 text-center text-sm text-slate-500"},"No completed QA reports are available for this item."))));}
