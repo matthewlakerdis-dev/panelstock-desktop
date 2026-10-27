@@ -49,10 +49,10 @@ test('order and sheet delete controls use all scheduled members, sit outside tog
  const page=source(html.includes('  function CncTab(')?'CncTab':'CncPage');assert.match(page,/onRemoveScheduled: isAdmin && view === "pending" \? onRemoveScheduled : null/);assert.match(page,/isAdmin && view === "pending" &&/);
 });
 test('PDF review removes one sheet copy, preserves original numbering, supports undo and never deletes existing schedule data',async()=>{
- const stock={id:'stock',sku:'SKU',qty:8,width:4000,height:1500,material:'ACM'},pdfPages=[{page:1,project:'Alpha',orderNumber:'01',sheetNumber:'1',panelIds:['A','B'],quantity:2,sheetWidth:4000,sheetHeight:1500,panelArea:4,material:'ACM'},{page:2,project:'Alpha',orderNumber:'01',sheetNumber:'2',panelIds:['C'],quantity:1,sheetWidth:4000,sheetHeight:1500,panelArea:4,material:'ACM'}];
+ const stock={id:'stock',sku:'SKU',qty:8,width:4000,height:1500,material:'ACM',color:'White',thickness:4},pdfPages=[{page:1,project:'Alpha',orderNumber:'01',sheetNumber:'1',panelIds:['A','B'],quantity:2,sheetWidth:4000,sheetHeight:1500,panelArea:4,material:'ACM 4 mm',finish:'White'},{page:2,project:'Alpha',orderNumber:'01',sheetNumber:'2',panelIds:['C'],quantity:1,sheetWidth:4000,sheetHeight:1500,panelArea:4,material:'ACM 4 mm',finish:'White'}];
  let saved=[],closed=0;const scheduled=[{...base,status:'completed'}],before=JSON.stringify(scheduled);
  const runtime=hooks({PageHeading:'heading',Upload:'upload',Trash2:'trash',Field:'field',CncStockPicker:'picker',CncPanelTypeFields:'classification',inputCls:'input',BAKED_WORKER_URL:'https://example.invalid',projectTitleCase:v=>v,FileReader:class{readAsDataURL(){this.result='data:application/pdf;base64,AA==';this.onload();}},PanelStock:{apiFetch:async()=>({ok:true,json:async()=>({pages:pdfPages})})}});
- const render=vm.runInNewContext(normalizers+source('expandCncPdfSheets')+source('cncRecutSheetPlan')+source('CncPdfImport')+';CncPdfImport',runtime.context),props={variants:[stock],offcuts:[],cncPanels:scheduled,onSave:(rows,options)=>saved.push({rows,options}),onClose:()=>closed++},draw=()=>nodes(runtime.render(render,props));
+ const render=vm.runInNewContext(normalizers+source('expandCncPdfSheets')+source('cncRecutSheetPlan')+source('cncPdfStockMatch')+source('CncPdfImport')+';CncPdfImport',runtime.context),props={variants:[stock],offcuts:[],cncPanels:scheduled,onSave:(rows,options)=>saved.push({rows,options}),onClose:()=>closed++},draw=()=>nodes(runtime.render(render,props));
  let all=draw();
  // The model stores an input element's type attribute on the same object key.
  const input=all.find(n=>n.accept==='application/pdf');await input.onChange({target:{files:[{type:'application/pdf',size:1,name:'example.pdf'}]}});
@@ -73,10 +73,10 @@ test('recut sheet changes keep the layout bottom-left and recalculate the usable
 });
 
 test('PDF import keeps an offcut only when opted in, independently per sheet copy',async()=>{
- const stock={id:'stock',sku:'SKU',qty:8,width:4000,height:1500,material:'ACM'};
- const pdfPages=[{page:1,project:'Alpha',orderNumber:'21',sheetNumber:'1',panelIds:['A','B'],quantity:2,sheetWidth:4000,sheetHeight:1500,panelArea:4,material:'ACM',proposedOffcut:{length:1500,width:500,edge:'right',cutEdgeAllowance:10}}];
+ const stock={id:'stock',sku:'SKU',qty:8,width:4000,height:1500,material:'ACM',color:'White',thickness:4};
+ const pdfPages=[{page:1,project:'Alpha',orderNumber:'21',sheetNumber:'1',panelIds:['A','B'],quantity:2,sheetWidth:4000,sheetHeight:1500,panelArea:4,material:'ACM 4 mm',finish:'White',proposedOffcut:{length:1500,width:500,edge:'right',cutEdgeAllowance:10}}];
  const saved=[];const runtime=hooks({PageHeading:'heading',Upload:'upload',Trash2:'trash',Field:'field',CncStockPicker:'picker',CncPanelTypeFields:'classification',inputCls:'input',BAKED_WORKER_URL:'https://example.invalid',projectTitleCase:v=>v,FileReader:class{readAsDataURL(){this.result='data:application/pdf;base64,AA==';this.onload();}},PanelStock:{apiFetch:async()=>({ok:true,json:async()=>({pages:pdfPages})})}});
- const render=vm.runInNewContext(normalizers+source('expandCncPdfSheets')+source('cncRecutSheetPlan')+source('CncPdfImport')+';CncPdfImport',runtime.context),props={variants:[stock],offcuts:[],cncPanels:[],onSave:rows=>saved.push(rows),onClose:()=>{}},draw=()=>nodes(runtime.render(render,props));
+ const render=vm.runInNewContext(normalizers+source('expandCncPdfSheets')+source('cncRecutSheetPlan')+source('cncPdfStockMatch')+source('CncPdfImport')+';CncPdfImport',runtime.context),props={variants:[stock],offcuts:[],cncPanels:[],onSave:rows=>saved.push(rows),onClose:()=>{}},draw=()=>nodes(runtime.render(render,props));
  const save=()=>draw().find(n=>n.children?.includes?.('Save reviewed sheets'));
  let all=draw();await all.find(n=>n.accept==='application/pdf').onChange({target:{files:[{type:'application/pdf',size:1,name:'example.pdf'}]}});
  assert.equal(draw().filter(n=>n['aria-label']?.startsWith('Keep offcut')).length,2);
@@ -90,4 +90,16 @@ test('PDF import keeps an offcut only when opted in, independently per sheet cop
  draw().find(n=>n['aria-label']==='Keep offcut for sheet 1').onChange({target:{checked:true}});assert.equal(save().disabled,true);
  draw().find(n=>n['aria-label']==='Off-cut width').onChange({target:{value:'5000'}});assert.equal(save().disabled,true);
  draw().find(n=>n['aria-label']==='Off-cut width').onChange({target:{value:'450'}});assert.equal(save().disabled,false);save().onClick();assert.equal(saved[3][0].pendingOffcut.width,450);
+});
+
+test('PDF stock match uses finish and thickness, independent of inventory order',()=>{
+ const match=vm.runInNewContext(source('cncPdfStockMatch')+';cncPdfStockMatch');
+ const champagne={id:'champagne',material:'Alpolic',color:'Champagne Metallic',thickness:4,width:4000,height:1270,qty:10};
+ const charcoal={...champagne,id:'charcoal',color:'Charcoal',qty:12};
+ const page={material:'ALPOLIC 4 mm',finish:'Champagne Metallic',sheetWidth:4000,sheetHeight:1270};
+ assert.equal(match(page,[charcoal,champagne]),champagne);
+ assert.equal(match({...page,material:' ALPOLIC   4mm ',finish:' champagne   metallic '},[charcoal,champagne]),champagne);
+ for(const stocks of [[charcoal],[{...champagne,thickness:3}],[{...champagne,width:3000}],[{...champagne,qty:0}],[champagne,{...champagne,id:'duplicate'}]])assert.equal(match(page,stocks),null);
+ for(const patch of [{finish:''},{material:'ALPOLIC'},{sheetWidth:0}])assert.equal(match({...page,...patch},[charcoal,champagne]),null);
+ assert.equal(match({...page,material:'ALPOLIC',thickness:4},[charcoal,champagne]),champagne);
 });
