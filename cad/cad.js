@@ -455,14 +455,17 @@ automaticPackButton.onclick=()=>{
  dialog.append(style,header,body,footer);
  const makeFile=(text,hint,accept,multiple)=>{const label=document.createElement('label');label.className='import-file';const heading=document.createElement('strong');heading.textContent=text;const note=document.createElement('small');note.textContent=hint;const input=document.createElement('input');input.type='file';input.accept=accept;input.multiple=multiple;label.append(heading,note,input);body.append(label);return input;};
  const dxfs=makeFile('Panel drawings','Select up to 30 DXF files · 6 MB each','.dxf',true),pdf=makeFile('Order PDF','Saved for traceability · 25 MB maximum','.pdf',false);
- const confirmLabel=document.createElement('label'),confirmed=document.createElement('input'),confirmText=document.createElement('span'),confirmTitle=document.createElement('strong'),confirmHelp=document.createElement('small');confirmLabel.className='import-confirm';confirmed.type='checkbox';confirmTitle.textContent='Ready-to-cut drawings · non-directional material';confirmHelp.textContent='Keep the existing cuts, folds and holes. No allowances will be added.';confirmText.append(confirmTitle,confirmHelp);confirmLabel.append(confirmed,confirmText);body.append(confirmLabel);
- const note=document.createElement('small');note.textContent='Import now, then review and plan sheets before sending to CNC.';body.append(note);
+ const confirmLabel=document.createElement('label'),confirmed=document.createElement('input'),confirmText=document.createElement('span'),confirmTitle=document.createElement('strong'),confirmHelp=document.createElement('small');confirmLabel.className='import-confirm';confirmed.type='checkbox';confirmTitle.textContent='Ready-to-cut drawings';confirmHelp.textContent='Keep the existing cuts, folds and holes. No allowances will be added.';confirmText.append(confirmTitle,confirmHelp);confirmLabel.append(confirmed,confirmText);body.append(confirmLabel);
+ const materialDirectionLabel=document.createElement('label');materialDirectionLabel.textContent='Material direction';
+ const materialDirection=document.createElement('select');materialDirection.setAttribute('aria-label','Material direction');
+ for(const [value,text] of [['review','Review each panel direction'],['none','Non-directional material']]){const option=document.createElement('option');option.value=value;option.textContent=text;materialDirection.append(option);}materialDirectionLabel.append(materialDirection);body.append(materialDirectionLabel);
+ const note=document.createElement('small');note.textContent='For directional material, match each panel arrow to its source drawing and apply it before planning sheets.';body.append(note);
  const status=document.createElement('p');status.className='combine-status';status.setAttribute('role','status');status.setAttribute('aria-live','polite');body.append(status);
  const add=document.createElement('button'),close=document.createElement('button');add.type=close.type='button';add.textContent='Import panels';add.className='primary';close.textContent='Cancel';footer.append(close,add);
  let importing=false,applied=false;close.onclick=()=>{if(!importing){dialog.close();dialog.remove();}};dialog.oncancel=e=>{e.preventDefault();close.click();};
  add.onclick=async()=>{if(importing)return;if(!confirmed.checked){status.textContent='Confirm the developed drawings and material direction before importing.';return;}
   importing=true;busy=true;add.disabled=close.disabled=true;const owner=projectOwner(),target=projectId;
-  try{rememberPanel();const file=pdf.files[0];const incoming=await PanelAutomaticPack.importFiles({files:[...dxfs.files],pdf:file,request:api,existing:panels,progress:text=>status.textContent=text});
+  try{rememberPanel();const file=pdf.files[0];const incoming=await PanelAutomaticPack.importFiles({files:[...dxfs.files],pdf:file,request:api,existing:panels,nonDirectional:materialDirection.value==='none',progress:text=>status.textContent=text});
    if(projectOwner()!==owner||projectId!==target)throw Error('The active project changed. Import again into the intended order.');
    const first=panels.length;panels.push(...incoming);applied=true;uploadedSketchFiles=[...uploadedSketchFiles,file];panelIndex=-1;selectPanel(first);rememberPanel();queueProjectSave();await saveProject();
    dialog.close();dialog.remove();notice(incoming.length+' panels imported with the order PDF. Review, then plan sheets when ready.');
@@ -568,6 +571,7 @@ function fabricationReadiness(panel,issues=[]){
  if(drawing?.dxf&&!panel.generatedSpec)reasons.push('Regenerate to verify this drawing matches the current panel.');
  if(!drawing?.dxf)reasons.push(panel.generatedSpec?'Details changed or generation failed. Generate a fresh drawing.':'Generate a drawing.');
  if(panel.generatedSpec&&panel.spec&&panel.generatedSpec!==drawingSpecKey(panel.spec))reasons.push('Details changed since generation. Generate a fresh drawing.');
+ if(panel.spec?.directionReviewed===false)reasons.push('Confirm the panel direction against its source drawing.');
  if(!panel.reviewed)reasons.push('Review the panel dimensions and edge types.');
  reasons.push(...issues);
  if(drawing?.dxf){
@@ -711,7 +715,7 @@ async function setPanelArrow(value){
    try{
     if(!result?.dxf)throw Error('Open an imported drawing first.');
     const drawing=await api('/cad/generate',{panelArrow:true,dxf:result.dxf,panelId:spec.panelId,panelDirection:value});
-    spec.panelDirection=value;result={...result,...drawing};
+    spec.panelDirection=value;spec.directionReviewed=true;result={...result,...drawing};panels[panelIndex].generatedSpec=drawingSpecKey(spec);queueProjectSave();
     if(previewURL)URL.revokeObjectURL(previewURL);
     previewURL=URL.createObjectURL(new Blob([result.svg],{type:'image/svg+xml'}));$('preview').src=previewURL;$('preview').hidden=false;
     rememberPanel();renderDrawingChecks(result);
@@ -728,13 +732,14 @@ $('applypaneldirection').onclick=()=>setPanelArrow($('paneldirection').value);
 
 const panelDrawingActions=$('generate').parentElement;panelDrawingActions.classList.add('panel-drawing-actions');panelDrawingActions.setAttribute('role','group');panelDrawingActions.setAttribute('aria-label','Panel drawing actions');
 manualHolesButton.onclick=()=>{if(spec?.importedDxf){notice('Edit holes in Codex and upload the revised DXF.',true);return;}const layout=result?.manualHoleLayout||(manualHoleRetryLayout?.spec===spec?manualHoleRetryLayout.layout:null);if(!spec||!layout){notice('Generate a fresh drawing first, then add manual holes.',true);return;}PanelManualHoles.open({layout,holes:spec.manualHoles||[],onApply:holes=>{spec.manualHoles=holes;invalidate();manualHoleRetryLayout={spec,layout};rememberPanel();queueProjectSave();$('generate').click();}});};
-sheetPlanButton.onclick=()=>run(async()=>{rememberPanel();if(!generatedDrawings().length)throw Error('Generate a panel drawing first.');await PanelSheetPlanner.open({canSendCnc:!!(session?.isAdmin||session?.taskAccess?.['factory.cnc']===true),projectName:$('projectname').value,orderNumber:projectDetails().orderNumber,jobReference:projectDetails().projectName,request:api,download,panels:panels.map((p,i)=>({name:p.spec?.panelId||p.name||'Panel',quantity:p.quantity||1,direction:p.spec?.panelDirection,dxf:(i===panelIndex?result:p.result)?.dxf}))});});
+sheetPlanButton.onclick=()=>run(async()=>{rememberPanel();if(!generatedDrawings().length)throw Error('Generate a panel drawing first.');await PanelSheetPlanner.open({canSendCnc:!!(session?.isAdmin||session?.taskAccess?.['factory.cnc']===true),projectName:$('projectname').value,orderNumber:projectDetails().orderNumber,jobReference:projectDetails().projectName,request:api,download,panels:panels.map((p,i)=>({name:p.spec?.panelId||p.name||'Panel',quantity:p.quantity||1,direction:p.spec?.directionReviewed===false?null:(p.spec?.panelDirection==='none'?'right':p.spec?.panelDirection),dxf:(i===panelIndex?result:p.result)?.dxf}))});});
 $('downloadall').onclick=()=>run(async()=>{if(!generatedDrawings().length)throw Error('Generate a drawing first.');const combined=await chooseCombinedDrawings();if(!combined){notice('Combined download cancelled.');return;}download(combined.dxf,'application/dxf',combinedFilename($('projectname').value));notice(combined.panelCount+' selected drawings downloaded in one DXF.');});
 
 $('save').onclick=()=>{try{download(JSON.stringify({...collect(),reviewed:false},null,2),'application/json',($('panelid').value.replace(/[^a-z0-9_-]/gi,'_')||'panel')+'-draft.json');notice('Draft downloaded.');}catch(e){notice(e.message);}};
 $('import').onchange=()=>run(async()=>{const file=$('import').files[0];if(!file||file.size>128*1024)throw Error('Choose a panel draft smaller than 128 KB.');const data=JSON.parse(await file.text());if(data.correctionDraft?(!Array.isArray(data.outlineSections)||data.outlineSections.length>32||!data.outlineSections.every(s=>s?.start&&Number.isFinite(s.start.x)&&Number.isFinite(s.start.y))):data.measuredEdges?PanelMeasuredOutline.validate(data).length:(!Array.isArray(data.edges)||data.edges.length<4||data.edges.length>32||!data.edges.every(e=>e&&codes.includes(e.code)&&directions.includes(e.direction))))throw Error('Invalid panel draft.');addPanel(data,file.name);notice('Draft loaded. Review it before generating.');});
 (async()=>{for(const key of (window.parent!==window?['panelstock:session:v2']:[KEY,'panelstock:session:v2','panelstock:site-orders:session:v1'])){try{const saved=JSON.parse(sessionStorage.getItem(key)||'null');if(saved?.token&&saved.expiresAt>Date.now()){session=saved;break;}}catch{}}showSession();if(session)await run(async()=>{await verify();const saved=await PanelCadProjects.list(projectOwner()).catch(()=>[]);notice(saved.length?'Ready. Select Open project to restore your saved work.':'Ready. Upload a sketch or load a test panel.');});})();
 })();
+
 
 
 

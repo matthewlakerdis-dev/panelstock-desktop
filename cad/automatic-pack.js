@@ -216,7 +216,7 @@ function checkedCache(owner){
  };
  return {get:key=>access(key),put:(key,value)=>access(key,value)};
 }
-async function importFiles({files,pdf,request,existing=[],progress=()=>{}}){
+async function importFiles({files,pdf,request,existing=[],nonDirectional=false,progress=()=>{}}){
  if(!pdf||!(/\.pdf$/i.test(pdf.name))||pdf.size>25*1024*1024||!pdf.size)throw Error('Choose the order PDF (up to 25 MB) for traceability.');
  if(!files?.length||files.length>30)throw Error('Choose 1 to 30 DXF files.');
  for(const file of files)if(!/\.dxf$/i.test(file.name)||!file.size||file.size>6*1024*1024)throw Error(file.name+': choose a DXF up to 6 MB.');
@@ -225,7 +225,7 @@ async function importFiles({files,pdf,request,existing=[],progress=()=>{}}){
  for(const [i,file] of files.entries()){
   progress('Checking '+file.name+' ('+(i+1)+' of '+files.length+')…');
   const sourceHash=await hash(await file.arrayBuffer());
-  const response=await request('/cad/analyse',{mode:'approved-dxf',approved:true,nonDirectional:true,filename:file.name,data:await base64(file)});
+  const response=await request('/cad/analyse',{mode:'approved-dxf',approved:true,nonDirectional,reviewDirections:!nonDirectional,filename:file.name,data:await base64(file)});
   if(!response.panels?.length)throw Error(file.name+': no valid panels found.');
   for(const panel of response.panels){
    if(names.has(normal(panel.name)))throw Error('Duplicate panel ID: '+panel.name+'. No files were imported.');
@@ -234,7 +234,7 @@ async function importFiles({files,pdf,request,existing=[],progress=()=>{}}){
    panel.sourcePdf=pdf;panel.sourcePdfName=pdf.name;
    panel.spec={...panel.spec,edges:[],folds:[],questions:[],importedDxf:true,sourceDxfName:file.name,sourceDxfSha256:sourceHash,sourcePdfSha256:pdfHash};
    panel.generatedSpec=specKey(panel.spec);panel.reviewed=true;
-   panel.message='Imported DXF. Order PDF is reference only; geometry has not been regenerated.';
+   panel.message=nonDirectional?'Imported DXF. Non-directional material confirmed.':'Imported DXF. Match the panel direction to the source drawing and apply it before planning sheets.';
    panels.push(panel);if(panels.length+existing.length>30)throw Error('Use up to 30 panels per CAD project.');
   }
  }
@@ -296,3 +296,4 @@ const api={importFiles,packContextIssues,checkedPageKey,validCachedPage,timingTe
 if(typeof module!=='undefined')module.exports=api;
 if(typeof window!=='undefined')window.PanelAutomaticPack=api;
 })();
+
