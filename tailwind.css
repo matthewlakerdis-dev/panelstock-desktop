@@ -800,6 +800,9 @@ video {
 .h-\[65vh\] {
   height: 65vh;
 }
+.h-auto {
+  height: auto;
+}
 .h-fit {
   height: fit-content;
 }
