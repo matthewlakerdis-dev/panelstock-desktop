@@ -178,7 +178,7 @@ async function process(job,{request,save,planner,progress=()=>{},sync=()=>{},can
   if(!manufacturing||Number(manufacturing.thickness)!==Number(stock[0].thickness))throw Error(panel.name+': stock thickness does not match.');
   if(normal(manufacturing.finish)!==normal(stock[0].color)&&!(job.settings.powderCoat&&['milled','mill','mill finish','milled finish'].includes(normal(stock[0].color))))throw Error(panel.name+': the required finish differs from the selected stock.');
  }
- job.plan=await timed('Nesting',()=>request('/cad/generate',{sheetPlan:true,panels:job.panels.map(p=>({name:p.name,quantity:p.quantity,direction:p.spec.panelDirection,dxf:p.result.dxf})),stock:stock.map(s=>({id:s.id,type:s.type,sku:s.sku,material:s.material,color:s.color,thickness:s.thickness,width:s.width,height:s.height,quantity:s.quantity}))}));
+ job.plan=await timed('Nesting',()=>request('/cad/generate',{sheetPlan:true,panels:job.panels.map(p=>({name:p.name,quantity:p.quantity,direction:p.spec.panelDirection==='none'?'right':p.spec.panelDirection,dxf:p.result.dxf})),stock:stock.map(s=>({id:s.id,type:s.type,sku:s.sku,material:s.material,color:s.color,thickness:s.thickness,width:s.width,height:s.height,quantity:s.quantity}))}));
  await checkpoint();
  if(job.plan.unplaced?.length){job.exceptions=job.plan.unplaced.map(p=>p.name+(p.copy>1?' (copy '+p.copy+')':'')+': could not fit available stock.');await checkpoint();throw Error('Not all panels fit. No panels have been scheduled.');}
  checkCancel();progress('Adding the planned panels to the CNC tracker…');
@@ -215,6 +215,17 @@ function checkedCache(owner){
   });}finally{db.close();}
  };
  return {get:key=>access(key),put:(key,value)=>access(key,value)};
+}
+async function markPanelsNonDirectional(panels,request){
+ if(!panels.length||panels.some(p=>!p.spec?.importedDxf||!p.result?.dxf))throw Error('This action requires imported ready-to-cut drawings for every panel.');
+ const updated=[];
+ for(const panel of panels){
+  const drawing=await request('/cad/generate',{panelArrow:true,dxf:panel.result.dxf,panelId:panel.spec.panelId,panelDirection:'none'});
+  if(!drawing?.dxf||!drawing?.svg)throw Error('Could not update '+panel.spec.panelId+'. No panels were changed.');
+  const spec={...panel.spec,panelDirection:'none',directionReviewed:true};
+  updated.push({...panel,spec,result:{...panel.result,...drawing},generatedSpec:specKey(spec)});
+ }
+ return updated;
 }
 async function importFiles({files,pdf,request,existing=[],nonDirectional=false,progress=()=>{}}){
  if(!pdf||!(/\.pdf$/i.test(pdf.name))||pdf.size>25*1024*1024||!pdf.size)throw Error('Choose the order PDF (up to 25 MB) for traceability.');
@@ -292,7 +303,7 @@ async function open({files,owner,request,projectName,orderNumber,canSendCnc,sync
  };
  await finished;
 }
-const api={importFiles,packContextIssues,checkedPageKey,validCachedPage,timingText,process,inventoryPanels,drawingIssues,firstSheet,ensureNotScheduled,open};
+const api={markPanelsNonDirectional,importFiles,packContextIssues,checkedPageKey,validCachedPage,timingText,process,inventoryPanels,drawingIssues,firstSheet,ensureNotScheduled,open};
 if(typeof module!=='undefined')module.exports=api;
 if(typeof window!=='undefined')window.PanelAutomaticPack=api;
 })();

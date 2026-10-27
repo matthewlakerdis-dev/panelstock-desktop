@@ -18,3 +18,14 @@ test('directional imports request explicit review instead of asserting non-direc
  await importFiles({files:[files[0]],pdf,nonDirectional:true,request:async(_,body)=>{requestBody=body;return {panels:[panel('P-1')]};}});
  assert.equal(requestBody.nonDirectional,true);assert.equal(requestBody.reviewDirections,false);
 });
+
+test('non-directional batch confirms every imported panel without bypassing drawing validation',async()=>{
+ const {markPanelsNonDirectional}=require('./automatic-pack.js');
+ const input=['A','B'].map(name=>({...panel(name),reviewed:false,spec:{panelId:name,importedDxf:true,directionReviewed:false}}));
+ const original=JSON.stringify(input);const calls=[];
+ const updated=await markPanelsNonDirectional(input,async(_,body)=>{calls.push(body);return {dxf:'no arrow',svg:'<svg/>'};});
+ assert.equal(JSON.stringify(input),original);assert.equal(calls.length,2);
+ for(const p of updated){assert.equal(p.spec.panelDirection,'none');assert.equal(p.spec.directionReviewed,true);assert.equal(p.reviewed,false);assert.equal(p.result.validation.closedCut,true);assert.ok(p.generatedSpec);}
+ let count=0;await assert.rejects(markPanelsNonDirectional(input,async()=>{if(++count===2)throw Error('Unavailable');return {dxf:'updated',svg:'<svg/>'};}),/Unavailable/);
+ assert.equal(JSON.stringify(input),original);
+});

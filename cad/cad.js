@@ -458,7 +458,7 @@ automaticPackButton.onclick=()=>{
  const confirmLabel=document.createElement('label'),confirmed=document.createElement('input'),confirmText=document.createElement('span'),confirmTitle=document.createElement('strong'),confirmHelp=document.createElement('small');confirmLabel.className='import-confirm';confirmed.type='checkbox';confirmTitle.textContent='Ready-to-cut drawings';confirmHelp.textContent='Keep the existing cuts, folds and holes. No allowances will be added.';confirmText.append(confirmTitle,confirmHelp);confirmLabel.append(confirmed,confirmText);body.append(confirmLabel);
  const materialDirectionLabel=document.createElement('label');materialDirectionLabel.textContent='Material direction';
  const materialDirection=document.createElement('select');materialDirection.setAttribute('aria-label','Material direction');
- for(const [value,text] of [['review','Review each panel direction'],['none','Non-directional material']]){const option=document.createElement('option');option.value=value;option.textContent=text;materialDirection.append(option);}materialDirectionLabel.append(materialDirection);body.append(materialDirectionLabel);
+ for(const [value,text] of [['review','Review each panel direction'],['none','Milled / non-directional material — no arrow']]){const option=document.createElement('option');option.value=value;option.textContent=text;materialDirection.append(option);}materialDirectionLabel.append(materialDirection);body.append(materialDirectionLabel);
  const note=document.createElement('small');note.textContent='For directional material, match each panel arrow to its source drawing and apply it before planning sheets.';body.append(note);
  const status=document.createElement('p');status.className='combine-status';status.setAttribute('role','status');status.setAttribute('aria-live','polite');body.append(status);
  const add=document.createElement('button'),close=document.createElement('button');add.type=close.type='button';add.textContent='Import panels';add.className='primary';close.textContent='Cancel';footer.append(close,add);
@@ -729,6 +729,13 @@ async function setPanelArrow(value){
 }
 $('paneldirection').onchange=()=>setPanelArrow($('paneldirection').value);
 $('applypaneldirection').onclick=()=>setPanelArrow($('paneldirection').value);
+const nonDirectionalButton=document.createElement('button');nonDirectionalButton.type='button';nonDirectionalButton.textContent='Mark all panels non-directional';$('applypaneldirection').after(nonDirectionalButton);
+nonDirectionalButton.onclick=()=>run(async()=>{
+ rememberPanel();const updated=await PanelAutomaticPack.markPanelsNonDirectional(panels,api),selected=panelIndex;
+ panels.splice(0,panels.length,...updated);panelIndex=-1;selectPanel(Math.max(0,selected));queueProjectSave();await saveProject();
+ notice('All panels marked non-directional. Drawing validation is still required.');
+});
+
 
 const panelDrawingActions=$('generate').parentElement;panelDrawingActions.classList.add('panel-drawing-actions');panelDrawingActions.setAttribute('role','group');panelDrawingActions.setAttribute('aria-label','Panel drawing actions');
 manualHolesButton.onclick=()=>{if(spec?.importedDxf){notice('Edit holes in Codex and upload the revised DXF.',true);return;}const layout=result?.manualHoleLayout||(manualHoleRetryLayout?.spec===spec?manualHoleRetryLayout.layout:null);if(!spec||!layout){notice('Generate a fresh drawing first, then add manual holes.',true);return;}PanelManualHoles.open({layout,holes:spec.manualHoles||[],onApply:holes=>{spec.manualHoles=holes;invalidate();manualHoleRetryLayout={spec,layout};rememberPanel();queueProjectSave();$('generate').click();}});};
