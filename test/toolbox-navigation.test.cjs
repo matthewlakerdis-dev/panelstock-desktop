@@ -27,3 +27,11 @@ test('administrators can grant the toolbox permission through the shared user an
  vm.runInNewContext(source.slice(start,end)+'globalThis.groups=taskGroups;',c);
  assert.equal(c.groups.length,1);assert.equal(c.groups[0].name,'Toolbox talks');assert.equal(c.groups[0].tasks[0].code,'factory.toolbox');
 });
+
+test('PanelCAD is hidden even for admins or users with CAD access',()=>{
+ for(const [admin,tasks]of [[true,{}],[false,{'factory.cad':true}]]){
+  const c=context(admin,tasks);vm.runInNewContext(groups+'globalThis.groups=navGroups;',c);
+  assert.equal(c.groups.flatMap(g=>g.items).some(item=>item.key==='cad'),false);
+ }
+ const a=source.indexOf('const permittedPages ='),b=source.indexOf('].filter(',a);assert.ok(a>=0&&b>a);assert.equal(source.slice(a,b).includes("['cad',"),false);
+});
