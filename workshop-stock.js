@@ -49,7 +49,8 @@ window.createWorkshopStock = function(React) {
   }
   const pendingKey='panelstock:workshop-pending:'+PanelStock.username;
   const can=task=>isAdmin||taskAccess[task]===true;
-  async function load(){try{const r=await PanelStock.apiFetch(workerUrl+'/workshop-stock'),d=await r.json();if(!r.ok)throw Error(d.error||'Workshop stock could not be loaded.');setData(d);setError('');}catch(e){setError(e.message);}}
+  async function load(){try{const r=await PanelStock.apiFetch(workerUrl+'/workshop-stock'),d=await r.json();if(!r.ok)throw Error(d.error||'Workshop stock could not be loaded.');setData(d);setError('');}catch(e){setError(e.message);return false;}}
+  useEffect(()=>window.PanelStockPullRefresh?.subscribe(()=>load()));
   useEffect(()=>{load();},[stockRevision]);
   useEffect(()=>{try{const saved=JSON.parse(localStorage.getItem(pendingKey)||'null');if(saved){setPending(saved);setForm(saved.item||saved);}}catch{setError('Could not read the pending stock save. Check browser storage before editing.');}},[]);
   const change=(key,value)=>setForm(f=>({...f,[key]:value,...(key==='categoryId'?{name:value?categories[value]:''}:{}),...(key==='sku'&&f.action==='create'?(()=>{const p=(data?.items||[]).find(i=>!i.legacy&&String(i.sku).trim().replace(/\s+/g,' ').toLowerCase()===String(value).trim().replace(/\s+/g,' ').toLowerCase());return p?{category:p.category,unit:p.unit,name:p.name,dimensions:p.dimensions||'',image:p.image||''}:{};})():{}),...(key==='category'?{unit:{extrusions:'lengths',fixings:'each',consumables:'packs',offcuts:'lengths'}[value]||'each'}:{})}));
@@ -281,6 +282,7 @@ window.createPurchaseOrderReceiving=function(React){
    if(target){openOrder(target);setNotice('Opened from SOH. Check the latest outstanding quantities before receiving.');}
    else setError('This purchase order is no longer available. Close this screen and refresh incoming stock.');
   },[data,initialOrderId,initialOrderOpened,pending]);
+  useEffect(()=>visible||launcher?window.PanelStockPullRefresh?.subscribe(()=>load()):undefined,[visible,launcher]);
   function openOrder(value){setStagedFile(null);setImportRows(null);setImportWarnings([]);setImportReviewed(false);setCorrection(null);setIssueForm(null);setCloseReason(null);setResolution(null);setSelected(value.id);setEditor(value.status==='draft'?{reference:value.reference,supplier:value.supplier,notes:value.notes,expectedDelivery:value.expectedDelivery||'',lines:value.lines.map(l=>({itemId:l.itemId,ordered:l.ordered}))}:null);setDelivery({quantities:{},reference:'',notes:''});setItemSearch('');setItemId('');setItemQuantity('');setReview(false);setError('');setNotice('');setCancelReason(null);}
   function editOrder(){setEditor({reference:order.reference,supplier:order.supplier,notes:order.notes,expectedDelivery:order.expectedDelivery||'',lines:order.lines.map(l=>({itemId:l.itemId,ordered:l.ordered}))});setReview(false);setCancelReason(null);setError('');}
   function newOrder(){setStagedFile(null);setImportRows(null);setImportWarnings([]);setImportReviewed(false);setSelected(null);setEditor({reference:'',supplier:'',notes:'',expectedDelivery:'',lines:[]});setError('');setNotice('');}
