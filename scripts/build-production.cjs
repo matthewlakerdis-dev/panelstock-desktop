@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const out = path.join(root, 'dist-production');
-const files = ['index.html','workshop-stock.js','workshop-stock.css','panelstock-client.js','toolbox-launcher.js','tailwind.css','icon-192.png','lennox-logo.jpg','PanelStock_SOP.pdf','push-sw.js','CNAME'];
+const files = ['index.html','pull-refresh.js','workshop-stock.js','workshop-stock.css','panelstock-client.js','toolbox-launcher.js','tailwind.css','icon-192.png','lennox-logo.jpg','PanelStock_SOP.pdf','push-sw.js','CNAME'];
 fs.mkdirSync(out,{recursive:true});
 for (const file of files) fs.copyFileSync(path.join(root,file),path.join(out,file));
 // Version both workshop assets so published changes bypass browser caches.
