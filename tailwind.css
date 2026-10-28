@@ -776,6 +776,9 @@ video {
 .h-24 {
   height: 6rem;
 }
+.h-32 {
+  height: 8rem;
+}
 .h-4 {
   height: 1rem;
 }
