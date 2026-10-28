@@ -8,12 +8,12 @@ const qaSource=source.slice(source.indexOf('  function qaReportStatusLabel('),so
 function nodes(tree){if(Array.isArray(tree))return tree.flatMap(nodes);if(!tree||typeof tree!=='object')return [];return [tree,...nodes(tree.children)];}
 function text(tree){if(Array.isArray(tree))return tree.map(text).join(' ');if(tree===null||tree===undefined||typeof tree==='boolean')return '';return typeof tree==='object'?text(tree.children):String(tree);}
 function harness({items=[],status='awaiting',kind='all',query='',response,apiFetch,extra={}}={}){
-  const state=[],calls=[];let cursor=0,reportMode=false;
-  const context={import_react:{createElement:(tag,props,...children)=>({tag,props,children})},useState:initial=>{const index=cursor++;if(!(index in state))state[index]=typeof initial==='function'?initial():initial;return [state[index],value=>{state[index]=typeof value==='function'?value(state[index]):value;}];},useEffect:()=>{},PageHeading:'heading',ClipboardList:'clipboard',ChevronRight:'chevron',PanelStock:{apiFetch:async(url,options)=>{calls.push({url,options});return apiFetch?apiFetch(url,options):{ok:true,json:async()=>response};}},BAKED_WORKER_URL:'https://worker.example.test',console,...extra};
+  const state=[],refs=[],calls=[];let cursor=0,refCursor=0,reportMode=false;
+  const context={import_react:{createElement:(tag,props,...children)=>({tag,props,children})},useState:initial=>{const index=cursor++;if(!(index in state))state[index]=typeof initial==='function'?initial():initial;return [state[index],value=>{state[index]=typeof value==='function'?value(state[index]):value;}];},useRef:initial=>{const index=refCursor++;return refs[index]||(refs[index]={current:initial});},useEffect:()=>{},PageHeading:'heading',ClipboardList:'clipboard',ChevronRight:'chevron',PanelStock:{apiFetch:async(url,options)=>{calls.push({url,options});return apiFetch?apiFetch(url,options):{ok:true,json:async()=>response};}},BAKED_WORKER_URL:'https://worker.example.test',console,...extra};
   vm.createContext(context);vm.runInContext(qaSource,context);
-  function render(props={}){cursor=0;return context.QaCenter({username:'admin',isAdmin:true,canManage:true,canDispatch:false,...props});}
+  function render(props={}){cursor=0;refCursor=0;return context.QaCenter({username:'admin',isAdmin:true,canManage:true,canDispatch:false,...props});}
   render();state[0]=items;state[5]=false;state[8]=status;state[9]=kind;state[10]=query;
-  return {context,state,calls,render,renderReport(report){if(!reportMode){state.length=0;reportMode=true;}cursor=0;return context.QaOrderReport({report,onClose(){}});}};
+  return {context,state,calls,render,renderReport(report){if(!reportMode){state.length=0;reportMode=true;}cursor=0;refCursor=0;return context.QaOrderReport({report,onClose(){}});}};
 }
 const panel=(id,reference,status='awaiting',extra={})=>({id,kind:'panel',project:'Library facade',orderNumber:'007',sheetNumber:'2',reference,status,history:[],quantity:1,remainingQuantity:1,...extra});
 const button=(tree,label)=>nodes(tree).find(node=>node.tag==='button'&&node.children.includes(label));
