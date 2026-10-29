@@ -15942,7 +15942,14 @@ function compareCncOrders(a, b) {
     const [q, setQ] = useState("");
     const [form, setForm] = useState({ color: "", material: "", thickness: "", width: "", height: "", qty: "1", note: "" });
     const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
-    const available = catalog.filter(
+    const materialKeys = [];
+    const materials = catalog.filter(function(item) {
+      var key = JSON.stringify([String(item.color || "").trim().replace(/\s+/g, " ").toLowerCase(), String(item.material || "").trim().replace(/\s+/g, " ").toLowerCase(), Number(item.thickness)]);
+      if (materialKeys.indexOf(key) !== -1) return false;
+      materialKeys.push(key);
+      return true;
+    });
+    const available = materials.filter(
       (v) => `${v.color} ${v.material} ${v.thickness}`.toLowerCase().includes(q.toLowerCase())
     );
     function pick(v) {
