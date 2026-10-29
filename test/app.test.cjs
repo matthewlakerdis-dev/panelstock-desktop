@@ -73,7 +73,9 @@ test('desktop scripts parse and do not contain the shared backend credential',()
  assert.match(pdfImport,/className:"ps-entry-cancel"/);
  assert.match(pdfImport,/onClick:onClose/);
  assert.match(html,/function projectTitleCase\(value\)/);
- assert.match(pdfImport,/jobReference:projectTitleCase\(page\.project\)/);
+ assert.doesNotMatch(pdfImport,/jobReference:projectTitleCase\(page\.project\)/);
+ assert.match(pdfImport,/jobReference:project\.name/);
+ assert.match(pdfImport,/required:true,strict:true/);
  assert.match(html,/nth-child\(6\)\{grid-column:2;grid-row:1\/span 5\}/);
  assert.match(html,/\/cnc-pdf\/analyse/);
  assert.match(html,/Add the proposed off-cut to SOH/);

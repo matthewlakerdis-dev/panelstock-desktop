@@ -27,4 +27,13 @@ for(const file of files){
   let finish;const ui=harness(file,()=>new Promise(resolve=>finish=resolve));ui.draw();await ui.load();ui.unmount();
   finish({ok:true,json:async()=>({projects:[{name:'Late'}]})});await new Promise(resolve=>setImmediate(resolve));assert.equal(ui.states()[1],'loading');
  });
+ test(file+': strict import project selection accepts only a loaded project and never preserves PDF text',async()=>{
+  const changes=[],ui=harness(file,async()=>({ok:true,json:async()=>({projects:[{id:'known',name:'Chosen Project'}]})}));
+  ui.draw({value:'PDF project text',strict:true,required:true,onChange:(name,project)=>changes.push({name,project})});await ui.load();
+  const nodes=ui.draw(),select=nodes.find(n=>n.tag==='select');assert.equal(select.value,'');assert.equal(select.required,true);assert.ok(!nodes.some(n=>n.tag==='option'&&n.children==='PDF project text (existing reference)'));
+  select.onChange({target:{value:'PDF project text'}});assert.equal(changes[0].name,'');assert.equal(changes[0].project,null);
+  select.onChange({target:{value:'Chosen Project'}});assert.equal(changes[1].name,'Chosen Project');assert.equal(changes[1].project.id,'known');
+ });
+
 }
+

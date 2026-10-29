@@ -56,7 +56,7 @@ test('PDF review removes one sheet copy, preserves original numbering, supports 
  let all=draw();
  // The model stores an input element's type attribute on the same object key.
  const input=all.find(n=>n.accept==='application/pdf');await input.onChange({target:{files:[{type:'application/pdf',size:1,name:'example.pdf'}]}});
- all=draw();assert.equal(all.filter(n=>n['aria-label']?.startsWith('Remove sheet')).length,3);
+ all=draw();assert.equal(all.find(n=>n.type==='project-picker').value,'');all.find(n=>n.type==='project-picker').onChange('Alpha',{name:'Alpha'});all=draw();assert.equal(all.filter(n=>n['aria-label']?.startsWith('Remove sheet')).length,3);
  all.find(n=>n['aria-label']==='Remove sheet 1 from import').onClick();all=draw();
  assert.ok(all.some(n=>n['aria-label']==='Remove sheet 1.2 from import'));assert.equal(all.find(n=>n.children?.includes?.('Save reviewed sheets')).disabled,false);
  all.find(n=>n.children?.includes?.('Undo last removal')).onClick();all=draw();assert.equal(all.find(n=>n.children?.includes?.('Save reviewed sheets')).disabled,true,'completed duplicate returns after undo');
@@ -67,7 +67,7 @@ test('PDF review removes one sheet copy, preserves original numbering, supports 
 });
 test('recut sheet changes keep the layout bottom-left and recalculate the usable off-cut',()=>{
  const plan=vm.runInNewContext(source('cncRecutSheetPlan')+';cncRecutSheetPlan({layout:{anchor:"bottom-left",usedLength:1800,usedWidth:900},cutEdgeAllowance:10,minimumOffcutSize:100},2400,1200)');
- assert.equal(plan.fits,true);assert.deepEqual(JSON.parse(JSON.stringify(plan.offcut)),{length:1200,width:590,edge:'right',cutEdgeAllowance:10,minimumOffcutSize:100,layout:{anchor:'bottom-left',usedLength:1800,usedWidth:900},confidence:'high'});
+ assert.equal(plan.fits,true);assert.deepEqual(JSON.parse(JSON.stringify(plan.offcut)),{length:1200,width:590,edge:'right',rectangle:{x:1810,y:0,width:590,height:1200},cutEdges:['left'],cutEdgeAllowance:10,minimumOffcutSize:100,layout:{anchor:'bottom-left',usedLength:1800,usedWidth:900},confidence:'high'});assert.equal(plan.offcuts.length,2);assert.deepEqual(JSON.parse(JSON.stringify(plan.offcuts[1].rectangle)),{x:0,y:910,width:1790,height:290});
  const tooSmall=vm.runInNewContext(source('cncRecutSheetPlan')+';cncRecutSheetPlan({layout:{anchor:"bottom-left",usedLength:1800,usedWidth:900}},1700,1200)');
  assert.equal(tooSmall.fits,false);assert.equal(tooSmall.offcut,null);
 });
@@ -81,7 +81,7 @@ test('PDF import keeps an offcut only when opted in, independently per sheet cop
  let all=draw();await all.find(n=>n.accept==='application/pdf').onChange({target:{files:[{type:'application/pdf',size:1,name:'example.pdf'}]}});
  assert.equal(draw().filter(n=>n['aria-label']?.startsWith('Keep offcut')).length,2);
  assert.ok(draw().filter(n=>n['aria-label']?.startsWith('Keep offcut')).every(n=>n.checked===false));
- assert.ok(!draw().some(n=>n['aria-label']==='Off-cut length'));
+ assert.ok(!draw().some(n=>n['aria-label']==='Off-cut length'));assert.equal(save().disabled,true);save().onClick();assert.equal(saved.length,0);const project=draw().find(n=>n.type==='project-picker');assert.equal(project.value,'');assert.equal(project.required,true);assert.equal(project.strict,true);project.onChange('Alpha',{name:'Alpha'});
  save().onClick();assert.equal(saved.length,1);assert.ok(saved[0].every(row=>row.pendingOffcut===null));
  draw().find(n=>n['aria-label']==='Keep offcut for sheet 1').onChange({target:{checked:true}});
  save().onClick();let rows=saved[1];assert.ok(rows.filter(row=>row.sheetNumber==='1').every(row=>row.pendingOffcut.length===1500&&row.pendingOffcut.width===500));assert.ok(rows.filter(row=>row.sheetNumber==='1.2').every(row=>row.pendingOffcut===null));
