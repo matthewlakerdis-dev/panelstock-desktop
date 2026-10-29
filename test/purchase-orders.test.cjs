@@ -323,3 +323,12 @@ test('linked PO waits for an uncertain save and closed orders cannot be received
  x.render();x.effects[2]();assert.equal(x.states[2],null);
  x.states[27]=null;x.render();x.effects[2]();const nodes=x.render();assert.equal(x.states[2],'po');assert.ok(!nodes.some(n=>n.props['aria-label']==='Receive ANG Angle'));assert.equal(x.requests.length,0);
 });
+
+test('purchase orders exclude panel and workshop offcuts from manual and imported stock choices',()=>{
+ const x=harness(true);const items=[{id:'variant:sheet',category:'panels',name:'Milled sheet',sku:'SHEET',unit:'sheets'},...stock,{id:'offcut:piece',category:'offcuts',name:'Milled offcut',sku:'CUT',unit:'sheets'},{id:'workshop-cut',category:'offcuts',name:'Angle offcut',sku:'ANG-CUT',unit:'lengths'}];
+ x.states[1]={orders:[],items,restoreEpoch:0};let nodes=x.render();nodes.find(n=>n.children.includes('New purchase order')).props.onClick();nodes=x.render();
+ const options=nodes.filter(n=>n.type==='option').map(n=>n.props.value);assert.ok(options.includes('variant:sheet'));assert.ok(options.includes('black'));assert.ok(!options.includes('offcut:piece'));assert.ok(!options.includes('workshop-cut'));
+ for(const sku of ['CUT','ANG-CUT']){const result=x.context.window.matchPurchaseOrderLine({sku,description:'offcut'},items);assert.equal(result.itemId,'');assert.ok(!result.candidates.includes('offcut:piece'));assert.ok(!result.candidates.includes('workshop-cut'));}
+ assert.equal(x.context.window.matchPurchaseOrderLine({sku:'SHEET'},items).itemId,'variant:sheet');
+ nodes.find(n=>n.children.includes('Create stock item')).props.onClick();nodes=x.render();assert.ok(!nodes.some(n=>n.type==='option'&&n.props.value==='offcuts'));
+});
