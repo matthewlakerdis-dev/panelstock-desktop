@@ -22,3 +22,23 @@ test('search keeps ready orders searchable after they move from Active to Dispat
   const ready=order('ready','completed');assert.deepEqual(view([ready],'active','search','completed').ids,['ready']);
   ready.status='dispatched';assert.deepEqual(view([ready],'active','search','dispatched').ids,['ready']);
 });
+
+test('project grouping preserves order and keeps distinct project IDs separate',()=>{
+  const start=source.indexOf('  function groupOrdersByProject('),end=source.indexOf('  function OrdersPage(',start);
+  const orders=[
+    {id:'a',projectId:'p1',project:'Shared project name'},
+    {id:'b',projectId:'p2',project:'Shared project name'},
+    {id:'c',projectId:'p1',project:'Shared project name'},
+    {id:'d',project:'Legacy project'},
+    {id:'e',project:'Legacy project'},
+    {id:'f',project:''}
+  ];
+  const unchanged=JSON.stringify(orders),context={orders};
+  vm.runInNewContext(source.slice(start,end)+'globalThis.groups=groupOrdersByProject(orders)',context);
+  const groups=JSON.parse(JSON.stringify(context.groups));
+  assert.deepEqual(groups.map(group=>group.orders.map(order=>order.id)),[['a','c'],['b'],['d','e'],['f']]);
+  assert.equal(groups.at(-1).project,'No project');
+  assert.equal(JSON.stringify(orders),unchanged);
+  context.orders=[];vm.runInNewContext('globalThis.groups=groupOrdersByProject(orders)',context);
+  assert.equal(context.groups.length,0);
+});
