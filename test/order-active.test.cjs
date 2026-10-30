@@ -2,8 +2,8 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const source=fs.readFileSync(require('node:path').join(__dirname,'../index.html'),'utf8');
 const start=source.indexOf('    const activeStatuses'),end=source.indexOf('    const orderDate',start);
 const code=source.slice(start,end)+'globalThis.result={counts,ids:shown.map(order=>order.id)};';
-function view(orders,filter='active',orderSection='orders',searchStatus='all'){
-  const context={orders,filter,orderSection,searchStatus,searchProject:'',orderSearch:''};
+function view(orders,filter='active',orderSection='orders',searchStatus='all',username='alice'){
+  const context={PanelStock:{username},orders,filter,orderSection,searchStatus,searchProject:'',orderSearch:''};
   vm.runInNewContext(code,context);return JSON.parse(JSON.stringify(context.result));
 }
 const order=(id,status)=>({id,status,project:'Test project',orderNumber:id,items:[]});
@@ -41,4 +41,14 @@ test('project grouping preserves order and keeps distinct project IDs separate',
   assert.equal(JSON.stringify(orders),unchanged);
   context.orders=[];vm.runInNewContext('globalThis.groups=groupOrdersByProject(orders)',context);
   assert.equal(context.groups.length,0);
+});
+
+
+test('My Orders filters by requester, scopes counts and keeps ready orders active',()=>{
+ const entries=['submitted','completed','dispatched','cancelled'].flatMap(status=>['alice','bob'].map(requestedBy=>({...order(requestedBy+'-'+status,status),requestedBy,siteContact:'alice'})));
+ entries.push(order('no-requester','submitted'));const original=JSON.stringify(entries);
+ const mine=view(entries,'active','mine');assert.deepEqual(mine.ids,['alice-submitted','alice-completed']);assert.deepEqual(mine.counts,{active:2,completed:1,dispatched:1,cancelled:1});
+ assert.deepEqual(view(entries,'dispatched','mine').ids,['alice-dispatched']);assert.deepEqual(view(entries,'cancelled','mine').ids,['alice-cancelled']);
+ assert.deepEqual(view(entries,'active','mine','all','bob').ids,['bob-submitted','bob-completed']);assert.equal(view(entries).counts.active,5);assert.equal(view(entries,'active','search').ids.length,9);
+ assert.equal(JSON.stringify(entries),original,'list selection never changes saved orders');
 });
