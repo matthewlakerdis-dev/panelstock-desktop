@@ -16462,7 +16462,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
     }
     async function saveOrderFiles(){setSaving(true);setNotice("");try{await uploadOrderFiles(panel.order);await loadOrders();setNotice("Attachments uploaded.");}catch(error){setNotice(error.message);}finally{setSaving(false);}}
     async function downloadAttachment(order,file){setNotice("");try{const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/orders/"+order.id+"/attachments/"+file.id),result=await response.json();if(!response.ok)throw Error(result.error||"Attachment could not be opened.");const url=URL.createObjectURL(new Blob([Uint8Array.from(atob(result.file.data),c=>c.charCodeAt(0))],{type:"application/octet-stream"})),link=document.createElement("a");link.href=url;link.download=file.name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}catch(error){setNotice(error.message);}}
-    const blankOrder = () => ({ projectId: "", project: "", orderType: "Other", orderTypeOther: "", siteContact: "", phone: "", requestedDeliveryDate: todayStr(), requestedDeliveryTime: "", scheduledDeliveryDate: "", scheduledDeliveryTime: "", locationNotes: "", status: "submitted", items: [{ quantity: 1, description: "" }] });
+    const blankOrder = () => ({ projectId: "", project: "", orderType: "Other", orderTypeOther: "", siteContact: "", phone: "", requestedDeliveryDate: "", requestedDeliveryTime: "", scheduledDeliveryDate: "", scheduledDeliveryTime: "", locationNotes: "", status: "submitted", items: [{ quantity: 1, description: "" }] });
     async function loadOrders() {
       setLoadingOrders(true);
       try {
