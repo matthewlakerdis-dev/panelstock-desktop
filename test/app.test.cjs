@@ -19,7 +19,7 @@ test('desktop scripts parse and do not contain the shared backend credential',()
  assert.match(html,/if \(!result\.ok\) \{\s*setPin\(""\);\s*setError\(result\.error \|\| "Login failed\."\)/);
  assert.match(html,/attempts >= 3 && await PanelStock\.confirm/);
  assert.match(html,/\/passcode-reset-request/);
- assert.match(html,/Passcode reset request sent to the administrators\./);
+ assert.match(html,/If your account has an email address, a PIN reset link will be sent/);
  assert.match(html,/const \[newReasonPhotoOptional, setNewReasonPhotoOptional\] = useState\(false\)/);
  assert.match(html,/onAddReason\(newReason, newReasonPhotoOptional\)/);
  assert.match(html,/selectedReason\?\.photoOptional !== true/);
