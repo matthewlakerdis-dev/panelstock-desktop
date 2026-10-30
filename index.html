@@ -15408,7 +15408,7 @@ ${xrefStart}
   function CncSheetDialog({ sheet, affectedPanels, onClose, onConfirm }) {
     const singlePanel=Boolean(sheet.panelId),count=affectedPanels.length;
     const proposalPanel=affectedPanels.find(panel=>Array.isArray(panel.pendingOffcuts)?panel.pendingOffcuts.length:panel.pendingOffcut),proposed=Array.isArray(proposalPanel?.pendingOffcuts)?proposalPanel.pendingOffcuts:proposalPanel?.pendingOffcut?[proposalPanel.pendingOffcut]:[];
-    const [offcutRows,setOffcutRows]=import_react.useState(proposed.slice(0,20).map(item=>({...item,length:item.length||"",width:item.width||"",note:"",keep:true})));
+    const [offcutRows,setOffcutRows]=import_react.useState(proposed.slice(0,20).map(cncWholeOffcutProposal).filter(Boolean).map(item=>({...item,length:item.length||"",width:item.width||"",note:"",keep:true})));
     const updateOffcut=(index,patch)=>setOffcutRows(current=>current.map((item,i)=>i===index?{...item,...patch,...(patch.length!==undefined||patch.width!==undefined?{rectangle:undefined}:{})}:item));
     const selected=singlePanel?[]:offcutRows.filter(item=>item.keep),stockLength=Math.max(Number(affectedPanels[0]?.sheetWidth)||0,Number(affectedPanels[0]?.sheetHeight)||0),stockWidth=Math.min(Number(affectedPanels[0]?.sheetWidth)||0,Number(affectedPanels[0]?.sheetHeight)||0);
     const panelArea=affectedPanels.reduce((value,panel)=>panel.panelAreaScope==="sheet"?{...value,sheet:Math.max(value.sheet,Number(panel.totalPanelArea)||0)}:{...value,individual:value.individual+(Number(panel.totalPanelArea)||0)},{sheet:0,individual:0});
@@ -15452,6 +15452,16 @@ function normalizeCncInput(row) {
   const isTemplate = row.isTemplate === true;
   const remakeReason = isRemake ? String(row.remakeReason ?? '').trim().replace(/\s+/g, ' ') : '';
   return {...row, orderNumber, jobReference, sheetNumber, panelNumber, isRemake, isTemplate, remakeReason};
+}
+
+function cncWholeOffcutProposal(item) {
+  if(!item||item.source==="manual")return item;
+  const originalLength=Math.max(Number(item.length),Number(item.width)),originalWidth=Math.min(Number(item.length),Number(item.width));
+  if(!Number.isFinite(originalLength)||!Number.isFinite(originalWidth)||originalWidth<=0)return item;
+  const rectangle=item.rectangle,hasRectangle=rectangle&&Number.isFinite(Number(rectangle.width))&&Number.isFinite(Number(rectangle.height))&&Number(rectangle.width)>0&&Number(rectangle.height)>0;
+  const length=Math.floor(hasRectangle?Math.min(originalLength,Math.max(Number(rectangle.width),Number(rectangle.height))):originalLength),width=Math.floor(hasRectangle?Math.min(originalWidth,Math.min(Number(rectangle.width),Number(rectangle.height))):originalWidth);
+  if(width<Math.max(1,Number(item.minimumOffcutSize)||1))return null;
+  return {...item,length,width,...(hasRectangle?{rectangle:{...rectangle,width:Number(rectangle.width)>=Number(rectangle.height)?length:width,height:Number(rectangle.width)>=Number(rectangle.height)?width:length}}:{})};
 }
 
 function cncDuplicateKey(row) {
@@ -15728,7 +15738,7 @@ function compareCncOrders(a, b) {
   }
   function cncRecutSheetPlan(proposed, sheetWidth, sheetHeight) {
     const length=Math.max(Number(sheetWidth),Number(sheetHeight)),width=Math.min(Number(sheetWidth),Number(sheetHeight)),layout=proposed?.layout;
-    if(!layout||layout.anchor!=="bottom-left")return {fits:true,offcut:proposed||null,offcuts:proposed?[proposed]:[]};
+    if(!layout||layout.anchor!=="bottom-left"){const offcut=cncWholeOffcutProposal(proposed);return {fits:true,offcut:offcut||null,offcuts:offcut?[offcut]:[]};}
     const usedLength=Number(layout.usedLength),usedWidth=Number(layout.usedWidth),allowance=Math.max(0,Number(proposed.cutEdgeAllowance)||0),minimum=Math.max(1,Number(proposed.minimumOffcutSize)||1);
     if(!(length>0&&width>0&&usedLength>0&&usedWidth>0)||usedLength>length||usedWidth>width)return {fits:false,offcut:null,offcuts:[]};
     // Partition the space outside the occupied bottom-left bounding box. The
@@ -15736,7 +15746,7 @@ function compareCncOrders(a, b) {
     const candidates=[
       {x:usedLength+allowance,y:0,width:length-usedLength-allowance,height:width,edge:"right",cutEdges:["left"]},
       {x:0,y:usedWidth+allowance,width:usedLength-allowance,height:width-usedWidth-allowance,edge:"top",cutEdges:["bottom","right"]}
-    ].filter(item=>item.width>=minimum&&item.height>=minimum);
+    ].map(item=>({...item,width:Math.floor(item.width),height:Math.floor(item.height)})).filter(item=>item.width>=minimum&&item.height>=minimum);
     const offcuts=candidates.map(item=>({length:Math.max(item.width,item.height),width:Math.min(item.width,item.height),edge:item.edge,rectangle:{x:item.x,y:item.y,width:item.width,height:item.height},cutEdges:item.cutEdges,cutEdgeAllowance:allowance,minimumOffcutSize:minimum,layout:{...layout},confidence:"high"})).sort((a,b)=>b.length*b.width-a.length*a.width);
     return {fits:true,offcut:offcuts[0]||null,offcuts};
   }
@@ -15755,7 +15765,7 @@ function compareCncOrders(a, b) {
     cncPdfImportPanels=cncPanels||[];
     const choices=[...variants,...offcuts].filter(item=>item.qty>0);
     const proposals=page=>Array.isArray(page.proposedOffcuts)?page.proposedOffcuts:page.proposedOffcut?[page.proposedOffcut]:[];
-    const reviewOffcuts=items=>(items.length?items:[{}]).slice(0,20).map(item=>({...item,length:item.length||"",width:item.width||"",keep:false}));
+    const reviewOffcuts=items=>{const whole=items.map(cncWholeOffcutProposal).filter(Boolean);return (whole.length?whole:[{}]).slice(0,20).map(item=>({...item,length:item.length||"",width:item.width||"",keep:false}));};
     const recutPatch=(page,stock)=>{
       const sheetWidth=stock?.width||page.sheetWidth,sheetHeight=stock?.height||page.sheetHeight,source=proposals(page)[0]||null,plan=cncRecutSheetPlan(source,sheetWidth,sheetHeight);
       return {sheetWidth,sheetHeight,recutSheetError:plan.fits?"":"The selected sheet is too small for this bottom-left recut layout.",offcutRows:reviewOffcuts(plan.offcuts||[])};
@@ -15877,7 +15887,7 @@ function compareCncOrders(a, b) {
   }
   function cncEstimatedOffcut(panels) {
     const panel=(panels||[]).find(item=>Array.isArray(item.pendingOffcuts)?item.pendingOffcuts.length:item.pendingOffcut),offcuts=Array.isArray(panel?.pendingOffcuts)?panel.pendingOffcuts:panel?.pendingOffcut?[panel.pendingOffcut]:[];
-    const valid=offcuts.filter(item=>Number(item.length)>0&&Number(item.width)>0);
+    const valid=offcuts.map(cncWholeOffcutProposal).filter(item=>item&&Number(item.length)>0&&Number(item.width)>0);
     return valid.length?{...valid[0],offcuts:valid}:null;
   }
   function CncSettingsPage({settings,onSaved}) {
