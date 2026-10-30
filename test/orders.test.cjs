@@ -132,15 +132,15 @@ test('web manages the shared schedule',()=>{
  assert.match(schedule,/className:"text-center text-xl font-bold text-slate-900"/);
 });
 
-test('web users can manage their own email address and profile photo',()=>{
+test('web users can manage their account details and profile photo',()=>{
  const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
  assert.match(html,/function ProfilePhotoPage\(\{onProfileChange\}\)/);
  assert.match(html,/label:\s*"My Profile"/);
  assert.match(html,/tab === "profile"/);
  assert.match(html,/profilePhoto:adjustedPhoto/);
- assert.match(html,/onClick:saveEmail/);
+ assert.match(html,/onSubmit:saveDetails/);
  assert.match(html,/"Email address"/);
- assert.match(html,/"Account information"/);
+ assert.match(html,/"User details"/);assert.match(html,/detailField\("Name","displayName","text",true\)/);assert.match(html,/detailField\("Phone number","phone","tel"\)/);
  assert.match(html,/"Profile photo"/);
  assert.match(html,/ownProfile\?\.profilePhoto/);
  assert.match(html,/onProfileChange:setOwnProfile/);
