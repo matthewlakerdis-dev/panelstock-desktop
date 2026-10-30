@@ -5,13 +5,12 @@ const out = path.join(root, 'dist-production');
 const files = ['index.html','pull-refresh.js','workshop-stock.js','workshop-stock.css','panelstock-client.js','toolbox-launcher.js','tailwind.css','icon-192.png','lennox-logo.jpg','PanelStock_SOP.pdf','push-sw.js','CNAME'];
 fs.mkdirSync(out,{recursive:true});
 for (const file of files) fs.copyFileSync(path.join(root,file),path.join(out,file));
-// Version both workshop assets so published changes bypass browser caches.
+// Version styles and workshop assets so published changes bypass browser caches.
 const indexPath=path.join(out,'index.html');
 let indexHtml=fs.readFileSync(indexPath,'utf8');
-for(const extension of ['js','css']){
- const asset='workshop-stock.'+extension;
+for(const asset of ['tailwind.css','workshop-stock.js','workshop-stock.css']){
  const version=require('node:crypto').createHash('sha256').update(fs.readFileSync(path.join(out,asset))).digest('hex').slice(0,12);
- indexHtml=indexHtml.replace(new RegExp('workshop-stock\\.'+extension+'\\?v=[^"\\x27]+','g'),asset+'?v='+version);
+ indexHtml=indexHtml.replace(new RegExp(asset.replace('.', '\\.')+'\\?v=[^"\\x27]+','g'),asset+'?v='+version);
 }
 fs.writeFileSync(indexPath,indexHtml);
 fs.cpSync(path.join(root,'cad'),path.join(out,'cad'),{recursive:true});
