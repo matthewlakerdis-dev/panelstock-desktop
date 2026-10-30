@@ -139,3 +139,15 @@
  .ps-app-access-heading{flex-wrap:wrap;gap:8px}
  .ps-app-access-card{gap:10px}
 }
+
+/* Keep account actions compact beside the username editor. */
+.ps-account-actions{container:account-actions / inline-size;display:flex;flex-wrap:wrap;align-items:flex-end;gap:20px 28px;margin-top:20px;padding-top:20px;border-top:1px solid #e2e8f0}
+.ps-account-actions-inline{margin-top:0;padding-top:0;border-top:0}
+.ps-account-actions>button,.ps-username-editor>button{flex:0 0 auto;align-self:flex-end;min-height:40px;height:40px;padding:8px 16px;line-height:1.4;white-space:nowrap}
+.ps-username-editor{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;flex:0 1 520px;min-width:0}
+.ps-username-editor>label{flex:1 1 220px;min-width:0}
+.ps-username-editor input{display:block;min-width:0;width:100%;height:40px;margin-top:6px;background:#fff}
+.ps-account-actions button:disabled{opacity:.45;cursor:default}
+.ps-account-actions button:focus-visible,.ps-username-editor input:focus-visible{outline:2px solid #0e7490;outline-offset:3px}
+@container account-actions (max-width:680px){.ps-username-editor{flex-basis:100%}}
+@container account-actions (max-width:420px){.ps-username-editor>label{flex-basis:100%}.ps-username-editor>button{width:100%}}
