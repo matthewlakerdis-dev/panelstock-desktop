@@ -16773,6 +16773,7 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
       });
       return res.json();
     }
+    function requestPinReset(){var name=username.trim();if(!name){setError('Enter your username first.');return;}if(busy)return;setBusy(true);setError('');callWorker('/passcode-reset-request',{username:name}).then(function(result){setBusy(false);setError(result.message||result.error||"If your account has an email address, a PIN reset link will be sent. Otherwise, contact your administrator.");}).catch(function(){setBusy(false);setError('Could not reach the server. Please try again.');});}
     async function handleLogin() {
       const uname = username.trim();
       if (!uname || !pin) {
@@ -16790,9 +16791,9 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
           if (result.error === "Invalid username or PIN") {
             const attempts = failedAttempts + 1;
             setFailedAttempts(attempts >= 3 ? 0 : attempts);
-            if (attempts >= 3 && await PanelStock.confirm({ title: "Request a passcode reset?", message: "Would you like to notify the administrators that you need help resetting your passcode?", confirmLabel: "Send request" })) {
+            if (attempts >= 3 && await PanelStock.confirm({ title: "Request a passcode reset?", message: "Request a PIN reset? If your account has an email address, a reset link will be sent. Otherwise, contact your administrator.", confirmLabel: "Send request" })) {
               const reset = await callWorker("/passcode-reset-request", { username: uname });
-              if (reset.ok) setError("Passcode reset request sent to the administrators.");
+              if (reset.ok) setError(reset.message||"If your account has an email address, a PIN reset link will be sent. Otherwise, contact your administrator.");
             }
           }
           return;
@@ -16869,7 +16870,7 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
             "Remember my username on this device"
           ] }),
           error && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "text-xs text-red-800 mb-3", children: error }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: handleLogin, disabled: busy, className: "w-full bg-cyan-800 disabled:opacity-50 text-white font-semibold rounded-lg py-2.5 text-sm hover:bg-cyan-900", children: busy ? "Checking\u2026" : "Log in" })
+          import_react.createElement("button",{type:"button",disabled:busy,onClick:requestPinReset,className:"mb-3 text-sm font-semibold text-cyan-800",children:"Forgot PIN?"}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: handleLogin, disabled: busy, className: "w-full bg-cyan-800 disabled:opacity-50 text-white font-semibold rounded-lg py-2.5 text-sm hover:bg-cyan-900", children: busy ? "Checking\u2026" : "Log in" })
         ] }),
         step === "setpin" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { className: "text-xs text-slate-400 mb-4", children: [
