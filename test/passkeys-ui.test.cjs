@@ -56,3 +56,9 @@ test('Not now and shared-device choices never enroll credentials or keep prompti
 test('devices without a platform authenticator continue PIN sign-in without an enrollment prompt',async()=>{
  const h=optInHarness();h.root.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable=async()=>false;await h.api.offerAfterPin(()=>assert.fail('unexpected request'),'sam','123456');assert.equal(h.button('Enable on my personal device'),undefined);
 });
+
+test('credential manager failure explains recovery and leaves PIN sign-in available without saving enrollment',async()=>{
+ const h=optInHarness(),calls=[];h.root.navigator.credentials.create=async()=>{throw Object.assign(Error('An unknown error occurred while talking to the credential manager.'),{name:'UnknownError'});};
+ const offered=h.api.offerAfterPin(async route=>{calls.push(route);return{requestId:'setup',options:{challenge:'AQ',user:{id:'AQ',name:'sam'},rp:{id:'example.test',name:'PanelStock'}}};},'sam','123456');await tick();h.button('Enable on my personal device').onclick();await tick();
+ assert.deepEqual(calls,['/passkeys/register/options']);assert.ok(h.nodes().some(node=>node.textContent.includes('password/passkey provider')));assert.equal(h.saved.size,0);assert.equal(h.button('Continue with PIN').disabled,false);h.button('Continue with PIN').onclick();await offered;assert.equal(h.api.signInLabel(),'Sign in with passkey');
+});
