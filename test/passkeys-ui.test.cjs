@@ -62,3 +62,36 @@ test('credential manager failure explains recovery and leaves PIN sign-in availa
  const offered=h.api.offerAfterPin(async route=>{calls.push(route);return{requestId:'setup',options:{challenge:'AQ',user:{id:'AQ',name:'sam'},rp:{id:'example.test',name:'PanelStock'}}};},'sam','123456');await tick();h.button('Enable on my personal device').onclick();await tick();
  assert.deepEqual(calls,['/passkeys/register/options']);assert.ok(h.nodes().some(node=>node.textContent.includes('password/passkey provider')));assert.equal(h.saved.size,0);assert.equal(h.button('Continue with PIN').disabled,false);h.button('Continue with PIN').onclick();await offered;assert.equal(h.api.signInLabel(),'Sign in with passkey');
 });
+
+test('failed device enrollment can be retried with a password manager after separate consent',async()=>{
+ const h=optInHarness(),calls=[],create=h.root.navigator.credentials.create;let attempts=0;
+ h.root.navigator.credentials.create=async options=>{if(++attempts===1)throw Object.assign(Error('provider unavailable'),{name:'NotReadableError'});return create(options);};
+ const request=async(route,body)=>{calls.push([route,body]);if(route.endsWith('/options'))return{requestId:'setup-'+calls.length,options:{challenge:'AQ',rp:{id:'example.test',name:'PanelStock'},user:{id:'AQ',name:'sam'},authenticatorSelection:{residentKey:'required',userVerification:'required',...(body.setupMethod==='password-manager'?{}:{authenticatorAttachment:'platform'})}}};return{ok:true};};
+ const offered=h.api.offerAfterPin(request,'sam','123456');await tick();assert.equal(calls.length,0);
+ h.button('Enable on my personal device').onclick();assert.equal(h.button('Use my password manager').disabled,true);await tick();
+ assert.equal(attempts,1);assert.equal(calls.length,1);assert.equal(h.saved.size,0);assert.equal(h.button('Use my password manager').disabled,false);
+ h.button('Use my password manager').onclick();await offered;
+ assert.equal(calls[1][1].setupMethod,'password-manager');assert.equal(calls[1][1].deviceKind,'personal');assert.equal(calls[1][1].pin,'123456');
+ assert.equal(h.createOptions().publicKey.authenticatorSelection.authenticatorAttachment,undefined);assert.equal(h.createOptions().publicKey.authenticatorSelection.userVerification,'required');assert.equal(calls[2][0],'/passkeys/register/verify');
+ assert.equal(h.api.signInLabel(),'Use saved passkey');assert.ok(!JSON.stringify(Array.from(h.saved)).includes('123456'));
+ let signedIn=false;h.api.signIn(async route=>route.endsWith('/options')?{requestId:'login',options:{challenge:'AQ',rpId:'example.test',hints:['client-device'],userVerification:'required'}}:{ok:true},()=>signedIn=true,()=>assert.fail('unexpected error'));await tick();assert.equal(h.getOptions().publicKey.hints,undefined);assert.equal(signedIn,true);
+});
+
+test('password-manager enrollment remains unsuccessful when the server rejects verification',async()=>{
+ const h=optInHarness();const offered=h.api.offerAfterPin(async route=>{if(route.endsWith('/verify'))throw Error('Passkey setup could not be verified');return{requestId:'setup',options:{challenge:'AQ',rp:{id:'example.test',name:'PanelStock'},user:{id:'AQ',name:'sam'}}};},'sam','123456');await tick();
+ h.button('Use my password manager').onclick();await tick();assert.equal(h.saved.size,0);assert.equal(h.api.signInLabel(),'Sign in with passkey');assert.equal(h.button('Continue with PIN').disabled,false);h.button('Continue with PIN').onclick();await offered;
+});
+
+test('profile setup offers password-manager registration with current PIN and provider-neutral options',async()=>{
+ const h=optInHarness(),calls=[];
+ h.api.manage(async(route,body)=>{calls.push([route,body]);if(route==='/passkeys/list')return{passkeys:[]};if(route.endsWith('/options'))return{requestId:'profile',options:{challenge:'AQ',rp:{id:'example.test',name:'PanelStock'},user:{id:'AQ',name:'sam'},authenticatorSelection:{userVerification:'required',residentKey:'required'}}};return{ok:true};});await tick();
+ const select=h.nodes().find(node=>node.tagName==='select');assert.ok(select.children.some(option=>option.value==='password-manager'));select.value='password-manager';h.nodes().find(node=>node.type==='password').value='123456';h.button('Add passkey').onclick();await tick();
+ const body=calls.find(call=>call[0].endsWith('/options'))[1];assert.equal(body.setupMethod,'password-manager');assert.equal(body.deviceKind,'personal');assert.equal(body.pin,'123456');assert.equal(h.createOptions().publicKey.authenticatorSelection.authenticatorAttachment,undefined);assert.equal(h.api.signInLabel(),'Use saved passkey');
+});
+
+test('an opted-in device can retry sign-in with its configured password manager without attachment hints',async()=>{
+ const h=optInHarness(),get=h.root.navigator.credentials.get,calls=[];let attempts=0,signedIn=false;h.saved.set('panelstock:device-unlock-kind:v1','personal');
+ h.root.navigator.credentials.get=async options=>{if(++attempts===1)throw Object.assign(Error('provider unavailable'),{name:'NotReadableError'});return get(options);};
+ h.api.signIn(async route=>{calls.push(route);return route.endsWith('/options')?{requestId:'login-'+calls.length,options:{challenge:'AQ',rpId:'example.test',hints:['client-device'],userVerification:'required'}}:{ok:true};},()=>signedIn=true,()=>{});await tick();assert.equal(signedIn,false);assert.deepEqual(calls,['/passkeys/authenticate/options']);
+ h.button('Use my password manager').onclick();await tick();assert.equal(h.getOptions().publicKey.hints,undefined);assert.equal(h.getOptions().publicKey.userVerification,'required');assert.equal(signedIn,true);assert.equal(h.api.signInLabel(),'Use saved passkey');
+});
