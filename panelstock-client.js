@@ -340,7 +340,7 @@
   const apiFetch=async(url,options={})=>{
     const absolute=new URL(url,location.href);
     if(!workerUrl || absolute.origin!==new URL(workerUrl).origin)throw Error('Unapproved API destination');
-    const authenticating=['/login','/set-pin'].includes(absolute.pathname);
+    const authenticating=['/login','/set-pin','/passkeys/authenticate/verify'].includes(absolute.pathname);
     const method=(options.method||'GET').toUpperCase();
     if(orderPdfView&&!['GET','HEAD'].includes(method)&&!(method==='POST'&&(authenticating||absolute.pathname==='/orders/'+encodeURIComponent(linkedOrderId)+'/pdf-link')))throw Error('This tab is only for viewing an order PDF.');
     // Starting a new login also invalidates an older login still in flight.
