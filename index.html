@@ -16349,7 +16349,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
     const [statusChoices,setStatusChoices]=useState({}),[statusSaving,setStatusSaving]=useState(false),statusRequest=useRef(false);
     const [filter, setFilter] = useState("active");
     const [groupByProject,setGroupByProject]=useState(false),[expandedOrders,setExpandedOrders]=useState({});
-    const [orderSection,setOrderSection]=useState("mine"),[orderSearch,setOrderSearch]=useState(""),[searchProject,setSearchProject]=useState(""),[searchStatus,setSearchStatus]=useState("all");
+    const [orderSection,setOrderSection]=useState("orders"),[orderSearch,setOrderSearch]=useState(""),[searchProject,setSearchProject]=useState(""),[searchStatus,setSearchStatus]=useState("all");
     const [loadingOrders, setLoadingOrders] = useState(true);
     const [notice, setNotice] = useState("");
     const [panel, setPanel] = useState(null);
@@ -16520,7 +16520,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
         )
       );
     }
-    const orderSections=[["mine","My Orders"],["orders","All Orders"],...(canCreate?[["drafts","Drafts ("+drafts.length+")"]]:[]),["search","Search orders"],...((canManage||isAdmin)?[["issues","Delivery issues"]]:[]),...(isAdmin?[["settings","Order settings"]]:[])];
+    const orderSections=[["orders","All Orders"],["mine","My Orders"],...(canCreate?[["drafts","Drafts ("+drafts.length+")"]]:[]),["search","Search orders"],...((canManage||isAdmin)?[["issues","Delivery issues"]]:[]),...(isAdmin?[["settings","Order settings"]]:[])];
     const activeProjects = projects.filter((project) => project.active !== false);
     const googleMapsUrl = (address) => "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(address);
     const GoogleMapsButtonIcon = () => e("svg", { viewBox: "0 0 24 24", width: 20, height: 20, fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true }, e("path", { d: "M9 18 3.5 21V6L9 3l6 3 5.5-3v15L15 21l-6-3Z" }), e("path", { d: "M9 3v15M15 6v15" }), e("path", { d: "M15 13s3-2.7 3-5a3 3 0 1 0-6 0c0 2.3 3 5 3 5Z" }), e("circle", { cx: 15, cy: 8, r: .7, fill: "currentColor", stroke: "none" }));
