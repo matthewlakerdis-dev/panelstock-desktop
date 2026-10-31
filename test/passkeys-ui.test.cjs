@@ -7,7 +7,7 @@ function harness({available=true,cancel=false}={}){
  const binary=new Uint8Array([1]).buffer;
  const credential={id:'AQ',rawId:binary,type:'public-key',authenticatorAttachment:'cross-platform',response:{clientDataJSON:binary,authenticatorData:binary,signature:binary,userHandle:binary,attestationObject:binary,getTransports:()=>['hybrid']},getClientExtensionResults:()=>({})};
  const root={isSecureContext:true,PublicKeyCredential:available?function(){}:null,atob,btoa,location:{reload:()=>reloads++},navigator:{credentials:{get:async options=>{getOptions=options;if(cancel)throw Object.assign(Error('cancelled'),{name:'NotAllowedError'});return credential;},create:async options=>{createOptions=options;if(cancel)throw Object.assign(Error('cancelled'),{name:'NotAllowedError'});return credential;}}}};
- vm.runInNewContext(source,{window:root,document,console});return{api:root.PanelStockPasskeys,nodes:()=>walk(body),button:text=>walk(body).find(node=>node.tagName==='button'&&node.textContent===text),getOptions:()=>getOptions,createOptions:()=>createOptions,reloads:()=>reloads,events};
+ vm.runInNewContext(source,{window:root,document,console});return{root:root,api:root.PanelStockPasskeys,nodes:()=>walk(body),button:text=>walk(body).find(node=>node.tagName==='button'&&node.textContent===text),getOptions:()=>getOptions,createOptions:()=>createOptions,reloads:()=>reloads,events};
 }
 test('shared-device sign-in asks for a phone or security key and forwards only the signed browser response',async()=>{
  const h=harness(),calls=[];let signedIn;
@@ -37,4 +37,22 @@ test('closing a passkey flow on sign-out prevents a late response from starting 
  const h=harness();let resolveOptions;const calls=[];
  h.api.signIn(route=>{calls.push(route);return new Promise(resolve=>resolveOptions=resolve);},()=>assert.fail('closed flow signed in'),()=>{});
  h.nodes().find(node=>node.tagName==='select').value='personal';h.button('Continue').onclick();h.api.close();resolveOptions({requestId:'old',options:{challenge:'AQ',rpId:'panelstockhq.com'}});await tick();assert.equal(h.getOptions(),undefined);assert.deepEqual(calls,['/passkeys/authenticate/options']);
+});
+
+function optInHarness(){const h=harness(),saved=new Map();h.root.localStorage={getItem:key=>saved.get(key)||null,setItem:(key,value)=>saved.set(key,value)};h.root.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable=async()=>true;h.saved=saved;return h;}
+test('first PIN sign-in offers opt-in and enrolls only on the personal device after explicit consent',async()=>{
+ const h=optInHarness(),calls=[];
+ const request=async(route,body)=>{calls.push([route,body]);if(route==='/passkeys/list')return{ok:true,passkeys:[{id:'AQ'}]};if(route.endsWith('/options'))return{ok:true,requestId:'register',options:{challenge:'AQ',user:{id:'AQ',name:'sam'},rp:{id:'example.test',name:'PanelStock'},authenticatorSelection:{residentKey:'required',userVerification:'required',authenticatorAttachment:'platform'},hints:['client-device']}};return{ok:true};};
+ const offered=h.api.offerAfterPin(request,'sam','123456');await tick();assert.equal(calls.length,0);assert.ok(h.button('Enable on my personal device'));
+ h.button('Enable on my personal device').onclick();await offered;
+ assert.equal(calls[0][1].pin,'123456');assert.equal(calls[0][1].deviceKind,'personal');assert.equal(h.createOptions().publicKey.authenticatorSelection.authenticatorAttachment,'platform');assert.equal(h.api.signInLabel(),'Use fingerprint / Face ID');assert.ok(!JSON.stringify(Array.from(h.saved)).includes('123456'));
+ await h.api.offerAfterPin(request,'sam','123456');assert.equal(h.button('Enable on my personal device'),undefined);assert.equal(calls.at(-1)[0],'/passkeys/list');
+ let signedIn=false;h.api.signIn(async route=>route.endsWith('/options')?{requestId:'login',options:{challenge:'AQ',rpId:'example.test',userVerification:'required'}}:{ok:true},()=>signedIn=true,()=>{});await tick();assert.equal(h.nodes().some(node=>node.tagName==='select'),false);assert.deepEqual(Array.from(h.getOptions().publicKey.hints),['client-device']);assert.equal(signedIn,true);
+});
+test('Not now and shared-device choices never enroll credentials or keep prompting',async()=>{
+ const h=optInHarness();let offered=h.api.offerAfterPin(()=>assert.fail('request before opt-in'),'sam','123456');await tick();h.button('Not now').onclick();await offered;await h.api.offerAfterPin(()=>assert.fail('request after decline'),'sam','123456');assert.equal(h.button('Enable on my personal device'),undefined);
+ offered=h.api.offerAfterPin(()=>assert.fail('request on shared device'),'other','123456');await tick();h.button('This is a shared device').onclick();await offered;await h.api.offerAfterPin(()=>assert.fail('request on shared device'),'third','123456');assert.equal(h.button('Enable on my personal device'),undefined);
+});
+test('devices without a platform authenticator continue PIN sign-in without an enrollment prompt',async()=>{
+ const h=optInHarness();h.root.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable=async()=>false;await h.api.offerAfterPin(()=>assert.fail('unexpected request'),'sam','123456');assert.equal(h.button('Enable on my personal device'),undefined);
 });
