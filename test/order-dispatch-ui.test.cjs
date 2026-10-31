@@ -5,7 +5,7 @@ const order={id:'one',project:'Test project',orderNumber:'007',orderType:'Fixing
 function nodes(tree){if(!tree||typeof tree!=='object')return [];if(Array.isArray(tree))return tree.flatMap(nodes);return [tree,...nodes(tree.children)];}
 function harness({orders=[order],selected=null,form={},filter='ready',fetcher=async()=>{throw Error('Unexpected request');}}={}){
   const values=[orders,false,'',selected,form,filter,''],refs=[{current:false},{current:true}];let stateIndex=0,refIndex=0,panelLoads=0;
-  const context={import_react:{createElement:(tag,props,...children)=>({tag,props,children})},useState:()=>{const index=stateIndex++;return [values[index],value=>{values[index]=typeof value==='function'?value(values[index]):value;}];},useRef:()=>refs[refIndex++],useEffect:()=>{},PageHeading:'heading',Truck:'truck',crypto:webcrypto,Uint8Array,PanelStock:{apiFetch:fetcher},BAKED_WORKER_URL:'https://example.test'};
+  const context={import_react:{createElement:(tag,props,...children)=>({tag,props,children})},useState:initial=>{const index=stateIndex++;if(!(index in values))values[index]=initial;return [values[index],value=>{values[index]=typeof value==='function'?value(values[index]):value;}];},useRef:()=>refs[refIndex++],useEffect:()=>{},PageHeading:'heading',Truck:'truck',crypto:webcrypto,Uint8Array,PanelStock:{apiFetch:fetcher},BAKED_WORKER_URL:'https://example.test'};
   vm.createContext(context);vm.runInContext(code+'globalThis.component=SiteOrderDispatch;',context);
   return {values,refs,render(){stateIndex=0;refIndex=0;return context.component({onPanelLoads:()=>panelLoads++});},get panelLoads(){return panelLoads;}};
 }
@@ -46,4 +46,32 @@ test('successful dispatch updates the ready queue and clears the submitted form'
   nodes(h.render()).find(node=>node.tag==='form').props.onSubmit({preventDefault(){}});await new Promise(setImmediate);
   assert.equal(h.values[3],null);assert.equal(h.values[0][0].status,'dispatched');
   assert.equal(button(h.render(),'Dispatch order'),undefined);assert.equal(h.values[2],'Order dispatched.');
+});
+
+test('collapsed rows keep delivery details and dispatch available without opening items',()=>{
+  const h=harness({orders:[{...order,locationNotes:'Rack V135'}]});
+  const tree=h.render(),summary=nodes(tree).find(node=>node.props?.className==='ps-order-dispatch-summary');
+  assert.ok(nodes(summary).some(node=>node.children?.includes('Test project')));
+  assert.ok(nodes(summary).some(node=>node.children?.includes('Test contact')));
+  assert.ok(nodes(summary).some(node=>node.children?.includes('123')));
+  assert.ok(nodes(summary).some(node=>node.children?.includes('Rack V135')));
+  assert.ok(button(summary,'Dispatch order'));
+  assert.equal(nodes(tree).find(node=>node.props?.className==='ps-order-dispatch-expanded').props.hidden,true);
+  button(summary,'Dispatch order').props.onClick();
+  assert.ok(button(h.render(),'Confirm dispatch'));
+});
+
+test('items expand independently and preserve their state while searching and returning from dispatch',()=>{
+  const h=harness({orders:[order,{...order,id:'two',project:'Another project',orderNumber:'008'}]});
+  const toggle=tree=>nodes(tree).find(node=>node.props?.['aria-controls']==='site-dispatch-items-one');
+  let tree=h.render();assert.equal(toggle(tree).props['aria-expanded'],false);
+  toggle(tree).props.onClick();tree=h.render();
+  assert.equal(toggle(tree).props['aria-expanded'],true);
+  assert.equal(nodes(tree).find(node=>node.props?.id==='site-dispatch-items-one').props.hidden,false);
+  assert.equal(nodes(tree).find(node=>node.props?.id==='site-dispatch-items-two').props.hidden,true);
+  h.values[6]='Another';assert.equal(toggle(h.render()),undefined);
+  h.values[6]='';tree=h.render();assert.equal(toggle(tree).props['aria-expanded'],true);
+  button(tree,'Dispatch order').props.onClick();button(h.render(),'Back to orders').props.onClick();
+  assert.equal(toggle(h.render()).props['aria-expanded'],true);
+  toggle(h.render()).props.onClick();assert.equal(toggle(h.render()).props['aria-expanded'],false);
 });

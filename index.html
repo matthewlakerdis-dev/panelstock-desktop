@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#0f172a" />
 <link rel="icon" href="icon-192.png" />
 
-<link rel="stylesheet" href="tailwind.css?v=20261101-expandable-panel-loads" />
+<link rel="stylesheet" href="tailwind.css?v=20261101-compact-site-dispatch" />
 <style>
 .order-attachments{margin-top:20px;padding:18px;border:1px solid #dbe3ec;border-radius:12px;background:#f8fafc}
 .order-attachments h3{margin:0 0 6px;font-size:15px;font-weight:600;color:#0f172a}
@@ -15162,6 +15162,7 @@ ${xrefStart}
   }
   function SiteOrderDispatch({onPanelLoads}) {
     const h=import_react.createElement,[orders,setOrders]=useState([]),[busy,setBusy]=useState(false),[notice,setNotice]=useState(""),[selected,setSelected]=useState(null),[form,setForm]=useState({}),[filter,setFilter]=useState("ready"),[query,setQuery]=useState("");
+    const [expandedOrders,setExpandedOrders]=useState({});
     const lock=useRef(false),alive=useRef(true);
     const inputClass="mt-1.5 h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm";
     async function request(body){
@@ -15199,13 +15200,19 @@ ${xrefStart}
         h("span",{role:"status","aria-live":"polite"},`${visible.length} order${visible.length===1?"":"s"}${filter==="ready"?" ready for dispatch":" dispatched"}`)),
       notice&&h("p",{role:"status"},notice),
       !busy&&!visible.length&&h("div",{className:"ps-dispatch-empty"},h("strong",null,query?"No matching orders":filter==="ready"?"No orders ready for dispatch":"No dispatched orders"),h("p",null,"Orders appear here when they are marked ready or pass their production checks.")),
-      visible.map(order=>h("article",{key:order.id,className:"ps-dispatch-card ps-order-dispatch-card ps-dispatch-"+(order.ready?"ready":"dispatched")},
-        h("div",{className:"ps-dispatch-card-heading"},h("div",null,h("p",{className:"ps-dispatch-order"},`Order #${order.orderNumber} · ${order.orderType}`),h("h3",null,order.project)),h("span",{className:"ps-dispatch-badge"},order.ready?"Ready for dispatch":"Dispatched")),
-        h("div",{className:"ps-order-dispatch-body"},
+      visible.map(order=>h("article",{key:order.id,className:"ps-dispatch-card ps-order-dispatch-card ps-order-dispatch-row ps-dispatch-"+(order.ready?"ready":"dispatched")},
+        h("div",{className:"ps-order-dispatch-summary"},
+          h("div",{className:"ps-order-dispatch-identity"},h("h3",null,order.project||"No project"),h("p",{className:"ps-order-dispatch-summary-meta"},"Order #"+order.orderNumber+" · "+(order.orderType||"Other")+" · "+(order.items||[]).length+" item"+((order.items||[]).length===1?"":"s"))),
+          h("div",{className:"ps-order-dispatch-contact"},h("span",{className:"ps-order-dispatch-field-label"},"Site contact"),h("span",null,order.siteContact||"Not provided"),order.phone&&h("small",null,order.phone)),
+          h("div",{className:"ps-order-dispatch-location"},h("span",{className:"ps-order-dispatch-field-label"},"Location / notes"),h("span",null,order.locationNotes||"Not provided")),
+          h("div",{className:"ps-order-dispatch-summary-actions"},h("span",{className:"ps-dispatch-badge"},order.ready?"Ready for dispatch":"Dispatched"),order.ready&&h("button",{type:"button",disabled:busy,className:"ps-dispatch-primary",onClick:()=>order.usesPanelLoads?onPanelLoads():open(order)},order.usesPanelLoads?"Dispatch panel loads":"Dispatch order")),
+          h("button",{type:"button",className:"ps-order-dispatch-toggle","aria-label":"Items for Order "+order.orderNumber,"aria-expanded":!!expandedOrders[order.id],"aria-controls":"site-dispatch-items-"+order.id,onClick:()=>setExpandedOrders(current=>({...current,[order.id]:!current[order.id]}))},h("svg",{width:16,height:16,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:1.8,"aria-hidden":true},h("path",{d:"m9 5 7 7-7 7",strokeLinecap:"round",strokeLinejoin:"round"})))
+        ),
+        h("div",{id:"site-dispatch-items-"+order.id,className:"ps-order-dispatch-expanded",hidden:!expandedOrders[order.id]},
           h("div",{className:"ps-order-dispatch-item-group"},h("h4",null,"Items",h("span",null,(order.items||[]).length)),items(order)),
-          h("div",{className:"ps-order-dispatch-meta"},h("div",null,h("h4",null,"Site contact"),h("p",null,[order.siteContact,order.phone].filter(Boolean).join(" · ")||"Not provided")),h("div",null,h("h4",null,"Location / notes"),h("p",null,order.locationNotes||"Not provided")))),
-        h("div",{className:"ps-order-dispatch-footer"},order.ready?h("button",{type:"button",disabled:busy,className:"ps-dispatch-primary",onClick:()=>order.usesPanelLoads?onPanelLoads():open(order)},order.usesPanelLoads?"Dispatch panel loads":"Dispatch order"):
-          h("div",{className:"ps-order-dispatch-record"},h("div",null,h("h4",null,"Dispatch recorded"),h("p",null,`Dispatched ${date(order.dispatchedAt)} · ${order.dispatchedBy||""}`)),h("div",null,h("h4",null,"Destination"),h("p",null,order.dispatch?.destination||"Not provided")),h("div",null,h("h4",null,"Transport / driver"),h("p",null,[order.dispatch?.transport,order.dispatch?.driver].filter(Boolean).join(" · ")||"Not provided")))))));
+          !order.ready&&h("div",{className:"ps-order-dispatch-record"},h("div",null,h("h4",null,"Dispatch recorded"),h("p",null,`Dispatched ${date(order.dispatchedAt)} · ${order.dispatchedBy||""}`)),h("div",null,h("h4",null,"Destination"),h("p",null,order.dispatch?.destination||"Not provided")),h("div",null,h("h4",null,"Transport / driver"),h("p",null,[order.dispatch?.transport,order.dispatch?.driver].filter(Boolean).join(" · ")||"Not provided")))
+        )
+      )));
   }
 
   function PanelDispatchLoads() {
