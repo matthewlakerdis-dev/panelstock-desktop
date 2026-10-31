@@ -32,3 +32,9 @@ test('cancelling the device prompt never calls verification, and unsupported bro
 test('admin management cannot enroll credentials for another person',async()=>{
  const h=harness(),calls=[];h.api.manage(async(route,body)=>{calls.push([route,body]);return{ok:true,passkeys:[]};},'sam');await tick();assert.equal(calls[0][0],'/passkeys/admin/list');assert.equal(calls[0][1].targetUsername,'sam');assert.equal(h.button('Add passkey'),undefined);assert.equal(h.nodes().filter(node=>node.type==='password').length,0);
 });
+
+test('closing a passkey flow on sign-out prevents a late response from starting device verification',async()=>{
+ const h=harness();let resolveOptions;const calls=[];
+ h.api.signIn(route=>{calls.push(route);return new Promise(resolve=>resolveOptions=resolve);},()=>assert.fail('closed flow signed in'),()=>{});
+ h.nodes().find(node=>node.tagName==='select').value='personal';h.button('Continue').onclick();h.api.close();resolveOptions({requestId:'old',options:{challenge:'AQ',rpId:'panelstockhq.com'}});await tick();assert.equal(h.getOptions(),undefined);assert.deepEqual(calls,['/passkeys/authenticate/options']);
+});
