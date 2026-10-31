@@ -25,7 +25,7 @@ test('Safety announces a new tab and uses the existing authenticated external la
  const functions=source.slice(source.indexOf('  function SideNavGroup('),source.indexOf('  function Toast('));vm.runInNewContext(functions+'globalThis.components={SideNavGroup,SideNavItem};',c);
  const item=safetyItem(false,{'factory.toolbox':true}),selected=[];
  const link=c.components.SideNavItem(item);assert.equal(link.type,'a');assert.equal(link.props.href,item.href);assert.equal(link.props.target,'_blank');assert.equal(link.props.rel,'noopener noreferrer');assert.equal(link.props['aria-label'],'Safety (opens in a new tab)');assert.equal(link.props.title,'Safety (opens in a new tab)');link.props.onClick({preventDefault(){}});assert.equal(launches,1);
- const children=link.props.children;assert.equal(children[2].props.children[1].props.children,'Opens in a new tab');assert.equal(children[3].type,'svg');assert.equal(children[3].props['aria-hidden'],true);
+ const children=link.props.children;assert.equal(children[2].props.children,'Safety');assert.equal(children[3].type,'svg');assert.equal(children[3].props['aria-hidden'],true);
  const button=c.components.SideNavItem({label:'Schedule',onClick:()=>selected.push('schedule')});assert.equal(button.type,'button');button.props.onClick();assert.deepEqual(selected,['schedule']);
 });
 test('administrators can grant the toolbox permission through the shared user and role access controls',()=>{
