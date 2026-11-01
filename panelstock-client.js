@@ -66,24 +66,31 @@
   }
 
   class IndexedOutboxStorage {
-    constructor(fallback,notify=()=>{},readOnly=false){this.readOnly=readOnly;this.fallback=fallback;this.notify=notify;this.value=null;this.db=null;this.writes=Promise.resolve();}
+    constructor(fallback,notify=()=>{}){this.fallback=fallback;this.notify=notify;this.value=null;this.db=null;this.writes=Promise.resolve();this.failure=null;}
     async ready(){
       if(!root.indexedDB){this.value=this.fallback.getItem(OUTBOX_KEY);return this;}
       try{
         this.db=await new Promise((resolve,reject)=>{const request=root.indexedDB.open('panelstock-sync',1);request.onupgradeneeded=()=>request.result.createObjectStore('state');request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});
         const saved=await new Promise((resolve,reject)=>{const request=this.db.transaction('state').objectStore('state').get(OUTBOX_KEY);request.onsuccess=()=>resolve(request.result??null);request.onerror=()=>reject(request.error);});
-        const legacy=this.fallback.getItem(OUTBOX_KEY);this.value=saved??legacy;
-        if(!this.readOnly&&saved==null&&legacy!=null){this.setItem(OUTBOX_KEY,legacy);await this.flushWrites();}
-        if(!this.readOnly&&saved!=null)this.fallback.removeItem(OUTBOX_KEY);
+        const legacy=this.fallback.getItem(OUTBOX_KEY);this.value=legacy??saved;
+        if(legacy!=null){this.setItem(OUTBOX_KEY,legacy);await this.flushWrites();}
       }catch(error){this.db=null;this.value=this.fallback.getItem(OUTBOX_KEY);this.notify('storage','Reliable device storage could not be opened. Pending changes will use limited browser storage.');}
       return this;
     }
     getItem(key){return key===OUTBOX_KEY?this.value:this.fallback.getItem(key);}
     setItem(key,value){
       if(key!==OUTBOX_KEY){this.fallback.setItem(key,value);return;}
+      if(this.failure)throw this.failure;
       this.value=value;
       if(!this.db){this.fallback.setItem(key,value);return;}
-      this.writes=this.writes.then(()=>new Promise((resolve,reject)=>{const tx=this.db.transaction('state','readwrite');tx.objectStore('state').put(value,key);tx.oncomplete=()=>{this.fallback.removeItem(key);resolve();};tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);})).catch(()=>{try{this.fallback.setItem(key,this.value);}catch{}this.notify('storage','Reliable device storage failed. Pending changes were preserved in limited browser storage.');});
+      this.writes=this.writes.then(()=>new Promise((resolve,reject)=>{const tx=this.db.transaction('state','readwrite');tx.objectStore('state').put(value,key);tx.oncomplete=()=>{try{this.fallback.removeItem(key);resolve();}catch(error){reject(error);}};tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);})).catch(()=>{
+        this.db=null;
+        try{this.fallback.setItem(key,this.value);}
+        catch{this.failure=Error('Device storage is full; pending changes are only in memory. Keep this page open and export pending changes.');this.notify('storage',this.failure.message);throw this.failure;}
+        this.notify('storage','Reliable device storage failed. Pending changes were preserved in limited browser storage.');
+      });
+      // Observe failures immediately; flushWrites still rejects and prevents sending.
+      this.writes.catch(()=>{});
     }
     removeItem(key){
       if(key!==OUTBOX_KEY){this.fallback.removeItem(key);return Promise.resolve();}
@@ -184,7 +191,7 @@
       this.finalize();
       if(this.state.owner!==owner||this.state.blocked)return false;
       while(this.state.queue.length) {
-        await this.storage.flushWrites?.();
+        try{await this.storage.flushWrites?.();}catch(error){this.notify('storage',error.message);return false;}
         const packet=this.state.queue[0];
         this.notify('syncing');
         let res;
@@ -211,7 +218,7 @@
         next.view.revision=Math.max(next.view.revision||0,result.revision||0);
         next.blocked=null;
         this.save(next);
-        await this.storage.flushWrites?.();
+        try{await this.storage.flushWrites?.();}catch(error){this.notify('storage',error.message);return false;}
       }
       return true;
     }
