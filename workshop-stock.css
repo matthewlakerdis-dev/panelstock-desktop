@@ -544,3 +544,7 @@ body:has(.ws-stock-screen,.ws-receiving-screen) #root header.sticky:has(img[alt=
 /* A size container establishes the containing block for fixed descendants in Safari.
    Release it while a modal is open so the dialog centers in the viewport. */
 .ws-stock-screen:has(>.ws-overlay){container-type:normal}
+
+/* Lennox Facades stocktake report. */
+.ws-report-brand{display:flex;gap:16px;align-items:center}.ws-report-brand img{width:72px;height:72px;object-fit:contain}.ws-report-brand>button{margin-left:auto}.ws-report h4{font-size:18px;color:#155e75;margin:16px 0 4px}.ws-report-summary{display:flex;flex-wrap:wrap;gap:16px;padding:18px 0;color:#155e75}.ws-report-table{overflow:auto;margin-top:18px}.ws-report-table table{min-width:900px;background:#fff}.ws-report-table th{background:#155e75;color:#fff;white-space:nowrap}.ws-report-table td{vertical-align:top;font-size:12px}.ws-report-table small{display:block;font-size:11px;color:#607589;margin-top:4px}.ws-report-variance{color:#a34b08;font-weight:700}.ws-report .ws-count-body>p{font-size:12px}
+@media(max-width:640px){.ws-report-brand{gap:10px;flex-wrap:wrap}.ws-report-brand img{width:48px;height:48px}.ws-report .ws-count-footer{flex-wrap:wrap}.ws-report .ws-count-footer button{flex:1;white-space:nowrap}.ws-report-table table{display:table}.ws-report-table thead{display:table-header-group}.ws-report-table tbody{display:table-row-group}.ws-report-table tr{display:table-row}.ws-report-table td{display:table-cell}.ws-report-table td:before{display:none!important}}

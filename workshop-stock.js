@@ -23,7 +23,8 @@ window.createWorkshopStock = function(React) {
   const rank=([key,label])=>{const canonical=['steel','other'].includes(String(label).trim().toLowerCase())?String(label).trim().toLowerCase():key;const i=order.indexOf(canonical);return i<0?order.length:i;};
   const categories=Object.fromEntries(Object.entries(labels).sort((a,b)=>rank(a)-rank(b)));
 
-  const [countList,setCountList]=useState(false),[countId,setCountId]=useState(null);
+  const [countList,setCountList]=useState(false),[countId,setCountId]=useState(null),[reportId,setReportId]=useState(null);
+  const report=(data?.stocktakes||[]).find(c=>c.id===reportId)?.report;
   const activeCount=(data?.stocktakes||[]).find(c=>c.id===countId);
   const countKey='panelstock:stocktake:'+PanelStock.username+':'+countId;
   const [countFilter,setCountFilter]=useState('all'),[countActive,setCountActive]=useState(null),[counting,setCounting]=useState(false),[review,setReview]=useState(false),[countSearch,setCountSearch]=useState(''),[countLocation,setCountLocation]=useState(''),[countDraft,setCountDraft]=useState(()=>{try{return JSON.parse(localStorage.getItem(countKey))||{counts:{},reference:''};}catch{return {counts:{},reference:''};}});
@@ -44,7 +45,7 @@ window.createWorkshopStock = function(React) {
    try{localStorage.setItem(countKey,JSON.stringify({...countDraft,request:payload}));setCountDraft({...countDraft,request:payload});
     const r=await PanelStock.apiFetch(workerUrl+'/workshop-stock',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}),d=await r.json();
     if(!r.ok){if(r.status<500){const next={...countDraft};delete next.request;localStorage.setItem(countKey,JSON.stringify(next));setCountDraft(next);}if(r.status===409)await load();throw Error(d.error||'Counts could not be saved.');}
-    localStorage.removeItem(countKey);setCountDraft({counts:{},reference:''});setData(d);setCounting(false);setCountList(true);setReview(false);setNotice('Stocktake saved. Quantities and movement history updated.');
+    localStorage.removeItem(countKey);setCountDraft({counts:{},reference:''});setData(d);setCounting(false);setCountList(true);setReview(false);setNotice('Stocktake saved. Quantities and movement history updated.');if(d.stocktakes?.find(c=>c.id===countId)?.status==='completed'){setCountList(false);setReportId(countId);}
    }catch(e){setError(e.message);}finally{setBusy(false);}
   }
   const pendingKey='panelstock:workshop-pending:'+PanelStock.username;
@@ -117,10 +118,30 @@ window.createWorkshopStock = function(React) {
   const selected=data?.items.find(i=>i.id===form?.itemId);
   function allowed(action){return ['create','metadata','stocktake'].includes(action)?isAdmin:can(action==='damage'?'factory.damage':['receive','return'].includes(action)?'factory.receive':'factory.dispatch');}
   const imageEditor=()=>sharedProfile?h('div',{className:'ws-image-editor'},h('div',{className:'ws-image-edit-preview'},sharedProfile.image?h('img',{src:sharedProfile.image,alt:'Shared stock profile'}):icon('box')),h('p',null,'Uses the existing profile image and dimensions. Edit stock details to update them for all variants.')):h('div',{className:'ws-image-editor'},h('div',{className:'ws-image-edit-preview'},form.image?h('img',{src:form.image,alt:'Selected stock profile'}):icon('box')),h('div',null,h('strong',null,'Profile / item image'),h('p',null,'Add a profile drawing or product photo. PNG, JPG or WebP, up to 8 MB.'),h('div',{className:'ws-image-controls'},h('label',{className:'ws-upload '+(busy||imageBusy||pending?'is-disabled':'')},h('input',{type:'file',accept:'image/png,image/jpeg,image/webp','aria-label':'Profile or item image',disabled:busy||imageBusy||!!pending,onChange:uploadImage}),imageBusy?'Preparing image…':form.image?'Replace image':'Choose image'),form.image&&button('Remove image',()=>change('image',''),busy||imageBusy||!!pending)),h('small',null,'The image is saved when you save this item.')));
+  function downloadReport(format){
+   try{const blob=window.PanelStockStocktakeReport[format](report),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='Lennox-Stocktake-'+report.name.replace(/[^a-zA-Z0-9_-]+/g,'-').slice(0,80)+'.'+format;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}catch(e){setError('Report could not be downloaded: '+e.message);}
+  }
+  function renderReport(){
+   const amount=v=>v===null||v===undefined?'Unknown':qty(v),stamp=v=>v?new Date(v).toLocaleString('en-AU',{timeZone:'Australia/Brisbane'}):'';
+   const close=()=>{setReportId(null);setCountList(true);};
+   const header=h('div',{className:'ws-count-header'},
+    h('div',{className:'ws-report-brand'},h('img',{src:'icon-192.png',alt:'Lennox Facades'}),h('div',null,h('div',{className:'ws-eyebrow'},'LENNOX FACADES / INVENTORY'),h('h3',null,'Stocktake report')),button('Close',close)),
+    report&&h('div',null,h('h4',null,report.name),h('p',null,'Completed '+stamp(report.completedAt)+' · Brisbane time'),h('p',null,'Supplier: '+(report.supplier||'All suppliers')+' · '+report.categories.map(c=>categories[c]||c).join(' / '))));
+   const reportRows=report?.rows.map(r=>h('tr',{key:r.itemId},
+    h('td',null,h('strong',null,r.name),h('small',null,[r.sku,r.colour,r.lengthMm?r.lengthMm+' mm':'',r.dimensions].filter(Boolean).join(' / '))),
+    h('td',null,r.location,h('small',null,r.supplier)),h('td',null,r.unit),h('td',null,amount(r.expectedQty)),h('td',null,amount(r.quantity)),h('td',{className:r.variance?'ws-report-variance':''},amount(r.variance)),h('td',null,r.user,h('small',null,stamp(r.at)))));
+   const table=report&&h('div',{className:'ws-report-table'},h('table',null,h('thead',null,h('tr',null,...['Item / stock code','Location / supplier','Unit','Expected','Counted','Variance','Counted by / time'].map(label=>h('th',{key:label},label)))),h('tbody',null,reportRows)));
+   const body=h('div',{className:'ws-count-body'},!report?h('p',{role:'alert'},'This report is not available yet. Close and refresh stocktakes to try again.'):h(React.Fragment,null,
+    h('div',{className:'ws-report-summary'},h('strong',null,report.rows.length+' items counted'),h('strong',null,report.rows.filter(r=>r.variance!==null&&r.variance!==0).length+' with variance')),
+    h('p',null,'Expected quantities are recorded when each item is submitted. Different stock units are not added together.'),
+    report.rows.some(r=>r.historicalDetails)&&h('p',{className:'ws-po-warning'},'Historical report: item descriptions use available records. Expected quantities that cannot be recovered are marked Unknown.'),table),error&&h('div',{className:'ws-error',role:'alert'},error));
+   const footer=h('div',{className:'ws-actions ws-count-footer'},button('Back to stocktakes',close),report&&button('Download Excel',()=>downloadReport('xlsx')),report&&button('Download PDF',()=>downloadReport('pdf')));
+   return h('div',{className:'ws-overlay'},h('div',{className:'ws-dialog ws-count-dialog ws-report',role:'dialog','aria-modal':true,'aria-label':'Completed stocktake report'},header,body,footer));
+  }
   function renderStocktakeList(){
    try{return h('div',{className:'ws-overlay'},h('div',{className:'ws-dialog ws-count-dialog',role:'dialog','aria-modal':true,'aria-label':'Stocktakes'},
     h('div',{className:'ws-count-header'},h('div',{className:'ws-heading'},h('h3',null,'Stocktakes'),button('Close',()=>setCountList(false))),h('p',null,'Choose a count to start or continue. Submitted quantities update stock and shared progress.'),isAdmin&&button('Create stocktake',()=>{setCountList(false);open(null,'stocktake_create');setForm(f=>({...f,name:'',categories:[]}));})),
-    h('div',{className:'ws-count-body'},error&&h('div',{className:'ws-error',role:'alert'},error),!(data?.stocktakes||[]).length&&h('p',null,'No stocktakes yet. An administrator can create a named count and choose its categories.'),...(data?.stocktakes||[]).map(c=>h('div',{key:c.id,className:'ws-count-session'},h('div',null,h('strong',null,c.name),h('p',null,[c.categories.map(k=>categories[k]||k).join(' · '),c.supplier?'Supplier: '+c.supplier:''].filter(Boolean).join(' · ')),h('small',null,Object.keys(c.counts).length+' of '+c.itemIds.length+' counted · '+(c.status==='completed'?'Completed':'Open'))),c.status==='open'&&button(Object.keys(c.counts).length?'Continue count':'Start count',()=>startCount(c),busy))))));}
+    h('div',{className:'ws-count-body'},error&&h('div',{className:'ws-error',role:'alert'},error),!(data?.stocktakes||[]).length&&h('p',null,'No stocktakes yet. An administrator can create a named count and choose its categories.'),...(data?.stocktakes||[]).map(c=>h('div',{key:c.id,className:'ws-count-session'},h('div',null,h('strong',null,c.name),h('p',null,[c.categories.map(k=>categories[k]||k).join(' · '),c.supplier?'Supplier: '+c.supplier:''].filter(Boolean).join(' · ')),h('small',null,Object.keys(c.counts).length+' of '+c.itemIds.length+' counted · '+(c.status==='completed'?'Completed':'Open'))),c.status==='completed'&&button('View report',()=>{setCountList(false);setReportId(c.id);},busy),c.status==='open'&&button(Object.keys(c.counts).length?'Continue count':'Start count',()=>startCount(c),busy))))));}
    catch(e){return h('div',{className:'ws-overlay'},h('div',{className:'ws-dialog',role:'dialog','aria-modal':true,'aria-label':'Stocktake error'},h('h3',null,'Stocktakes could not be opened'),h('p',{role:'alert'},'Please share the message below so we can repair this stocktake.'),h('pre',{style:{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}},String(e.message||e)),button('Back to stock',()=>setCountList(false))));}
   }
   return h('section',{className:'ws ws-stock-screen'},
@@ -168,6 +189,7 @@ window.createWorkshopStock = function(React) {
     stockArea==='stock'&&h('details',{className:'ws-help'},h('summary',null,'How stock and allocations work'),h('p',null,'CNC scheduling reserves panel sheets automatically. Use Receive, Dispatch, Convert and Damage for sheets and sheet offcuts. Reserve other stock against a job here, then record usage when the material is used. Release unused allocations to make stock available again.')),
     history&&h('div',{className:'ws-history'},h('div',{className:'ws-heading'},h('h3',null,'Movement history'),button('Close',()=>setHistory(null))),h('p',null,'Current reservations: '+Object.entries(data.items.find(i=>i.id===history)?.reservations||{}).filter(([,q])=>q>0).map(([job,q])=>job+': '+q).join(', ')),data.movements.filter(m=>m.itemId===history).map(m=>h('p',{key:m.id},new Date(m.at).toLocaleString('en-AU')+' · '+m.action+' · '+m.quantity+' · '+m.user+(m.job?' · '+m.job:'')+(m.reason?' · '+m.reason:''))))
    ),
+   reportId&&renderReport(),
    countList&&renderStocktakeList(),
    counting&&h('div',{className:'ws-overlay'},h('div',{className:'ws-dialog ws-count-dialog',role:'dialog','aria-modal':true,'aria-label':'Workshop stocktake'},
     h('div',{className:'ws-count-header'},h('div',{className:'ws-eyebrow'},'WORKSHOP / STOCKTAKE'),h('div',{className:'ws-count-title'},h('h3',null,review?'Review '+activeCount?.name:activeCount?.name||'Stocktake'),h('span',{className:'ws-count-saved'},'Draft saved on this device')),h('p',null,'Count physical stock, including reserved items. Leave uncounted items blank.'),h('div',{className:'ws-count-progress'},h('strong',null,countedTotal+' of '+countItems.length+' counted'),h('span',null,(countItems.length-countedTotal)+' remaining')),h('progress',{max:countItems.length||1,value:countedTotal,'aria-label':'Stocktake progress'})),
@@ -545,3 +567,66 @@ window.createPurchaseOrderReceiving=function(React){
  };
 };
 
+
+/* Standalone, dependency-free exports of the saved stocktake snapshot. */
+window.PanelStockStocktakeReport=(()=>{
+ const enc={encode:value=>new TextEncoder().encode(value)};
+ const date=value=>value?new Date(value).toLocaleString('en-AU',{timeZone:'Australia/Brisbane'}):'';
+ const value=n=>n===null||n===undefined?'Unknown':String(n);
+ const columns=['Stock code','Item','Colour / size','Location','Supplier','Unit','Expected','Counted','Variance','Counted by','Counted at (Brisbane)'];
+ const rows=report=>report.rows.map(r=>[r.sku,r.name,[r.colour,r.lengthMm?r.lengthMm+' mm':'',r.dimensions].filter(Boolean).join(' / '),r.location,r.supplier,r.unit,r.expectedQty,r.quantity,r.variance,r.user,date(r.at)]);
+ const xml=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g,'');
+ function zip(files){
+  const parts=[],directory=[];let offset=0;
+  const u16=(v,p,n)=>v.setUint16(p,n,true),u32=(v,p,n)=>v.setUint32(p,n>>>0,true);
+  for(const [name,text] of Object.entries(files)){
+   const data=enc.encode(text),filename=enc.encode(name);let crc=0xffffffff;
+   for(const byte of data){crc^=byte;for(let bit=0;bit<8;bit++)crc=(crc>>>1)^((crc&1)?0xedb88320:0);}crc=(crc^0xffffffff)>>>0;
+   const header=new Uint8Array(30+filename.length),h=new DataView(header.buffer);u32(h,0,0x04034b50);u16(h,4,20);u32(h,14,crc);u32(h,18,data.length);u32(h,22,data.length);u16(h,26,filename.length);header.set(filename,30);
+   const central=new Uint8Array(46+filename.length),c=new DataView(central.buffer);u32(c,0,0x02014b50);u16(c,4,20);u16(c,6,20);u32(c,16,crc);u32(c,20,data.length);u32(c,24,data.length);u16(c,28,filename.length);u32(c,42,offset);central.set(filename,46);
+   parts.push(header,data);directory.push(central);offset+=header.length+data.length;
+  }
+  const end=new Uint8Array(22),e=new DataView(end.buffer);u32(e,0,0x06054b50);u16(e,8,directory.length);u16(e,10,directory.length);u32(e,12,directory.reduce((sum,v)=>sum+v.length,0));u32(e,16,offset);
+  return new Blob([...parts,...directory,end],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+ }
+ function xlsx(report){
+  const data=[['LENNOX FACADES'],['STOCKTAKE REPORT'],[report.name],['Completed (Brisbane)',date(report.completedAt)],['Supplier',report.supplier||'All suppliers'],['Scope',report.categories.join(', ')],['Quantities are compared at each item submission; units are not combined.'],...(report.rows.some(r=>r.historicalDetails)?[['Historical report: item descriptions use available records. Unknown baselines are left blank.']]:[]),[],columns,...rows(report)];
+  const sheet=data.map((row,i)=>'<row r="'+(i+1)+'">'+row.map((v,j)=>{const ref=String.fromCharCode(65+j)+(i+1),style=i===0?1:row===columns?2:i>=data.length-report.rows.length&&j>=6&&j<=8?3:0;return '<c r="'+ref+'" s="'+style+'"'+(typeof v==='number'?' t="n"><v>'+v+'</v>':' t="inlineStr"><is><t xml:space="preserve">'+xml(v)+'</t></is>')+'</c>';}).join('')+'</row>').join('');
+  return zip({
+   '[Content_Types].xml':'<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>',
+   '_rels/.rels':'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>',
+   'xl/workbook.xml':'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Stocktake report" sheetId="1" r:id="rId1"/></sheets></workbook>',
+   'xl/_rels/workbook.xml.rels':'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>',
+   'xl/styles.xml':'<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="20"/><color rgb="FF155E75"/><name val="Calibri"/></font><font><b/><color rgb="FFFFFFFF"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF155E75"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf/></cellStyleXfs><cellXfs count="4"><xf fontId="0" fillId="0" borderId="0"/><xf fontId="1" fillId="0" borderId="0" applyFont="1"/><xf fontId="2" fillId="2" borderId="0" applyFont="1" applyFill="1"/><xf fontId="0" fillId="0" borderId="0" numFmtId="4" applyNumberFormat="1"/></cellXfs></styleSheet>',
+   'xl/worksheets/sheet1.xml':'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols><col min="1" max="1" width="20" customWidth="1"/><col min="2" max="5" width="30" customWidth="1"/><col min="6" max="10" width="16" customWidth="1"/><col min="11" max="11" width="27" customWidth="1"/></cols><sheetData>'+sheet+'</sheetData></worksheet>'
+  });
+ }
+ const ascii=v=>String(v??'').normalize('NFKD').replace(/[^\x20-\x7e]/g,' ').replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)');
+ const fit=(v,n)=>String(v??'').length>n?String(v).slice(0,n-3)+'...':String(v??'');
+ function pdf(report){
+  const objects=[null],add=s=>(objects.push(s),objects.length-1),font=add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'),bold=add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>'),pages=add(''),ids=[];
+  const chunks=[];for(let i=0;i<Math.max(1,report.rows.length);i+=9)chunks.push(report.rows.slice(i,i+9));
+  chunks.forEach((items,page)=>{
+   let stream='';const text=(x,y,size,v,b=false,color='0.1 0.16 0.24')=>stream+=color+' rg BT /F'+(b?2:1)+' '+size+' Tf '+x+' '+y+' Td ('+ascii(v)+') Tj ET\n';
+   // Lennox blue facade motif and wordmark, drawn as vectors for sharp printing.
+   stream+='0 0.65 0.86 rg ';for(let i=0;i<5;i++)stream+=(30+i*5)+' '+(538-i*3)+' 3 '+(24+i*3)+' re f\n';
+   text(65,548,19,'LENNOX',true,'0 0.65 0.86');text(65,533,11,'FACADES',true);text(535,548,18,'STOCKTAKE REPORT',true,'0.08 0.37 0.46');
+   text(30,506,15,fit(report.name,85),true);text(30,485,9,'Completed: '+date(report.completedAt)+' (Brisbane)');text(420,485,9,'Supplier: '+fit(report.supplier||'All suppliers',60));
+   text(30,468,9,'Scope: '+fit(report.categories.join(', '),125));
+   const changed=report.rows.filter(r=>r.variance!==null&&r.variance!==0).length;
+   text(30,449,10,report.rows.length+' items counted  |  '+changed+' with variance',true);
+   stream+='0.08 0.37 0.46 rg 30 417 782 22 re f\n';
+   [[38,'ITEM / STOCK CODE'],[337,'UNIT'],[402,'EXPECTED'],[478,'COUNTED'],[553,'VARIANCE'],[642,'COUNTED BY / TIME']].forEach(([x,v])=>text(x,425,8,v,true,'1 1 1'));
+   items.forEach((r,i)=>{const y=402-i*36;if(i%2===0)stream+='0.95 0.97 0.98 rg 30 '+(y-20)+' 782 35 re f\n';
+    text(38,y,9,fit(r.name,54),true);text(38,y-12,7,fit([r.sku,r.colour,r.lengthMm?r.lengthMm+' mm':'',r.dimensions,r.location].filter(Boolean).join(' / '),82));
+    text(337,y,8,fit(r.unit,11));text(402,y,9,value(r.expectedQty));text(478,y,9,value(r.quantity));text(553,y,9,value(r.variance),true,r.variance?'0.65 0.22 0.08':'0.08 0.37 0.46');text(642,y,8,fit(r.user,29));text(642,y-12,7,date(r.at));
+   });
+   text(30,58,8,'Expected quantities are recorded when each item is submitted. Different stock units are not added together.');
+   if(report.rows.some(r=>r.historicalDetails))text(30,44,8,'Historical report: descriptions use available records. Unknown baselines are shown as Unknown.');
+   text(30,25,8,'LENNOX FACADES  |  '+fit(report.name,85));text(742,25,8,'Page '+(page+1)+' of '+chunks.length);
+   const content=add('<< /Length '+enc.encode(stream).length+' >>\nstream\n'+stream+'endstream');ids.push(add('<< /Type /Page /Parent '+pages+' 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 '+font+' 0 R /F2 '+bold+' 0 R >> >> /Contents '+content+' 0 R >>'));
+  });
+  objects[pages]='<< /Type /Pages /Kids ['+ids.map(id=>id+' 0 R').join(' ')+'] /Count '+ids.length+' >>';const catalog=add('<< /Type /Catalog /Pages '+pages+' 0 R >>');let result='%PDF-1.4\n',offsets=[0];for(let i=1;i<objects.length;i++){offsets[i]=enc.encode(result).length;result+=i+' 0 obj\n'+objects[i]+'\nendobj\n';}const xref=enc.encode(result).length;result+='xref\n0 '+objects.length+'\n0000000000 65535 f \n'+offsets.slice(1).map(n=>String(n).padStart(10,'0')+' 00000 n \n').join('')+'trailer\n<< /Size '+objects.length+' /Root '+catalog+' 0 R >>\nstartxref\n'+xref+'\n%%EOF';return new Blob([result],{type:'application/pdf'});
+ }
+ return {pdf,xlsx};
+})();
