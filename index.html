@@ -187,6 +187,8 @@
     return true;
   };
 </script>
+<link rel="stylesheet" href="excel-order-actions.css?v=20261102">
+<script src="excel-order-actions.js?v=20261102"></script>
 <script src="workshop-stock.js?v=3"></script>
 <script src="pull-refresh.js?v=20261029"></script>
 <script src="panelstock-client.js?v=20261101-audit-fixes"></script>
@@ -13704,6 +13706,7 @@ ${xrefStart}
   const catalogKey = item => `${String(item.color || "").trim().toLowerCase()}|${String(item.material || "").trim().toLowerCase()}|${Number(item.thickness)}`;
   const WorkshopStock = window.createWorkshopStock(import_react.default);
   const PurchaseOrderReceiving = window.createPurchaseOrderReceiving(import_react.default);
+  const ExcelOrderAction = window.PanelStockExcelActions.createComponent(import_react.default,PanelStock,BAKED_WORKER_URL,window.PanelStockExcelActions.link);
   function App() {
     const [tab, setTab] = useState("workshop");
     const [navSelection, setNavSelection] = useState("workshop");
@@ -14549,6 +14552,7 @@ ${xrefStart}
     ].filter(group=>group.items.length);
     const pageLabels = { cad: "Panel CAD", workshop: "SOH", stock: "Stock", receive: "Receive", dispatch: "Dispatch", transfer:"Convert", damage: "Damage", cnc: "CNC", "cnc-settings":"CNC Settings", qa:"QA Check", "qa-settings":"QA Settings", projects:"Projects", orders: "Orders", schedule: "Schedule", jobs: "Jobs", access: "User Access", audit:"Audit Centre", notifications:"Notifications", support:"Support", profile:"My Profile", settings: "Settings" };
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex h-screen bg-slate-50 text-slate-900 font-sans", children: [
+      (0,import_jsx_runtime.jsx)(ExcelOrderAction,{username}),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("aside", { className: "w-60 bg-slate-900 flex flex-col shrink-0", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center justify-between gap-3 px-4 py-4 border-b border-white/10", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className:"min-w-0",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-white font-semibold text-sm tracking-wide", children: "LENNOX FACADES" }),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-slate-400 text-xs mt-0.5", children: "PanelStock" })]}),
