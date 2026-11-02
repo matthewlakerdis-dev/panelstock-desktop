@@ -14,7 +14,7 @@ window.createWorkshopStock = function(React) {
   const [data,setData]=useState(null),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[category,setCategory]=useState('all'),[search,setSearch]=useState(''),[status,setStatus]=useState('all'),[sort,setSort]=useState('name'),[form,setForm]=useState(null),[history,setHistory]=useState(null),[pending,setPending]=useState(null),[imageBusy,setImageBusy]=useState(false),[preview,setPreview]=useState(null),[enhanceOutline,setEnhanceOutline]=useState(false);
   const [poOpen,setPoOpen]=useState(false),[selectedIds,setSelectedIds]=useState([]);
   const [stockArea,setStockArea]=useState('stock');
-  const [availableOnly,setAvailableOnly]=useState(false);
+  const [availableOnly,setAvailableOnly]=useState(false),[supplierFilter,setSupplierFilter]=useState(''),[locationFilter,setLocationFilter]=useState(''),[sohExport,setSohExport]=useState(null);
   const [restockFilter,setRestockFilter]=useState('all'),[restockSearch,setRestockSearch]=useState(''),[restockPage,setRestockPage]=useState(0);
   const labels={...defaultCategories,...data?.categories};
   if(labels.panels==='Panel sheets')labels.panels='Panels';
@@ -80,7 +80,26 @@ window.createWorkshopStock = function(React) {
   const allItems=data?.items||[];
   const stocktakeSuppliers=[...new Set(allItems.filter(i=>!i.legacy).map(i=>String(i.supplier||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   const matchesStocktakeSupplier=i=>!form?.supplier||String(i.supplier||'').trim()===form.supplier;
-  const items=allItems.filter(i=>(!availableOnly||Number(i.available)>0)&&(category==='all'||i.category===category)&&(status==='all'||status==='reorder'&&i.available<=Number(i.reorderLevel||0)||status==='reserved'&&i.reserved>0||status==='unassigned'&&!i.location)&&[i.name,i.sku,i.location,i.supplier,i.details,i.lengthMm,i.dimensions,i.colour].join(' ').toLowerCase().includes(search.trim().toLowerCase())).sort((a,b)=>sort==='available'?a.available-b.available:sort==='location'?String(a.location||'').localeCompare(String(b.location||'')):a.name.localeCompare(b.name,undefined,{numeric:true}));
+  const selectStock=scope=>allItems.filter(i=>(!scope.categoryIds||scope.categoryIds.includes(i.category))&&(!scope.supplierFilter||JSON.stringify(String(i.supplier||'').trim())===scope.supplierFilter)&&(!scope.locationFilter||JSON.stringify(String(i.location||'').trim())===scope.locationFilter)&&(!scope.availableOnly||Number(i.available)>0)&&(scope.status==='all'||scope.status==='reorder'&&i.available<=Number(i.reorderLevel||0)||scope.status==='reserved'&&i.reserved>0||scope.status==='unassigned'&&!i.location)&&[i.name,i.sku,i.location,i.supplier,i.details,i.lengthMm,i.dimensions,i.colour,i.color,i.material].join(' ').toLowerCase().includes(scope.search.trim().toLowerCase())).sort((a,b)=>scope.sort==='available'?a.available-b.available:scope.sort==='location'?String(a.location||'').localeCompare(String(b.location||'')):a.name.localeCompare(b.name,undefined,{numeric:true}));
+  const items=selectStock({categoryIds:category==='all'?null:[category],supplierFilter,locationFilter,availableOnly,status,search,sort});
+  const exportItems=sohExport?selectStock(sohExport):[];
+  const exportCategoryKeys=Object.keys(categories).filter(k=>k!=='all');
+  const openSOHExport=()=>{setError('');setSohExport({categoryIds:category==='all'?exportCategoryKeys:[category],supplierFilter,locationFilter,availableOnly,status,search,sort});};
+  const exportChange=(key,value)=>setSohExport(current=>({...current,[key]:value}));
+  const filterOptions=(key,emptyLabel)=>[...new Set(allItems.map(i=>String(i[key]||'').trim()))].sort((a,b)=>a.localeCompare(b)).map(v=>h('option',{key:JSON.stringify(v),value:JSON.stringify(v)},v||emptyLabel));
+  function exportSOH(format){
+   if(!data||!sohExport||!exportItems.length)return;
+   const statuses={all:'All statuses',reorder:'Needs restocking',reserved:'Allocated to jobs',unassigned:'Location needed'},sorts={name:'Item name',available:'Lowest available',location:'Location'};
+   const chosen=(value,empty,all)=>value?JSON.parse(value)||empty:all;
+   const scope=sohExport;
+   const filters=['Categories: '+scope.categoryIds.map(k=>categories[k]||k).join(' / '),'Supplier: '+chosen(scope.supplierFilter,'No supplier','All suppliers'),'Location: '+chosen(scope.locationFilter,'No location','All locations'),'Status: '+statuses[scope.status],scope.availableOnly?'Available stock only':'All stock levels',...(scope.search.trim()?['Search: '+scope.search.trim()]:[]),'Sort: '+sorts[scope.sort]];
+   const snapshot={kind:'soh',name:'Stock on hand',generatedAt:new Date().toISOString(),revision:data.revision,categories:filters,supplier:chosen(scope.supplierFilter,'No supplier','All suppliers'),rows:exportItems.map(i=>({
+    itemId:i.id,sku:i.sku||'',name:i.name||'',category:categories[i.category]||i.category||'',colour:i.colour||i.color||'',lengthMm:i.lengthMm??null,
+    dimensions:i.legacy?[i.material,i.thickness?i.thickness+' mm':'',i.width&&i.height?i.width+' x '+i.height+' mm':''].filter(Boolean).join(' / '):i.dimensions||i.details||'',
+    location:i.location||'',supplier:i.supplier||'',unit:i.unit||'',qty:Number(i.qty||0),reserved:Number(i.reserved||0),available:Number(i.available??i.qty??0),onOrder:Number(i.onOrder||0),reorderLevel:Number(i.reorderLevel||0),status:i.available<=0?'Out of stock':i.available<=Number(i.reorderLevel||0)?'Needs restocking':'In stock'
+   }))};
+   try{const blob=window.PanelStockStocktakeReport.soh[format](snapshot),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='Lennox-SOH-'+new Date().toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})+'.'+format;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);setNotice('Exported '+exportItems.length+' matching stock items.');}catch(e){setError('SOH export could not be created: '+e.message);}
+  }
   const lowItems=allItems.filter(i=>i.available<=Number(i.reorderLevel||0)).sort((a,b)=>(a.available>0)-(b.available>0)||a.name.localeCompare(b.name,undefined,{numeric:true}));
   const shortfall=i=>Math.max(0,Math.round((Number(i.reorderLevel||0)-i.available-Number(i.onOrder||0))*1000)/1000);
   const waitingItems=lowItems.filter(i=>Number(i.onOrder)>0);
@@ -95,7 +114,7 @@ window.createWorkshopStock = function(React) {
   const bulkHasPanels=form?.action==='bulk_metadata'&&allItems.some(i=>form.itemIds.includes(i.id)&&i.legacy);
   const bulkFields=[['name','Stock item name','text'],['category','Category','select'],['location','Rack / shelf / bin','text'],['supplier','Supplier','text'],['reorderLevel','Reorder level','number'],['colour','Colour / finish','text'],['lengthMm','Length (mm)','number'],['dimensions','Dimensions / profile size','text']];
   function bulkChange(key,value){setForm(f=>({...f,changes:{...f.changes,[key]:value}}));}
-  const resetFilters=()=>{setCategory('all');setStatus('all');setSearch('');setAvailableOnly(false);};
+  const resetFilters=()=>{setCategory('all');setStatus('all');setSearch('');setAvailableOnly(false);setSupplierFilter('');setLocationFilter('');};
   const qty=value=>Number(value||0).toLocaleString('en-AU',{maximumFractionDigits:3});
   const incomingItem=allItems.find(i=>i.id===incomingId);
   const incomingToday=window.purchaseOrderToday();
@@ -106,7 +125,7 @@ window.createWorkshopStock = function(React) {
   const incomingButton=item=>Number(item.onOrder)>0&&Array.isArray(item.incomingOrders)?h('button',{type:'button',className:'ws-on-order-link','aria-label':'View '+qty(item.onOrder)+' '+item.unit+' on order for '+item.name,disabled:busy||!!pending,onClick:()=>showIncoming(item)},qty(item.onOrder),h('span',{'aria-hidden':true},' ↗')):qty(item.onOrder);
   const stockStatus=item=>item.available<=0?['empty','Out of stock']:item.available<=Number(item.reorderLevel||0)?['low','Low stock']:['ok','In stock'];
   const icon=(name)=>h('svg',{width:20,height:20,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:1.6,'aria-hidden':true},h('path',{d:{box:'M3 7l9-4 9 4-9 4-9-4zm0 0v10l9 4 9-4V7M12 11v10M7 5l10 4',alert:'M12 3L2 21h20L12 3zm0 6v5m0 3v1',job:'M8 7V4h8v3M3 7h18v13H3V7zm0 6h18M10 11v4h4v-4',pin:'M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1114 0zM15 10a3 3 0 11-6 0 3 3 0 016 0',search:'M21 21l-6-6M17 10a7 7 0 11-14 0 7 7 0 0114 0',refresh:'M20 7v5h-5M4 17v-5h5M5 7a8 8 0 0114 0M19 17a8 8 0 01-14 0',excel:'M4 3h16v18H4zM4 9h16M4 15h16M10 9v12',pdf:'M14 2H5v20h14V7zM14 2v5h5M12 10v8m-3-3 3 3 3-3',offcut:'M3 3h12v7h6v11H3zM7 14h6m-3-3v6',plus:'M12 5v14M5 12h14'}[name]}));
-  const iconButton=(label,symbol,onClick,text)=>h('button',{type:'button',className:'ws-icon-button',title:label,'aria-label':label,onClick},icon(symbol),h('span',null,text));
+  const iconButton=(label,symbol,onClick,text,disabled=false)=>h('button',{type:'button',className:'ws-icon-button',title:label,'aria-label':label,onClick,disabled},icon(symbol),h('span',null,text));
   const metric=(key,label,value,caption,symbol)=>h('button',{type:'button',className:'ws-metric '+((stockArea==='restock'?key==='reorder':key!=='reorder'&&status===key)?'is-selected':''),'aria-pressed':stockArea==='restock'?key==='reorder':key!=='reorder'&&status===key,onClick:()=>{setStockArea(key==='reorder'?'restock':'stock');setCategory('all');setSearch('');setStatus(key==='reorder'?'all':status===key?'all':key);}},h('span',{className:'ws-metric-top'},label,h('span',{className:'ws-metric-icon '+key},icon(symbol))),h('strong',null,value),h('small',null,caption));
   const profileKey=v=>String(v||'').trim().replace(/\s+/g,' ').toLowerCase();
   const sharedProfile=form?.action==='create'&&profileKey(form.sku)?allItems.find(i=>!i.legacy&&profileKey(i.sku)===profileKey(form.sku)):null;
@@ -118,6 +137,21 @@ window.createWorkshopStock = function(React) {
   const selected=data?.items.find(i=>i.id===form?.itemId);
   function allowed(action){return ['create','metadata','stocktake','archive'].includes(action)?isAdmin:can(action==='damage'?'factory.damage':['receive','return'].includes(action)?'factory.receive':'factory.dispatch');}
   const imageEditor=()=>sharedProfile?h('div',{className:'ws-image-editor'},h('div',{className:'ws-image-edit-preview'},sharedProfile.image?h('img',{src:sharedProfile.image,alt:'Shared stock profile'}):icon('box')),h('p',null,'Uses the existing profile image and dimensions. Edit stock details to update them for all variants.')):h('div',{className:'ws-image-editor'},h('div',{className:'ws-image-edit-preview'},form.image?h('img',{src:form.image,alt:'Selected stock profile'}):icon('box')),h('div',null,h('strong',null,'Profile / item image'),h('p',null,'Add a profile drawing or product photo. PNG, JPG or WebP, up to 8 MB.'),h('div',{className:'ws-image-controls'},h('label',{className:'ws-upload '+(busy||imageBusy||pending?'is-disabled':'')},h('input',{type:'file',accept:'image/png,image/jpeg,image/webp','aria-label':'Profile or item image',disabled:busy||imageBusy||!!pending,onChange:uploadImage}),imageBusy?'Preparing image…':form.image?'Replace image':'Choose image'),form.image&&button('Remove image',()=>change('image',''),busy||imageBusy||!!pending)),h('small',null,'The image is saved when you save this item.')));
+  function renderSOHExport(){
+   const toggleCategory=(key,checked)=>exportChange('categoryIds',checked?[...new Set([...sohExport.categoryIds,key])]:sohExport.categoryIds.filter(k=>k!==key));
+   const header=h('div',{className:'ws-count-header'},h('div',{className:'ws-heading'},h('div',null,h('div',{className:'ws-eyebrow'},'LENNOX FACADES / INVENTORY'),h('h3',null,'Export stock on hand')),button('Close',()=>setSohExport(null))),h('p',null,'Choose what to include. Your current SOH filters are preselected.'));
+   const scope=h('section',{className:'ws-soh-export-categories'},h('div',{className:'ws-heading'},h('h4',null,'Categories to include'),h('div',{className:'ws-actions'},button('Select all',()=>exportChange('categoryIds',exportCategoryKeys)),button('Clear categories',()=>exportChange('categoryIds',[])))),h('div',{className:'ws-count-categories'},exportCategoryKeys.map(key=>h('label',{key},h('input',{type:'checkbox','aria-label':'Include '+categories[key],checked:sohExport.categoryIds.includes(key),onChange:e=>toggleCategory(key,e.target.checked)}),categories[key],h('small',null,' ('+allItems.filter(i=>i.category===key).length+')')))));
+   const filters=h('div',{className:'ws-fields ws-soh-export-filters'},
+    h('label',{className:'ws-field'},'Supplier',h('select',{'aria-label':'Export supplier',value:sohExport.supplierFilter,onChange:e=>exportChange('supplierFilter',e.target.value)},h('option',{value:''},'All suppliers'),filterOptions('supplier','No supplier'))),
+    h('label',{className:'ws-field'},'Location',h('select',{'aria-label':'Export location',value:sohExport.locationFilter,onChange:e=>exportChange('locationFilter',e.target.value)},h('option',{value:''},'All locations'),filterOptions('location','No location'))),
+    h('label',{className:'ws-field'},'Status',h('select',{'aria-label':'Export status',value:sohExport.status,onChange:e=>exportChange('status',e.target.value)},[['all','All statuses'],['reorder','Needs restocking'],['reserved','Allocated to jobs'],['unassigned','Location needed']].map(([v,label])=>h('option',{key:v,value:v},label)))),
+    h('label',{className:'ws-field'},'Sort',h('select',{'aria-label':'Export sort',value:sohExport.sort,onChange:e=>exportChange('sort',e.target.value)},[['name','Item name'],['available','Lowest available'],['location','Location']].map(([v,label])=>h('option',{key:v,value:v},label)))),
+    h('label',{className:'ws-field ws-soh-export-search'},'Find stock',h('input',{'aria-label':'Export search',type:'search',value:sohExport.search,placeholder:'Item, code, colour, location or supplier',onChange:e=>exportChange('search',e.target.value)})),
+    h('label',{className:'ws-soh-export-available'},h('input',{type:'checkbox','aria-label':'Export available stock only',checked:sohExport.availableOnly,onChange:e=>exportChange('availableOnly',e.target.checked)}),'Available stock only'));
+   const summary=h('div',{className:'ws-soh-export-summary','aria-live':'polite'},h('strong',null,exportItems.length+' '+(exportItems.length===1?'item':'items')+' will be exported'),h('p',null,exportItems.length?'All matching items are included, with on-hand, reserved, available and on-order quantities.':'Choose a category or change the filters to include stock.'));
+   const footer=h('div',{className:'ws-actions ws-count-footer'},h('span',{className:'ws-soh-export-count'},exportItems.length+' '+(exportItems.length===1?'item':'items')+' selected for export'),button('Cancel',()=>setSohExport(null)),button('Download Excel',()=>exportSOH('xlsx'),busy||!exportItems.length),button('Download PDF',()=>exportSOH('pdf'),busy||!exportItems.length));
+   return h('div',{className:'ws-overlay'},h('div',{className:'ws-dialog ws-count-dialog ws-soh-export',role:'dialog','aria-modal':true,'aria-label':'Export stock on hand'},header,h('div',{className:'ws-count-body'},scope,filters,summary,error&&h('div',{className:'ws-error',role:'alert'},error)),footer));
+  }
   function downloadReport(format){
    try{const blob=window.PanelStockStocktakeReport[format](report),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='Lennox-Stocktake-'+report.name.replace(/[^a-zA-Z0-9_-]+/g,'-').slice(0,80)+'.'+format;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}catch(e){setError('Report could not be downloaded: '+e.message);}
   }
@@ -166,7 +200,8 @@ window.createWorkshopStock = function(React) {
     h('div',{className:'ws-inventory'},
      h('div',{className:'ws-tabs',role:'group','aria-label':'Stock categories'},Object.entries(categories).map(([key,label])=>h('button',{type:'button',key,className:category===key?'is-active':'','aria-pressed':category===key,onClick:()=>setCategory(key)},label,h('span',null,key==='all'?allItems.length:allItems.filter(i=>i.category===key).length)))),
      h('div',{className:'ws-filters'},h('button',{type:'button',className:availableOnly?'ws-primary':undefined,'aria-pressed':availableOnly,onClick:()=>setAvailableOnly(v=>!v),style:{whiteSpace:'nowrap'}},'Available only'),h('label',{className:'ws-search'},icon('search'),h('input',{'aria-label':'Search stock',value:search,placeholder:'Search by item, code, location or supplier…',onChange:e=>setSearch(e.target.value)})),h('select',{'aria-label':'Stock status',value:status,onChange:e=>setStatus(e.target.value)},[['all','All statuses'],['reorder','Needs restocking'],['reserved','Allocated to jobs'],['unassigned','Location needed']].map(([v,t])=>h('option',{value:v,key:v},t))),h('select',{'aria-label':'Sort stock',value:sort,onChange:e=>setSort(e.target.value)},[['name','Sort: item name'],['available','Sort: lowest available'],['location','Sort: location']].map(([v,t])=>h('option',{value:v,key:v},t)))),
-     h('div',{className:'ws-list-caption'},h('span',null,h('strong',null,categories[category]),' · '+items.length+' '+(items.length===1?'item':'items')),h('div',{className:'ws-list-tools'},onExportExcel&&iconButton('Export panels Excel','excel',onExportExcel,'Excel'),onExportPDF&&iconButton('Export panels PDF','pdf',onExportPDF,'PDF'),isAdmin&&onAddOffcut&&iconButton('Add panel offcut','offcut',onAddOffcut,'Offcut')), (availableOnly||status!=='all'||search||category!=='all')&&button('Clear filters',resetFilters)),
+     h('div',{className:'ws-soh-scope-filters'},h('label',{className:'ws-field'},'Supplier',h('select',{'aria-label':'Stock supplier',value:supplierFilter,onChange:e=>setSupplierFilter(e.target.value)},h('option',{value:''},'All suppliers'),filterOptions('supplier','No supplier'))),h('label',{className:'ws-field'},'Location',h('select',{'aria-label':'Stock location',value:locationFilter,onChange:e=>setLocationFilter(e.target.value)},h('option',{value:''},'All locations'),filterOptions('location','No location')))),
+     h('div',{className:'ws-list-caption'},h('span',null,h('strong',null,categories[category]),' · '+items.length+' '+(items.length===1?'item':'items')),h('div',{className:'ws-list-tools'},iconButton('Export SOH','excel',openSOHExport,'Export SOH',!data||busy),isAdmin&&onAddOffcut&&iconButton('Add panel offcut','offcut',onAddOffcut,'Offcut')), (availableOnly||status!=='all'||search||category!=='all'||supplierFilter||locationFilter)&&button('Clear filters',resetFilters)),
      isAdmin&&h('div',{className:'ws-bulk-toolbar'},h('label',null,h('input',{type:'checkbox','aria-label':'Select all visible stock items',checked:items.length>0&&items.every(i=>selectedIds.includes(i.id)),disabled:busy||!!pending||!items.length,onChange:e=>setSelectedIds(ids=>e.target.checked?[...new Set([...ids,...items.map(i=>i.id)])]:ids.filter(id=>!items.some(i=>i.id===id)))}),'Select visible'),h('span',null,selectedStock.length+' selected'),button('Bulk edit',openBulk,busy||!!pending||!selectedStock.length||selectedStock.length>500),selectedIds.length>0&&button('Clear selection',()=>setSelectedIds([]),busy||!!pending)),
      h('div',{className:'ws-table ws-incoming-table'},h('table',null,h('thead',null,h('tr',null,['Stock item','Location','On hand','Reserved','Available','Reorder at','Status','Actions','On order'].map(t=>h('th',{key:t},t)))),h('tbody',null,items.map(item=>{
       const [tone,label]=stockStatus(item);
@@ -189,6 +224,7 @@ window.createWorkshopStock = function(React) {
     stockArea==='stock'&&h('details',{className:'ws-help'},h('summary',null,'How stock and allocations work'),h('p',null,'CNC scheduling reserves panel sheets automatically. Use Receive, Dispatch, Convert and Damage for sheets and sheet offcuts. Reserve other stock against a job here, then record usage when the material is used. Release unused allocations to make stock available again.')),
     history&&h('div',{className:'ws-history'},h('div',{className:'ws-heading'},h('h3',null,'Movement history'),button('Close',()=>setHistory(null))),h('p',null,'Current reservations: '+Object.entries(data.items.find(i=>i.id===history)?.reservations||{}).filter(([,q])=>q>0).map(([job,q])=>job+': '+q).join(', ')),data.movements.filter(m=>m.itemId===history).map(m=>h('p',{key:m.id},new Date(m.at).toLocaleString('en-AU')+' · '+m.action+' · '+m.quantity+' · '+m.user+(m.job?' · '+m.job:'')+(m.reason?' · '+m.reason:''))))
    ),
+   sohExport&&renderSOHExport(),
    reportId&&renderReport(),
    countList&&renderStocktakeList(),
    counting&&h('div',{className:'ws-overlay'},h('div',{className:'ws-dialog ws-count-dialog',role:'dialog','aria-modal':true,'aria-label':'Workshop stocktake'},
@@ -725,39 +761,42 @@ License: GPL-2+
   return new Blob([...parts,...directory,end],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
  }
  function xlsx(report){
+  const soh=report.kind==='soh',lastColumn=soh?'M':'K',sheetName=soh?'Stock on hand':'Stocktake report',sheetRef="'"+sheetName+"'";
+  const headings=soh?['Stock code','Item','Category','Colour / size','Location','Supplier','Unit','On hand','Reserved','Available','On order','Reorder level','Status']:columns;
+  const exportedRows=soh?report.rows.map(r=>[r.sku,r.name,r.category,[r.colour,r.lengthMm?r.lengthMm+' mm':'',r.dimensions].filter(Boolean).join(' / '),r.location,r.supplier,r.unit,r.qty,r.reserved,r.available,r.onOrder,r.reorderLevel,r.status]):rows(report);
   const ns='http://schemas.openxmlformats.org/spreadsheetml/2006/main',rels='http://schemas.openxmlformats.org/package/2006/relationships';
   const cell=(ref,v,style=0,numeric=false)=>'<c r="'+ref+'" s="'+style+'"'+(numeric&&typeof v==='number'&&Number.isFinite(v)?' t="n"><v>'+v+'</v>':' t="inlineStr"><is><t xml:space="preserve">'+xml(numeric&&(v===null||v===undefined)?'Unknown':v)+'</t></is>')+'</c>';
   const sheetRows=[],row=(n,height,cells)=>sheetRows.push('<row r="'+n+'" ht="'+height+'" customHeight="1">'+cells+'</row>');
   const changed=report.rows.filter(r=>r.variance!==null&&r.variance!==undefined&&r.variance!==0).length;
-  row(1,22,cell('E1','INVENTORY / COMPLETED COUNT',3));
-  row(2,28,cell('E2','STOCKTAKE REPORT',1));
+  row(1,22,cell('E1',soh?'INVENTORY / FILTERED EXPORT':'INVENTORY / COMPLETED COUNT',3));
+  row(2,28,cell('E2',soh?'STOCK ON HAND':'STOCKTAKE REPORT',1));
   row(3,24,cell('E3',report.name,2));row(4,20,'');row(5,8,'');
-  row(6,22,cell('A6','LENNOX FACADES',3)+cell('E6','COMPLETED (BRISBANE)',4)+cell('G6',date(report.completedAt),5));
+  row(6,22,cell('A6','LENNOX FACADES',3)+cell('E6',soh?'EXPORTED (BRISBANE)':'COMPLETED (BRISBANE)',4)+cell('G6',date(soh?report.generatedAt:report.completedAt),5));
   row(7,23,cell('A7','SUPPLIER',4)+cell('C7',report.supplier||'All suppliers',5));
-  row(8,30,cell('A8','COUNT SCOPE',4)+cell('C8',report.categories.join(' / '),5));
-  row(9,28,cell('A9',report.rows.length+' ITEMS COUNTED',17)+cell('D9',changed+' WITH VARIANCE',17)+cell('G9','BRISBANE TIME / AUSTRALIA',17));
-  row(10,26,cell('A10','Expected quantities are recorded when each item is submitted. Different stock units are not added together.',16));
-  const historical=report.rows.some(r=>r.historicalDetails);
+  row(8,soh?Math.max(30,Math.min(90,Math.ceil(report.categories.join(' / ').length/180)*15)):30,cell('A8',soh?'FILTERS':'COUNT SCOPE',4)+cell('C8',report.categories.join(' / '),5));
+  row(9,28,cell('A9',report.rows.length+(soh?' ITEMS EXPORTED':' ITEMS COUNTED'),17)+cell('D9',soh?'INVENTORY REVISION '+String(report.revision??'Unknown'):changed+' WITH VARIANCE',17)+cell('G9','BRISBANE TIME / AUSTRALIA',17));
+  row(10,26,cell('A10',soh?'Stock snapshot at export time. Available = on hand - reserved. Different stock units are not added together.':'Expected quantities are recorded when each item is submitted. Different stock units are not added together.',16));
+  const historical=!soh&&report.rows.some(r=>r.historicalDetails);
   row(11,historical?28:9,historical?cell('A11','Historical report: item descriptions use available records. Baselines that cannot be recovered are marked Unknown.',15):'');
   const headerRow=12,firstDataRow=13,lastRow=Math.max(headerRow,headerRow+report.rows.length);
-  row(headerRow,30,columns.map((label,j)=>cell(String.fromCharCode(65+j)+headerRow,label,6)).join(''));
-  rows(report).forEach((values,i)=>{
+  row(headerRow,30,headings.map((label,j)=>cell(String.fromCharCode(65+j)+headerRow,label,6)).join(''));
+  exportedRows.forEach((values,i)=>{
    const r=firstDataRow+i,zebra=i%2===1;
    row(r,36,values.map((v,j)=>{
-    const numeric=j>=6&&j<=8;
+    const numeric=soh?j>=7&&j<=11:j>=6&&j<=8;
     let style=numeric?(zebra?10:9):(zebra?8:7);
-    if(j===8){const variance=report.rows[i].variance;style=typeof variance==='number'&&variance!==0?(zebra?14:13):(zebra?12:11);}
+    if(!soh&&j===8){const variance=report.rows[i].variance;style=typeof variance==='number'&&variance!==0?(zebra?14:13):(zebra?12:11);}
     return cell(String.fromCharCode(65+j)+r,v,style,numeric);
    }).join(''));
   });
-  const merges=['E1:K1','E2:K2','E3:K4','A6:C6','E6:F6','G6:K6','A7:B7','C7:K7','A8:B8','C8:K8','A9:C9','D9:F9','G9:K9','A10:K10',...(historical?['A11:K11']:[])];
-  const widths=[18,30,33,23,24,13,15,15,15,22,28];
+  const merges=['E1:'+lastColumn+'1','E2:'+lastColumn+'2','E3:'+lastColumn+'4','A6:C6','E6:F6','G6:'+lastColumn+'6','A7:B7','C7:'+lastColumn+'7','A8:B8','C8:'+lastColumn+'8','A9:C9','D9:F9','G9:'+lastColumn+'9','A10:'+lastColumn+'10',...(historical?['A11:'+lastColumn+'11']:[])];
+  const widths=soh?[18,30,21,33,23,24,13,15,15,15,15,17,23]:[18,30,33,23,24,13,15,15,15,22,28];
   const worksheet='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="'+ns+'" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'+
-   '<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><dimension ref="A1:K'+lastRow+'"/><sheetViews><sheetView workbookViewId="0" showGridLines="0"><pane xSplit="2" ySplit="12" topLeftCell="C13" activePane="bottomRight" state="frozen"/><selection pane="bottomRight" activeCell="C13" sqref="C13"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="18"/>'+
+   '<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><dimension ref="A1:'+lastColumn+lastRow+'"/><sheetViews><sheetView workbookViewId="0" showGridLines="0"><pane xSplit="2" ySplit="12" topLeftCell="C13" activePane="bottomRight" state="frozen"/><selection pane="bottomRight" activeCell="C13" sqref="C13"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="18"/>'+
    '<cols>'+widths.map((width,i)=>'<col min="'+(i+1)+'" max="'+(i+1)+'" width="'+width+'" customWidth="1"/>').join('')+'</cols><sheetData>'+sheetRows.join('')+'</sheetData>'+
-   '<autoFilter ref="A12:K'+lastRow+'"/><mergeCells count="'+merges.length+'">'+merges.map(ref=>'<mergeCell ref="'+ref+'"/>').join('')+'</mergeCells>'+
+   '<autoFilter ref="A12:'+lastColumn+lastRow+'"/><mergeCells count="'+merges.length+'">'+merges.map(ref=>'<mergeCell ref="'+ref+'"/>').join('')+'</mergeCells>'+
    '<printOptions horizontalCentered="1"/><pageMargins left="0.3" right="0.3" top="0.4" bottom="0.45" header="0.15" footer="0.2"/><pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"/>'+
-   '<headerFooter><oddFooter>&amp;L&amp;8LENNOX FACADES | STOCKTAKE REPORT&amp;R&amp;8Page &amp;P of &amp;N</oddFooter></headerFooter><drawing r:id="rId1"/></worksheet>';
+   '<headerFooter><oddFooter>&amp;L&amp;8LENNOX FACADES | '+(soh?'STOCK ON HAND':'STOCKTAKE REPORT')+'&amp;R&amp;8Page &amp;P of &amp;N</oddFooter></headerFooter><drawing r:id="rId1"/></worksheet>';
   const fonts=[
    '<font><sz val="11"/><color rgb="FF243746"/><name val="Calibri"/></font>',
    '<font><b/><sz val="24"/><color rgb="FF155E75"/><name val="Calibri"/></font>',
@@ -782,7 +821,7 @@ License: GPL-2+
   return zip({
    '[Content_Types].xml':'<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>',
    '_rels/.rels':'<Relationships xmlns="'+rels+'"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>',
-   'xl/workbook.xml':'<workbook xmlns="'+ns+'" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView/></bookViews><sheets><sheet name="Stocktake report" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">\'Stocktake report\'!$A$1:$K$'+lastRow+'</definedName><definedName name="_xlnm.Print_Titles" localSheetId="0">\'Stocktake report\'!$12:$12</definedName></definedNames><calcPr calcId="191029"/></workbook>',
+   'xl/workbook.xml':'<workbook xmlns="'+ns+'" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView/></bookViews><sheets><sheet name="'+sheetName+'" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">'+sheetRef+'!$A$1:$'+lastColumn+'$'+lastRow+'</definedName><definedName name="_xlnm.Print_Titles" localSheetId="0">'+sheetRef+'!$12:$12</definedName></definedNames><calcPr calcId="191029"/></workbook>',
    'xl/_rels/workbook.xml.rels':'<Relationships xmlns="'+rels+'"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>',
    'xl/styles.xml':stylesXml,
    'xl/worksheets/sheet1.xml':worksheet,
@@ -796,6 +835,7 @@ License: GPL-2+
  const clean=v=>String(v??'').replace(/[–—]/g,'-').replace(/×/g,'x').replace(/·/g,' / ').normalize('NFKD').replace(/[^\x20-\x7e]/g,' ').replace(/\s+/g,' ').trim();
  const pdfEscape=v=>clean(v).replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)');
  function pdf(report){
+  const soh=report.kind==='soh';
   const objects=[null],add=s=>(objects.push(s),objects.length-1),pages=add(''),ids=[];
   const makeFont=(data,name)=>{
    const file=add('<< /Length '+(data.hex.length+1)+' /Length1 '+data.hex.length/2+' /Filter /ASCIIHexDecode >>\nstream\n'+data.hex+'>\nendstream');
@@ -817,12 +857,12 @@ License: GPL-2+
   };
   const prepared=report.rows.map(r=>{
    const name=wrap(r.name,280,9.2,true),spec=wrap([r.sku,r.colour,r.lengthMm?r.lengthMm+' mm':'',r.dimensions].filter(Boolean).join(' / '),280,7.5);
-   const storage=wrap([r.location?'Location: '+r.location:'',r.supplier?'Supplier: '+r.supplier:''].filter(Boolean).join(' / '),280,7.2);
-   const user=wrap(r.user||'Not recorded',182,8.4);
+   const storage=wrap([soh&&r.category?'Category: '+r.category:'',r.location?'Location: '+r.location:'',r.supplier?'Supplier: '+r.supplier:''].filter(Boolean).join(' / '),280,7.2);
+   const user=soh?[]:wrap(r.user||'Not recorded',182,8.4);
    return {r,name,spec,storage,user,height:Math.max(36,14+name.length*11+spec.length*9+storage.length*9,16+user.length*10+10)};
   });
   const titleLines=wrap(report.name,778,16,true),titleExtra=Math.max(0,titleLines.length-2)*19;
-  const scope=wrap('Scope: '+report.categories.join(', '),778,8),scopeExtra=Math.max(0,scope.length-2)*10;
+  const scope=wrap((soh?'Filters: ':'Scope: ')+report.categories.join(', '),778,8),scopeExtra=Math.max(0,scope.length-2)*10;
   const supplierLines=wrap(report.supplier||'All suppliers',305,8.5),metaExtra=Math.max(0,supplierLines.length-2)*10,tableTop=359-titleExtra-scopeExtra-metaExtra;
   // Split unusually long descriptions into continuation rows instead of clipping them.
   const displayRows=[];
@@ -834,7 +874,7 @@ License: GPL-2+
   }
   const chunks=[];let chunk=[],height=0;
   for(const item of displayRows){if(height+item.height>tableTop-71&&chunk.length){chunks.push(chunk);chunk=[];height=0;}chunk.push(item);height+=item.height;}if(chunk.length||!chunks.length)chunks.push(chunk);
-  const changed=report.rows.filter(r=>r.variance!==null&&r.variance!==undefined&&r.variance!==0).length;
+  const changed=soh?report.rows.filter(r=>r.available>0).length:report.rows.filter(r=>r.variance!==null&&r.variance!==undefined&&r.variance!==0).length;
   chunks.forEach((items,page)=>{
    let stream='';
    const rect=(x,y,w,h,color)=>stream+=color+' rg '+x+' '+y+' '+w+' '+h+' re f\n';
@@ -843,30 +883,33 @@ License: GPL-2+
    const rightIn=(x,y,width,size,v,b=false,color)=>right(x,y,Math.min(size,width*size/Math.max(1,measure(v,size,b))),v,b,color);
    rect(32,579,778,3,'0 0.682 0.937');
    stream+='q 152 0 0 '+(152*brand.height/brand.width).toFixed(2)+' 32 492 cm /Logo Do Q\n';
-   right(810,555,8,'LENNOX FACADES / INVENTORY',true,'0.35 0.43 0.49');right(810,529,22,'STOCKTAKE REPORT',true,'0.08 0.37 0.46');right(810,510,9,'Completed '+date(report.completedAt)+' (Brisbane)',false,'0.35 0.43 0.49');
+   right(810,555,8,'LENNOX FACADES / INVENTORY',true,'0.35 0.43 0.49');right(810,529,22,soh?'STOCK ON HAND':'STOCKTAKE REPORT',true,'0.08 0.37 0.46');right(810,510,9,(soh?'Exported ':'Completed ')+date(soh?report.generatedAt:report.completedAt)+' (Brisbane)'+(soh&&report.revision!==undefined?' / Revision '+report.revision:''),false,'0.35 0.43 0.49');
    titleLines.forEach((line,i)=>text(32,478-i*19,16,line,true));
    scope.forEach((line,i)=>text(32,443-titleExtra-i*10,8,line,false,'0.35 0.43 0.49'));
    rect(32,389-titleExtra-scopeExtra-metaExtra,778,35+metaExtra,'0.95 0.97 0.98');
    text(44,414-titleExtra-scopeExtra,7,'SUPPLIER',true,'0.35 0.43 0.49');supplierLines.forEach((v,i)=>text(44,402-titleExtra-scopeExtra-i*10,8.5,v));
-   text(375,414-titleExtra-scopeExtra,7,'COUNT SUMMARY',true,'0.35 0.43 0.49');text(375,402-titleExtra-scopeExtra,9,report.rows.length+' items counted / '+changed+' with variance',true);
+   text(375,414-titleExtra-scopeExtra,7,soh?'EXPORT SUMMARY':'COUNT SUMMARY',true,'0.35 0.43 0.49');text(375,402-titleExtra-scopeExtra,9,soh?report.rows.length+' items / '+changed+' with available stock':report.rows.length+' items counted / '+changed+' with variance',true);
    rect(32,tableTop,778,22,'0.08 0.37 0.46');
-   [[42,'ITEM / STOCK CODE'],[337,'UNIT'],[400,'EXPECTED'],[468,'COUNTED'],[538,'VARIANCE'],[612,'COUNTED BY / TIME']].forEach(([x,v])=>text(x,tableTop+8,7.5,v,true,'1 1 1'));
+   (soh?[[42,'ITEM / STOCK CODE'],[337,'UNIT'],[400,'ON HAND'],[466,'RESERVED'],[532,'AVAILABLE'],[605,'ON ORDER'],[676,'REORDER'],[744,'STATUS']]:[[42,'ITEM / STOCK CODE'],[337,'UNIT'],[400,'EXPECTED'],[468,'COUNTED'],[538,'VARIANCE'],[612,'COUNTED BY / TIME']]).forEach(([x,v])=>text(x,tableTop+8,7.5,v,true,'1 1 1'));
    let y=tableTop;
    items.forEach((item,i)=>{
     const {r}=item;if(i%2===0)rect(32,y-item.height,778,item.height,'0.96 0.98 0.99');
     rect(32,y-item.height,778,.4,'0.87 0.91 0.93');
     let lineY=y-13;for(const line of item.detail){text(42,lineY,line.size,line.text,line.bold,line.bold?'0.09 0.14 0.19':'0.35 0.43 0.49');lineY-=line.size+2;}
     const top=y-14;text(337,top,8,value(r.unit));
-    if(!item.continuation){rightIn(449,top,49,9,value(r.expectedQty));rightIn(517,top,49,9,value(r.quantity));rightIn(589,top,52,9,value(r.variance),true,r.variance?'0.65 0.22 0.08':'0.08 0.37 0.46');}
-    item.user.forEach((v,index)=>text(612,top-index*10,8.4,v));text(612,top-item.user.length*10-3,7.2,date(r.at));y-=item.height;
+    if(!item.continuation){
+     if(soh){rightIn(449,top,49,9,value(r.qty));rightIn(517,top,49,9,value(r.reserved));rightIn(589,top,52,9,value(r.available),true,r.available<=0?'0.65 0.22 0.08':'0.08 0.37 0.46');rightIn(660,top,52,9,value(r.onOrder));rightIn(728,top,52,9,value(r.reorderLevel));wrap(r.status,65,7.3).forEach((line,i)=>text(744,top-i*9,7.3,line));}
+     else{rightIn(449,top,49,9,value(r.expectedQty));rightIn(517,top,49,9,value(r.quantity));rightIn(589,top,52,9,value(r.variance),true,r.variance?'0.65 0.22 0.08':'0.08 0.37 0.46');}
+    }
+    if(!soh){item.user.forEach((v,index)=>text(612,top-index*10,8.4,v));text(612,top-item.user.length*10-3,7.2,date(r.at));}y-=item.height;
    });
-   const note='Expected quantities are recorded at each item submission. Different stock units are not added together.';
+   const note=soh?'Quantities reflect the filtered SOH results at export time. Different stock units are not added together.':'Expected quantities are recorded at each item submission. Different stock units are not added together.';
    text(32,56,7.5,note,false,'0.35 0.43 0.49');
    if(report.rows.some(r=>r.historicalDetails))text(32,44,7.2,'Historical descriptions use available records; unrecoverable baselines are marked Unknown.',false,'0.35 0.43 0.49');
-   rect(32,33,778,.5,'0.8 0.86 0.9');text(32,20,7.5,'LENNOX FACADES / STOCKTAKE',true,'0.08 0.37 0.46');right(810,20,7.5,'Page '+(page+1)+' of '+chunks.length,false,'0.35 0.43 0.49');
+   rect(32,33,778,.5,'0.8 0.86 0.9');text(32,20,7.5,soh?'LENNOX FACADES / STOCK ON HAND':'LENNOX FACADES / STOCKTAKE',true,'0.08 0.37 0.46');right(810,20,7.5,'Page '+(page+1)+' of '+chunks.length,false,'0.35 0.43 0.49');
    const content=add('<< /Length '+enc.encode(stream).length+' >>\nstream\n'+stream+'endstream');ids.push(add('<< /Type /Page /Parent '+pages+' 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 '+font+' 0 R /F2 '+bold+' 0 R >> /XObject << /Logo '+logo+' 0 R >> >> /Contents '+content+' 0 R >>'));
   });
   objects[pages]='<< /Type /Pages /Kids ['+ids.map(id=>id+' 0 R').join(' ')+'] /Count '+ids.length+' >>';const catalog=add('<< /Type /Catalog /Pages '+pages+' 0 R >>');let result='%PDF-1.4\n',offsets=[0];for(let i=1;i<objects.length;i++){offsets[i]=enc.encode(result).length;result+=i+' 0 obj\n'+objects[i]+'\nendobj\n';}const xref=enc.encode(result).length;result+='xref\n0 '+objects.length+'\n0000000000 65535 f \n'+offsets.slice(1).map(n=>String(n).padStart(10,'0')+' 00000 n \n').join('')+'trailer\n<< /Size '+objects.length+' /Root '+catalog+' 0 R >>\nstartxref\n'+xref+'\n%%EOF';return new Blob([result],{type:'application/pdf'});
  }
- return {pdf,xlsx,logo:'data:image/png;base64,'+brand.pngBase64};
+ return {pdf,xlsx,soh:{pdf:report=>pdf({...report,kind:'soh'}),xlsx:report=>xlsx({...report,kind:'soh'})},logo:'data:image/png;base64,'+brand.pngBase64};
 })();
