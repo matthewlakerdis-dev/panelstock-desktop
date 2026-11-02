@@ -27,10 +27,11 @@ async function harness(fetchImpl=async()=>Response.json({ok:true}),pending=false
   const document={body,documentElement:body,querySelectorAll:()=>[],createElement:tag=>new Element(tag),getElementById:id=>walk(body).find(node=>node.id===id),addEventListener(){},removeEventListener(){}};
   const context={console,URL,Headers,Response,Request,AbortSignal,Event,CustomEvent,Blob,crypto,localStorage,sessionStorage,document,
     Date:class extends Date{static now(){return clock.now;}},
-    location:{href:settings.href||'https://app.test/',reload(){},assign(url){events.push(url);}},navigator:{locks:{request:(_name,_options,fn)=>{events.push('editor-lock');if(settings.lockDenied){setImmediate(()=>fn(null));return;}return fn({});}}},
+    location:{href:settings.href||'https://app.test/',reload(){},assign(url){events.push(url);}},navigator:{locks:{request:(_name,_options,fn)=>{events.push('editor-lock');if(settings.lockDenied&&_name==='panelstock-editor-v2'){setImmediate(()=>fn(null));return;}return fn({});}}},
     setTimeout,clearTimeout,queueMicrotask,requestAnimationFrame:fn=>queueMicrotask(fn),MutationObserver:class{observe(){}},
     dispatchEvent:event=>{events.push(event.type);return true;},addEventListener(){},
     fetch:async(url,options)=>{calls.push([url,options]);return url.endsWith('/session')&&!settings.customSession?Response.json({username:'a',isAdmin:true}):fetchImpl(url,options);}};
+  vm.runInNewContext(fs.readFileSync(require.resolve('../tab-workspace.js'),'utf8'),context);
   vm.runInNewContext(source,context);
   const api=context.PanelStock,initUser=await api.init('https://api.test');
   return {api,initUser,clock,events,calls,queue,localStorage,sessionStorage,nodes:()=>walk(body)};
@@ -81,7 +82,8 @@ test('slow sign-out revokes only its captured token and cannot clear the next ac
   assert.equal(h.localStorage.getItem(OUTBOX),JSON.stringify(h.queue));
 });
 test('wrong-owner recovery offers Switch user without discarding the queued work',async()=>{
-  const h=await harness(async()=>{throw Error('offline');},true);
+  const h=await harness(async url=>{if(url.endsWith('/login'))return Response.json(user('b'));throw Error('offline');},true,{owner:'a'});
+  await login(h,'b');
   const button=h.nodes().find(node=>node.tagName==='button'&&node.textContent==='Switch user');
   assert.ok(button);await button.onclick({currentTarget:button});
   assert.equal(h.api.username,null);assert.equal(h.sessionStorage.getItem(SESSION),null);
@@ -91,8 +93,8 @@ test('wrong-owner recovery offers Switch user without discarding the queued work
 });
 test('a delayed mutation error cannot mark the old owner’s queue as conflicted after switching accounts',async()=>{
   const body=deferred();
-  const h=await harness(async(url,options)=>url.endsWith('/login')?Response.json(user(JSON.parse(options.body).username)):{ok:false,status:409,json:()=>body.promise,text:async()=>'',arrayBuffer:async()=>new ArrayBuffer(0),blob:async()=>new Blob(),clone(){return this;}},true);
-  await login(h,'owner');
+  const h=await harness(async(url,options)=>url.endsWith('/login')?Response.json(user(JSON.parse(options.body).username)):{ok:false,status:409,json:()=>body.promise,text:async()=>'',arrayBuffer:async()=>new ArrayBuffer(0),blob:async()=>new Blob(),clone(){return this;}},true,{owner:'a'});
+  await login(h,'a');
   const flush=h.api.flush();
   await new Promise(resolve=>setImmediate(resolve));
   await login(h,'b');body.resolve({error:'old conflict'});await flush;
@@ -221,11 +223,12 @@ test('PDF tab opens with another editor active and cannot write or flush pending
  assert.equal(h.calls.some(([url])=>url.endsWith('/mutations')),false);
  assert.equal(h.nodes().some(node=>node.id==='panelstock-safety-notice'),false);
 });
-test('normal tabs still enforce the editor lock',async()=>{
+test('another stock editor no longer blocks an independent page',async()=>{
  const h=await harness(undefined,false,{lockDenied:true});
- await new Promise(resolve=>setImmediate(resolve));
+ await h.api.snapshot();
  assert.ok(h.events.includes('editor-lock'));
- assert.throws(()=>h.api.stage({},{}),/cannot edit stock/);
- assert.ok(h.nodes().some(node=>node.textContent==='PanelStock is open in another tab'));
+ assert.match(h.sessionStorage.getItem(OUTBOX+':workspace'),/:tab:/);
+ assert.doesNotThrow(()=>h.api.stage({variants:[]},{}));
+ assert.equal(h.nodes().some(node=>node.textContent==='PanelStock is open in another tab'),false);
 });
 
