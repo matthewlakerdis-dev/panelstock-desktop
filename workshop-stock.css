@@ -595,3 +595,5 @@ body:has(.ws-stock-screen,.ws-receiving-screen) #root header.sticky:has(img[alt=
 
 /* Purchase pack pricing stays separate from the stock/count unit. */
 .ws-pricing-fields{display:contents}.ws-pricing-fields>.ws-field-hint{grid-column:1/-1;margin:0!important;line-height:1.6}.ws-pricing-fields .ws-field select{width:100%}
+
+.ws-area-source-field{grid-column:span 2}
