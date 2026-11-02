@@ -545,6 +545,41 @@ body:has(.ws-stock-screen,.ws-receiving-screen) #root header.sticky:has(img[alt=
    Release it while a modal is open so the dialog centers in the viewport. */
 .ws-stock-screen:has(>.ws-overlay){container-type:normal}
 
-/* Lennox Facades stocktake report. */
-.ws-report-brand{display:flex;gap:16px;align-items:center}.ws-report-brand img{width:72px;height:72px;object-fit:contain}.ws-report-brand>button{margin-left:auto}.ws-report h4{font-size:18px;color:#155e75;margin:16px 0 4px}.ws-report-summary{display:flex;flex-wrap:wrap;gap:16px;padding:18px 0;color:#155e75}.ws-report-table{overflow:auto;margin-top:18px}.ws-report-table table{min-width:900px;background:#fff}.ws-report-table th{background:#155e75;color:#fff;white-space:nowrap}.ws-report-table td{vertical-align:top;font-size:12px}.ws-report-table small{display:block;font-size:11px;color:#607589;margin-top:4px}.ws-report-variance{color:#a34b08;font-weight:700}.ws-report .ws-count-body>p{font-size:12px}
-@media(max-width:640px){.ws-report-brand{gap:10px;flex-wrap:wrap}.ws-report-brand img{width:48px;height:48px}.ws-report .ws-count-footer{flex-wrap:wrap}.ws-report .ws-count-footer button{flex:1;white-space:nowrap}.ws-report-table table{display:table}.ws-report-table thead{display:table-header-group}.ws-report-table tbody{display:table-row-group}.ws-report-table tr{display:table-row}.ws-report-table td{display:table-cell}.ws-report-table td:before{display:none!important}}
+/* Lennox Facades report: use the full logo and the same visual hierarchy as exports. */
+.ws .ws-report{width:min(1180px,96vw);border-top:4px solid #00aeef}
+.ws-report .ws-count-header{background:#fff;padding:24px 28px 20px}
+.ws-report-brand{display:flex;gap:24px;align-items:center;justify-content:space-between}
+.ws-report-brand img{width:180px;height:auto;max-height:91px;object-fit:contain;flex:none}
+.ws-report-brand>div{margin-left:auto;text-align:right}
+.ws-report-brand h3{font-size:25px;letter-spacing:-.5px;color:#155e75;line-height:1.2;margin-top:5px}
+.ws-report-brand .ws-eyebrow{font-size:10px;color:#607589}
+.ws-report-brand>button{margin-left:0;align-self:flex-start}
+.ws-report h4{font-size:19px;line-height:1.35;color:#172b3a;margin:20px 0 6px;font-weight:700}
+.ws-report .ws-count-header p{font-size:12px;line-height:1.6;color:#526779}
+.ws-report .ws-count-body{background:#f7fafc;padding:0 28px 24px}
+.ws-report-summary{display:flex;flex-wrap:wrap;gap:12px;padding:20px 0 14px}
+.ws-report-summary strong{font-size:13px;color:#155e75;background:#eaf5fa;border:1px solid #d3e8f1;border-radius:8px;padding:11px 16px}
+.ws-report .ws-count-body>p{font-size:12px;color:#607589;line-height:1.6;margin:0}
+.ws-report-table{overflow:auto;margin-top:18px;border:1px solid #dbe6ed;border-radius:9px;background:#fff}
+.ws-report-table table{width:100%;min-width:1040px;border-collapse:collapse;table-layout:auto}
+.ws-report-table th{background:#155e75;color:#fff;white-space:nowrap;font-size:10px;padding:13px 14px;letter-spacing:.4px}
+.ws-report-table td{vertical-align:top;font-size:12px;padding:13px 14px;border-bottom:1px solid #e4edf2;line-height:1.5}
+.ws-report-table tbody tr:nth-child(even){background:#f1f8fb}
+.ws-report-table tbody tr:last-child td{border-bottom:0}
+.ws-report-table td:first-child{min-width:250px}.ws-report-table td:nth-child(2){min-width:160px}
+.ws-report-table th:nth-child(n+4):nth-child(-n+6),.ws-report-table td:nth-child(n+4):nth-child(-n+6){text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ws-report-table small{display:block;font-size:11px;color:#607589;margin-top:4px;line-height:1.5}
+.ws-report-variance{color:#a34b08;font-weight:700}
+.ws-report .ws-count-footer{padding:16px 28px;border-top:1px solid #dbe6ed;gap:10px}
+.ws-report .ws-count-footer button:last-child{background:#155e75;border-color:#155e75;color:#fff}
+@media(max-width:640px){
+ .ws-report .ws-count-header{padding:16px}.ws-report-brand{gap:14px;flex-wrap:wrap;align-items:flex-start}
+ .ws-report-brand img{width:128px;max-height:65px}.ws-report-brand>div{order:2;flex-basis:100%;margin-left:0;text-align:left}
+ .ws-report-brand>button{margin-left:auto}.ws-report-brand h3{font-size:22px}.ws-report h4{margin-top:16px;font-size:17px}
+ .ws-report .ws-count-body{padding:0 12px 16px}.ws-report-summary{gap:8px;padding-top:14px}.ws-report-summary strong{font-size:12px;padding:9px 12px}
+ .ws-report .ws-count-footer{padding:12px;flex-wrap:wrap}.ws-report .ws-count-footer button{flex:1;white-space:nowrap}
+ .ws-report-table table{display:table}.ws-report-table thead{display:table-header-group}.ws-report-table tbody{display:table-row-group}
+ .ws-report-table tr{display:table-row}.ws-report-table td{display:table-cell}.ws-report-table td:before{display:none!important}
+}
+
+.ws-report-scroll-hint{display:none}@media(max-width:1100px){.ws-report .ws-report-scroll-hint{display:block;font-size:11px;margin-top:10px;color:#607589}}
