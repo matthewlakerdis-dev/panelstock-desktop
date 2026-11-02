@@ -20,7 +20,7 @@ function harness(){
 test('create form has an optional cost per displayed stock unit and preserves blank and zero values',async()=>{
  const x=harness();x.button('Add stock item').props.onClick();let nodes=x.render(),cost=x.field('unitCost');
  assert.equal(cost.props.type,'number');assert.equal(cost.props.min,0);assert.equal(cost.props.step,'0.01');assert.equal(cost.props.required,false);assert.equal(cost.props.value,'');
- assert.ok(nodes.some(n=>n.type==='label'&&n.props.key==='unitCost'&&n.children.includes('Unit cost (AUD / lengths)')));
+ assert.ok(nodes.some(n=>n.type==='label'&&n.props.key==='unitCost'&&n.children.includes('Unit cost (AUD ex GST / lengths)')));
  x.field('name').props.onChange({target:{value:'New stock'}});let payload=await x.save();assert.equal(payload.action,'create');assert.equal(payload.item.unitCost,'');
  x.button('Add stock item').props.onClick();x.field('name').props.onChange({target:{value:'No charge'}});x.field('unitCost').props.onChange({target:{value:'0'}});payload=await x.save();assert.equal(payload.item.unitCost,'0');
 });
@@ -29,12 +29,12 @@ test('editing existing costs fills their value and sends entered prices or blank
  const x=harness();x.openItem('Angle priced');assert.equal(x.field('unitCost').props.value,12.34);
  x.field('unitCost').props.onChange({target:{value:'45.67'}});let payload=await x.save();assert.equal(payload.action,'metadata');assert.equal(payload.itemId,'angle');assert.equal(payload.unitCost,'45.67');
  x.openItem('Angle priced');x.field('unitCost').props.onChange({target:{value:''}});payload=await x.save();assert.equal(payload.unitCost,'');
- x.openItem('Free pack');assert.equal(x.field('unitCost').props.value,0);assert.ok(x.render().some(n=>n.type==='label'&&n.props.key==='unitCost'&&n.children.includes('Unit cost (AUD / packs)')));
+ x.openItem('Free pack');assert.equal(x.field('unitCost').props.value,0);assert.ok(x.render().some(n=>n.type==='label'&&n.props.key==='unitCost'&&n.children.includes('Unit cost (AUD ex GST / packs)')));
 });
 
 test('legacy panels expose a unit cost per sheet in the existing metadata editor',async()=>{
  const x=harness();x.openItem('White ACP panel');const cost=x.field('unitCost');assert.equal(cost.props.value,25);assert.equal(cost.props.disabled,false);
- assert.ok(x.render().some(n=>n.type==='label'&&n.props.key==='unitCost'&&n.children.includes('Unit cost (AUD / sheets)')));
+ assert.ok(x.render().some(n=>n.type==='label'&&n.props.key==='unitCost'&&n.children.includes('Unit cost (AUD ex GST / sheets)')));
  cost.props.onChange({target:{value:'100.25'}});const payload=await x.save();assert.equal(payload.itemId,'variant:sheet');assert.equal(payload.unitCost,'100.25');
 });
 
@@ -52,10 +52,10 @@ test('priced SOH snapshots use only selected filtered rows and distinguish zero 
 });
 
 test('bulk cost edit is optional and uses a two-decimal number field',()=>{
- const x=harness();x.check('Select Angle priced ANG',true);x.button('Bulk edit').props.onClick();let nodes=x.render(),field=nodes.find(n=>n.props['aria-label']==='Unit cost (AUD)');
+ const x=harness();x.check('Select Angle priced ANG',true);x.button('Bulk edit').props.onClick();let nodes=x.render(),field=nodes.find(n=>n.props['aria-label']==='Unit cost (AUD ex GST)');
  assert.ok(field);assert.equal(field.props.disabled,true);assert.equal(field.props.min,0);assert.equal(field.props.step,'0.01');
  const row=nodes.find(n=>n.props.className==='ws-bulk-field'&&n.props.key==='unitCost');walk(row).find(n=>n.type==='input'&&n.props.type==='checkbox').props.onChange({target:{checked:true}});
- field=x.node('Unit cost (AUD)');assert.equal(field.props.disabled,false);assert.equal(field.props.value,'');
+ field=x.node('Unit cost (AUD ex GST)');assert.equal(field.props.disabled,false);assert.equal(field.props.value,'');
 });
 
 function realExports(){const context={window:{},TextEncoder,Blob,atob};vm.runInNewContext(source,context);return context.window.PanelStockStocktakeReport.soh;}
@@ -70,19 +70,19 @@ function unzipStored(bytes){let offset=0;const files={};while(bytes.readUInt32LE
 
 test('cost preparation rounds each line to cents, sums the rounded values and costs on hand rather than available or packs contents',()=>{
  const input=costingSample(),before=structuredClone(input),report=realExports().prepare(input);
- assert.deepEqual(Array.from(report.rows,r=>r.lineValue),[0.01,0.01,6.42,null,0]);assert.equal(report.costSummary.totalValue,6.44);assert.equal(report.costSummary.currency,'AUD');assert.equal(report.costSummary.pricedItems,4);assert.equal(report.costSummary.unpricedItems,1);assert.deepEqual(input,before);
+ assert.deepEqual(Array.from(report.rows,r=>r.lineValue),[0.01,0.01,6.42,null,0]);assert.equal(report.costSummary.totalValue,6.44);assert.equal(report.costSummary.currency,'AUD');assert.equal(report.costSummary.taxBasis,'exGST');assert.equal(report.costSummary.pricedItems,4);assert.equal(report.costSummary.unpricedItems,1);assert.deepEqual(input,before);
  const off=realExports().prepare({...report,includeCostings:false});assert.equal(Object.hasOwn(off,'costSummary'),false);assert.ok(off.rows.every(r=>!Object.hasOwn(r,'unitCost')&&!Object.hasOwn(r,'lineValue')));
  const tooLarge=costingSample();tooLarge.rows=[{...tooLarge.rows[0],qty:1e9,unitCost:1e9}];assert.throws(()=>realExports().prepare(tooLarge),/too large to export accurately/);
 });
 
 test('costing Excel adds AUD prices and on-hand values only when requested while retaining numeric zero and missing-price text',async()=>{
  const methods=realExports(),input=costingSample(),costed=unzipStored(Buffer.from(await methods.xlsx(input).arrayBuffer())),sheet=costed['xl/worksheets/sheet1.xml'];
- assert.match(sheet,/>Unit cost \(AUD\)</);assert.match(sheet,/>On-hand value \(AUD\)</);assert.match(sheet,/autoFilter ref="A12:O17"/);assert.match(sheet,/<c r="N13"[^>]* t="n"><v>0\.01<\/v>/);assert.match(sheet,/<c r="O13"[^>]* t="n"><v>0\.01<\/v>/);assert.match(sheet,/<c r="O15"[^>]* t="n"><v>6\.42<\/v>/);assert.match(sheet,/<c r="N17"[^>]* t="n"><v>0<\/v>/);assert.match(sheet,/>Not priced</);assert.match(sheet,/<v>6\.44<\/v>/);assert.doesNotMatch(sheet,/<f>/);
+ assert.match(sheet,/>Unit cost \(AUD ex GST\)</);assert.match(sheet,/>On-hand value \(AUD ex GST\)</);assert.match(sheet,/All unit costs and stock values are in AUD, excluding GST/);assert.match(sheet,/autoFilter ref="A12:O17"/);assert.match(sheet,/<c r="N13"[^>]* t="n"><v>0\.01<\/v>/);assert.match(sheet,/<c r="O13"[^>]* t="n"><v>0\.01<\/v>/);assert.match(sheet,/<c r="O15"[^>]* t="n"><v>6\.42<\/v>/);assert.match(sheet,/<c r="N17"[^>]* t="n"><v>0<\/v>/);assert.match(sheet,/>Not priced</);assert.match(sheet,/<v>6\.44<\/v>/);assert.doesNotMatch(sheet,/<f>/);
  const uncosted=unzipStored(Buffer.from(await methods.xlsx({...input,includeCostings:false}).arrayBuffer()))['xl/worksheets/sheet1.xml'];assert.match(uncosted,/autoFilter ref="A12:M17"/);assert.doesNotMatch(uncosted,/Unit cost|On-hand value|Known on-hand value|Not priced/);
 });
 
 test('costing PDF shows line prices, a known total and unpriced warning only when enabled',async()=>{
  const methods=realExports(),input=costingSample(),pdf=(await methods.pdf(input).text()).replace(/\\([()\\])/g,'$1');
- assert.match(pdf,/Unit cost \(AUD\)/);assert.match(pdf,/On-hand value \(AUD\)/);assert.match(pdf,/Known on-hand value \(AUD\): \$6\.44/);assert.match(pdf,/Not priced/);assert.match(pdf,/1 item\(s\) not priced/);
+ assert.match(pdf,/Unit cost \(AUD ex GST\)/);assert.match(pdf,/On-hand value \(AUD ex GST\)/);assert.match(pdf,/Known on-hand value \(AUD ex GST\): \$6\.44/);assert.match(pdf,/Not priced/);assert.match(pdf,/All prices and values exclude GST/);assert.match(pdf,/1 item\(s\) not priced/);
  const plain=await methods.pdf({...input,includeCostings:false}).text();assert.doesNotMatch(plain,/Unit cost|On-hand value|Known on-hand value|Not priced/);
 });
