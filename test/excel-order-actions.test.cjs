@@ -76,3 +76,36 @@ test('the login-independent link capture and confirmation UI are wired into the 
  assert.match(html,/jsx\)\(ExcelOrderAction,\{username\}\)/);
  for(const name of ['excel-order-actions.js','excel-order-actions.css'])assert.ok(build.includes(name));
 });
+
+test('schedule links read the current date/time and save only after admin confirmation',async()=>{
+ const scheduled={...order,status:'completed',scheduledDeliveryDate:'2026-11-06',scheduledDeliveryTime:'09:30'};
+ const h=harness('schedule',async(url,options)=>options?Response.json({ok:true}):url.endsWith('/session')?Response.json({isAdmin:true}):Response.json({order:scheduled}));
+ assert.deepEqual(parseLink('https://web.panelstockhq.com/?orderAction=schedule&orderId='+id),{id,action:'schedule'});
+ await h.controller.load();assert.equal(h.controller.state.phase,'confirm');assert.equal(h.controller.state.order.scheduledDeliveryTime,'09:30');assert.equal(h.calls.filter(call=>call.options).length,0);
+ await h.controller.submit({scheduledDeliveryDate:'2026-11-09',scheduledDeliveryTime:'10:15'});
+ const write=h.calls.find(call=>call.options);assert.equal(write.url,'https://api.example/orders/'+id+'/delivery');
+ assert.deepEqual(JSON.parse(write.options.body),{scheduledDeliveryDate:'2026-11-09',scheduledDeliveryTime:'10:15',expectedUpdatedAt:'v1'});assert.equal(h.controller.state.phase,'done');
+});
+test('non-admins and terminal orders cannot schedule, while active panel and gate orders can',async()=>{
+ const denied=harness('schedule',async()=>Response.json({isAdmin:false}));await denied.controller.load();await denied.controller.submit({scheduledDeliveryDate:'2026-11-09'});assert.equal(denied.calls.length,1);assert.match(denied.controller.state.message,/administrators/);
+ for(const status of ['cancelled','dispatched']){
+  const h=harness('schedule',async url=>url.endsWith('/session')?Response.json({isAdmin:true}):Response.json({order:{...order,status}}));await h.controller.load();await h.controller.submit({scheduledDeliveryDate:'2026-11-09'});assert.equal(h.calls.filter(call=>call.options).length,0);assert.equal(h.controller.state.phase,'blocked');
+ }
+ for(const orderType of ['Panels','Gate']){
+  const h=harness('schedule',async url=>url.endsWith('/session')?Response.json({isAdmin:true}):Response.json({order:{...order,orderType}}));await h.controller.load();assert.equal(h.controller.state.phase,'confirm');
+ }
+});
+test('scheduling validates dates and optional times and requires an explicit clear action',async()=>{
+ const h=harness('schedule',async(url,options)=>options?Response.json({ok:true}):url.endsWith('/session')?Response.json({isAdmin:true}):Response.json({order}));await h.controller.load();
+ for(const details of [{},{scheduledDeliveryDate:''},{scheduledDeliveryDate:'2026-02-31'},{scheduledDeliveryDate:'2026-11-09',scheduledDeliveryTime:'25:00'},{scheduledDeliveryDate:'2026-11-09',scheduledDeliveryTime:42}])assert.equal(await h.controller.submit(details),false);
+ assert.equal(h.calls.filter(call=>call.options).length,0);
+ await h.controller.submit({scheduledDeliveryDate:'2028-02-29'});assert.equal(h.controller.state.phase,'done');assert.equal(JSON.parse(h.calls.at(-1).options.body).scheduledDeliveryTime,'');
+ const clear=harness('schedule',async(url,options)=>options?Response.json({ok:true}):url.endsWith('/session')?Response.json({isAdmin:true}):Response.json({order:{...order,scheduledDeliveryDate:'2026-11-09',scheduledDeliveryTime:'08:00'}}));await clear.controller.load();await clear.controller.submit({clearSchedule:true});
+ assert.deepEqual(JSON.parse(clear.calls.at(-1).options.body),{scheduledDeliveryDate:'',scheduledDeliveryTime:'',expectedUpdatedAt:'v1'});assert.match(clear.controller.state.message,/cleared/);
+});
+test('changed delivery schedules require reload and a new confirmation against the latest version',async()=>{
+ let stamp='v1';const h=harness('schedule',async(url,options)=>options?Response.json({error:'Order changed',code:'ORDER_CONFLICT'},{status:409}):url.endsWith('/session')?Response.json({isAdmin:true}):Response.json({order:{...order,updatedAt:stamp}}));
+ await h.controller.load();await h.controller.submit({scheduledDeliveryDate:'2026-11-09'});assert.equal(h.controller.state.needsReview,true);
+ const count=h.calls.length;await h.controller.submit({scheduledDeliveryDate:'2026-11-09'});assert.equal(h.calls.length,count);
+ stamp='v2';await h.controller.load();await h.controller.submit({scheduledDeliveryDate:'2026-11-10'});assert.equal(JSON.parse(h.calls.at(-1).options.body).expectedUpdatedAt,'v2');
+});
