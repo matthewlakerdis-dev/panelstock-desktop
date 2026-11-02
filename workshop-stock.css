@@ -592,3 +592,6 @@ body:has(.ws-stock-screen,.ws-receiving-screen) #root header.sticky:has(img[alt=
 
 /* Optional stock costings. */
 .ws .ws-unit-cost{font-size:11px;color:#155e75;background:#eaf5fa;border:1px solid #d3e8f1;border-radius:5px;padding:2px 6px}.ws-soh-export-costings{border:1px solid #c6dce7;background:#eef7fb;border-radius:8px;padding:12px;color:#155e75;font-weight:600}.ws-soh-export-summary .ws-costing-note{border-top:1px solid #c6dce7;padding-top:10px;margin-top:10px;font-size:11px}.ws-stock-section .ws-fields.ws-edit-storage{grid-template-columns:repeat(4,minmax(0,1fr))}@media(max-width:700px){.ws-stock-section .ws-fields.ws-edit-storage{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Purchase pack pricing stays separate from the stock/count unit. */
+.ws-pricing-fields{display:contents}.ws-pricing-fields>.ws-field-hint{grid-column:1/-1;margin:0!important;line-height:1.6}.ws-pricing-fields .ws-field select{width:100%}
