@@ -597,3 +597,5 @@ body:has(.ws-stock-screen,.ws-receiving-screen) #root header.sticky:has(img[alt=
 .ws-pricing-fields{display:contents}.ws-pricing-fields>.ws-field-hint{grid-column:1/-1;margin:0!important;line-height:1.6}.ws-pricing-fields .ws-field select{width:100%}
 
 .ws-area-source-field{grid-column:span 2}
+
+.ws-stocktake-month{display:flex;align-items:center;gap:10px;min-height:44px;margin:14px 0 4px;padding:10px 12px;border:1px solid #c6dce7;border-radius:8px;background:#eef7fb;color:#155e75;font-weight:600;cursor:pointer}.ws-stocktake-month input[type=checkbox]{width:18px;height:18px;flex:0 0 18px;accent-color:#155e75}
