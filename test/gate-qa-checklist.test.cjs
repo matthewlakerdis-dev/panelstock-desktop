@@ -1,6 +1,6 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const source=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
-const settingsCode=source.slice(source.indexOf('  function QaSettingsPage()'),source.indexOf('\nfunction cncSheetKey('));
+const settingsCode=source.slice(source.indexOf('  function QaSettingsPage('),source.indexOf('\nfunction cncSheetKey('));
 const qaCode=source.slice(source.indexOf('  function qaReportStatusLabel('),source.indexOf('  function AuditCenter('));
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
 function nodes(tree){if(Array.isArray(tree))return tree.flatMap(nodes);return tree&&typeof tree==='object'?[tree,...nodes(tree.children)]:[];}
@@ -8,11 +8,11 @@ function text(tree){if(Array.isArray(tree))return tree.map(text).join(' ');retur
 const button=(tree,label)=>nodes(tree).find(node=>node.tag==='button'&&text(node).trim()===label);
 const input=(tree,label)=>nodes(tree).find(node=>node.tag==='input'&&node.props['aria-label']===label);
 const checklistData={panel:[['p-edge','Panel edge']],metalwork:[['dimensions','Metalwork dimensions'],['welds','Metalwork welds']],gate:[['dimensions','Gate opening dimensions'],['latch','Gate latch operates']]};
-function fixture({mode='qa',fetcher=async()=>Response.json({ok:true}),items=[],checklists=checklistData}={}){
+function fixture({mode='qa',settingsSection='qa',fetcher=async()=>Response.json({ok:true}),items=[],checklists=checklistData}={}){
  const states=[],refs=[],effects=[],calls=[];let cursor=0,refCursor=0,effectCursor=0;
  const context={Response,console,Date,Math,PageHeading:'heading',ClipboardList:'clipboard',ChevronRight:'chevron',Check:'check',Camera:'camera',Upload:'upload',Plus:'plus',Trash2:'trash',BAKED_WORKER_URL:'https://worker.test',PanelStock:{apiFetch:async(url,options)=>{calls.push({url,options});return fetcher(url,options);}},import_react:{createElement:(tag,props,...children)=>({tag,props:props||{},children})},useState(initial){const i=cursor++;if(!(i in states))states[i]=typeof initial==='function'?initial():initial;return [states[i],value=>{states[i]=typeof value==='function'?value(states[i]):value;}];},useRef(initial){const i=refCursor++;return refs[i]||(refs[i]={current:initial});},useEffect(callback){const i=effectCursor++;if(mode==='settings'&&!(i in effects)){effects[i]=true;callback();}}};
  vm.createContext(context);vm.runInContext(mode==='settings'?settingsCode:qaCode,context);
- function render(){cursor=refCursor=effectCursor=0;return mode==='settings'?context.QaSettingsPage():context.QaCenter({username:'inspector',isAdmin:true,canManage:true,canDispatch:false});}
+ function render(){cursor=refCursor=effectCursor=0;return mode==='settings'?context.QaSettingsPage({section:settingsSection}):context.QaCenter({username:'inspector',isAdmin:true,canManage:true,canDispatch:false});}
  render();if(mode==='qa'){states[0]=items;states[2]=checklists;states[4]={requireQaPhoto:false,requireFailurePhoto:false};states[5]=false;}
  return {render,states,calls,context};
 }
@@ -72,4 +72,19 @@ test('Gate history uses each saved checklist and keeps old Gate attempts on thei
 test('Gate and ordinary metalwork filters remain separate',()=>{
  const view=fixture({items:[gate(),metal()]});view.states[9]='gate';let tree=view.render();nodes(tree).find(node=>node.tag==='button'&&node.props['aria-expanded']===false).props.onClick();tree=view.render();assert.match(text(tree),/Gate: ENTRY/);assert.doesNotMatch(text(tree),/METALWORK/);
  view.states[9]='metalwork';tree=view.render();assert.match(text(tree),/METALWORK/);assert.doesNotMatch(text(tree),/Gate: ENTRY/);
+});
+
+test('Dispatch Settings owns driver defaults and removes them from QA Settings',async()=>{
+ let settings={dispatchVehicles:['Lennox Truck','Lennox Ute'],dispatchDrivers:['alex','sam'],dispatchDefaultDriver:'alex'};
+ const fetcher=async(url,options)=>{if(options)settings=JSON.parse(options.body);return Response.json({settings,availableDrivers:[{username:'alex',displayName:'Alex'},{username:'sam',displayName:'Sam'}],availableChecklists:checklistData});};
+ const view=fixture({mode:'settings',settingsSection:'dispatch',fetcher});await settle();let tree=view.render();
+ assert.match(text(tree),/Dispatch Settings/);assert.doesNotMatch(text(tree),/Inspection checklists|Evidence and approval/);
+ const select=nodes(tree).find(node=>node.tag==='select');assert.equal(select.props.value,'alex');
+ select.props.onChange({target:{value:'sam'}});tree=view.render();
+ await nodes(tree).find(node=>node.tag==='form').props.onSubmit({preventDefault(){}});
+ assert.equal(settings.dispatchDefaultDriver,'sam');assert.equal(view.calls.at(-1).url,'https://worker.test/dispatch/settings');
+ tree=view.render();nodes(tree).find(node=>node.tag==='input'&&node.props.type==='checkbox'&&node.props.checked).props.onChange({target:{checked:false}});
+ tree=view.render();const remaining=nodes(tree).filter(node=>node.tag==='input'&&node.props.type==='checkbox'&&node.props.checked);remaining[0].props.onChange({target:{checked:false}});
+ assert.equal(nodes(view.render()).find(node=>node.tag==='select').props.value,'');
+ const qa=fixture({mode:'settings',fetcher});await settle();assert.doesNotMatch(text(qa.render()),/Dispatch drivers|Dispatch vehicles|Default driver|Dispatch load requirements/);
 });

@@ -4,8 +4,8 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const source=fs.readFileSync(require('node:path').join(__dirname,'../index.html'),'utf8');
 const start=source.indexOf('  function PanelDispatchLoads()'),end=source.indexOf('  function DispatchPage(',start);
-function view(loads,selected=null,filter="active"){
- let index=0;const values=[loads,false,'',selected,{destinationType:'site'},'',filter];
+function view(loads,selected=null,filter="active",defaults={}){
+ let index=0;const values=[loads,false,'',selected,{destinationType:'site'},'',filter,{},['Lennox Truck','Lennox Ute'],defaults.drivers||[],defaults.defaultDriver||''];
  const context={import_react:{createElement:(tag,props,...children)=>({tag,props,children})},useState:initial=>{const i=index++;if(!(i in values))values[i]=initial;return [values[i],value=>{values[i]=typeof value==='function'?value(values[i]):value;}];},useRef:initial=>({current:initial}),useEffect:()=>{},PageHeading:'heading',Truck:'truck',EmptyState:'empty',PanelStock:{},BAKED_WORKER_URL:''};
  vm.createContext(context);vm.runInContext(source.slice(start,end),context);
  return {render(){index=0;return context.PanelDispatchLoads();}};
@@ -62,4 +62,13 @@ test('dispatch form offers vehicle choices and a required driver selector',()=>{
  assert.equal(selects[1].props.value,'Lennox Truck');
  assert.equal(selects[2].props.required,true);
  assert.equal(nodes(selects[2]).find(n=>n.tag==='option').props.disabled,true);
+});
+
+test('opening a new dispatch prefills only an eligible default driver',()=>{
+ for(const [defaultDriver,expected] of [['alex','alex'],['inactive',''],['','']]){
+  const ui=view([{...base,ready:true,routing:true,fabricationComplete:true,qaComplete:true}],null,'active',{drivers:[{username:'alex',displayName:'Alex'}],defaultDriver});
+  nodes(ui.render()).find(n=>n.tag==='button'&&n.children.includes('Dispatch load')).props.onClick();
+  const selects=nodes(ui.render()).filter(n=>n.tag==='select');
+  assert.equal(selects[2].props.value,expected);
+ }
 });
