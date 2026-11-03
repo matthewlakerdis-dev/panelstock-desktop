@@ -4,6 +4,57 @@ if(typeof document!=='undefined')document.addEventListener('wheel',event=>{
  if(input?.tagName==='INPUT'&&input.type==='number'&&document.activeElement===input)event.preventDefault();
 },{capture:true,passive:false});
 
+/* Persist large image edits without exceeding localStorage's string quota. */
+function workshopPendingStorage(key) {
+ const marker='__panelstockPendingStorage',store={unreadable:false};
+ function indexed(action,value){
+  if(typeof indexedDB==='undefined')return action==='put'?Promise.reject(Error('IndexedDB is unavailable.')):Promise.resolve();
+  return new Promise((resolve,reject)=>{
+   let request,db,settled=false;
+   const fail=error=>{if(settled)return;settled=true;if(db)db.close();reject(error||Error('Pending stock storage is unavailable.'));};
+   try{request=indexedDB.open('panelstock-workshop-pending',1);}catch(error){fail(error);return;}
+   request.onupgradeneeded=()=>{if(!request.result.objectStoreNames.contains('requests'))request.result.createObjectStore('requests');};
+   request.onerror=()=>fail(request.error);request.onblocked=()=>fail(Error('Pending stock storage is blocked.'));
+   request.onsuccess=()=>{
+    db=request.result;if(settled){db.close();return;}db.onversionchange=()=>db.close();
+    try{
+     const transaction=db.transaction('requests',action==='get'?'readonly':'readwrite'),objects=transaction.objectStore('requests');let result;
+     const operation=action==='put'?objects.put(value,key):action==='delete'?objects.delete(key):objects.get(key);
+     operation.onsuccess=()=>{result=operation.result;};operation.onerror=()=>fail(operation.error);
+     transaction.oncomplete=()=>{if(settled)return;settled=true;db.close();resolve(result);};transaction.onerror=()=>fail(transaction.error);transaction.onabort=()=>fail(transaction.error);
+    }catch(error){fail(error);}
+   };
+  });
+ }
+ store.read=async()=>{
+  let saved,localError,text;try{text=localStorage.getItem(key);}catch(error){localError=error;}
+  if(text)saved=JSON.parse(text);
+  if(saved?.[marker]==='cleared')return null;
+  if(saved&&!saved[marker])return saved;
+  try{
+   const text=await indexed('get'),payload=text?JSON.parse(text):null;
+   if(saved?.[marker]==='indexeddb'&&(!payload||payload.mutationId!==saved.mutationId))throw Error('The pending stock request could not be recovered.');
+   if(!payload&&localError&&typeof indexedDB==='undefined')throw localError;
+   return payload;
+  }catch(error){if(saved||localError)throw error;return null;}
+ };
+ store.write=async payload=>{
+  const text=JSON.stringify(payload);let storedLocally=false;
+  try{localStorage.setItem(key,text);storedLocally=true;}catch{}
+  if(storedLocally){try{await indexed('delete');}catch{}return;}
+  await indexed('put',text);
+  try{localStorage.setItem(key,JSON.stringify({[marker]:'indexeddb',mutationId:payload.mutationId}));}catch{
+   try{localStorage.removeItem(key);}catch{let stale=false;try{stale=localStorage.getItem(key)!==null;}catch{}if(stale)throw Error('The older pending stock request could not be replaced.');}
+  }
+ };
+ store.clear=async()=>{
+  let indexedError;try{await indexed('delete');}catch(error){indexedError=error;}
+  if(indexedError){localStorage.setItem(key,JSON.stringify({[marker]:'cleared'}));return;}
+  try{localStorage.removeItem(key);}catch{localStorage.setItem(key,JSON.stringify({[marker]:'cleared'}));}
+ };
+ return store;
+}
+
 /* Shared desktop/mobile workshop inventory screen. */
 window.createWorkshopStock = function(React) {
  const h=React.createElement, {useState,useEffect}=React;
@@ -49,11 +100,12 @@ window.createWorkshopStock = function(React) {
    }catch(e){setError(e.message);}finally{setBusy(false);}
   }
   const pendingKey='panelstock:workshop-pending:'+PanelStock.username;
+  const [pendingStorage]=useState(()=>workshopPendingStorage(pendingKey));
   const can=task=>isAdmin||taskAccess[task]===true;
-  async function load(){try{const r=await PanelStock.apiFetch(workerUrl+'/workshop-stock'),d=await r.json();if(!r.ok)throw Error(d.error||'Workshop stock could not be loaded.');setData(d);setError('');}catch(e){setError(e.message);return false;}}
+  async function load(){try{const r=await PanelStock.apiFetch(workerUrl+'/workshop-stock'),d=await r.json();if(!r.ok)throw Error(d.error||'Workshop stock could not be loaded.');setData(d);if(!pendingStorage.unreadable)setError('');}catch(e){if(!pendingStorage.unreadable)setError(e.message);return false;}}
   useEffect(()=>window.PanelStockPullRefresh?.subscribe(()=>load()));
   useEffect(()=>{load();},[stockRevision]);
-  useEffect(()=>{try{const saved=JSON.parse(localStorage.getItem(pendingKey)||'null');if(saved){setPending(saved);setForm(saved.item||saved);}}catch{setError('Could not read the pending stock save. Check browser storage before editing.');}},[]);
+  useEffect(()=>{let active=true;setBusy(true);pendingStorage.read().then(saved=>{if(!active)return;if(saved){setPending(saved);setForm(saved.item||saved);}setBusy(false);}).catch(()=>{if(!active)return;pendingStorage.unreadable=true;setError('Could not read the pending stock save. Check browser storage before editing.');});return()=>{active=false;};},[]);
   const change=(key,value)=>setForm(f=>({...f,[key]:value,...(key==='categoryId'?{name:value?categories[value]:''}:{}),...(key==='sku'&&f.action==='create'?(()=>{const p=String(value).trim()&&(data?.items||[]).find(i=>!i.legacy&&String(i.sku).trim().replace(/\s+/g,' ').toLowerCase()===String(value).trim().replace(/\s+/g,' ').toLowerCase());return p?{category:p.category,unit:p.unit,name:p.name,dimensions:p.dimensions||'',image:p.image||''}:{};})():{}),...(key==='category'?{unit:{extrusions:'lengths',fixings:'each',consumables:'packs',offcuts:'lengths'}[value]||'each'}:{})}));
   function open(item,action){const variant=action==='variant';if(variant)action='create';setError('');setNotice('');setPending(null);setForm({action,variant,categoryId:'',catalogId:item?.legacy&&item.category==='offcuts'?item.catalogId||'':undefined,expectedMaterial:item?.legacy?JSON.stringify([item.catalogId||'',item.color,item.material,Number(item.thickness)]):undefined,itemId:variant?undefined:item?.id,quantity:action==='stocktake'?item.qty:'',job:'',reason:'',location:item?.location||'',supplier:item?.supplier||'',unitCost:item?.unitCost??'',costBasis:item?.costBasis||'unit',...(item?.legacy&&item.category==='offcuts'?{costSourceItemId:item.costSourceItemId||''}:{}),packCost:item?.packCost??'',reorderLevel:item?.reorderLevel||0,category:item?.category||'extrusions',unit:item?.unit||'lengths',qty:0,packSize:item?.packSize||1,name:item?.name||'',sku:variant?item.sku:'',details:item?.details||'',lengthMm:item?.lengthMm??'',dimensions:item?.dimensions||'',colour:variant?'':item?.colour||'',image:item?.image||''});}
   useEffect(()=>{if(!preview)return;const close=e=>{if(e.key==='Escape')setPreview(null);};document.addEventListener('keydown',close);return()=>document.removeEventListener('keydown',close);},[preview]);
@@ -65,15 +117,21 @@ window.createWorkshopStock = function(React) {
    try{
     url=URL.createObjectURL(file);const img=new Image();await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(Error('This image could not be read.'));img.src=url;});
     if(!img.naturalWidth||img.naturalWidth*img.naturalHeight>40000000)throw Error('Choose an image under 40 megapixels.');
-    const scale=Math.min(1,1600/Math.max(img.naturalWidth,img.naturalHeight)),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0,canvas.width,canvas.height);
-    let image=canvas.toDataURL('image/png');if(image.length>680000)image=canvas.toDataURL('image/webp',.9);if(image.length>680000)image=canvas.toDataURL('image/webp',.75);if(image.length>680000)throw Error('This image is too detailed. Choose a smaller image or crop to the profile.');
+    const maxSavedBytes=2*1024*1024,fits=value=>{const length=value.length-value.indexOf(',')-1,padding=value.endsWith('==')?2:value.endsWith('=')?1:0;return length>0&&length*3/4-padding<=maxSavedBytes;};
+    const scale=Math.min(1,1600/Math.max(img.naturalWidth,img.naturalHeight)),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));const ctx=canvas.getContext('2d');let image='';
+    for(let attempt=0;attempt<8&&!image;attempt++){
+     ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0,canvas.width,canvas.height);
+     for(const [type,quality] of [['image/png'],['image/webp',.9],['image/webp',.75],['image/jpeg',.85],['image/jpeg',.7]]){const candidate=canvas.toDataURL(type,quality);if(fits(candidate)){image=candidate;break;}}
+     if(!image){canvas.width=Math.max(1,Math.floor(canvas.width*.75));canvas.height=Math.max(1,Math.floor(canvas.height*.75));}
+    }
+    if(!image)throw Error('Could not prepare this image within the 2 MB saved-image limit. Please try another image.');
     setForm(current=>current?{...current,image}:current);
    }catch(e){setError(e.message||'The image could not be uploaded.');}finally{if(url)URL.revokeObjectURL(url);setImageBusy(false);}
   }
-  async function save(e){e.preventDefault();if(imageBusy)return;setBusy(true);setError('');setNotice('');
+  async function save(e){e.preventDefault();if(imageBusy||busy)return;setBusy(true);setError('');setNotice('');
    const payload=pending||{...(form.action==='create'?{action:'create',item:form}:form),expectedRevision:data.revision,mutationId:crypto.randomUUID()};
-   try{localStorage.setItem(pendingKey,JSON.stringify(payload));}catch{setError('Browser storage is unavailable. No stock changes were sent.');setBusy(false);return;}setPending(payload);
-   try{const r=await PanelStock.apiFetch(workerUrl+'/workshop-stock',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}),d=await r.json();if(!r.ok){if(r.status<500){localStorage.removeItem(pendingKey);setPending(null);}if(r.status===409)await load();throw Error(d.error||'Stock could not be saved.');}setData(d);localStorage.removeItem(pendingKey);setForm(null);setPending(null);setNotice(form.action==='stocktake_create'?'Stocktake created. Workers can now select it.':form.action==='bulk_metadata'?'Updated '+form.itemIds.length+' stock items.':form.action==='archive'?'Item removed from active stock. Its history and completed reports are retained.':'Stock saved.');if(form.action==='bulk_metadata')setSelectedIds([]);if(form.action==='archive'){setSelectedIds(ids=>ids.filter(id=>id!==form.itemId));setHistory(null);}if(form.action==='stocktake_create')setCountList(true);}catch(e){setError(e.message+' If the connection failed, retry the same save to avoid duplicates.');}finally{setBusy(false);}
+   try{await pendingStorage.write(payload);}catch{setError('Browser storage is unavailable. No stock changes were sent.');setBusy(false);return;}setPending(payload);
+   try{const r=await PanelStock.apiFetch(workerUrl+'/workshop-stock',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}),d=await r.json();if(!r.ok){if(r.status<500){await pendingStorage.clear();setPending(null);}if(r.status===409)await load();throw Error(d.error||'Stock could not be saved.');}setData(d);await pendingStorage.clear();setForm(null);setPending(null);setNotice(form.action==='stocktake_create'?'Stocktake created. Workers can now select it.':form.action==='bulk_metadata'?'Updated '+form.itemIds.length+' stock items.':form.action==='archive'?'Item removed from active stock. Its history and completed reports are retained.':'Stock saved.');if(form.action==='bulk_metadata')setSelectedIds([]);if(form.action==='archive'){setSelectedIds(ids=>ids.filter(id=>id!==form.itemId));setHistory(null);}if(form.action==='stocktake_create')setCountList(true);}catch(e){setError(e.message+' If the connection failed, retry the same save to avoid duplicates.');}finally{setBusy(false);}
   }
   const field=(label,key,type='text',options)=>h('label',{className:'ws-field'+(key==='costSourceItemId'?' ws-area-source-field':''),key},label,options?h('select',{value:form[key],disabled:busy||imageBusy||!!pending||!!(sharedProfile&&['category','unit'].includes(key)),onChange:e=>change(key,e.target.value)},options.map(([v,t])=>h('option',{key:v,value:v},t))):h('input',{type,value:sharedProfile&&['name','dimensions'].includes(key)?sharedProfile[key]||'':form[key]??'',disabled:busy||imageBusy||!!pending||!!(sharedProfile&&['name','dimensions'].includes(key)),min:type==='number'?(key==='packSize'?1:0):undefined,step:type==='number'?(['unitCost','packCost'].includes(key)?'0.01':key==='packSize'?'1':'0.001'):undefined,required:['name','quantity','job'].includes(key)||(key==='packSize'&&form.costBasis==='pack'),placeholder:({name:form.category==='extrusions'?'e.g. 25 × 25 aluminium angle':'e.g. Stainless rivets 4.8 mm',sku:'e.g. ANG-25-3',lengthMm:'e.g. 6000',dimensions:'e.g. 80 × 40 × 3 mm',colour:'e.g. Black, mill finish or timber grain',details:'Additional notes (optional)',location:'e.g. Rack A · Bay 2',supplier:'e.g. Knotwood',job:'Job name or reference',reason:'Add a reference or note'})[key],onChange:e=>change(key,e.target.value)}));
   const button=(label,onClick,disabled=false)=>h('button',{type:'button',onClick,disabled},label);
@@ -137,7 +195,7 @@ window.createWorkshopStock = function(React) {
   const visibleCounts=countItems.filter(i=>review?hasCount(i):(!countLocation||(i.location||'Unassigned')===countLocation)&&[i.name,i.sku,i.colour,i.lengthMm,i.dimensions].join(' ').toLowerCase().includes(countSearch.toLowerCase())&&(countFilter==='all'||!hasCount(i)||countActive===i.id)).sort((a,b)=>String(a.location||'').localeCompare(String(b.location||''))||String(a.sku||a.name||'').localeCompare(String(b.sku||b.name||''))||String(a.colour||'').localeCompare(String(b.colour||'')));
   const selected=data?.items.find(i=>i.id===form?.itemId);
   function allowed(action){return ['create','metadata','stocktake','archive'].includes(action)?isAdmin:can(action==='damage'?'factory.damage':['receive','return'].includes(action)?'factory.receive':'factory.dispatch');}
-  const imageEditor=()=>sharedProfile?h('div',{className:'ws-image-editor'},h('div',{className:'ws-image-edit-preview'},sharedProfile.image?h('img',{src:sharedProfile.image,alt:'Shared stock profile'}):icon('box')),h('p',null,'Uses the existing profile image and dimensions. Edit stock details to update them for all variants.')):h('div',{className:'ws-image-editor'},h('div',{className:'ws-image-edit-preview'},form.image?h('img',{src:form.image,alt:'Selected stock profile'}):icon('box')),h('div',null,h('strong',null,'Profile / item image'),h('p',null,'Add a profile drawing or product photo. PNG, JPG or WebP, up to 8 MB.'),h('div',{className:'ws-image-controls'},h('label',{className:'ws-upload '+(busy||imageBusy||pending?'is-disabled':'')},h('input',{type:'file',accept:'image/png,image/jpeg,image/webp','aria-label':'Profile or item image',disabled:busy||imageBusy||!!pending,onChange:uploadImage}),imageBusy?'Preparing image…':form.image?'Replace image':'Choose image'),form.image&&button('Remove image',()=>change('image',''),busy||imageBusy||!!pending)),h('small',null,'The image is saved when you save this item.')));
+  const imageEditor=()=>sharedProfile?h('div',{className:'ws-image-editor'},h('div',{className:'ws-image-edit-preview'},sharedProfile.image?h('img',{src:sharedProfile.image,alt:'Shared stock profile'}):icon('box')),h('p',null,'Uses the existing profile image and dimensions. Edit stock details to update them for all variants.')):h('div',{className:'ws-image-editor'},h('div',{className:'ws-image-edit-preview'},form.image?h('img',{src:form.image,alt:'Selected stock profile'}):icon('box')),h('div',null,h('strong',null,'Profile / item image'),h('p',null,'Add a profile drawing or product photo. PNG, JPG or WebP, up to 8 MB. Images are optimised to 2 MB or less.'),h('div',{className:'ws-image-controls'},h('label',{className:'ws-upload '+(busy||imageBusy||pending?'is-disabled':'')},h('input',{type:'file',accept:'image/png,image/jpeg,image/webp','aria-label':'Profile or item image',disabled:busy||imageBusy||!!pending,onChange:uploadImage}),imageBusy?'Preparing image…':form.image?'Replace image':'Choose image'),form.image&&button('Remove image',()=>change('image',''),busy||imageBusy||!!pending)),h('small',null,'The image is saved when you save this item.')));
   function stockCostLabel(item){
    if(item.costBasis==='area')return item.areaCost&&Number.isFinite(item.areaCost.ratePerM2)?Number(item.areaCost.ratePerM2).toLocaleString('en-AU',{style:'currency',currency:'AUD',minimumFractionDigits:2,maximumFractionDigits:12})+' / m² (AUD ex GST)':'Not priced — choose a matching full sheet';
    if(item.costBasis==='pack')return item.packCost===null||item.packCost===undefined?'Not priced':money(item.packCost)+' / pack of '+item.packSize+' '+item.unit+' (ex GST)';
