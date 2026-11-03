@@ -14545,7 +14545,7 @@ ${xrefStart}
     const navigate=(key,target=key,section=null)=>{if(key===navSelection&&target===tab&&(!section||section===settingsSection))return;history.pushState({panelstock:true,key,target,section},"",`${location.pathname}?page=${encodeURIComponent(key)}`);setNavSelection(key);if(section)setSettingsSection(section);setTab(target);};
     const safetyNavItem=(isAdmin||taskAccess["factory.toolbox"]===true)?{label:"Safety",href:BAKED_WORKER_URL+"/toolbox?app=web",toolbox:true,icon:(0,import_jsx_runtime.jsxs)("svg",{width:16,height:16,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round","aria-hidden":true,children:[(0,import_jsx_runtime.jsx)("path",{d:"M12 3 4 6v6c0 4.5 8 9 8 9s8-4.5 8-9V6l-8-3Z"}),(0,import_jsx_runtime.jsx)("path",{d:"m8 12 3 3 5-6"})]})}:null;
     const navGroups = [
-      {key:"stockGroup",label:"Stock",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Layers,{size:16}),items:[...(can("factory.stock")?[{key:"workshop",label:"SOH",target:"workshop",icon:(0,import_jsx_runtime.jsx)(Layers,{size:16})}]:[]),...(can("factory.receive")?[{key:"receive",label:"Receive",target:"receive",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Package,{size:16})}]:[]),...(can("factory.dispatch")?[{key:"dispatch",label:"Dispatch",target:"dispatch",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Truck,{size:16})}]:[]),...(isAdmin?[{key:"dispatch-settings",label:"Dispatch Settings",target:"dispatch-settings",icon:(0,import_jsx_runtime.jsx)(Settings2,{size:16})}]:[]),...(can("factory.damage")?[{key:"damage",label:"Damage",target:"damage",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(AlertTriangle,{size:16})}]:[]),...(can("factory.transfer")?[{key:"transfer",label:"Convert",target:"transfer",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Scissors,{size:16})}]:[])]},
+      {key:"stockGroup",label:"Stock",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Layers,{size:16}),items:[...(can("factory.stock")?[{key:"workshop",label:"SOH",target:"workshop",icon:(0,import_jsx_runtime.jsx)(Layers,{size:16})}]:[]),...(can("factory.receive")?[{key:"receive",label:"Receive",target:"receive",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Package,{size:16})}]:[]),...(can("factory.dispatch")?[{key:"dispatch",label:"Dispatch",target:"dispatch",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Truck,{size:16})}]:[]),...(can("factory.damage")?[{key:"damage",label:"Damage",target:"damage",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(AlertTriangle,{size:16})}]:[]),...(can("factory.transfer")?[{key:"transfer",label:"Convert",target:"transfer",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Scissors,{size:16})}]:[])]},
       {key:"cncGroup",label:"CNC",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(CncRouterIcon,{size:16}),items:[...(can("factory.cnc")?[{key:"cnc",label:"CNC Tracker",target:"cnc",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(CncRouterIcon,{size:16})}]:[]),...(isAdmin?[{key:"cnc-settings",label:"CNC Settings",target:"cnc-settings",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Settings2,{size:16})}]:[])]},
       {key:"workGroup",label:"Work",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Briefcase,{size:16}),items:[...(can("schedule.view")||can("schedule.cnc.view")?[{key:"schedule",label:"Schedule",target:"schedule",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(ScheduleCalendarIcon,{size:16})}]:[]),...(isAdmin||can("site.orders.manage")?[{key:"projects",label:"Projects",target:"projects",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Briefcase,{size:16})}]:[]),...(can("factory.jobs")?[{key:"jobs",label:"Jobs",target:"jobs",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Briefcase,{size:16})}]:[]),...(can("site.orders.view")?[{key:"orders",label:"Site Orders",target:"orders",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(ClipboardList,{size:16})}]:[])]},
       {key:"qaGroup",label:"QA",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(ClipboardList,{size:16}),items:[...(can("factory.qa")?[{key:"qa",label:"QA Check",target:"qa",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(ClipboardList,{size:16})}]:[]),...(isAdmin?[{key:"qa-settings",label:"QA Settings",target:"qa-settings",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Settings2,{size:16})}]:[])]},
@@ -14627,7 +14627,6 @@ ${xrefStart}
           tab === "jobs" && can("factory.jobs") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(JobsPage, { transactions }),
           tab === "qa" && can("factory.qa") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(QaCenter, { username, isAdmin, canManage:isAdmin||can("factory.qa.manage"), canDispatch:isAdmin||can("factory.qa.dispatch") }),
           tab === "qa-settings" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(QaSettingsPage, {}),
-          tab === "dispatch-settings" && isAdmin && (0, import_jsx_runtime.jsx)(QaSettingsPage, {section:"dispatch"}),
           tab === "access" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeading, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(User, { size: 18 }), title: "User Access", subtitle: "Manage users, administrators and the tasks each person can use." }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AdminPanel, { username, workerUrl: emailConfig.workerUrl, secret: emailConfig.secret, onLogTxn: logTxn })
@@ -14636,7 +14635,7 @@ ${xrefStart}
           tab === "notifications" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NotificationCenter, { onOpen:key=>navigate(key), onUnreadChange:setNotificationCount }),
           tab === "support" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupportCenter, { isAdmin }),
           tab === "profile" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProfilePhotoPage, {onProfileChange:setOwnProfile}),
-          tab === "settings" && can("factory.settings") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          (tab === "settings" || tab === "dispatch-settings" && isAdmin) && can("factory.settings") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
             SettingsPage,
             {
               reasons,
@@ -14663,7 +14662,7 @@ ${xrefStart}
               onLogTxn: logTxn,
               onResetAllSOH: resetAllSOH,
               onResetAllInformation: resetAllInformation,
-              initialSection: settingsSection
+              initialSection: tab === "dispatch-settings" ? "dispatch" : settingsSection
             }
           )
         ] })
@@ -18022,6 +18021,7 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
     const sections = [
       { key: "general", label: "General" },
       { key: "notifications", label: "Notifications" },
+      ...isAdmin ? [{ key: "dispatch", label: "Dispatch" }] : [],
       ...isAdmin ? [{ key: "schedule", label: "Schedule" }] : [],
       ...isAdmin ? [{ key: "catalog", label: "Material Catalogue" }] : [],
       ...isAdmin ? [{ key: "reasons", label: "Damage Reasons" }] : [],
@@ -18057,6 +18057,7 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
             ] })
           ] }),
           section === "notifications" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "max-w-xl mx-auto", children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(NotificationPreferences, {}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PushNotificationControl, {})] }),
+          section === "dispatch" && isAdmin && (0, import_jsx_runtime.jsx)(QaSettingsPage, {section:"dispatch"}),
           section === "schedule" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ScheduleSettingsPanel, {}),
           section === "catalog" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CatalogAdmin, { catalog, onAdd: onAddCatalogItem, onRemove: onRemoveCatalogItem, onEdit: onEditCatalogItem, onAddBulk: onAddCatalogItemsBulk, onExportExcel: onExportCatalogExcel, onExportPDF: onExportCatalogPDF }),
           section === "reasons" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "max-w-xl mx-auto", children: [
