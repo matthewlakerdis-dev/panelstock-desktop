@@ -4,7 +4,7 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const path=require('node:path');
 const source=fs.readFileSync(path.join(__dirname,'../workshop-stock.js'),'utf8');
-const MiB=1024*1024,limit=2*MiB;
+const MiB=1024*1024,limit=4*MiB;
 const walk=n=>!n||typeof n!=='object'?[]:[n,...(n.children||[]).flat(Infinity).flatMap(walk)];
 const dataURL=(type,bytes)=>'data:'+type+';base64,'+Buffer.alloc(bytes,120).toString('base64');
 const decodedSize=url=>Buffer.from(url.slice(url.indexOf(',')+1),'base64').length;
@@ -34,7 +34,7 @@ test('a saved PNG above 500 KiB updates only the pending form and clears prepara
  x.finishDecode();await upload.done;assert.equal(decodedSize(x.preview()),700*1024);assert.equal(x.error(),'');assert.deepEqual(x.draws,[{width:1600,height:800}]);assert.equal(x.attempts[0].type,'image/png');assert.deepEqual(x.states[0],before);cleanFinished(x);
 });
 
-test('the saved image limit is 2 MiB of decoded bytes rather than the larger base64 text length',async()=>{
+test('the saved image limit is 4 MiB of decoded bytes rather than the larger base64 text length',async()=>{
  const image=dataURL('image/png',limit),x=harness({encode:()=>image});assert.ok(image.length>limit);await x.upload().done;assert.equal(x.preview(),image);assert.equal(decodedSize(x.preview()),limit);assert.equal(x.attempts.length,1);assert.equal(x.error(),'');cleanFinished(x);
 });
 
@@ -68,5 +68,5 @@ test('the 40-megapixel boundary remains allowed and a cancelled picker leaves th
 });
 
 test('an image that cannot fit after compression is rejected without retaining a URL or an oversized form image',async()=>{
- const oversized=dataURL('image/png',limit+1),x=harness({encode:()=>oversized}),old=x.preview();await x.upload().done;assert.match(x.error(),/2 MB.*limit|try another image/i);assert.equal(x.preview(),old);assert.ok(x.attempts.length>5);cleanFinished(x);
+ const oversized=dataURL('image/png',limit+1),x=harness({encode:()=>oversized}),old=x.preview();await x.upload().done;assert.match(x.error(),/4 MB.*limit|try another image/i);assert.equal(x.preview(),old);assert.ok(x.attempts.length>5);cleanFinished(x);
 });

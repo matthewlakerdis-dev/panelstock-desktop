@@ -8,7 +8,7 @@ const key=user=>'panelstock:workshop-pending:'+user,marker='__panelstockPendingS
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const walk=n=>!n||typeof n!=='object'?[]:[n,...(n.children||[]).flat(Infinity).flatMap(walk)];
 const stock={revision:7,movements:[],items:[{id:'spacer',name:'Spacer',sku:'KASP24',category:'extrusions',unit:'each',qty:100,reserved:0,available:100,image:''}]};
-const payload=(mutationId='pending-image')=>({action:'metadata',itemId:'spacer',name:'Spacer',image:'data:image/png;base64,'+Buffer.alloc(2*1024*1024,120).toString('base64'),unit:'each',expectedRevision:7,mutationId});
+const payload=(mutationId='pending-image')=>({action:'metadata',itemId:'spacer',name:'Spacer',image:'data:image/png;base64,'+Buffer.alloc(4*1024*1024,120).toString('base64'),unit:'each',expectedRevision:7,mutationId});
 function localStorageMock({values=new Map(),limit=Infinity,unavailable=false}={}){
  return {values,getItem(name){if(unavailable)throw Error('Storage denied');return values.get(name)??null;},setItem(name,value){if(unavailable)throw Error('Storage denied');if(String(value).length>limit)throw Object.assign(Error('Quota exceeded'),{name:'QuotaExceededError'});values.set(name,String(value));},removeItem(name){if(unavailable)throw Error('Storage denied');values.delete(name);}};
 }
@@ -55,7 +55,7 @@ test('legacy localStorage requests load and retry unchanged without IndexedDB su
  await x.ready();assert.equal(x.requests.length,0);assert.equal(x.form().props['aria-label'],'Edit stock details');assert.equal(x.node(n=>n.type==='button'&&n.props.type==='submit').children.join(''),'Retry save');await x.submit();assert.deepEqual(x.requests,[saved]);assert.equal(storage.getItem(key('admin')),null);assert.equal(x.form(),undefined);
 });
 
-test('a 2 MiB image survives localStorage quota failure, a failed POST, reload and an identical retry',async()=>{
+test('a 4 MiB image survives localStorage quota failure, a failed POST, reload and an identical retry',async()=>{
  const storage=localStorageMock({limit:1024*1024}),idb=indexedMock(),x=harness({storage,indexedDB:idb,post:async()=>{throw Error('Offline');}});await x.ready();x.open();const image=payload().image;x.setImage(image);const original=structuredClone(stock);await x.submit();
  assert.equal(x.requests.length,1);const sent=x.requests[0];assert.equal(sent.image,image);assert.equal(sent.expectedRevision,7);assert.equal(JSON.parse(idb.values.get(key('admin'))).mutationId,sent.mutationId);assert.equal(JSON.parse(storage.getItem(key('admin')))[marker],'indexeddb');assert.match(x.error(),/Offline.*retry the same save/);assert.deepEqual(stock,original);
  const restored=harness({storage,indexedDB:idb});await restored.ready();assert.equal(restored.requests.length,0,'recovery does not send in the background');assert.equal(restored.states[8].image,image);assert.equal(restored.node(n=>n.type==='input'&&n.props.type==='file').props.disabled,true);await restored.submit();assert.deepEqual(restored.requests,[sent]);assert.equal(idb.values.has(key('admin')),false);assert.equal(storage.getItem(key('admin')),null);assert.equal(restored.form(),undefined);
