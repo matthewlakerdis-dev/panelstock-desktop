@@ -1,6 +1,6 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const html=fs.readFileSync(path.join(__dirname,fs.existsSync(path.join(__dirname,'../panelstock-app.modern.js'))?'../panelstock-app.modern.js':'../index.html'),'utf8');
-const normalizers=html.slice(html.indexOf('function normalizeCncInput('),html.indexOf('function compareCncOrders('));
+const normalizers=(html.match(/  var (?:fmtDim|stockDimensions|fmtStockDim|fmtCncOffcutDim) = [^\n]+/g)||[]).join('\n')+'\n'+html.slice(html.indexOf('function normalizeCncInput('),html.indexOf('function compareCncOrders('));
 function source(name,indent=2,endName){const a=html.indexOf(' '.repeat(indent)+'function '+name+'(');assert.ok(a>=0,name);const b=endName?html.indexOf(' '.repeat(indent)+'function '+endName+'(',a+10):html.indexOf('\n'+' '.repeat(indent)+'function ',a+10);return html.slice(a,b);}
 const nodes=value=>Array.isArray(value)?value.flatMap(nodes):value&&typeof value==='object'?[value,...nodes(value.children)]:[];
 function hooks(extra={}){
@@ -10,7 +10,7 @@ function hooks(extra={}){
  return {context,render(fn,props){cursor=0;return nodes(fn(props));}};
 }
 const stock={id:'stock',sku:'SKU',qty:5,width:4000,height:1500,material:'ACM',color:'White',thickness:4};
-const proposals=[{length:1500,width:500,rectangle:{x:3500,y:0,width:500,height:1500},cutEdges:['left'],cutEdgeAllowance:10},{length:2000,width:300,rectangle:{x:0,y:1200,width:2000,height:300},cutEdges:['bottom'],cutEdgeAllowance:10}];
+const proposals=[{length:500,width:1500,dimensionOrder:"sheet",rectangle:{x:3500,y:0,width:500,height:1500},cutEdges:['left'],cutEdgeAllowance:10},{length:2000,width:300,dimensionOrder:"sheet",rectangle:{x:0,y:1200,width:2000,height:300},cutEdges:['bottom'],cutEdgeAllowance:10}];
 test('PDF import requires one explicitly selected project and reviews multiple offcuts independently for each sheet',async()=>{
  const pdfPages=[{page:1,project:'Wrong PDF project',orderNumber:'7',sheetNumber:'1',panelIds:['A','B'],quantity:2,sheetWidth:4000,sheetHeight:1500,panelArea:4,material:'ACM 4 mm',finish:'White',proposedOffcuts:proposals,proposedOffcut:proposals[0]}],saved=[];
  const runtime=hooks({BAKED_WORKER_URL:'https://example.test',FileReader:class{readAsDataURL(){this.result='data:application/pdf;base64,AA==';this.onload();}},PanelStock:{apiFetch:async()=>({ok:true,json:async()=>({pages:pdfPages})})}});
