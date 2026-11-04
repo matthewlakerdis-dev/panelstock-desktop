@@ -12,7 +12,8 @@ test(repo+': mobile CNC entry keeps the remove button inside the form',()=>asser
  const normalize=html.slice(html.indexOf('function normalizeCncInput('),html.indexOf('function compareCncOrders('));
  const start=html.indexOf('  function prepareCncBulkRows(');
  const end=html.indexOf(repo==='panelstock'?'  function CncTab(':'  function CncPage(',start);
- const source=normalize+html.slice(start,end);
+ const stockFormatters=(html.match(/  var (?:fmtDim|stockDimensions|fmtStockDim|fmtCncOffcutDim) = [^\n]+/g)||[]).join('\n');
+ const source=stockFormatters+normalize+html.slice(start,end);
  const prepare=vm.runInNewContext(source+';prepareCncBulkRows');
  const stock={stockItemType:'variant',stockItemId:'stock-1',stockSku:'SKU-1',sheetWidth:4000,sheetHeight:1500};
  test(repo+': bulk entry shares and normalizes order details without changing identifiers',()=>{

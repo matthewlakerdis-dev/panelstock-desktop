@@ -4,7 +4,8 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const html=fs.readFileSync(require('node:path').join(__dirname,'../index.html'),'utf8');
 for(const match of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g))if(match[1].trim())new vm.Script(match[1]);
-const handler=html.slice(html.indexOf('    function completeCncSheet('),html.indexOf('    function removeCncPanel('));
+const stockFormatters=(html.match(/  var (?:fmtDim|stockDimensions|fmtStockDim|fmtCncOffcutDim) = [^\n]+/g)||[]).join('\n');
+const handler=stockFormatters+html.slice(html.indexOf('    function completeCncSheet('),html.indexOf('    function removeCncPanel('));
 assert.ok(!handler.includes('window.confirm'));
 function run(accept=true,panels) {
   const base={orderNumber:'ORDER-A',sheetNumber:'1',status:'pending',stockVariantId:'stock-1',stockSku:'SKU-1'};

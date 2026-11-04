@@ -1,6 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const html=fs.readFileSync(require.resolve('../index.html'),'utf8');
-const helpers=html.slice(html.indexOf('function normalizeCncInput('),html.indexOf('function compareCncOrders('));
+const stockFormatters=(html.match(/  var (?:fmtDim|stockDimensions|fmtStockDim|fmtCncOffcutDim) = [^\n]+/g)||[]).join('\n');
+const helpers=stockFormatters+html.slice(html.indexOf('function normalizeCncInput('),html.indexOf('function compareCncOrders('));
 function source(name,indent=2){const start=html.indexOf(' '.repeat(indent)+'function '+name+'(');assert.ok(start>=0,name);const end=html.indexOf('\n'+' '.repeat(indent)+'function ',start+10);return html.slice(start,end);}
 function nodes(value){if(Array.isArray(value))return value.flatMap(nodes);return value&&typeof value==='object'?[value,...nodes(value.children)]:[];}
 function hooks(extra={}){

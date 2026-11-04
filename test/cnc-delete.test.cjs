@@ -67,7 +67,7 @@ test('PDF review removes one sheet copy, preserves original numbering, supports 
 });
 test('recut sheet changes keep the layout bottom-left and recalculate the usable off-cut',()=>{
  const plan=vm.runInNewContext(source('cncRecutSheetPlan')+';cncRecutSheetPlan({layout:{anchor:"bottom-left",usedLength:1800,usedWidth:900},cutEdgeAllowance:10,minimumOffcutSize:100},2400,1200)');
- assert.equal(plan.fits,true);assert.deepEqual(JSON.parse(JSON.stringify(plan.offcut)),{length:1200,width:590,edge:'right',rectangle:{x:1810,y:0,width:590,height:1200},cutEdges:['left'],cutEdgeAllowance:10,minimumOffcutSize:100,layout:{anchor:'bottom-left',usedLength:1800,usedWidth:900},confidence:'high'});assert.equal(plan.offcuts.length,2);assert.deepEqual(JSON.parse(JSON.stringify(plan.offcuts[1].rectangle)),{x:0,y:910,width:1790,height:290});
+ assert.equal(plan.fits,true);assert.deepEqual(JSON.parse(JSON.stringify(plan.offcut)),{length:590,width:1200,dimensionOrder:'sheet',edge:'right',rectangle:{x:1810,y:0,width:590,height:1200},cutEdges:['left'],cutEdgeAllowance:10,minimumOffcutSize:100,layout:{anchor:'bottom-left',usedLength:1800,usedWidth:900},confidence:'high'});assert.equal(plan.offcuts.length,2);assert.deepEqual(JSON.parse(JSON.stringify(plan.offcuts[1].rectangle)),{x:0,y:910,width:1790,height:290});
  const tooSmall=vm.runInNewContext(source('cncRecutSheetPlan')+';cncRecutSheetPlan({layout:{anchor:"bottom-left",usedLength:1800,usedWidth:900}},1700,1200)');
  assert.equal(tooSmall.fits,false);assert.equal(tooSmall.offcut,null);
 });
