@@ -13946,11 +13946,18 @@ ${xrefStart}
         }
       } else if (txn.itemType === "offcut") {
         const o = offcuts.find((x) => x.sku === txn.sku);
-        if (o) {
-          nextOffcuts = offcuts.map((x) => x.id === o.id ? { ...x, qty: x.qty + txn.qty } : x);
+        if(txn.type==="offcut_add"){
+          if(!o||o.qty<txn.qty)return showToast("Cannot void this addition: some offcuts have already been used.","err");
+          nextOffcuts=offcuts.map(x=>x.id===o.id?{...x,qty:x.qty-txn.qty}:x);
+        } else if (o) {
+          const quantity=Number(o.qty)+Number(txn.qty);
+          if(!Number.isSafeInteger(quantity)||quantity>10000000)return showToast("The offcut quantity must be a whole number within the stock limit","err");
+          nextOffcuts = offcuts.map((x) => x.id === o.id ? { ...x, qty: quantity } : x);
         } else {
-          nextOffcuts = [...offcuts, { id: uid(), sku: txn.sku, color: txn.color, material: txn.material, thickness: txn.thickness, width: txn.width, height: txn.height, ...(txn.dimensionOrder === "sheet" ? {dimensionOrder: "sheet"} : {}), qty: txn.qty, note: txn.note || "" }];
-          note = " \u2014 off-cut recreated";
+          const merged=mergeOffcutStock(offcuts,[{id:uid(),sku:txn.sku,color:txn.color,material:txn.material,thickness:txn.thickness,width:txn.width,height:txn.height,...(txn.dimensionOrder==="sheet"?{dimensionOrder:"sheet"}:{}),qty:txn.qty,note:txn.note||""}]);
+          if(merged.error)return showToast(merged.error,"err");
+          nextOffcuts=merged.offcuts;
+          note=merged.additions[0].sku===txn.sku?" \u2014 off-cut recreated":" \u2014 returned to matching off-cut";
         }
         setOffcuts(nextOffcuts);
       }
@@ -14159,10 +14166,13 @@ ${xrefStart}
         for(let j=0;j<i;j++){const other=selected[j].rectangle;if(other&&Math.min(rectangle.x+rectangle.width,other.x+other.width)>Math.max(rectangle.x,other.x)&&Math.min(rectangle.y+rectangle.height,other.y+other.height)>Math.max(rectangle.y,other.y))return showToast("The saved offcuts overlap", "err");}
       }
       const completedAt = new Date().toISOString();
-      const savedOffcuts=selected.map(item=>({id:uid(),sku:genSku(),color:stock.color,material:stock.material,thickness:stock.thickness,width:item.dimensionOrder==="sheet"||item.source==="manual"?Number(item.length):Math.max(Number(item.length),Number(item.width)),height:item.dimensionOrder==="sheet"||item.source==="manual"?Number(item.width):Math.min(Number(item.length),Number(item.width)),...(item.dimensionOrder==="sheet"||item.source==="manual"?{dimensionOrder:"sheet"}:{}),qty:1,note:item.note||`From Order ${orderNumber}, Sheet ${sheetNumber}`,sourceOrderNumber:orderNumber,sourceSheetNumber:sheetNumber,createdBy:username||"Unknown",createdAt:completedAt})),savedOffcut=savedOffcuts[0]||null;
+      const additions=selected.map(item=>({id:uid(),sku:genSku(),color:stock.color,material:stock.material,thickness:stock.thickness,width:item.dimensionOrder==="sheet"||item.source==="manual"?Number(item.length):Math.max(Number(item.length),Number(item.width)),height:item.dimensionOrder==="sheet"||item.source==="manual"?Number(item.width):Math.min(Number(item.length),Number(item.width)),...(item.dimensionOrder==="sheet"||item.source==="manual"?{dimensionOrder:"sheet"}:{}),qty:1,note:item.note||`From Order ${orderNumber}, Sheet ${sheetNumber}`,sourceOrderNumber:orderNumber,sourceSheetNumber:sheetNumber,createdBy:username||"Unknown",createdAt:completedAt}));
+      const dispatchedOffcuts=stockType==="offcut"?offcuts.map(item=>item.id===stock.id?{...item,qty:item.qty-1}:item).filter(item=>item.qty>0):offcuts,nextVariants=stockType==="variant"?variants.map(item=>item.id===stock.id?{...item,qty:item.qty-1}:item):variants;
+      const merged=mergeOffcutStock(dispatchedOffcuts,additions);
+      if(merged.error)return showToast(merged.error,"err");
+      const savedOffcuts=merged.additions,savedOffcut=savedOffcuts[0]||null,nextOffcuts=merged.offcuts;
       const details=savedOffcuts.map(item=>({length:item.width,width:item.height,...(item.dimensionOrder==="sheet"?{dimensionOrder:"sheet"}:{}),color:item.color,material:item.material,thickness:item.thickness}));
       const next = cncPanels.map((p) => matches(p) ? { ...p, status: "completed", completedBy: username, completedAt,offcutOutcome:savedOffcuts.length?"confirmed":"none",offcutDetails:savedOffcut?details[0]:null,savedOffcuts:details } : p);
-      const dispatchedOffcuts=stockType==="offcut"?offcuts.map(item=>item.id===stock.id?{...item,qty:item.qty-1}:item).filter(item=>item.qty>0):offcuts,nextVariants=stockType==="variant"?variants.map(item=>item.id===stock.id?{...item,qty:item.qty-1}:item):variants,nextOffcuts=[...dispatchedOffcuts,...savedOffcuts];
       const panelIds=sheetPanels.map(panel=>panel.panelNumber).filter(Boolean),panelLabel=panelIds.join(", ");
       const hasProposal=sheetPanels.some(panel=>Array.isArray(panel.pendingOffcuts)?panel.pendingOffcuts.length>0:!!panel.pendingOffcut);
       const activity=[...(savedOffcuts.length?savedOffcuts.map(savedOffcut=>({id:uid(),timestamp:completedAt,user:username||"Unknown",type:"offcut_add",itemType:"offcut",sku:savedOffcut.sku,desc:`Saved CNC off-cut ${fmtStockDim(savedOffcut)} · Order ${orderNumber} · Sheet ${sheetNumber}`,qty:1,orderNumber,sheetNumber})):hasProposal?[{id:uid(),timestamp:completedAt,user:username||"Unknown",type:"cnc",desc:`Proposed CNC off-cut not saved · Order ${orderNumber} · Sheet ${sheetNumber}`,qty:"",orderNumber,sheetNumber}]:[]),{id:uid(),timestamp:completedAt,user:username||"Unknown",type:"dispatch",source:"cnc",desc:`${stockType==="offcut"?"Off-cut ":""}${stock.color} ${stock.material} ${stock.thickness}mm ${fmtStockDim(stock)} · Order ${orderNumber} · Panel ID${panelIds.length===1?"":"s"} ${panelLabel}`,qty:1,ref:scheduled.jobReference||orderNumber,customer:"CNC",orderNumber,panelIds,itemType:stockType,sku:stock.sku,color:stock.color,material:stock.material,thickness:stock.thickness,width:stock.width,height:stock.height,...(stock.dimensionOrder==="sheet"?{dimensionOrder:"sheet"}:{}),note:stock.note||""},{id:uid(),timestamp:completedAt,user:username||"Unknown",type:"cnc",desc:`Completed CNC sheet: Order ${orderNumber} · Sheet ${sheetNumber} · ${count} panel${count === 1 ? "" : "s"}`,qty:""},...transactions];
@@ -14342,11 +14352,12 @@ ${xrefStart}
     }
     function addOffcut({ color, material, thickness, width, height, qty, note }) {
       [width,height]=[Number(width),Number(height)];
-      const sku = genSku();
-      const next = [...offcuts, { id: uid(), sku, color, material, thickness, width, height, dimensionOrder: "sheet", qty, note: note || "" }];
+      const merged=mergeOffcutStock(offcuts,[{id:uid(),sku:genSku(),color,material,thickness,width,height,dimensionOrder:"sheet",qty:Number(qty),note:note||""}]);
+      if(merged.error)return showToast(merged.error,"err");
+      const next=merged.offcuts,added=merged.additions[0];
       setOffcuts(next);
       persist({ offcuts: next });
-      logTxn({ type: "offcut_add", itemType: "offcut", sku, desc: `${color} ${material} ${thickness}mm ${fmtStockDim({width,height,dimensionOrder:"sheet"})}`, qty });
+      logTxn({ type: "offcut_add", itemType: "offcut", sku:added.sku, desc: `${color} ${material} ${thickness}mm ${fmtStockDim({width,height,dimensionOrder:"sheet"})}`, qty:added.qty });
       showToast("Off-cut added to SOH");
     }
     function editOffcut(offcutId, { width, height, qty, note }) {
@@ -15493,6 +15504,30 @@ function normalizeCncInput(row) {
   const isTemplate = row.isTemplate === true;
   const remakeReason = isRemake ? String(row.remakeReason ?? '').trim().replace(/\s+/g, ' ') : '';
   return {...row, orderNumber, jobReference, sheetNumber, panelNumber, isRemake, isTemplate, remakeReason};
+}
+
+function offcutStockKey(item) {
+  const clean=value=>String(value??"").trim().replace(/\s+/g," ").toLowerCase();
+  const first=Number(item.width),second=Number(item.height),dimensions=item.dimensionOrder==="sheet"?[first,second]:[Math.max(first,second),Math.min(first,second)];
+  return JSON.stringify([clean(item.material),clean(item.color),Number(item.thickness),...dimensions]);
+}
+
+function mergeOffcutStock(existing, additions) {
+  const offcuts=existing.slice(),saved=[];
+  for(const addition of additions){
+    const quantity=Number(addition.qty),index=offcuts.findIndex(item=>offcutStockKey(item)===offcutStockKey(addition));
+    const total=quantity+(index>=0?Number(offcuts[index].qty):0);
+    if(!Number.isSafeInteger(quantity)||quantity<=0||!Number.isSafeInteger(total)||total>10000000)return {error:"The offcut quantity must be a whole number within the stock limit"};
+    if(index>=0){
+      const target=offcuts[index];
+      offcuts[index]={...target,qty:total};
+      saved.push({...addition,id:target.id,sku:target.sku,qty:quantity});
+    }else{
+      const item={...addition,qty:quantity};
+      offcuts.push(item);saved.push({...item});
+    }
+  }
+  return {offcuts,additions:saved};
 }
 
 function cncWholeOffcutProposal(item) {

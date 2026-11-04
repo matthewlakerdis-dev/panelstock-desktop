@@ -39,7 +39,7 @@ test('completing a sheet saves every confirmed offcut in one stock transaction b
  const r=complete({confirmed:true,offcuts:proposals});assert.equal(r.writes.length,1);assert.equal(r.variants[0].qty,4);assert.equal(r.offcuts.length,2);assert.ok(r.offcuts.every(item=>item.qty===1&&item.sourceOrderNumber==='7'&&item.sourceSheetNumber==='1'));
  assert.equal(new Set(r.offcuts.map(item=>item.id)).size,2);assert.equal(r.transactions.filter(item=>item.type==='offcut_add').length,2);assert.equal(r.transactions.filter(item=>item.type==='dispatch').length,1);
  assert.ok(r.panels.slice(0,2).every(panel=>panel.status==='completed'&&panel.savedOffcuts.length===2&&panel.offcutDetails===panel.savedOffcuts[0]));assert.equal(r.panels[2].status,'pending');assert.equal(complete({confirmed:true,offcuts:proposals},r.panels).writes.length,0);
- const same=complete({confirmed:true,offcuts:[{length:500,width:300},{length:500,width:300}]});assert.equal(same.offcuts.length,2,'equal-sized separate pieces are retained');
+ const same=complete({confirmed:true,offcuts:[{length:500,width:300},{length:500,width:300}]});assert.equal(same.offcuts.length,1,'equal-sized pieces share one stock line');assert.equal(same.offcuts[0].qty,2);assert.equal(same.panels[0].savedOffcuts.length,2,'both physical pieces remain in the sheet history');const additions=same.transactions.filter(item=>item.type==='offcut_add');assert.equal(additions.length,2);assert.ok(additions.every(item=>item.sku===same.offcuts[0].sku&&item.qty===1));
 });
 test('completion supports a legacy single offcut, an explicit decline and rejects invalid or overlapping lists',()=>{
  assert.equal(complete({confirmed:true,length:500,width:300}).offcuts.length,1);
