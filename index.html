@@ -13731,6 +13731,7 @@ ${xrefStart}
     const [rememberedUsername, setRememberedUsername] = useState("");
     const [isAdmin, setIsAdmin] = useState(false);
     const [taskAccess, setTaskAccess] = useState({});
+    const [productionTrackerShare,setProductionTrackerShare] = useState(null);
     const [toast, setToast] = useState(null);
     const [modal, setModal] = useState(null);
     const [detailItem, setDetailItem] = useState(null);
@@ -13758,7 +13759,7 @@ ${xrefStart}
             PanelStock.apiFetch(BAKED_WORKER_URL + "/cnc-share").then(async response => {
               if (!response.ok) return;
               const share = await response.json();
-              if (active && PanelStock.username === user.username) CNC_PUBLIC_TOKEN = share.token;
+              if (active && PanelStock.username === user.username) { CNC_PUBLIC_TOKEN = share.token; setProductionTrackerShare({username:user.username,token:share.token}); }
             }).catch(() => {});
             const data = await PanelStock.snapshot();
             if (!active) return;
@@ -13787,7 +13788,7 @@ ${xrefStart}
       if (!username) return;
       let active = true, refreshTask = null;
       const onSync = event => setSyncStatus(event.detail.status);
-      const onExpired = () => { setUsername(null); setIsAdmin(false); };
+      const onExpired = () => { setUsername(null); setIsAdmin(false); setProductionTrackerShare(null); CNC_PUBLIC_TOKEN = null; };
       function refresh() {
         if (refreshTask) return refreshTask;
         if (document.visibilityState === "hidden") return Promise.resolve(false);
@@ -13875,7 +13876,7 @@ ${xrefStart}
       location.reload();
     }
     function logOut() {
-      setUsername(null); setOwnProfile(null); setIsAdmin(false); setTaskAccess({});
+      setUsername(null); setOwnProfile(null); setIsAdmin(false); setTaskAccess({}); setProductionTrackerShare(null); CNC_PUBLIC_TOKEN = null;
       void PanelStock.logout();
     }
     const INACTIVITY_LIMIT_MS = 30 * 60 * 1e3;
@@ -14580,6 +14581,7 @@ ${xrefStart}
           navGroups.filter(group=>group.key==="stockGroup").map(group=>/* @__PURE__ */ (0,import_jsx_runtime.jsx)(SideNavGroup,{...group,open:openNavGroup===group.key||previewNavGroup===group.key,onToggle:()=>openNavGroup===group.key?setOpenNavGroup(null):setPreviewNavGroup(current=>current===group.key?null:group.key),activeKey:navSelection,onSelect:item=>{setOpenNavGroup(group.key);setPreviewNavGroup(null);navigate(item.key,item.target,item.section);}},group.key)),
           navGroups.filter(group=>group.key!=="stockGroup").map(group=>/* @__PURE__ */ (0,import_jsx_runtime.jsx)(SideNavGroup,{...group,open:openNavGroup===group.key||previewNavGroup===group.key,onToggle:()=>openNavGroup===group.key?setOpenNavGroup(null):setPreviewNavGroup(current=>current===group.key?null:group.key),activeKey:navSelection,onSelect:item=>{setOpenNavGroup(group.key);setPreviewNavGroup(null);navigate(item.key,item.target,item.section);}},group.key)),
           safetyNavItem && (0,import_jsx_runtime.jsx)(SideNavItem,safetyNavItem),
+          productionTrackerShare?.token && productionTrackerShare.username===username && PanelStock.username===username && (0,import_jsx_runtime.jsx)(SideNavItem,{icon:(0,import_jsx_runtime.jsx)(FileSpreadsheet,{size:16}),label:"Production Tracker",href:"https://cnc.panelstockhq.com/cnc-tracker?token="+encodeURIComponent(productionTrackerShare.token)}),
           /* @__PURE__ */ (0,import_jsx_runtime.jsx)(SideNavItem,{icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(SupportHeadsetIcon,{size:16}),label:"Support",active:navSelection==="support",onClick:()=>{setOpenNavGroup(null);setPreviewNavGroup(null);navigate("support");}}),
           /* @__PURE__ */ (0,import_jsx_runtime.jsx)(SideNavItem,{icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(User,{size:16}),label:"My Profile",active:navSelection==="profile",onClick:()=>{setOpenNavGroup(null);setPreviewNavGroup(null);navigate("profile");}})
         ] }),
