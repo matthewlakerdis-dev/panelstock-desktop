@@ -13,6 +13,7 @@ for(const asset of ['tab-workspace.js','panelstock-client.js','tailwind.css','wo
  indexHtml=indexHtml.replace(new RegExp(asset.replace('.', '\\.')+'\\?v=[^"\\x27]+','g'),asset+'?v='+version);
 }
 fs.writeFileSync(indexPath,indexHtml);
+fs.cpSync(path.join(root,'sign-in'),path.join(out,'sign-in'),{recursive:true});
 fs.cpSync(path.join(root,'cad'),path.join(out,'cad'),{recursive:true});
 const pdfRoot=path.join(root,'node_modules/pdfjs-dist');
 const pdfOut=path.join(out,'cad/pdfjs');
@@ -21,7 +22,7 @@ for(const name of ['pdf.min.mjs','pdf.worker.min.mjs']) fs.copyFileSync(path.joi
 for(const name of ['cmaps','standard_fonts','wasm']) fs.cpSync(path.join(pdfRoot,name),path.join(pdfOut,name),{recursive:true});
 fs.copyFileSync(path.join(pdfRoot,'LICENSE'),path.join(pdfOut,'LICENSE'));
 fs.writeFileSync(path.join(out,'.nojekyll'),'');
-for(const file of ['index.html','cad/cad.js']){
+for(const file of ['index.html','cad/cad.js','sign-in/index.html','sign-in/manage/index.html']){
  const text=fs.readFileSync(path.join(out,file),'utf8');
  if(!text.includes('https://panelstock-reports.matthewlakerdis.workers.dev')||text.includes('panelstock-reports-staging')) throw Error('Production API configuration invalid: '+file);
 }
