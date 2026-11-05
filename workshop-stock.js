@@ -55,6 +55,66 @@ function workshopPendingStorage(key) {
  return store;
 }
 
+/* Keep stock and COS settings monotonic when requests finish out of order. */
+function mergeWorkshopStockViews(current,incoming){
+ if(!incoming||typeof incoming!=='object')return current||incoming;
+ const previous=current?.stocktakeSettings,next=incoming.stocktakeSettings;
+ const settings=previous&&(!next||previous.revision>next.revision)?previous:next;
+ const stock=current&&Number.isFinite(current.revision)&&Number.isFinite(incoming.revision)&&current.revision>incoming.revision?current:incoming;
+ return settings&&stock.stocktakeSettings!==settings?{...stock,stocktakeSettings:settings}:stock;
+}
+
+/* Shared stocktake and Xero Cost of Sales configuration. */
+window.createStocktakeSettings=function(React){
+ const h=React.createElement,{useState,useEffect}=React,copy=value=>JSON.parse(JSON.stringify(value));
+ return function StocktakeSettings({workerUrl,isAdmin,onSaved}){
+  const [current,setCurrent]=useState(null),[form,setForm]=useState(null),[pending,setPending]=useState(null),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
+  const key='panelstock:stocktake-settings-pending:'+workerUrl+':'+PanelStock.username;
+  const [storage]=useState(()=>workshopPendingStorage(key));
+  const parse=async response=>{let body;try{body=await response.json();}catch{throw Error('The stocktake settings service returned an unreadable response. Retry the saved request.');}if(!body||typeof body!=='object'||Array.isArray(body))throw Error('The stocktake settings service returned an unreadable response.');return body;};
+  async function readSettings(){const response=await PanelStock.apiFetch(workerUrl+'/stocktake/settings'),body=await parse(response);if(!response.ok)throw Error(body.error||'Stocktake settings could not be loaded.');if(!body.stocktakeSettings||!Array.isArray(body.stocktakeSettings.cosGroups))throw Error('Stocktake settings are unavailable.');return body.stocktakeSettings;}
+  async function recoverPending(){try{const saved=await storage.read();storage.unreadable=false;return saved;}catch{storage.unreadable=true;throw Error('The pending settings request could not be recovered. Restore browser storage, then reload settings before editing.');}}
+  useEffect(()=>{let active=true;async function start(){let saved;try{saved=await recoverPending();if(!active)return;if(saved){setPending(saved);setForm(copy(saved));}const settings=await readSettings();if(!active)return;setCurrent(settings);if(!saved)setForm(copy(settings));}catch(e){if(active)setError(e.message||'Stocktake settings could not be loaded.');}finally{if(active)setLoading(false);}}start();return()=>{active=false;};},[]);
+  async function reload(){if(busy||pending)return;setLoading(true);setError('');setNotice('');try{const saved=await recoverPending();if(saved){setPending(saved);setForm(copy(saved));}const settings=await readSettings();setCurrent(settings);if(!saved)setForm(copy(settings));}catch(e){setError(e.message);}finally{setLoading(false);}}
+  const locked=!isAdmin||loading||busy||!!pending||storage.unreadable;
+  const update=(field,value)=>setForm(valueBefore=>({...valueBefore,[field]:value}));
+  const updateGroup=(id,field,value)=>setForm(valueBefore=>({...valueBefore,cosGroups:valueBefore.cosGroups.map(group=>group.id===id?{...group,[field]:value}:group)}));
+  const validText=(value,max)=>typeof value==='string'&&value.trim().length>0&&value.trim().length<=max&&!/[\u0000-\u001f\u007f-\u009f\u2028\u2029<>]/.test(value);
+  const issues=[];
+  if(form){
+   if(!Array.isArray(form.cosGroups)||form.cosGroups.length<1||form.cosGroups.length>50)issues.push('Use between 1 and 50 COS groups.');
+   for(const [index,group]of(form.cosGroups||[]).entries()){if(!validText(group.label,120))issues.push('Enter a valid COS name for row '+(index+1)+'.');if(!validText(group.accountCode,30))issues.push('Enter a valid Xero account code for row '+(index+1)+'.');}
+   if(!validText(form.assetAccountCode,30))issues.push('Enter the Factory Stock on Hand account code.');
+   if(!validText(form.trackingName,120)||!validText(form.trackingOption,120))issues.push('Enter the tracking name and tracking option.');
+   if(!['','asset-debit','asset-credit'].includes(form.direction))issues.push('Choose a valid default journal direction.');
+  }
+  async function save(event){
+   event.preventDefault();if(!isAdmin||busy||loading||storage.unreadable||(!pending&&(!current||!form||issues.length)))return;setBusy(true);setError('');setNotice('');
+   const request=pending||{expectedRevision:current.revision,mutationId:crypto.randomUUID(),cosGroups:copy(form.cosGroups),assetAccountCode:form.assetAccountCode,trackingName:form.trackingName,trackingOption:form.trackingOption,direction:form.direction};
+   try{
+    await storage.write(request);setPending(request);
+    const response=await PanelStock.apiFetch(workerUrl+'/stocktake/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(request)}),body=await parse(response);
+    if(!response.ok){if(response.status<500&&response.status!==408&&response.status!==429){await storage.clear();setPending(null);}throw Error(body.error||'Stocktake settings could not be saved.');}
+    if(!body.stocktakeSettings||!Array.isArray(body.stocktakeSettings.cosGroups))throw Error('The save response could not be confirmed. Retry the saved request.');
+    await storage.clear();setPending(null);setCurrent(body.stocktakeSettings);setForm(copy(body.stocktakeSettings));setNotice('Stocktake settings saved.');
+    if(typeof window.dispatchEvent==='function'&&typeof CustomEvent==='function')window.dispatchEvent(new CustomEvent('panelstock-stocktake-settings-changed'));
+    if(onSaved)onSaved(body.stocktakeSettings);
+   }catch(e){const message=String(e?.message||'Stocktake settings could not be saved.');setError(/failed to fetch|networkerror|load failed/i.test(message)?'The save was not confirmed. Your original request is saved on this device; use Retry save safely.':message);}finally{setBusy(false);}
+  }
+  const field=(label,name)=>h('label',{className:'ws-field'},label,h('input',{'aria-label':label,type:'text',maxLength:name==='assetAccountCode'?30:120,value:form?.[name]??'',disabled:locked,onChange:event=>update(name,event.target.value)}));
+  const existing=new Set((current?.cosGroups||[]).map(group=>group.id));
+  return h('section',{className:'ws-stocktake-settings'},h('div',{className:'ws-eyebrow'},'LENNOX FACADES / STOCKTAKE'),h('h2',null,'Stocktake settings'),h('p',null,'Manage Cost of Sales (COS) groups and Xero account codes for stock exports. These settings are shared across devices.'),
+   loading&&h('p',{role:'status'},'Loading stocktake settings…'),error&&h('div',{className:'ws-error',role:'alert'},error),notice&&h('p',{className:'ws-settings-notice',role:'status'},notice),
+   !isAdmin&&h('p',null,'An administrator can change these settings.'),form&&h('form',{onSubmit:save,'aria-label':'Stocktake settings'},h('h3',null,'Cost of Sales accounts'),
+    h('div',{className:'ws-cos-rows'},form.cosGroups.map((group,index)=>h('div',{className:'ws-cos-row',key:group.id},h('label',{className:'ws-field'},'COS name',h('input',{'aria-label':'COS name '+(index+1),type:'text',maxLength:120,value:group.label,disabled:locked,onChange:event=>updateGroup(group.id,'label',event.target.value)})),h('label',{className:'ws-field'},'Xero account code',h('input',{'aria-label':'COS account code '+(index+1),type:'text',maxLength:30,value:group.accountCode,disabled:locked,onChange:event=>updateGroup(group.id,'accountCode',event.target.value)})),!existing.has(group.id)&&h('button',{type:'button',disabled:locked,onClick:()=>setForm(previous=>({...previous,cosGroups:previous.cosGroups.filter(row=>row.id!==group.id)}))},'Remove new COS')))),
+    h('button',{type:'button',disabled:locked||form.cosGroups.length>=50,onClick:()=>setForm(previous=>({...previous,cosGroups:[...previous.cosGroups,{id:'cos-'+crypto.randomUUID(),label:'',accountCode:''}]}))},'Add COS'),
+    h('p',{className:'ws-field-hint'},'Renaming a COS group keeps its existing stock-item assignments linked.'),h('h3',null,'Xero journal defaults'),h('div',{className:'ws-settings-fields'},field('Stock asset account code','assetAccountCode'),field('Tracking name','trackingName'),field('Tracking option','trackingOption'),h('label',{className:'ws-field'},'Default journal direction',h('select',{'aria-label':'Default journal direction',value:form.direction,disabled:locked,onChange:event=>update('direction',event.target.value)},[['','Choose at export'],['asset-debit','Debit stock asset; credit COS'],['asset-credit','Credit stock asset; debit COS']].map(([value,label])=>h('option',{value,key:value},label))))),
+    h('p',{className:'ws-field-hint'},'Exports use full closing stock values in AUD excluding GST, with BAS Excluded. Zero-value account rows are included.'),issues.length>0&&!pending&&h('div',{className:'ws-settings-validation',role:'status'},issues.map((issue,index)=>h('p',{key:index},issue))),
+    pending&&h('p',{className:'ws-field-hint'},'Save status is uncertain. Retry the original request before editing these settings.'),h('div',{className:'ws-actions'},h('button',{type:'button',disabled:loading||busy||!!pending,onClick:reload},'Reload settings'),isAdmin&&h('button',{type:'submit',className:'ws-primary',disabled:busy||loading||storage.unreadable||(!pending&&(!current||issues.length>0))},busy?'Saving…':pending?'Retry save':'Save stocktake settings'))),
+   !form&&!loading&&h('button',{type:'button',onClick:reload},'Reload settings'));
+ };
+};
+
 /* Shared desktop/mobile workshop inventory screen. */
 window.createWorkshopStock = function(React) {
  const h=React.createElement, {useState,useEffect}=React;
@@ -97,16 +157,18 @@ window.createWorkshopStock = function(React) {
    try{localStorage.setItem(countKey,JSON.stringify({...countDraft,request:payload}));setCountDraft({...countDraft,request:payload});
     const r=await PanelStock.apiFetch(workerUrl+'/workshop-stock',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}),d=await r.json();
     if(!r.ok){if(r.status<500){const next={...countDraft};delete next.request;localStorage.setItem(countKey,JSON.stringify(next));setCountDraft(next);}if(r.status===409)await load();throw Error(d.error||'Counts could not be saved.');}
-    localStorage.removeItem(countKey);setCountDraft({counts:{},reference:''});setData(d);setCounting(false);setCountList(true);setReview(false);setNotice('Stocktake saved. Quantities and movement history updated.');if(d.stocktakes?.find(c=>c.id===countId)?.status==='completed'){setCountList(false);setReportId(countId);}
+    localStorage.removeItem(countKey);setCountDraft({counts:{},reference:''});acceptView(d);setCounting(false);setCountList(true);setReview(false);setNotice('Stocktake saved. Quantities and movement history updated.');if(d.stocktakes?.find(c=>c.id===countId)?.status==='completed'){setCountList(false);setReportId(countId);}
    }catch(e){setError(e.message);}finally{setBusy(false);}
   }
   const pendingKey='panelstock:workshop-pending:'+PanelStock.username;
   const [pendingStorage]=useState(()=>workshopPendingStorage(pendingKey));
   const [xeroExport,setXeroExport]=useState(null);
   const can=task=>isAdmin||taskAccess[task]===true;
-  async function load(){try{const r=await PanelStock.apiFetch(workerUrl+'/workshop-stock'),d=await r.json();if(!r.ok)throw Error(d.error||'Workshop stock could not be loaded.');setData(d);if(!pendingStorage.unreadable)setError('');}catch(e){if(!pendingStorage.unreadable)setError(e.message);return false;}}
+  const acceptView=incoming=>setData(current=>mergeWorkshopStockViews(current,incoming));
+  async function load(){try{const r=await PanelStock.apiFetch(workerUrl+'/workshop-stock'),d=await r.json();if(!r.ok)throw Error(d.error||'Workshop stock could not be loaded.');acceptView(d);if(!pendingStorage.unreadable)setError('');}catch(e){if(!pendingStorage.unreadable)setError(e.message);return false;}}
   useEffect(()=>window.PanelStockPullRefresh?.subscribe(()=>load()));
   useEffect(()=>{load();},[stockRevision]);
+  useEffect(()=>{const changed=()=>load();if(typeof window.addEventListener!=='function')return;window.addEventListener('panelstock-stocktake-settings-changed',changed);return()=>window.removeEventListener('panelstock-stocktake-settings-changed',changed);},[]);
   useEffect(()=>{let active=true;setBusy(true);pendingStorage.read().then(saved=>{if(!active)return;if(saved){setPending(saved);setForm(saved.item||saved);}setBusy(false);}).catch(()=>{if(!active)return;pendingStorage.unreadable=true;setError('Could not read the pending stock save. Check browser storage before editing.');});return()=>{active=false;};},[]);
   const change=(key,value)=>setForm(f=>({...f,[key]:value,...(key==='categoryId'?{name:value?categories[value]:''}:{}),...(key==='sku'&&f.action==='create'?(()=>{const p=String(value).trim()&&(data?.items||[]).find(i=>!i.legacy&&String(i.sku).trim().replace(/\s+/g,' ').toLowerCase()===String(value).trim().replace(/\s+/g,' ').toLowerCase());return p?{category:p.category,unit:p.unit,name:p.name,dimensions:p.dimensions||'',image:p.image||''}:{};})():{}),...(key==='category'?{unit:{extrusions:'lengths',fixings:'each',consumables:'packs',offcuts:'lengths'}[value]||'each'}:{})}));
   function open(item,action){const variant=action==='variant';if(variant)action='create';setError('');setNotice('');setPending(null);setForm({action,variant,categoryId:'',catalogId:item?.legacy&&item.category==='offcuts'?item.catalogId||'':undefined,expectedMaterial:item?.legacy?JSON.stringify([item.catalogId||'',item.color,item.material,Number(item.thickness)]):undefined,itemId:variant?undefined:item?.id,quantity:action==='stocktake'?item.qty:'',job:'',reason:'',location:item?.location||'',supplier:item?.supplier||'',unitCost:item?.unitCost??'',costBasis:item?.costBasis||'unit',...(item?.legacy&&item.category==='offcuts'?{costSourceItemId:item.costSourceItemId||''}:{}),packCost:item?.packCost??'',reorderLevel:item?.reorderLevel||0,category:item?.category||'extrusions',unit:item?.unit||'lengths',qty:0,packSize:item?.packSize||1,xeroGroup:item?.xeroGroup||'',name:item?.name||'',sku:variant?item.sku:'',details:item?.details||'',lengthMm:item?.lengthMm??'',dimensions:item?.dimensions||'',colour:variant?'':item?.colour||'',image:item?.image||''});}
@@ -146,11 +208,12 @@ window.createWorkshopStock = function(React) {
    if(form.action==='metadata'&&selected?.costBasis==='catalogue-area')saveForm=Object.fromEntries(Object.entries(form).filter(([key])=>!['unitCost','packCost','packSize','costBasis','costSourceItemId'].includes(key)));
    const payload=pending||{...(form.action==='create'?{action:'create',item:saveForm}:saveForm),...(form.action==='stocktake_create'&&form.uncountedThisMonth?{stocktakeMonth:data.stocktakeMonth.key}:{}),expectedRevision:data.revision,mutationId:crypto.randomUUID()};
    try{await pendingStorage.write(payload);}catch{setError('Browser storage is unavailable. No stock changes were sent.');setBusy(false);return;}setPending(payload);
-   try{const r=await PanelStock.apiFetch(workerUrl+'/workshop-stock',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}),d=await stockSaveResponse(r);if(!r.ok){if(r.status<500&&r.status!==408&&r.status!==429){await pendingStorage.clear();setPending(null);}if(r.status===409)await load();throw Error(d.error||'Stock could not be saved.');}setData(d);await pendingStorage.clear();setForm(null);setPending(null);setNotice(form.action==='stocktake_create'?'Stocktake created. Workers can now select it.':form.action==='bulk_metadata'?'Updated '+form.itemIds.length+' stock items.':form.action==='archive'?'Item removed from active stock. Its history and completed reports are retained.':'Stock saved.');if(form.action==='bulk_metadata')setSelectedIds([]);if(form.action==='archive'){setSelectedIds(ids=>ids.filter(id=>id!==form.itemId));setHistory(null);}if(form.action==='stocktake_create')setCountList(true);}catch(e){setError(stockSaveFailureMessage(e));}finally{setBusy(false);}
+   try{const r=await PanelStock.apiFetch(workerUrl+'/workshop-stock',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}),d=await stockSaveResponse(r);if(!r.ok){if(r.status<500&&r.status!==408&&r.status!==429){await pendingStorage.clear();setPending(null);}if(r.status===409)await load();throw Error(d.error||'Stock could not be saved.');}acceptView(d);await pendingStorage.clear();setForm(null);setPending(null);setNotice(form.action==='stocktake_create'?'Stocktake created. Workers can now select it.':form.action==='bulk_metadata'?'Updated '+form.itemIds.length+' stock items.':form.action==='archive'?'Item removed from active stock. Its history and completed reports are retained.':'Stock saved.');if(form.action==='bulk_metadata')setSelectedIds([]);if(form.action==='archive'){setSelectedIds(ids=>ids.filter(id=>id!==form.itemId));setHistory(null);}if(form.action==='stocktake_create')setCountList(true);}catch(e){setError(stockSaveFailureMessage(e));}finally{setBusy(false);}
   }
   const field=(label,key,type='text',options)=>h('label',{className:'ws-field'+(key==='costSourceItemId'?' ws-area-source-field':''),key},label,options?h('select',{value:form[key],disabled:busy||imageBusy||!!pending||!!(sharedProfile&&['category','unit'].includes(key)),onChange:e=>change(key,e.target.value)},options.map(([v,t])=>h('option',{key:v,value:v},t))):h('input',{type,value:sharedProfile&&['name','dimensions'].includes(key)?sharedProfile[key]||'':form[key]??'',disabled:busy||imageBusy||!!pending||!!(sharedProfile&&['name','dimensions'].includes(key)),min:type==='number'?(key==='packSize'?1:0):undefined,step:type==='number'?(['unitCost','packCost'].includes(key)?'0.01':key==='packSize'?'1':'0.001'):undefined,required:['name','quantity','job'].includes(key)||(key==='packSize'&&form.costBasis==='pack'),placeholder:({name:form.category==='extrusions'?'e.g. 25 × 25 aluminium angle':'e.g. Stainless rivets 4.8 mm',sku:'e.g. ANG-25-3',lengthMm:'e.g. 6000',dimensions:'e.g. 80 × 40 × 3 mm',colour:'e.g. Black, mill finish or timber grain',details:'Additional notes (optional)',location:'e.g. Rack A · Bay 2',supplier:'e.g. Knotwood',job:'Job name or reference',reason:'Add a reference or note'})[key],onChange:e=>change(key,e.target.value)}));
   const button=(label,onClick,disabled=false)=>h('button',{type:'button',onClick,disabled},label);
   const allItems=data?.items||[];
+  const stocktakeGroups=data?.stocktakeSettings?.cosGroups??XeroJournal.groups;
   const stocktakeSuppliers=[...new Set(allItems.filter(i=>!i.legacy).map(i=>String(i.supplier||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   const matchesStocktakeSupplier=i=>!form?.supplier||String(i.supplier||'').trim()===form.supplier;
   const matchesStocktakeScope=i=>!i.legacy&&!i.archivedAt&&matchesStocktakeSupplier(i)&&(!form?.uncountedThisMonth||i.countedThisMonth!==true);
@@ -183,14 +246,16 @@ window.createWorkshopStock = function(React) {
   function openXeroExport(){
    const snapshot=sohSnapshot({...sohExport,includeCostings:true});if(!snapshot)return;
    let saved={};try{saved=JSON.parse(localStorage.getItem(xeroSettingsKey)||'{}')||{};}catch{}
-   const accountCodes={...saved.accountCodes};if(String(accountCodes.asset??'').trim()==='11356')accountCodes.asset='11350';
+   const shared=data.stocktakeSettings,groups=(shared?.cosGroups??XeroJournal.groups).map(group=>({...group}));
+   const accountCodes=shared?{...Object.fromEntries(groups.map(group=>[group.id,group.accountCode])),asset:shared.assetAccountCode}:{...saved.accountCodes};if(!shared&&String(accountCodes.asset??'').trim()==='11356')accountCodes.asset='11350';
    const date=new Date().toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'});
-   setError('');setXeroExport({snapshot,date,narration:xeroNarration(date),basis:'closing',direction:saved.direction||'',categoryGroups:saved.categoryGroups||{},itemGroups:Object.fromEntries(snapshot.rows.filter(r=>r.xeroGroup).map(r=>[r.itemId,r.xeroGroup])),accountCodes,openingBalances:{},trackingName:saved.trackingName??'job',trackingOption:saved.trackingOption??'Factory/Production - BAU'});
+   setError('');setXeroExport({snapshot,date,narration:xeroNarration(date),basis:'closing',groups,settingsRevision:shared?.revision,direction:shared?shared.direction:saved.direction||'',categoryGroups:saved.categoryGroups||{},itemGroups:Object.fromEntries(snapshot.rows.filter(r=>r.xeroGroup).map(r=>[r.itemId,r.xeroGroup])),accountCodes,openingBalances:{},trackingName:shared?shared.trackingName:saved.trackingName??'job',trackingOption:shared?shared.trackingOption:saved.trackingOption??'Factory/Production - BAU'});
   }
   const xeroChange=(key,value)=>setXeroExport(current=>({...current,[key]:value}));
   const xeroMap=(key,id,value)=>setXeroExport(current=>{const next={...current[key]};if(key==='itemGroups'&&!value)delete next[id];else next[id]=value;return {...current,[key]:next};});
   function downloadXero(){
    if(!xeroExport)return;
+   if((xeroExport.settingsRevision??null)!==(data?.stocktakeSettings?.revision??null)){setError('Stocktake settings changed. Reopen this export to use the latest COS accounts.');return;}
    try{
     const prepared=XeroJournal.prepare(xeroExport.snapshot,xeroExport),csv=XeroJournal.csv(prepared);
     const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})),link=document.createElement('a');link.href=url;link.download='Lennox-SOH-Xero-'+xeroExport.date+'.csv';document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
@@ -200,8 +265,9 @@ window.createWorkshopStock = function(React) {
    }catch(e){setError('Xero CSV could not be created: '+e.message);}
   }
   function renderXeroExport(){
-   const x=xeroExport,api=XeroJournal,groups=api.groups;
+   const x=xeroExport,api=XeroJournal,groups=x.groups??api.groups;
    let prepared;try{prepared=api.prepare(x.snapshot,x);}catch(e){prepared={rows:[],issues:[e.message],totals:{balanceCents:0,debitCents:0,creditCents:0}};}
+   if((x.settingsRevision??null)!==(data?.stocktakeSettings?.revision??null))prepared={...prepared,issues:[...prepared.issues,'Stocktake settings changed. Reopen this export to use the latest COS accounts.']};
    let costRows=x.snapshot.rows;try{costRows=window.PanelStockStocktakeReport.soh.prepare(x.snapshot).rows;}catch{}
    const categoryKeys=[...new Set(x.snapshot.rows.map(r=>r.categoryKey))];
    const options=[['','Choose account group'],...groups.map(g=>[g.id,g.label+' · '+g.accountCode])];
@@ -210,13 +276,13 @@ window.createWorkshopStock = function(React) {
    const moneyCents=value=>money(Number(value||0)/100);
    const header=h('div',{className:'ws-count-header'},h('div',{className:'ws-heading'},h('div',null,h('div',{className:'ws-eyebrow'},'LENNOX FACADES / INVENTORY'),h('h3',null,'Xero journal CSV')),button('Back to SOH export',()=>{setXeroExport(null);setError('');})),h('p',null,'Group the selected stock values into the accounts from your Xero import template. Amounts are AUD excluding GST.'));
    const setup=h('div',{className:'ws-xero-fields'},h('label',{className:'ws-field'},'Journal date',h('input',{type:'date','aria-label':'Journal date',value:x.date,onChange:e=>{const date=e.target.value;setXeroExport(current=>({...current,date,narration:date&&current.narration===xeroNarration(current.date)?xeroNarration(date):current.narration}));}})),input('Narration','narration'),
-    h('p',{className:'ws-field-hint'},'Basis: full closing stock value. Factory Stock on Hand is the total of the five stock groups.'),
+    h('p',{className:'ws-field-hint'},'Basis: full closing stock value. Factory Stock on Hand is the total of the configured COS groups.'),
     select('Journal direction',x.direction,[['','Choose debit / credit direction'],['asset-debit','Debit stock asset; credit expenses'],['asset-credit','Credit stock asset; debit expenses']],value=>xeroChange('direction',value)),
     input('Tracking name','trackingName'),input('Tracking option','trackingOption'),h('label',{className:'ws-field'},'Stock asset account',h('input',{'aria-label':'Stock asset account',value:x.accountCodes.asset??'11350',onChange:e=>xeroMap('accountCodes','asset',e.target.value)})));
    const mapping=h('section',{className:'ws-xero-section'},h('h4',null,'Assign SOH categories'),h('p',{className:'ws-field-hint'},'Saved item assignments take priority. Choose defaults for unassigned categories, or override individual items below. To save a shared assignment, use Xero stock group in Edit stock details or Bulk edit.'),h('div',{className:'ws-xero-fields'},categoryKeys.map(key=>select('Account group for '+(categories[key]||key),x.categoryGroups[key]||'',options,value=>xeroMap('categoryGroups',key,value)))));
    const accounts=h('section',{className:'ws-xero-section'},h('h4',null,'Xero accounts'+(x.basis==='adjustment'?' and opening values':'')),h('div',{className:'ws-xero-scroll'},h('table',null,h('thead',null,h('tr',null,h('th',null,'Stock group'),h('th',null,'Account code'),x.basis==='adjustment'&&h('th',null,'Opening value (AUD ex GST)'))),h('tbody',null,groups.map(g=>h('tr',{key:g.id},h('td',null,g.label),h('td',null,h('input',{'aria-label':'Account code for '+g.label,value:x.accountCodes[g.id]??g.accountCode,onChange:e=>xeroMap('accountCodes',g.id,e.target.value)})),x.basis==='adjustment'&&h('td',null,h('input',{'aria-label':'Opening value for '+g.label,type:'number',step:'0.01',value:x.openingBalances[g.id]??'',placeholder:'Enter 0 if none',onChange:e=>xeroMap('openingBalances',g.id,e.target.value)}))))))));
    const assignments=h('details',{className:'ws-xero-section'},h('summary',null,'Review item assignments ('+x.snapshot.rows.length+')'),h('div',{className:'ws-xero-scroll'},h('table',null,h('thead',null,h('tr',null,h('th',null,'Stock item'),h('th',null,'On-hand value'),h('th',null,'Account group override'))),h('tbody',null,costRows.map(r=>h('tr',{key:r.itemId},h('td',null,h('strong',null,r.name),h('small',null,[r.sku,r.colour,r.dimensions].filter(Boolean).join(' · '))),h('td',null,r.lineValue==null?(Number(r.qty)===0?money(0):'Not priced'):money(r.lineValue)),h('td',null,select('Account group for item '+r.name,x.itemGroups[r.itemId]||'',[['','Use category assignment'],...options.slice(1)],value=>xeroMap('itemGroups',r.itemId,value)))))))));
-   const preview=h('section',{className:'ws-xero-section'},h('h4',null,'Journal preview'),h('div',{className:'ws-xero-scroll'},h('table',{'aria-label':'Xero journal preview'},h('thead',null,h('tr',null,['*Narration','*Date','Description','*AccountCode','*TaxRate','*Amount','TrackingName1','TrackingOption1'].map(v=>h('th',{key:v},v)))),h('tbody',null,prepared.rows.map(r=>h('tr',{key:r.groupId},[prepared.narration,prepared.formattedDate,r.description,r.accountCode,r.taxRate,r.amount,r.trackingName,r.trackingOption].map((v,i)=>h('td',{key:i},v))))))),h('p',{className:'ws-field-hint'},'Debits: '+moneyCents(prepared.totals.debitCents)+' · Credits: '+moneyCents(prepared.totals.creditCents)+' · Balance: '+moneyCents(prepared.totals.balanceCents)),h('p',{className:'ws-field-hint'},'All six account rows are included, including zero values. The stock asset line balances the selected expense accounts.'));
+   const preview=h('section',{className:'ws-xero-section'},h('h4',null,'Journal preview'),h('div',{className:'ws-xero-scroll'},h('table',{'aria-label':'Xero journal preview'},h('thead',null,h('tr',null,['*Narration','*Date','Description','*AccountCode','*TaxRate','*Amount','TrackingName1','TrackingOption1'].map(v=>h('th',{key:v},v)))),h('tbody',null,prepared.rows.map(r=>h('tr',{key:r.groupId},[prepared.narration,prepared.formattedDate,r.description,r.accountCode,r.taxRate,r.amount,r.trackingName,r.trackingOption].map((v,i)=>h('td',{key:i},v))))))),h('p',{className:'ws-field-hint'},'Debits: '+moneyCents(prepared.totals.debitCents)+' · Credits: '+moneyCents(prepared.totals.creditCents)+' · Balance: '+moneyCents(prepared.totals.balanceCents)),h('p',{className:'ws-field-hint'},'All '+(groups.length===5?'six':groups.length+1)+' account rows are included, including zero values. The stock asset line balances the selected expense accounts.'));
    const issues=prepared.issues.length?h('div',{className:'ws-xero-issues',role:'status'},h('strong',null,'Complete the following before downloading:'),h('ul',null,prepared.issues.slice(0,15).map((v,i)=>h('li',{key:i},v))),prepared.issues.length>15&&h('p',null,'And '+(prepared.issues.length-15)+' more items.')):h('p',{className:'ws-soh-export-summary',role:'status'},'Journal balanced and ready to download.');
    return h('div',{className:'ws-overlay'},h('div',{className:'ws-dialog ws-count-dialog ws-soh-export ws-xero-dialog',role:'dialog','aria-modal':true,'aria-label':'Xero journal CSV'},header,h('div',{className:'ws-count-body'},h('p',{className:'ws-field-hint'},'Uses the '+x.snapshot.rows.length+' stock items selected in SOH export, including reserved on-hand stock and excluding incoming orders. The journal date does not reconstruct historical stock quantities or costs.'),setup,mapping,accounts,assignments,issues,preview,error&&h('div',{className:'ws-error',role:'alert'},error)),h('div',{className:'ws-actions ws-count-footer'},button('Back to SOH export',()=>{setXeroExport(null);setError('');}),button('Download Xero CSV',downloadXero,busy||prepared.issues.length>0))));
   }
@@ -232,7 +298,7 @@ window.createWorkshopStock = function(React) {
   function toggleSelected(id,checked){setSelectedIds(ids=>checked?[...new Set([...ids,id])]:ids.filter(value=>value!==id));}
   function openBulk(){setError('');setNotice('');setForm({action:'bulk_metadata',itemIds:selectedStock.map(i=>i.id),changes:{}});}
   const bulkHasPanels=form?.action==='bulk_metadata'&&allItems.some(i=>form.itemIds.includes(i.id)&&i.legacy);
-  const xeroGroupChoices=[['','Unassigned'],...XeroJournal.groups.map(g=>[g.id,g.label+' · '+g.accountCode])];
+  const xeroGroupChoices=[['','Unassigned'],...stocktakeGroups.map(g=>[g.id,g.label+' · '+g.accountCode])];
   const bulkFields=[['name','Stock item name','text'],['category','Category','select'],['location','Rack / shelf / bin','text'],['supplier','Supplier','text'],['xeroGroup','Xero stock group','select'],['costBasis','Price entered per','select'],['unitCost','Unit cost (AUD ex GST)','number'],['packCost','Pack price (AUD ex GST)','number'],['packSize','Stock units per pack','number'],['reorderLevel','Reorder level','number'],['colour','Colour / finish','text'],['lengthMm','Length (mm)','number'],['dimensions','Dimensions / profile size','text']];
   function bulkChange(key,value){setForm(f=>({...f,changes:{...f.changes,[key]:value}}));}
   const resetFilters=()=>{setCategory('all');setStatus('all');setSearch('');setAvailableOnly(false);setSupplierFilter('');setLocationFilter('');};
@@ -994,6 +1060,22 @@ License: GPL-2+
   Object.freeze({id:'route-stiffeners',label:'Route Stiffeners & Z Tags',accountCode:'51085'}),
   Object.freeze({id:'silicone',label:'Silicone',accountCode:'51090'})
  ]);
+ const xeroJournalField=(value,maximum)=>typeof value==='string'&&value.trim()&&value.trim().length<=maximum&&!/[\u0000-\u001f\u007f-\u009f<>\u2028\u2029]/.test(value)?value.trim():'';
+ function xeroJournalGroupConfig(input){
+  const source=input===undefined?xeroJournalGroups:input,groups=[],issues=[],ids=new Set();
+  if(!Array.isArray(source)||source.length<1||source.length>50)return {groups,issues:['Configure between 1 and 50 COS groups before exporting.']};
+  for(let index=0;index<source.length;index++){
+   const entry=source[index],id=typeof entry?.id==='string'?entry.id.trim():'',label=xeroJournalField(entry?.label,120),accountCode=xeroJournalField(entry?.accountCode,30);
+   if(!/^[a-z][a-z0-9-]{0,79}$/.test(id)||id==='asset'){issues.push('Enter a valid ID for COS group '+(index+1)+'.');continue;}
+   if(ids.has(id)){issues.push('Each COS group must have a unique ID: '+id+'.');continue;}
+   ids.add(id);
+   if(!label){issues.push('Enter a valid label for COS group '+id+' (up to 120 characters).');continue;}
+   if(!accountCode){issues.push('Enter a valid account code for COS group '+label+' (up to 30 characters).');continue;}
+   groups.push({id,label,accountCode});
+  }
+  return {groups,issues};
+ }
+ const xeroJournalDescription=(id,label,date)=>(id==='cladding'&&label==='Cladding'?'Cladding Stock':id==='fixings'&&label==='Fixings'?'Fixings Stock':label)+' as at '+date.replace(/\//g,'-');
  const xeroJournalLimit=999999999999999n;
  const xeroJournalMoney=cents=>{
   const n=typeof cents==='bigint'?cents:BigInt(cents),absolute=n<0n?-n:n;
@@ -1015,7 +1097,7 @@ License: GPL-2+
  };
  function xeroJournalPrepare(snapshot,options={}){
   const issues=[],own=(object,key)=>object!=null&&Object.prototype.hasOwnProperty.call(object,key);
-  const groups=xeroJournalGroups,known=new Set(groups.map(group=>group.id));
+  const configured=xeroJournalGroupConfig(options.groups),groups=configured.groups,known=new Set(groups.map(group=>group.id));issues.push(...configured.issues);
   const basis=options.basis,direction=options.direction,date=typeof options.date==='string'?options.date:'',formattedDate=xeroJournalDate(date),narration=typeof options.narration==='string'?options.narration.trim():'';
   const trackingName=String(options.trackingName??'job').trim(),trackingOption=String(options.trackingOption??'Factory/Production - BAU').trim();
   if(!['closing','adjustment'].includes(basis))issues.push('Choose the full closing value or an adjustment journal.');
@@ -1038,7 +1120,7 @@ License: GPL-2+
    }
    if(known.has(groupId)&&row.lineValue!==null&&row.lineValue!==undefined)closing[groupId]+=BigInt(Math.round(row.lineValue*100));
   }
-  const opening={},changes={};
+  const opening=Object.create(null),changes=Object.create(null);
   for(const group of groups){
    let amount=0n;
    if(basis==='adjustment'){
@@ -1055,9 +1137,9 @@ License: GPL-2+
   };
   const factor=direction==='asset-debit'?1n:direction==='asset-credit'?-1n:0n;
   const makeRow=(id,label,amount,close,open,change,isAsset=false)=>{
-   const code=own(options.accountCodes,id)?options.accountCodes[id]:(isAsset?'11350':groups.find(group=>group.id===id).accountCode),accountCode=typeof code==='string'||typeof code==='number'?String(code).trim():'';
-   if(!accountCode)issues.push('Enter an account code for '+label+'.');
-   const description=({cladding:'Cladding Stock',fixings:'Fixings Stock'}[id]||label)+' as at '+formattedDate.replace(/\//g,'-');
+   const code=own(options.accountCodes,id)?options.accountCodes[id]:(isAsset?'11350':groups.find(group=>group.id===id).accountCode),accountCode=xeroJournalField(typeof code==='number'?String(code):code,30);
+   if(!accountCode)issues.push('Enter a valid account code for '+label+' (up to 30 characters).');
+   const description=xeroJournalDescription(id,label,formattedDate);
    return {groupId:id,label,description,accountCode,taxRate:'BAS Excluded',amountCents:within(amount,label+' amount'),amount:xeroJournalMoney(amount),trackingName:isAsset?'':trackingName,trackingOption:isAsset?'':trackingOption,closingCents:within(close,label+' closing value'),openingCents:within(open,label+' opening balance'),changeCents:within(change,label+' change')};
   };
   const rows=groups.map(group=>makeRow(group.id,group.label,-factor*changes[group.id],closing[group.id],opening[group.id],changes[group.id]));
@@ -1071,12 +1153,12 @@ License: GPL-2+
  function xeroJournalCsv(prepared){
   if(!prepared||!Array.isArray(prepared.issues)||prepared.issues.length)throw Error(prepared?.issues?.join(' ')||'Prepare a valid stock journal before exporting.');
   const headers=['*Narration','*Date','Description','*AccountCode','*TaxRate','*Amount','TrackingName1','TrackingOption1'];
-  const ids=[...xeroJournalGroups.map(group=>group.id),'asset'];
-  if(!['closing','adjustment'].includes(prepared.basis)||!['asset-debit','asset-credit'].includes(prepared.direction)||!prepared.narration||!xeroJournalDate(prepared.date)||!Array.isArray(prepared.rows)||prepared.rows.length!==ids.length)throw Error('Prepare a valid stock journal before exporting.');
+  const configured=xeroJournalGroupConfig(prepared.groups),groups=configured.groups,ids=[...groups.map(group=>group.id),'asset'];
+  if(prepared.groups===undefined||configured.issues.length||!['closing','adjustment'].includes(prepared.basis)||!['asset-debit','asset-credit'].includes(prepared.direction)||!prepared.narration||!xeroJournalDate(prepared.date)||!Array.isArray(prepared.rows)||prepared.rows.length!==ids.length)throw Error('Prepare a valid stock journal before exporting.');
   let balance=0n;
   for(let index=0;index<ids.length;index++){
-   const row=prepared.rows[index],cents=xeroJournalCents(row.amount),asset=ids[index]==='asset';
-   if(row.groupId!==ids[index]||!String(row.accountCode||'').trim()||row.taxRate!=='BAS Excluded'||cents===null||row.amountCents!==Number(cents)||(!asset&&(!row.trackingName||!row.trackingOption))||(asset&&(row.trackingName||row.trackingOption)))throw Error('Prepare a valid stock journal before exporting.');
+   const row=prepared.rows[index],cents=xeroJournalCents(row?.amount),asset=ids[index]==='asset',label=asset?'Factory Stock on Hand':groups[index].label;
+   if(!row||row.groupId!==ids[index]||row.label!==label||row.description!==xeroJournalDescription(ids[index],label,xeroJournalDate(prepared.date))||!xeroJournalField(row.accountCode,30)||row.taxRate!=='BAS Excluded'||cents===null||row.amountCents!==Number(cents)||(!asset&&(!row.trackingName||!row.trackingOption))||(asset&&(row.trackingName||row.trackingOption)))throw Error('Prepare a valid stock journal before exporting.');
    balance+=cents;
   }
   if(balance!==0n)throw Error('The journal must balance to zero.');

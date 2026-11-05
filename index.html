@@ -13709,6 +13709,7 @@ ${xrefStart}
 
   const catalogKey = item => `${String(item.color || "").trim().toLowerCase()}|${String(item.material || "").trim().toLowerCase()}|${Number(item.thickness)}`;
   const WorkshopStock = window.createWorkshopStock(import_react.default);
+  const StocktakeSettings = window.createStocktakeSettings(import_react.default);
   const PurchaseOrderReceiving = window.createPurchaseOrderReceiving(import_react.default);
   const ExcelOrderAction = window.PanelStockExcelActions.createComponent(import_react.default,PanelStock,BAKED_WORKER_URL,window.PanelStockExcelActions.link);
   function App() {
@@ -18168,6 +18169,7 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
       { key: "notifications", label: "Notifications" },
       ...isAdmin ? [{ key: "dispatch", label: "Dispatch" }] : [],
       ...isAdmin ? [{ key: "schedule", label: "Schedule" }] : [],
+      ...isAdmin ? [{ key: "stocktake", label: "Stocktake" }] : [],
       ...isAdmin ? [{ key: "catalog", label: "Material Catalogue" }] : [],
       ...isAdmin ? [{ key: "reasons", label: "Damage Reasons" }] : [],
       ...isAdmin ? [{ key: "email", label: "Email Reports" }] : [],
@@ -18204,6 +18206,7 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
           section === "notifications" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "max-w-xl mx-auto", children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(NotificationPreferences, {}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PushNotificationControl, {})] }),
           section === "dispatch" && isAdmin && (0, import_jsx_runtime.jsx)(QaSettingsPage, {section:"dispatch"}),
           section === "schedule" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ScheduleSettingsPanel, {}),
+          section === "stocktake" && isAdmin && (0, import_jsx_runtime.jsx)(StocktakeSettings, { workerUrl: workerUrl || BAKED_WORKER_URL, isAdmin }),
           section === "catalog" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CatalogAdmin, { catalog, onAdd: onAddCatalogItem, onRemove: onRemoveCatalogItem, onEdit: onEditCatalogItem, onAddBulk: onAddCatalogItemsBulk, onExportExcel: onExportCatalogExcel, onExportPDF: onExportCatalogPDF }),
           section === "reasons" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "max-w-xl mx-auto", children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
