@@ -45,5 +45,9 @@ test('desktop first installation includes offline CSS and only existing local as
  assert.equal((await h.dispatch('fetch',{url:'https://web.example/index.html?open=notifications',method:'GET',mode:'navigate',headers:new Headers()})).status,200);
  assert.equal(await h.dispatch('fetch',new Request('https://api.example/support')),undefined);
  assert.equal(await h.dispatch('fetch',new Request('https://web.example/index.html?token=secret')),undefined);
+ for(const path of ['/sign-in','/sign-in/','/sign-in/manage','/sign-in/manage/','/sign-in/apple-touch-icon.png']){
+  assert.equal(await h.dispatch('fetch',{url:'https://web.example'+path,method:'GET',mode:'navigate',headers:new Headers()}),undefined,'Attendance must remain outside the desktop offline shell: '+path);
+ }
+ assert.ok([...h.buckets.get('panelstock-shell-v2').keys()].every(url=>!new URL(url).pathname.startsWith('/sign-in')),'Attendance pages must not be cached by the desktop service worker');
  assert.doesNotMatch(source,/cdn.tailwindcss.com/);
 });
