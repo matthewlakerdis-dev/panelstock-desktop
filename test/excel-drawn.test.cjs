@@ -12,10 +12,10 @@ test('drawn links open read-only and confirm against the latest version using th
  for(const orderType of ['Panels','Gate']){
   let finish;const h=harness({...order,orderType},undefined,()=>new Promise(resolve=>finish=resolve));
   await h.controller.load();assert.equal(h.controller.state.phase,'confirm');assert.equal(h.calls.filter(c=>c.options).length,0);
-  const saving=h.controller.submit({status:'completed',drawn:false,stages:{readyForDispatch:'complete'}});await h.controller.submit();
+  const saving=h.controller.submit({areaM2:'12.5',status:'completed',drawn:false,stages:{readyForDispatch:'complete'}});await h.controller.submit();
   const writes=h.calls.filter(c=>c.options);assert.equal(writes.length,1);
   assert.equal(writes[0].url,'https://api.example/orders/'+id+(orderType==='Gate'?'/progress':'/drawing'));
-  assert.deepEqual(JSON.parse(writes[0].options.body),{...(orderType==='Gate'?{stages:{drawn:'complete'}}:{drawn:true}),expectedUpdatedAt:'v1'});
+  assert.deepEqual(JSON.parse(writes[0].options.body),{...(orderType==='Gate'?{stages:{drawn:'complete'},areaM2:12.5}:{drawn:true}),expectedUpdatedAt:'v1'});
   finish(Response.json({ok:true}));assert.equal(await saving,true);assert.equal(h.controller.state.phase,'done');
   assert.match(h.controller.state.message,/marked Drawn/);if(orderType==='Gate')assert.match(h.controller.state.message,/queued for QA/);
  }
@@ -42,4 +42,12 @@ test('uncertain or conflicting drawn saves require reload, and a newer completed
   source.updatedAt='v2';await h.controller.load();await h.controller.submit();assert.equal(JSON.parse(h.calls.at(-1).options.body).expectedUpdatedAt,'v2');
   source.manualDrawing={drawn:true};await h.controller.load();const writes=h.calls.filter(c=>c.options).length;await h.controller.submit();assert.equal(h.controller.state.phase,'done');assert.equal(h.calls.filter(c=>c.options).length,writes);
  }
+});
+
+test('Excel Gate drawing requires total area before writing and allows correction without reloading',async()=>{
+ for(const areaM2 of [undefined,'',0,-1,'no',100000,{},true]){
+  const h=harness({...order,orderType:'Gate'});await h.controller.load();assert.equal(await h.controller.submit({areaM2}),false);assert.equal(h.calls.filter(call=>call.options).length,0);assert.equal(h.controller.state.needsReview,false);assert.match(h.controller.state.error,/total Gate area/);
+  assert.equal(await h.controller.submit({areaM2:8.75}),true);assert.equal(JSON.parse(h.calls.at(-1).options.body).areaM2,8.75);
+ }
+ const h=harness({...order,orderType:'Gate',manualProduction:{areaM2:9,stages:{drawn:'pending'}}});await h.controller.load();assert.equal(await h.controller.submit(),true);assert.equal(JSON.parse(h.calls.at(-1).options.body).areaM2,9);
 });

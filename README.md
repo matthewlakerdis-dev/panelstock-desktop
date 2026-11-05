@@ -19,3 +19,5 @@ One editing tab per app origin is allowed. Pending changes remain tied to the us
 ## Standard operating procedures
 
 [Open the approved SOP (PDF)](PanelStock_SOP.pdf). Both apps use the same user-supplied document. Replace this PDF in both repositories together; do not regenerate it from the retired SOP builders. The app download remains under Settings.
+
+Site Orders require one Villa / location field for new Gate orders, or Location with separate optional Notes for Panels. Saved drafts retain these fields. Gate progress uses Drawn and total order area (m²), required when completing Drawn. Fabricated/QA and Ready for dispatch continue to update from QA.
