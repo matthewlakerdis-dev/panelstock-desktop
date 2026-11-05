@@ -20,4 +20,6 @@ One editing tab per app origin is allowed. Pending changes remain tied to the us
 
 [Open the approved SOP (PDF)](PanelStock_SOP.pdf). Both apps use the same user-supplied document. Replace this PDF in both repositories together; do not regenerate it from the retired SOP builders. The app download remains under Settings.
 
-Site Orders require one Villa / location field for new Gate orders, or Location with separate optional Notes for Panels. Saved drafts retain these fields. Gate progress uses Drawn and total order area (m²), required when completing Drawn. Fabricated/QA and Ready for dispatch continue to update from QA.
+Site Orders require Villa for new Gate orders, or Location with separate optional Notes for Panels. Saved drafts retain these fields. Gate progress uses Drawn and total order area (m²), required when completing Drawn. Fabricated/QA and Ready for dispatch continue to update from QA.
+
+Site Order forms use the same Order details, Site contact, Requested delivery and Notes sections for every type. Gate Villa and Panel Location appear within Order details; Notes is optional for all types. Older note text is restored into the common editor, with distinct historical text retained separately when both saved note fields contain content.
