@@ -64,7 +64,7 @@ test('Xero blocks all unpriced nonzero stock and recalculates instead of trustin
 test('Xero uses only the supplied filtered snapshot and permits unpriced unmapped zero quantity rows',()=>{
  const input=fixture(),config=options();input.rows=[input.rows[1],{itemId:'zero',categoryKey:'unknown',name:'Zero stock',qty:0,unitCost:null}];
  const journal=soh.xero.prepare(input,config);assert.deepEqual(plain(journal.issues),[]);assert.equal(journal.totals.closingCents,300);assert.equal(journal.rows[0].closingCents,0);assert.equal(journal.rows[1].closingCents,300);assert.equal(journal.rows[5].amount,'3.00');
- const rows=parseCSV(soh.xero.csv(journal));assert.equal(rows.length,3);assert.deepEqual(rows.slice(1).map(row=>row[3]),['51066','11350']);
+ const rows=parseCSV(soh.xero.csv(journal));assert.equal(rows.length,7);assert.deepEqual(rows.slice(1).map(row=>row[3]),['51050','51066','51097','51085','51090','11350']);assert.deepEqual(rows.slice(1).map(row=>row[5]),['0.00','-3.00','0.00','0.00','0.00','3.00']);
 });
 test('Xero preserves report half-cent and per-stock-line pack rounding rather than rounding group sums',()=>{
  const input=fixture(),config=options();input.rows=[{itemId:'positive',categoryKey:'other',name:'Half cent',qty:0.5,unitCost:0.01},...Array.from({length:6},(_,i)=>({itemId:'pack'+i,categoryKey:'fixings',name:'Small pack '+i,qty:1,costBasis:'pack',packSize:3,packCost:0.01}))];
@@ -78,9 +78,10 @@ test('Xero requires explicit financial choices, valid dates, narration, codes an
  for(const date of ['2026-04-31','1900-02-29','2026-11-05T00:00:00Z','05/11/2026'])assert.ok(soh.xero.prepare(input,{...options(),date}).issues.some(issue=>/valid journal date/.test(issue)));
  input.rows[0].unitCost=1e9;input.rows[0].qty=1e9;journal=soh.xero.prepare(input,options());assert.ok(journal.issues.some(issue=>/too large/.test(issue)));assert.throws(()=>soh.xero.csv(journal),/too large/);
 });
-test('Xero preview retains zero groups, CSV omits them and an all-zero journal cannot be exported',()=>{
- const input=fixture(),config=options();input.rows=[input.rows[0]];let journal=soh.xero.prepare(input,config);assert.equal(journal.rows.length,6);assert.equal(parseCSV(soh.xero.csv(journal)).length,3);
- input.rows[0].unitCost=0;journal=soh.xero.prepare(input,config);assert.equal(journal.rows.length,6);assert.ok(journal.issues.some(issue=>/no nonzero amounts/.test(issue)));assert.throws(()=>soh.xero.csv(journal),/no nonzero amounts/);
+test('Xero exports every zero-value account row and permits a balanced all-zero journal',()=>{
+ const input=fixture(),config=options();input.rows=[input.rows[0]];let journal=soh.xero.prepare(input,config);assert.equal(journal.rows.length,6);let rows=parseCSV(soh.xero.csv(journal));assert.equal(rows.length,7);assert.deepEqual(rows[2].slice(2),['Fixings Stock as at 29-02-2028','51066','BAS Excluded','0.00','job','Factory/Production - BAU']);assert.equal(rows[3][5],'0.00');assert.equal(rows[4][5],'0.00');assert.equal(rows[5][5],'0.00');
+ input.rows[0].unitCost=0;journal=soh.xero.prepare(input,config);assert.equal(journal.rows.length,6);assert.deepEqual(plain(journal.issues),[]);assert.equal(journal.totals.balanceCents,0);rows=parseCSV(soh.xero.csv(journal));assert.equal(rows.length,7);assert.ok(rows.slice(1).every(row=>row[5]==='0.00'));assert.deepEqual(rows[6].slice(3),['11350','BAS Excluded','0.00','','']);
+ input.rows=[{itemId:'zero',categoryKey:'unmapped',name:'Zero unpriced stock',qty:0,unitCost:null}];journal=soh.xero.prepare(input,config);assert.deepEqual(plain(journal.issues),[]);assert.equal(parseCSV(soh.xero.csv(journal)).length,7);
 });
 test('Xero serialization rejects tampered imbalance and preserves explicitly overridden account codes as strings',()=>{
  const config=options();config.accountCodes={cladding:'0051050',asset:'0011356'};let journal=soh.xero.prepare(fixture(),config);assert.deepEqual(plain(journal.issues),[]);

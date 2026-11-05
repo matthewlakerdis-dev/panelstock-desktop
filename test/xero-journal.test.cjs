@@ -83,3 +83,8 @@ test('saved former default stock accounts are corrected while other explicit acc
   assert.equal(x.node('Stock asset account').props.value,expected);const journal=x.last().result;assert.deepEqual(journal.issues,[]);assert.equal(journal.rows.at(-1).accountCode,expected);assert.equal(journal.rows.at(-1).amount,'157.00');
  }
 });
+
+test('Xero CSV retains a zero-value account row alongside the closing total',async()=>{
+ const x=harness();const fixing=x.states[0].items.find(row=>row.id==='fixing');fixing.qty=0;fixing.reserved=0;fixing.available=0;x.open();x.openXero();configure(x);x.button('Download Xero CSV').props.onClick();
+ const csv=await x.downloads[0].blob.text();assert.equal(csv.trim().split('\r\n').length,7);assert.match(csv,/51066,BAS Excluded,0\.00,/);assert.match(csv,/11350,BAS Excluded,142\.00,/);assert.ok(x.render().some(n=>n.type==='p'&&text(n).includes('All six account rows are included, including zero values.')));
+});
