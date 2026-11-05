@@ -8,10 +8,12 @@
   const normalize=value=>String(value||'').trim().toLowerCase();
   function parseLink(href){
     try{const params=new URL(href).searchParams,id=params.get('orderId'),action=params.get('orderAction');
-      return /^[a-zA-Z0-9-]{16,100}$/.test(id||'')&&['ready','dispatch','schedule'].includes(action)?{id,action}:null;
+      return /^[a-zA-Z0-9-]{16,100}$/.test(id||'')&&['ready','dispatch','schedule','drawn'].includes(action)?{id,action}:null;
     }catch{return null;}
   }
   const manualReady=order=>active.includes(order.status)&&!['panels','gate'].includes(normalize(order.orderType));
+  const drawingOrder=order=>['panels','gate'].includes(normalize(order.orderType));
+  const drawn=order=>normalize(order.orderType)==='gate'?order.manualProduction?.stages?.drawn==='complete':(typeof order.manualDrawing?.drawn==='boolean'?order.manualDrawing.drawn:order.drawingProgress?.drawn)===true;
   const siteLoad=load=>['waiting','ready_for_site'].includes(load.status)&&load.readyForSite===true;
   function createController({link,client,baseUrl,onChange,uuid=()=>crypto.randomUUID()}){
     const owner=client.username;
@@ -39,6 +41,16 @@
           const {order}=await request('/orders/'+encodeURIComponent(link.id));
           if(generation!==version||!current())return;
           if(['dispatched','cancelled'].includes(order.status))publish({order,phase:'blocked',message:'This order is already '+order.status+' and cannot be rescheduled.'});
+          else publish({order,phase:'confirm',message:''});
+        }else if(link.action==='drawn'){
+          const actor=await request('/session');
+          if(generation!==version||!current())return;
+          if(!actor.isAdmin&&!actor.taskAccess?.['site.orders.manage']){publish({phase:'blocked',message:'Site order management access is required to mark an order drawn.'});return;}
+          const {order}=await request('/orders/'+encodeURIComponent(link.id));
+          if(generation!==version||!current())return;
+          if(['dispatched','cancelled'].includes(order.status))publish({order,phase:'blocked',message:'This order is already '+order.status+' and cannot be marked drawn.'});
+          else if(!drawingOrder(order))publish({order,phase:'blocked',message:'Mark drawn is only available for panel and gate orders.'});
+          else if(drawn(order))publish({order,phase:'done',message:'This order is already marked Drawn. Use Refresh All in Excel to update the tracker.'});
           else publish({order,phase:'confirm',message:''});
         }else if(link.action==='ready'){
           const {order}=await request('/orders/'+encodeURIComponent(link.id));
@@ -71,7 +83,7 @@
     async function submit(details={}){
       if(locked||!current()||state.phase!=='confirm'||state.needsReview)return false;
       const panel=link.action==='dispatch'&&state.order.usesPanelLoads;
-      if(link.action==='ready'&&!manualReady(state.order)||panel&&!siteLoad(state.selected||{}))return false;
+      if(link.action==='ready'&&!manualReady(state.order)||link.action==='drawn'&&(!drawingOrder(state.order)||drawn(state.order)||['dispatched','cancelled'].includes(state.order.status))||panel&&!siteLoad(state.selected||{}))return false;
       locked=true;publish({busy:true,error:''});
       try{
         if(link.action==='schedule'){
@@ -81,6 +93,10 @@
           if(typeof time!=='string'||time&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(time))throw Error('Choose a valid delivery time or leave it blank.');
           const result=await request('/orders/'+encodeURIComponent(link.id)+'/delivery',{scheduledDeliveryDate:date,scheduledDeliveryTime:time,expectedUpdatedAt:state.order.updatedAt||state.order.createdAt||''});
           publish({phase:'done',message:(result.unchanged?'Delivery schedule is unchanged.':clear?'Delivery schedule cleared.':'Delivery scheduled.')+' Use Refresh All in Excel to update the tracker.'});
+        }else if(link.action==='drawn'){
+          const gate=normalize(state.order.orderType)==='gate';
+          await request('/orders/'+encodeURIComponent(link.id)+(gate?'/progress':'/drawing'),{...(gate?{stages:{drawn:'complete'}}:{drawn:true}),expectedUpdatedAt:state.order.updatedAt||state.order.createdAt||''});
+          publish({phase:'done',message:'Order marked Drawn.'+(gate?' Gate items are now queued for QA.':'')+' Use Refresh All in Excel to update the tracker.'});
         }else if(link.action==='ready'){
           await request('/orders/'+encodeURIComponent(link.id)+'/status',{status:'completed',expectedUpdatedAt:state.order.updatedAt||state.order.createdAt||''});
           publish({phase:'done',message:'Order marked Ready for dispatch. Use Refresh All in Excel to update the tracker.'});
@@ -94,7 +110,7 @@
           publish({phase:'done',message:'Order dispatched. Use Refresh All in Excel to update the tracker.'});
         }
         return true;
-      }catch(error){publish({error:error.message,needsReview:error.status===409||panel||link.action==='ready'});return false;}
+      }catch(error){publish({error:error.message,needsReview:error.status===409||panel||['ready','drawn'].includes(link.action)});return false;}
       finally{locked=false;publish({busy:false});}
     }
     return {load,selectLoad,submit,get state(){return state;},dispose(){disposed=true;version++;}};
@@ -125,8 +141,8 @@
           else if(!event.shiftKey&&(document.activeElement===last||document.activeElement===dialog.current)){event.preventDefault();first?.focus();}
         }
       };
-      const heading=link.action==='schedule'?'Schedule delivery':link.action==='ready'?'Mark ready for dispatch':'Dispatch to site';
-      const confirm=state.phase==='confirm',dispatch=link.action==='dispatch',schedule=link.action==='schedule';
+      const heading=link.action==='drawn'?'Mark drawn':link.action==='schedule'?'Schedule delivery':link.action==='ready'?'Mark ready for dispatch':'Dispatch to site';
+      const confirm=state.phase==='confirm',dispatch=link.action==='dispatch',schedule=link.action==='schedule',drawing=link.action==='drawn';
       return h('div',{className:'ps-excel-action-backdrop'},h('section',{className:'ps-excel-action',role:'dialog','aria-modal':true,'aria-label':heading,tabIndex:-1,ref:dialog,onKeyDown:keyDown},
         h('header',null,h('div',null,h('small',null,'Production Tracker'),h('h2',null,heading)),h('button',{type:'button',disabled:state.busy,onClick:close,'aria-label':'Close order action'},'Close')),
         state.order&&h('p',{className:'ps-excel-action-order'},'Order #'+state.order.orderNumber+' · '+state.order.project),
@@ -137,7 +153,8 @@
           !state.loads.length&&h('p',null,'No panel loads are available for this order.'),
           state.loads.map(load=>h('article',{key:load.id,className:'ps-excel-action-load'},h('div',null,h('strong',null,load.project+' · Order '+load.orderNumber),h('p',null,(load.items?.length||load.panelIds?.length||0)+' panels · '+(load.status==='dispatched_to_site'?'Dispatched to site':siteLoad(load)?'Ready for site':'Waiting for production / coating / QA'))),siteLoad(load)&&h('button',{type:'button',disabled:state.busy,onClick:()=>controller.current?.selectLoad(load.id)},'Dispatch this load')))),
         confirm&&h('form',{onSubmit:event=>{event.preventDefault();void controller.current?.submit(details);}},
-          !dispatch&&!schedule&&h('p',null,'Confirm that this order is ready for dispatch. This will update its status in PanelStockHQ.'),
+          !dispatch&&!schedule&&!drawing&&h('p',null,'Confirm that this order is ready for dispatch. This will update its status in PanelStockHQ.'),
+          drawing&&h('p',null,normalize(state.order.orderType)==='gate'?'Confirm the drawings for this gate order are complete. Each gate item will be sent to the QA Centre; QA approval will update dispatch readiness automatically.':'Confirm the drawings for this panel order are complete.'),
           schedule&&h('div',null,
             h('p',null,'Requested delivery: '+(state.order.requestedDeliveryDate?state.order.requestedDeliveryDate.split('-').reverse().join('/'):'Not set')),
             h('label',null,'Scheduled delivery date',h('input',{type:'date',required:true,value:details.scheduledDeliveryDate,disabled:state.busy,onChange:event=>{const value=event.target.value;setDetails(current=>({...current,scheduledDeliveryDate:value}));}})),
@@ -145,7 +162,7 @@
           dispatch&&h('div',null,state.selected&&h('p',null,'Dispatching the selected panel load to site.'),
             [['destination','Site address'],['transport','Vehicle / transport company'],['driver','Driver']].map(([key,label])=>h('label',{key},label,h('input',{required:true,maxLength:300,value:details[key],disabled:state.busy,onChange:event=>{const value=event.target.value;setDetails(current=>({...current,[key]:value}));}}))),
             h('label',null,'Notes (optional)',h('textarea',{maxLength:5000,rows:3,value:details.notes,disabled:state.busy,onChange:event=>{const value=event.target.value;setDetails(current=>({...current,notes:value}));}}))),
-          h('footer',null,h('button',{type:'button',disabled:state.busy,onClick:close},'Cancel'),schedule&&state.order.scheduledDeliveryDate&&h('button',{type:'button',disabled:state.busy||state.needsReview,onClick:()=>{void controller.current?.submit({...details,clearSchedule:true});}},'Clear schedule'),h('button',{type:'submit',className:'ps-excel-action-primary',disabled:state.busy||state.needsReview},state.busy?'Saving…':schedule?'Save schedule':dispatch?'Confirm dispatch':'Confirm ready for dispatch'))),
+          h('footer',null,h('button',{type:'button',disabled:state.busy,onClick:close},'Cancel'),schedule&&state.order.scheduledDeliveryDate&&h('button',{type:'button',disabled:state.busy||state.needsReview,onClick:()=>{void controller.current?.submit({...details,clearSchedule:true});}},'Clear schedule'),h('button',{type:'submit',className:'ps-excel-action-primary',disabled:state.busy||state.needsReview},state.busy?'Saving…':drawing?'Confirm drawn':schedule?'Save schedule':dispatch?'Confirm dispatch':'Confirm ready for dispatch'))),
         !state.busy&&h('footer',null,h('button',{type:'button',onClick:reload},state.needsReview?'Reload latest status':'Refresh status'),state.phase!=='confirm'&&h('button',{type:'button',onClick:close},'Close'))));
     };
   }
