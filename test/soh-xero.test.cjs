@@ -27,7 +27,7 @@ test('Xero closing journal uses exact unit, pack and offcut line valuations and 
  const input=fixture(),config=options(),before=JSON.stringify({input,config}),journal=soh.xero.prepare(input,config);
  assert.deepEqual(plain(journal.issues),[]);assert.equal(journal.rows.length,6);assert.equal(journal.formattedDate,'29/02/2028');
  assert.deepEqual(Array.from(journal.rows,row=>row.amountCents),[-20030,-300,1,-250,-1275,21854]);
- assert.deepEqual(Array.from(journal.rows,row=>row.accountCode),['51050','51066','51097','51085','51090','11356']);
+ assert.deepEqual(Array.from(journal.rows,row=>row.accountCode),['51050','51066','51097','51085','51090','11350']);
  assert.deepEqual(Array.from(journal.rows,row=>row.amount),['-200.30','-3.00','0.01','-2.50','-12.75','218.54']);
  assert.deepEqual(Array.from(journal.rows,row=>row.description),['Cladding Stock as at 29-02-2028','Fixings Stock as at 29-02-2028','Materials & Supplies as at 29-02-2028','Route Stiffeners & Z Tags as at 29-02-2028','Silicone as at 29-02-2028','Factory Stock on Hand as at 29-02-2028']);
  assert.equal(journal.totals.closingCents,21854);assert.equal(journal.totals.assetCents,21854);assert.equal(journal.totals.balanceCents,0);assert.equal(journal.totals.debitCents,journal.totals.creditCents);
@@ -64,7 +64,7 @@ test('Xero blocks all unpriced nonzero stock and recalculates instead of trustin
 test('Xero uses only the supplied filtered snapshot and permits unpriced unmapped zero quantity rows',()=>{
  const input=fixture(),config=options();input.rows=[input.rows[1],{itemId:'zero',categoryKey:'unknown',name:'Zero stock',qty:0,unitCost:null}];
  const journal=soh.xero.prepare(input,config);assert.deepEqual(plain(journal.issues),[]);assert.equal(journal.totals.closingCents,300);assert.equal(journal.rows[0].closingCents,0);assert.equal(journal.rows[1].closingCents,300);assert.equal(journal.rows[5].amount,'3.00');
- const rows=parseCSV(soh.xero.csv(journal));assert.equal(rows.length,3);assert.deepEqual(rows.slice(1).map(row=>row[3]),['51066','11356']);
+ const rows=parseCSV(soh.xero.csv(journal));assert.equal(rows.length,3);assert.deepEqual(rows.slice(1).map(row=>row[3]),['51066','11350']);
 });
 test('Xero preserves report half-cent and per-stock-line pack rounding rather than rounding group sums',()=>{
  const input=fixture(),config=options();input.rows=[{itemId:'positive',categoryKey:'other',name:'Half cent',qty:0.5,unitCost:0.01},...Array.from({length:6},(_,i)=>({itemId:'pack'+i,categoryKey:'fixings',name:'Small pack '+i,qty:1,costBasis:'pack',packSize:3,packCost:0.01}))];
