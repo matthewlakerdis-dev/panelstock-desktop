@@ -71,3 +71,18 @@ test('bulk selections containing a derived panel or offcut disable pricing chang
 test('a bulk selection containing only manually priced items retains editable price controls',async()=>{
  const x=harness();x.selectItem('Manual full panel');x.selectItem('Manual fixing');x.button('Bulk edit').props.onClick();const field=x.bulkField('unitCost'),checkbox=walk(field).find(n=>n.type==='input'&&n.props.type==='checkbox');assert.equal(checkbox.props.disabled,false);checkbox.props.onChange({target:{checked:true}});const editor=x.node('Unit cost (AUD ex GST)');assert.equal(editor.props.disabled,false);editor.props.onChange({target:{value:'12.40'}});const payload=await x.save();assert.equal(payload.action,'bulk_metadata');assert.equal(payload.changes.unitCost,'12.40');
 });
+
+test('unresolved catalogue pricing shows its actual reason and distinguishable priced catalogue choices',()=>{
+ const cases={conflicting_rates:'Catalogue prices conflict',unpriced_material:'Set price per m² in Catalogue',no_matching_material:'Link the correct catalogue material',invalid_material:'Check colour, material and thickness'};
+ for(const [status,hint] of Object.entries(cases)){
+  const x=harness(),item=x.states[0].items.find(i=>i.id==='offcut:area');item.areaCost=null;item.areaCostSources=[];item.cataloguePricingStatus=status;
+  x.states[0].catalog=[{id:'priced-a',color:'White',material:'ACP',thickness:3,unitCostPerM2:84},{id:'priced-b',color:'White',material:'ACP',thickness:3,unitCostPerM2:90}];
+  assert.ok(x.render().some(n=>n.props.className==='ws-unit-cost'&&text(n).includes(hint)));x.openItem('Source-priced offcut');
+  assert.ok(x.render().some(n=>n.type==='p'&&text(n).includes(hint)));const choices=walk(x.control('catalogId')).filter(n=>n.type==='option').map(text);assert.ok(choices.some(v=>v.includes('$84.00')));assert.ok(choices.some(v=>v.includes('$90.00')));
+ }
+});
+
+test('an available manual full-sheet fallback price is retained when a catalogue rate is unavailable',()=>{
+ const x=harness(),item=x.states[0].items.find(i=>i.id==='offcut:area');item.cataloguePricingStatus='unpriced_material';
+ assert.ok(x.render().some(n=>n.props.className==='ws-unit-cost'&&text(n).includes('/ m² (AUD ex GST)')));x.openItem('Source-priced offcut');assert.ok(x.control('costSourceItemId'));
+});
