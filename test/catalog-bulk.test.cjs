@@ -3,7 +3,9 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 const html=fs.readFileSync(require('node:path').join(__dirname,'../index.html'),'utf8');
-const source=html.slice(html.indexOf('  function prepareCatalogBulkRows('),html.indexOf('  function CatalogAdmin('));
+const priceSource=html.slice(html.indexOf('  function catalogPricePatch('),html.indexOf('  function CatalogSingleForm('));
+const source=priceSource+html.slice(html.indexOf('  function prepareCatalogBulkRows('),html.indexOf('  function CatalogAdmin('));
+const catalogPricePatch=vm.runInNewContext(priceSource+';catalogPricePatch');
 const prepare=vm.runInNewContext(source+';prepareCatalogBulkRows');
 const shared={material:' Solid Aluminium ',color:' White '};
 const line={thickness:'3',width:'1200',height:'2400'};
@@ -25,7 +27,7 @@ test('catalog batch creates material definitions without creating sized stock ro
  const start=html.indexOf('    function addCatalogItemsBulk('),end=html.indexOf('    function removeCatalogItem(',start);
  const catalog=[{id:'old'}],variants=[{id:'stock',qty:27}];let saved=[],logs=[],id=0;
  const rows=prepare(shared,[line,{...line,width:'1500'}]).rows;
- vm.runInNewContext(html.slice(start,end)+';addCatalogItemsBulk(rows);',{rows,catalog,variants,uid:()=>String(++id),genSku:()=> 'SKU'+(++id),setCatalog(){},setVariants(){},persist:next=>saved.push(next),logTxn:tx=>logs.push(tx),showToast(){}});
+ vm.runInNewContext(html.slice(start,end)+';addCatalogItemsBulk(rows);',{rows,catalog,variants,catalogPricePatch,uid:()=>String(++id),genSku:()=> 'SKU'+(++id),setCatalog(){},setVariants(){},persist:next=>saved.push(next),logTxn:tx=>logs.push(tx),showToast(){}});
  assert.equal(saved.length,1);assert.equal(logs.length,1);assert.equal(saved[0].variants,undefined);
  assert.equal(saved[0].catalog.length,3);
  for(let i=1;i<=2;i++){const c=saved[0].catalog[i];assert.equal(c.width,0);assert.equal(c.height,0);}

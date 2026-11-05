@@ -59,6 +59,7 @@ function workshopPendingStorage(key) {
 window.createWorkshopStock = function(React) {
  const h=React.createElement, {useState,useEffect}=React;
  const PurchaseOrderReceiving=window.createPurchaseOrderReceiving(React);
+ const XeroJournal=window.PanelStockStocktakeReport.soh.xero;
  const defaultCategories={all:'All Stock',panels:'Panels',extrusions:'Extrusions',fixings:'Fixings',consumables:'Consumables',offcuts:'Offcuts'};
  const actions={receive:'Receive delivery',reserve:'Reserve for job',use:'Record usage',return:'Return from job',release:'Release reservation',damage:'Record damage',stocktake:'Stocktake count',metadata:'Edit stock details',category_save:'Manage categories',stocktake_create:'Create stocktake',bulk_metadata:'Bulk edit stock',archive:'Remove stock item'};
  return function WorkshopStock({workerUrl,isAdmin,taskAccess={},onPanels,onAddOffcut,onExportExcel,onExportPDF,stockRevision}){
@@ -101,13 +102,14 @@ window.createWorkshopStock = function(React) {
   }
   const pendingKey='panelstock:workshop-pending:'+PanelStock.username;
   const [pendingStorage]=useState(()=>workshopPendingStorage(pendingKey));
+  const [xeroExport,setXeroExport]=useState(null);
   const can=task=>isAdmin||taskAccess[task]===true;
   async function load(){try{const r=await PanelStock.apiFetch(workerUrl+'/workshop-stock'),d=await r.json();if(!r.ok)throw Error(d.error||'Workshop stock could not be loaded.');setData(d);if(!pendingStorage.unreadable)setError('');}catch(e){if(!pendingStorage.unreadable)setError(e.message);return false;}}
   useEffect(()=>window.PanelStockPullRefresh?.subscribe(()=>load()));
   useEffect(()=>{load();},[stockRevision]);
   useEffect(()=>{let active=true;setBusy(true);pendingStorage.read().then(saved=>{if(!active)return;if(saved){setPending(saved);setForm(saved.item||saved);}setBusy(false);}).catch(()=>{if(!active)return;pendingStorage.unreadable=true;setError('Could not read the pending stock save. Check browser storage before editing.');});return()=>{active=false;};},[]);
   const change=(key,value)=>setForm(f=>({...f,[key]:value,...(key==='categoryId'?{name:value?categories[value]:''}:{}),...(key==='sku'&&f.action==='create'?(()=>{const p=String(value).trim()&&(data?.items||[]).find(i=>!i.legacy&&String(i.sku).trim().replace(/\s+/g,' ').toLowerCase()===String(value).trim().replace(/\s+/g,' ').toLowerCase());return p?{category:p.category,unit:p.unit,name:p.name,dimensions:p.dimensions||'',image:p.image||''}:{};})():{}),...(key==='category'?{unit:{extrusions:'lengths',fixings:'each',consumables:'packs',offcuts:'lengths'}[value]||'each'}:{})}));
-  function open(item,action){const variant=action==='variant';if(variant)action='create';setError('');setNotice('');setPending(null);setForm({action,variant,categoryId:'',catalogId:item?.legacy&&item.category==='offcuts'?item.catalogId||'':undefined,expectedMaterial:item?.legacy?JSON.stringify([item.catalogId||'',item.color,item.material,Number(item.thickness)]):undefined,itemId:variant?undefined:item?.id,quantity:action==='stocktake'?item.qty:'',job:'',reason:'',location:item?.location||'',supplier:item?.supplier||'',unitCost:item?.unitCost??'',costBasis:item?.costBasis||'unit',...(item?.legacy&&item.category==='offcuts'?{costSourceItemId:item.costSourceItemId||''}:{}),packCost:item?.packCost??'',reorderLevel:item?.reorderLevel||0,category:item?.category||'extrusions',unit:item?.unit||'lengths',qty:0,packSize:item?.packSize||1,name:item?.name||'',sku:variant?item.sku:'',details:item?.details||'',lengthMm:item?.lengthMm??'',dimensions:item?.dimensions||'',colour:variant?'':item?.colour||'',image:item?.image||''});}
+  function open(item,action){const variant=action==='variant';if(variant)action='create';setError('');setNotice('');setPending(null);setForm({action,variant,categoryId:'',catalogId:item?.legacy&&item.category==='offcuts'?item.catalogId||'':undefined,expectedMaterial:item?.legacy?JSON.stringify([item.catalogId||'',item.color,item.material,Number(item.thickness)]):undefined,itemId:variant?undefined:item?.id,quantity:action==='stocktake'?item.qty:'',job:'',reason:'',location:item?.location||'',supplier:item?.supplier||'',unitCost:item?.unitCost??'',costBasis:item?.costBasis||'unit',...(item?.legacy&&item.category==='offcuts'?{costSourceItemId:item.costSourceItemId||''}:{}),packCost:item?.packCost??'',reorderLevel:item?.reorderLevel||0,category:item?.category||'extrusions',unit:item?.unit||'lengths',qty:0,packSize:item?.packSize||1,xeroGroup:item?.xeroGroup||'',name:item?.name||'',sku:variant?item.sku:'',details:item?.details||'',lengthMm:item?.lengthMm??'',dimensions:item?.dimensions||'',colour:variant?'':item?.colour||'',image:item?.image||''});}
   useEffect(()=>{if(!preview)return;const close=e=>{if(e.key==='Escape')setPreview(null);};document.addEventListener('keydown',close);return()=>document.removeEventListener('keydown',close);},[preview]);
   async function uploadImage(event){
    const file=event.target.files?.[0];event.target.value='';if(!file)return;
@@ -130,7 +132,9 @@ window.createWorkshopStock = function(React) {
   }
   async function save(e){e.preventDefault();if(imageBusy||busy||(!pending&&!data))return;setBusy(true);setError('');setNotice('');
    if(!pending&&form.action==='stocktake_create'&&form.uncountedThisMonth&&(!data?.stocktakeMonth?.key||!stocktakeEligibleItems.length)){setBusy(false);return;}
-   const payload=pending||{...(form.action==='create'?{action:'create',item:form}:form),...(form.action==='stocktake_create'&&form.uncountedThisMonth?{stocktakeMonth:data.stocktakeMonth.key}:{}),expectedRevision:data.revision,mutationId:crypto.randomUUID()};
+   let saveForm=form;
+   if(form.action==='metadata'&&selected?.costBasis==='catalogue-area')saveForm=Object.fromEntries(Object.entries(form).filter(([key])=>!['unitCost','packCost','packSize','costBasis','costSourceItemId'].includes(key)));
+   const payload=pending||{...(form.action==='create'?{action:'create',item:saveForm}:saveForm),...(form.action==='stocktake_create'&&form.uncountedThisMonth?{stocktakeMonth:data.stocktakeMonth.key}:{}),expectedRevision:data.revision,mutationId:crypto.randomUUID()};
    try{await pendingStorage.write(payload);}catch{setError('Browser storage is unavailable. No stock changes were sent.');setBusy(false);return;}setPending(payload);
    try{const r=await PanelStock.apiFetch(workerUrl+'/workshop-stock',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}),d=await r.json();if(!r.ok){if(r.status<500){await pendingStorage.clear();setPending(null);}if(r.status===409)await load();throw Error(d.error||'Stock could not be saved.');}setData(d);await pendingStorage.clear();setForm(null);setPending(null);setNotice(form.action==='stocktake_create'?'Stocktake created. Workers can now select it.':form.action==='bulk_metadata'?'Updated '+form.itemIds.length+' stock items.':form.action==='archive'?'Item removed from active stock. Its history and completed reports are retained.':'Stock saved.');if(form.action==='bulk_metadata')setSelectedIds([]);if(form.action==='archive'){setSelectedIds(ids=>ids.filter(id=>id!==form.itemId));setHistory(null);}if(form.action==='stocktake_create')setCountList(true);}catch(e){setError(e.message+' If the connection failed, retry the same save to avoid duplicates.');}finally{setBusy(false);}
   }
@@ -149,18 +153,61 @@ window.createWorkshopStock = function(React) {
   const openSOHExport=()=>{setError('');setSohExport({categoryIds:category==='all'?exportCategoryKeys:[category],supplierFilter,locationFilter,availableOnly,status,search,sort,includeCostings:false});};
   const exportChange=(key,value)=>setSohExport(current=>({...current,[key]:value}));
   const filterOptions=(key,emptyLabel)=>[...new Set(allItems.map(i=>String(i[key]||'').trim()))].sort((a,b)=>a.localeCompare(b)).map(v=>h('option',{key:JSON.stringify(v),value:JSON.stringify(v)},v||emptyLabel));
-  function exportSOH(format){
+  function sohSnapshot(scope){
    if(!data||!sohExport||!exportItems.length)return;
    const statuses={all:'All statuses',reorder:'Needs restocking',reserved:'Allocated to jobs',unassigned:'Location needed'},sorts={name:'Item name',available:'Lowest available',location:'Location'};
    const chosen=(value,empty,all)=>value?JSON.parse(value)||empty:all;
-   const scope=sohExport;
    const filters=['Categories: '+scope.categoryIds.map(k=>categories[k]||k).join(' / '),'Supplier: '+chosen(scope.supplierFilter,'No supplier','All suppliers'),'Location: '+chosen(scope.locationFilter,'No location','All locations'),'Status: '+statuses[scope.status],scope.availableOnly?'Available stock only':'All stock levels',...(scope.search.trim()?['Search: '+scope.search.trim()]:[]),'Sort: '+sorts[scope.sort]];
-   const snapshot={kind:'soh',name:'Stock on hand',generatedAt:new Date().toISOString(),revision:data.revision,includeCostings:scope.includeCostings===true,categories:filters,supplier:chosen(scope.supplierFilter,'No supplier','All suppliers'),rows:exportItems.map(i=>({
-    itemId:i.id,sku:i.sku||'',name:i.name||'',category:categories[i.category]||i.category||'',colour:i.colour||i.color||'',lengthMm:i.lengthMm??null,
+   return {kind:'soh',name:'Stock on hand',generatedAt:new Date().toISOString(),revision:data.revision,includeCostings:scope.includeCostings===true,categories:filters,supplier:chosen(scope.supplierFilter,'No supplier','All suppliers'),rows:exportItems.map(i=>({
+    itemId:i.id,sku:i.sku||'',name:i.name||'',categoryKey:i.category,xeroGroup:i.xeroGroup||'',category:categories[i.category]||i.category||'',colour:i.colour||i.color||'',lengthMm:i.lengthMm??null,
     dimensions:i.legacy?[i.material,i.thickness?i.thickness+' mm':'',i.width&&i.height?i.width+' x '+i.height+' mm':''].filter(Boolean).join(' / '):i.dimensions||i.details||'',
-    location:i.location||'',supplier:i.supplier||'',unit:i.unit||'',qty:Number(i.qty||0),reserved:Number(i.reserved||0),available:Number(i.available??i.qty??0),onOrder:Number(i.onOrder||0),reorderLevel:Number(i.reorderLevel||0),...(scope.includeCostings?{unitCost:i.unitCost===null||i.unitCost===undefined||i.unitCost===''?null:Number(i.unitCost),costBasis:i.costBasis||'unit',packCost:i.packCost===null||i.packCost===undefined||i.packCost===''?null:Number(i.packCost),packSize:i.packSize??1,...(i.costBasis==='area'?{areaCost:i.areaCost?{...i.areaCost}:null,areaCostStatus:i.areaCostStatus||'',width:i.width,height:i.height}:{})}:{}),status:i.available<=0?'Out of stock':i.available<=Number(i.reorderLevel||0)?'Needs restocking':'In stock'
+    location:i.location||'',supplier:i.supplier||'',unit:i.unit||'',qty:Number(i.qty||0),reserved:Number(i.reserved||0),available:Number(i.available??i.qty??0),onOrder:Number(i.onOrder||0),reorderLevel:Number(i.reorderLevel||0),...(scope.includeCostings?{unitCost:i.unitCost===null||i.unitCost===undefined||i.unitCost===''?null:Number(i.unitCost),costBasis:i.costBasis||'unit',packCost:i.packCost===null||i.packCost===undefined||i.packCost===''?null:Number(i.packCost),packSize:i.packSize??1,...(i.costBasis==='area'?{areaCost:i.areaCost?{...i.areaCost}:null,areaCostStatus:i.areaCostStatus||'',width:i.width,height:i.height}:{}),...(i.costBasis==='catalogue-area'?{catalogueCost:i.catalogueCost?{...i.catalogueCost}:null,width:i.width,height:i.height}:{})}:{}),status:i.available<=0?'Out of stock':i.available<=Number(i.reorderLevel||0)?'Needs restocking':'In stock'
    }))};
+  }
+  function exportSOH(format){
+   const snapshot=sohSnapshot(sohExport);if(!snapshot)return;
    try{const blob=window.PanelStockStocktakeReport.soh[format](snapshot),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='Lennox-SOH-'+new Date().toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})+'.'+format;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);setNotice('Exported '+exportItems.length+' matching stock items.');}catch(e){setError('SOH export could not be created: '+e.message);}
+  }
+  const xeroSettingsKey='panelstock:xero-settings:v1:'+workerUrl+':'+PanelStock.username;
+  const xeroNarration=date=>'Stock Take for Factory '+new Date(date+'T00:00:00Z').toLocaleDateString('en-AU',{month:'short',year:'numeric',timeZone:'Australia/Brisbane'}).replace(' ','-');
+  function openXeroExport(){
+   const snapshot=sohSnapshot({...sohExport,includeCostings:true});if(!snapshot)return;
+   let saved={};try{saved=JSON.parse(localStorage.getItem(xeroSettingsKey)||'{}')||{};}catch{}
+   const date=new Date().toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'});
+   setError('');setXeroExport({snapshot,date,narration:xeroNarration(date),basis:'closing',direction:saved.direction||'',categoryGroups:saved.categoryGroups||{},itemGroups:Object.fromEntries(snapshot.rows.filter(r=>r.xeroGroup).map(r=>[r.itemId,r.xeroGroup])),accountCodes:saved.accountCodes||{},openingBalances:{},trackingName:saved.trackingName??'job',trackingOption:saved.trackingOption??'Factory/Production - BAU'});
+  }
+  const xeroChange=(key,value)=>setXeroExport(current=>({...current,[key]:value}));
+  const xeroMap=(key,id,value)=>setXeroExport(current=>{const next={...current[key]};if(key==='itemGroups'&&!value)delete next[id];else next[id]=value;return {...current,[key]:next};});
+  function downloadXero(){
+   if(!xeroExport)return;
+   try{
+    const prepared=XeroJournal.prepare(xeroExport.snapshot,xeroExport),csv=XeroJournal.csv(prepared);
+    const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})),link=document.createElement('a');link.href=url;link.download='Lennox-SOH-Xero-'+xeroExport.date+'.csv';document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+    const {direction,categoryGroups,accountCodes,trackingName,trackingOption}=xeroExport;
+    try{localStorage.setItem(xeroSettingsKey,JSON.stringify({direction,categoryGroups,accountCodes,trackingName,trackingOption}));}catch{}
+    setNotice('Downloaded the Xero journal CSV. Import it into Xero as a manual journal.');setError('');
+   }catch(e){setError('Xero CSV could not be created: '+e.message);}
+  }
+  function renderXeroExport(){
+   const x=xeroExport,api=XeroJournal,groups=api.groups;
+   let prepared;try{prepared=api.prepare(x.snapshot,x);}catch(e){prepared={rows:[],issues:[e.message],totals:{balanceCents:0,debitCents:0,creditCents:0}};}
+   let costRows=x.snapshot.rows;try{costRows=window.PanelStockStocktakeReport.soh.prepare(x.snapshot).rows;}catch{}
+   const categoryKeys=[...new Set(x.snapshot.rows.map(r=>r.categoryKey))];
+   const options=[['','Choose account group'],...groups.map(g=>[g.id,g.label+' · '+g.accountCode])];
+   const input=(label,key,type='text')=>h('label',{className:'ws-field'},label,h('input',{'aria-label':label,type,value:x[key],onChange:e=>xeroChange(key,e.target.value)}));
+   const select=(label,value,choices,onChange)=>h('label',{className:'ws-field'},label,h('select',{'aria-label':label,value,onChange:e=>onChange(e.target.value)},choices.map(([v,label])=>h('option',{key:v,value:v},label))));
+   const moneyCents=value=>money(Number(value||0)/100);
+   const header=h('div',{className:'ws-count-header'},h('div',{className:'ws-heading'},h('div',null,h('div',{className:'ws-eyebrow'},'LENNOX FACADES / INVENTORY'),h('h3',null,'Xero journal CSV')),button('Back to SOH export',()=>{setXeroExport(null);setError('');})),h('p',null,'Group the selected stock values into the accounts from your Xero import template. Amounts are AUD excluding GST.'));
+   const setup=h('div',{className:'ws-xero-fields'},h('label',{className:'ws-field'},'Journal date',h('input',{type:'date','aria-label':'Journal date',value:x.date,onChange:e=>{const date=e.target.value;setXeroExport(current=>({...current,date,narration:date&&current.narration===xeroNarration(current.date)?xeroNarration(date):current.narration}));}})),input('Narration','narration'),
+    h('p',{className:'ws-field-hint'},'Basis: full closing stock value. Factory Stock on Hand is the total of the five stock groups.'),
+    select('Journal direction',x.direction,[['','Choose debit / credit direction'],['asset-debit','Debit stock asset; credit expenses'],['asset-credit','Credit stock asset; debit expenses']],value=>xeroChange('direction',value)),
+    input('Tracking name','trackingName'),input('Tracking option','trackingOption'),h('label',{className:'ws-field'},'Stock asset account',h('input',{'aria-label':'Stock asset account',value:x.accountCodes.asset??'11356',onChange:e=>xeroMap('accountCodes','asset',e.target.value)})));
+   const mapping=h('section',{className:'ws-xero-section'},h('h4',null,'Assign SOH categories'),h('p',{className:'ws-field-hint'},'Saved item assignments take priority. Choose defaults for unassigned categories, or override individual items below. To save a shared assignment, use Xero stock group in Edit stock details or Bulk edit.'),h('div',{className:'ws-xero-fields'},categoryKeys.map(key=>select('Account group for '+(categories[key]||key),x.categoryGroups[key]||'',options,value=>xeroMap('categoryGroups',key,value)))));
+   const accounts=h('section',{className:'ws-xero-section'},h('h4',null,'Xero accounts'+(x.basis==='adjustment'?' and opening values':'')),h('div',{className:'ws-xero-scroll'},h('table',null,h('thead',null,h('tr',null,h('th',null,'Stock group'),h('th',null,'Account code'),x.basis==='adjustment'&&h('th',null,'Opening value (AUD ex GST)'))),h('tbody',null,groups.map(g=>h('tr',{key:g.id},h('td',null,g.label),h('td',null,h('input',{'aria-label':'Account code for '+g.label,value:x.accountCodes[g.id]??g.accountCode,onChange:e=>xeroMap('accountCodes',g.id,e.target.value)})),x.basis==='adjustment'&&h('td',null,h('input',{'aria-label':'Opening value for '+g.label,type:'number',step:'0.01',value:x.openingBalances[g.id]??'',placeholder:'Enter 0 if none',onChange:e=>xeroMap('openingBalances',g.id,e.target.value)}))))))));
+   const assignments=h('details',{className:'ws-xero-section'},h('summary',null,'Review item assignments ('+x.snapshot.rows.length+')'),h('div',{className:'ws-xero-scroll'},h('table',null,h('thead',null,h('tr',null,h('th',null,'Stock item'),h('th',null,'On-hand value'),h('th',null,'Account group override'))),h('tbody',null,costRows.map(r=>h('tr',{key:r.itemId},h('td',null,h('strong',null,r.name),h('small',null,[r.sku,r.colour,r.dimensions].filter(Boolean).join(' · '))),h('td',null,r.lineValue==null?(Number(r.qty)===0?money(0):'Not priced'):money(r.lineValue)),h('td',null,select('Account group for item '+r.name,x.itemGroups[r.itemId]||'',[['','Use category assignment'],...options.slice(1)],value=>xeroMap('itemGroups',r.itemId,value)))))))));
+   const preview=h('section',{className:'ws-xero-section'},h('h4',null,'Journal preview'),h('div',{className:'ws-xero-scroll'},h('table',{'aria-label':'Xero journal preview'},h('thead',null,h('tr',null,['*Narration','*Date','Description','*AccountCode','*TaxRate','*Amount','TrackingName1','TrackingOption1'].map(v=>h('th',{key:v},v)))),h('tbody',null,prepared.rows.map(r=>h('tr',{key:r.groupId},[prepared.narration,prepared.formattedDate,r.description,r.accountCode,r.taxRate,r.amount,r.trackingName,r.trackingOption].map((v,i)=>h('td',{key:i},v))))))),h('p',{className:'ws-field-hint'},'Debits: '+moneyCents(prepared.totals.debitCents)+' · Credits: '+moneyCents(prepared.totals.creditCents)+' · Balance: '+moneyCents(prepared.totals.balanceCents)),h('p',{className:'ws-field-hint'},'Zero-value rows are omitted from the CSV. The stock asset line balances the selected expense accounts.'));
+   const issues=prepared.issues.length?h('div',{className:'ws-xero-issues',role:'status'},h('strong',null,'Complete the following before downloading:'),h('ul',null,prepared.issues.slice(0,15).map((v,i)=>h('li',{key:i},v))),prepared.issues.length>15&&h('p',null,'And '+(prepared.issues.length-15)+' more items.')):h('p',{className:'ws-soh-export-summary',role:'status'},'Journal balanced and ready to download.');
+   return h('div',{className:'ws-overlay'},h('div',{className:'ws-dialog ws-count-dialog ws-soh-export ws-xero-dialog',role:'dialog','aria-modal':true,'aria-label':'Xero journal CSV'},header,h('div',{className:'ws-count-body'},h('p',{className:'ws-field-hint'},'Uses the '+x.snapshot.rows.length+' stock items selected in SOH export, including reserved on-hand stock and excluding incoming orders. The journal date does not reconstruct historical stock quantities or costs.'),setup,mapping,accounts,assignments,issues,preview,error&&h('div',{className:'ws-error',role:'alert'},error)),h('div',{className:'ws-actions ws-count-footer'},button('Back to SOH export',()=>{setXeroExport(null);setError('');}),button('Download Xero CSV',downloadXero,busy||prepared.issues.length>0))));
   }
   const lowItems=allItems.filter(i=>i.available<=Number(i.reorderLevel||0)).sort((a,b)=>(a.available>0)-(b.available>0)||a.name.localeCompare(b.name,undefined,{numeric:true}));
   const shortfall=i=>Math.max(0,Math.round((Number(i.reorderLevel||0)-i.available-Number(i.onOrder||0))*1000)/1000);
@@ -174,7 +221,8 @@ window.createWorkshopStock = function(React) {
   function toggleSelected(id,checked){setSelectedIds(ids=>checked?[...new Set([...ids,id])]:ids.filter(value=>value!==id));}
   function openBulk(){setError('');setNotice('');setForm({action:'bulk_metadata',itemIds:selectedStock.map(i=>i.id),changes:{}});}
   const bulkHasPanels=form?.action==='bulk_metadata'&&allItems.some(i=>form.itemIds.includes(i.id)&&i.legacy);
-  const bulkFields=[['name','Stock item name','text'],['category','Category','select'],['location','Rack / shelf / bin','text'],['supplier','Supplier','text'],['costBasis','Price entered per','select'],['unitCost','Unit cost (AUD ex GST)','number'],['packCost','Pack price (AUD ex GST)','number'],['packSize','Stock units per pack','number'],['reorderLevel','Reorder level','number'],['colour','Colour / finish','text'],['lengthMm','Length (mm)','number'],['dimensions','Dimensions / profile size','text']];
+  const xeroGroupChoices=[['','Unassigned'],...XeroJournal.groups.map(g=>[g.id,g.label+' · '+g.accountCode])];
+  const bulkFields=[['name','Stock item name','text'],['category','Category','select'],['location','Rack / shelf / bin','text'],['supplier','Supplier','text'],['xeroGroup','Xero stock group','select'],['costBasis','Price entered per','select'],['unitCost','Unit cost (AUD ex GST)','number'],['packCost','Pack price (AUD ex GST)','number'],['packSize','Stock units per pack','number'],['reorderLevel','Reorder level','number'],['colour','Colour / finish','text'],['lengthMm','Length (mm)','number'],['dimensions','Dimensions / profile size','text']];
   function bulkChange(key,value){setForm(f=>({...f,changes:{...f.changes,[key]:value}}));}
   const resetFilters=()=>{setCategory('all');setStatus('all');setSearch('');setAvailableOnly(false);setSupplierFilter('');setLocationFilter('');};
   const qty=value=>Number(value||0).toLocaleString('en-AU',{maximumFractionDigits:3});
@@ -201,11 +249,16 @@ window.createWorkshopStock = function(React) {
   function allowed(action){return ['create','metadata','stocktake','archive'].includes(action)?isAdmin:can(action==='damage'?'factory.damage':['receive','return'].includes(action)?'factory.receive':'factory.dispatch');}
   const imageEditor=()=>sharedProfile?h('div',{className:'ws-image-editor'},h('div',{className:'ws-image-edit-preview'},sharedProfile.image?h('img',{src:sharedProfile.image,alt:'Shared stock profile'}):icon('box')),h('p',null,'Uses the existing profile image and dimensions. Edit stock details to update them for all variants.')):h('div',{className:'ws-image-editor'},h('div',{className:'ws-image-edit-preview'},form.image?h('img',{src:form.image,alt:'Selected stock profile'}):icon('box')),h('div',null,h('strong',null,'Profile / item image'),h('p',null,'Add a profile drawing or product photo. PNG, JPG or WebP, up to 8 MB. Images are optimised to 4 MB or less.'),h('div',{className:'ws-image-controls'},h('label',{className:'ws-upload '+(busy||imageBusy||pending?'is-disabled':'')},h('input',{type:'file',accept:'image/png,image/jpeg,image/webp','aria-label':'Profile or item image',disabled:busy||imageBusy||!!pending,onChange:uploadImage}),imageBusy?'Preparing image…':form.image?'Replace image':'Choose image'),form.image&&button('Remove image',()=>change('image',''),busy||imageBusy||!!pending)),h('small',null,'The image is saved when you save this item.')));
   function stockCostLabel(item){
+   if(item.costBasis==='catalogue-area')return item.catalogueCost&&Number.isFinite(item.catalogueCost.ratePerM2)?money(item.catalogueCost.ratePerM2)+' / m² (AUD ex GST)':'Not priced — set a catalogue rate';
    if(item.costBasis==='area')return item.areaCost&&Number.isFinite(item.areaCost.ratePerM2)?Number(item.areaCost.ratePerM2).toLocaleString('en-AU',{style:'currency',currency:'AUD',minimumFractionDigits:2,maximumFractionDigits:12})+' / m² (AUD ex GST)':'Not priced — choose a matching full sheet';
    if(item.costBasis==='pack')return item.packCost===null||item.packCost===undefined?'Not priced':money(item.packCost)+' / pack of '+item.packSize+' '+item.unit+' (ex GST)';
    return item.unitCost===null||item.unitCost===undefined?'Not priced':money(item.unitCost)+' / '+item.unit+' (AUD ex GST)';
   }
   function pricingFields(){
+   if(selected?.costBasis==='catalogue-area'){
+    const cost=selected.catalogueCost,area=Number(cost?.width)*Number(cost?.height)/1e6;
+    return h('div',{className:'ws-pricing-fields'},h('strong',null,'Catalogue area pricing'),h('p',{className:'ws-field-hint'},cost?.name||'Catalogue material'),h('p',null,'Rate: '+money(cost?.ratePerM2??0)+' / m² (AUD ex GST)'),h('p',null,'Area: '+(Number.isFinite(area)?area.toLocaleString('en-AU',{maximumFractionDigits:8})+' m²':'Invalid dimensions')),h('p',null,'Calculated cost per '+selected.unit+': '+(selected.effectiveUnitCost===null||selected.effectiveUnitCost===undefined?'Not priced':Number(selected.effectiveUnitCost).toLocaleString('en-AU',{style:'currency',currency:'AUD',minimumFractionDigits:2,maximumFractionDigits:8}))),h('p',{className:'ws-field-hint'},'Change the price per m² in Catalogue. Full panels and offcuts use their own dimensions and this same rate.'));
+   }
    const areaAllowed=!!selected?.legacy&&selected.category==='offcuts';
    const choices=[['unit','Stock unit ('+form.unit+')'],['pack','Pack'],...(areaAllowed?[['area','Full sheet area (m²)']]:[])];
    const sources=selected?.areaCostSources||[];
@@ -235,7 +288,7 @@ window.createWorkshopStock = function(React) {
     h('label',{className:'ws-field ws-soh-export-search'},'Find stock',h('input',{'aria-label':'Export search',type:'search',value:sohExport.search,placeholder:'Item, code, colour, location or supplier',onChange:e=>exportChange('search',e.target.value)})),
     h('label',{className:'ws-soh-export-available'},h('input',{type:'checkbox','aria-label':'Export available stock only',checked:sohExport.availableOnly,onChange:e=>exportChange('availableOnly',e.target.checked)}),'Available stock only'),h('label',{className:'ws-soh-export-available ws-soh-export-costings'},h('input',{type:'checkbox','aria-label':'Include costings',checked:sohExport.includeCostings===true,onChange:e=>exportChange('includeCostings',e.target.checked)}),'Include costings (AUD ex GST)'));
    const summary=h('div',{className:'ws-soh-export-summary','aria-live':'polite'},h('strong',null,exportItems.length+' '+(exportItems.length===1?'item':'items')+' will be exported'),h('p',null,exportItems.length?'All matching items are included, with on-hand, reserved, available and on-order quantities.':'Choose a category or change the filters to include stock.'),sohExport.includeCostings&&h('p',{className:'ws-costing-note'},'Costings use on-hand quantities, including reserved stock and excluding incoming orders. All prices and values exclude GST. '+exportItems.filter(i=>{if(i.costBasis==='area')return !i.areaCost;const cost=i.costBasis==='pack'?i.packCost:i.unitCost;return cost===null||cost===undefined||cost==='';}).length+' item(s) are not priced and will be excluded from the known value total.'));
-   const footer=h('div',{className:'ws-actions ws-count-footer'},h('span',{className:'ws-soh-export-count'},exportItems.length+' '+(exportItems.length===1?'item':'items')+' selected for export'),button('Cancel',()=>setSohExport(null)),button('Download Excel',()=>exportSOH('xlsx'),busy||!exportItems.length),button('Download PDF',()=>exportSOH('pdf'),busy||!exportItems.length));
+   const footer=h('div',{className:'ws-actions ws-count-footer'},h('span',{className:'ws-soh-export-count'},exportItems.length+' '+(exportItems.length===1?'item':'items')+' selected for export'),button('Cancel',()=>setSohExport(null)),button('Xero journal CSV',openXeroExport,busy||!exportItems.length),button('Download Excel',()=>exportSOH('xlsx'),busy||!exportItems.length),button('Download PDF',()=>exportSOH('pdf'),busy||!exportItems.length));
    return h('div',{className:'ws-overlay'},h('div',{className:'ws-dialog ws-count-dialog ws-soh-export',role:'dialog','aria-modal':true,'aria-label':'Export stock on hand'},header,h('div',{className:'ws-count-body'},scope,filters,summary,error&&h('div',{className:'ws-error',role:'alert'},error)),footer));
   }
   function downloadReport(format){
@@ -320,7 +373,7 @@ window.createWorkshopStock = function(React) {
     stockArea==='stock'&&h('details',{className:'ws-help'},h('summary',null,'How stock and allocations work'),h('p',null,'CNC scheduling reserves panel sheets automatically. Use Receive, Dispatch, Convert and Damage for sheets and sheet offcuts. Reserve other stock against a job here, then record usage when the material is used. Release unused allocations to make stock available again.')),
     history&&h('div',{className:'ws-history'},h('div',{className:'ws-heading'},h('h3',null,'Movement history'),button('Close',()=>setHistory(null))),h('p',null,'Current reservations: '+Object.entries(data.items.find(i=>i.id===history)?.reservations||{}).filter(([,q])=>q>0).map(([job,q])=>job+': '+q).join(', ')),data.movements.filter(m=>m.itemId===history).map(m=>h('p',{key:m.id},new Date(m.at).toLocaleString('en-AU')+' · '+m.action+' · '+m.quantity+' · '+m.user+(m.job?' · '+m.job:'')+(m.reason?' · '+m.reason:''))))
    ),
-   sohExport&&renderSOHExport(),
+   sohExport&&!xeroExport&&renderSOHExport(),xeroExport&&renderXeroExport(),
    reportId&&renderReport(),
    countList&&renderStocktakeList(),
    counting&&h('div',{className:'ws-overlay'},h('div',{className:'ws-dialog ws-count-dialog',role:'dialog','aria-modal':true,'aria-label':'Workshop stocktake'},
@@ -336,12 +389,12 @@ window.createWorkshopStock = function(React) {
    form&&h('div',{className:'ws-overlay'},h('form',{className:'ws-dialog '+(['create','metadata'].includes(form.action)?'ws-create-dialog':''),onSubmit:save,role:'dialog','aria-modal':true,'aria-label':form.action==='create'?(form.variant?'Add stock variant':'Add stock item'):actions[form.action]},h('div',{className:'ws-form-heading'},h('span',{className:'ws-eyebrow'},form.action==='create'?'WORKSHOP INVENTORY':'STOCK DETAILS'),h('h3',null,form.action==='create'?(form.variant?'Add stock variant':'Add stock item'):actions[form.action]),form.action==='create'&&h('p',null,sharedProfile?'Shared profile: '+sharedProfile.sku+'. Choose a different colour or length and enter its stock quantity.':'Set up the item, add its profile and record your starting stock.')),selected&&h('div',{className:'ws-edit-identity'},h('strong',null,selected.name),h('span',{className:'ws-sku'},selected.sku||'No code'),h('span',null,categories[selected.category]+' · '+selected.unit)),
     form.action==='metadata'&&!selected?.legacy&&profileVariants(selected)>1&&h('p',{className:'ws-field-hint'},'Profile image and dimensions are shared by all '+profileVariants(selected)+' variants. Colour, length and stock settings apply only to this variant.'),
     form.action==='archive'?h('div',null,h('p',null,'Remove this item from active stock? Its movement history and completed stocktake reports will be retained.'),h('p',{className:'ws-po-warning'},'The item must have zero stock, no reservations, no active purchase orders and no unsubmitted count in an open stocktake.'),selected?.qty!==0&&h('p',{className:'ws-error',role:'alert'},'This item has '+qty(selected?.qty)+' '+(selected?.unit||'')+' on hand. Record usage, damage or a stocktake adjustment before removing it.'),selected?.reserved>0&&h('p',{className:'ws-error',role:'alert'},'Release its reservations before removing it.')):form.action==='bulk_metadata'?h('div',null,h('p',null,'Update '+form.itemIds.length+' selected stock items. Only checked fields will change. Empty text clears that field.'),h('div',{className:'ws-bulk-fields'},bulkFields.map(([key,label,type])=>{
-     const checked=Object.prototype.hasOwnProperty.call(form.changes,key),unsupported=bulkHasPanels&&['category','colour','lengthMm','dimensions'].includes(key);
-     return h('div',{className:'ws-bulk-field',key},h('label',null,h('input',{type:'checkbox',checked,disabled:busy||!!pending||unsupported,onChange:e=>setForm(f=>{const changes={...f.changes};if(e.target.checked)changes[key]=key==='category'?'extrusions':key==='costBasis'?'unit':key==='packSize'?1:key==='reorderLevel'?0:'';else delete changes[key];return {...f,changes};})}),label),type==='select'?h('select',{'aria-label':label,value:form.changes[key]??(key==='costBasis'?'unit':'extrusions'),disabled:!checked||busy||!!pending||unsupported,onChange:e=>bulkChange(key,e.target.value)},(key==='costBasis'?[['unit','Stock unit'],['pack','Pack'],...(selectedStock.every(i=>i.legacy&&i.category==='offcuts')?[['area','Full sheet area (m²)']]:[])]:Object.entries(categories).filter(([k])=>!['all','panels'].includes(k))).map(([value,label])=>h('option',{value,key:value},label))):h('input',{'aria-label':label,type,value:form.changes[key]??'',min:type==='number'?(key==='packSize'?1:0):undefined,step:type==='number'?(['unitCost','packCost'].includes(key)?'0.01':key==='packSize'?'1':'0.001'):undefined,disabled:!checked||busy||!!pending||unsupported,onChange:e=>bulkChange(key,e.target.value)}));
+     const checked=Object.prototype.hasOwnProperty.call(form.changes,key),unsupported=bulkHasPanels&&['category','colour','lengthMm','dimensions'].includes(key)||selectedStock.some(i=>i.costBasis==='catalogue-area')&&['unitCost','packCost','packSize','costBasis','costSourceItemId'].includes(key);
+     return h('div',{className:'ws-bulk-field',key},h('label',null,h('input',{type:'checkbox',checked,disabled:busy||!!pending||unsupported,onChange:e=>setForm(f=>{const changes={...f.changes};if(e.target.checked)changes[key]=key==='category'?'extrusions':key==='costBasis'?'unit':key==='packSize'?1:key==='reorderLevel'?0:'';else delete changes[key];return {...f,changes};})}),label),type==='select'?h('select',{'aria-label':label,value:form.changes[key]??(key==='costBasis'?'unit':'extrusions'),disabled:!checked||busy||!!pending||unsupported,onChange:e=>bulkChange(key,e.target.value)},(key==='xeroGroup'?xeroGroupChoices:key==='costBasis'?[['unit','Stock unit'],['pack','Pack'],...(selectedStock.every(i=>i.legacy&&i.category==='offcuts')?[['area','Full sheet area (m²)']]:[])]:Object.entries(categories).filter(([k])=>!['all','panels'].includes(k))).map(([value,label])=>h('option',{value,key:value},label))):h('input',{'aria-label':label,type,value:form.changes[key]??'',min:type==='number'?(key==='packSize'?1:0):undefined,step:type==='number'?(['unitCost','packCost'].includes(key)?'0.01':key==='packSize'?'1':'0.001'):undefined,disabled:!checked||busy||!!pending||unsupported,onChange:e=>bulkChange(key,e.target.value)}));
     })),h('p',{className:'ws-field-hint'},bulkHasPanels?'Panel sheets and panel offcuts support name, location, supplier, unit cost and reorder changes. Select workshop items separately to edit their other fields.':'To change a profile’s category or shared dimensions, select all its colour and length variants. Quantities are changed through receiving, usage and stocktake.')):form.action==='stocktake_create'?renderStocktakeSetup():form.action==='category_save'?h('div',null,h('div',{className:'ws-fields'},field('Category to edit','categoryId','text',[['','Add new category'],...Object.entries(categories).filter(([key])=>key!=='all')]),field('Category name','name')),h('p',{className:'ws-field-hint'},'Renaming a category keeps its existing items and stock history. New categories become available when adding workshop stock. Panel sheets and offcuts retain their existing stock workflows.')):form.action==='create'?h('div',{className:'ws-create-content'},
-     h('div',{className:'ws-create-top'},h('section',{className:'ws-form-section'},h('h4',null,'01',h('span',null,'Item details')),h('div',{className:'ws-fields'},field('Category','category','text',Object.entries(categories).filter(([k])=>!['all','panels'].includes(k))),field('Stock code (optional)','sku'),field(form.category==='extrusions'?'Profile name':'Item name','name'),field('Supplier','supplier'),field('Length (mm)','lengthMm','number'),field('Dimensions / profile size','dimensions'),field('Colour / finish','colour'),field('Additional notes','details'))),h('section',{className:'ws-form-section ws-profile-section'},h('h4',null,'02',h('span',null,'Profile image')),imageEditor())),
+     h('div',{className:'ws-create-top'},h('section',{className:'ws-form-section'},h('h4',null,'01',h('span',null,'Item details')),h('div',{className:'ws-fields'},field('Category','category','text',Object.entries(categories).filter(([k])=>!['all','panels'].includes(k))),field('Stock code (optional)','sku'),field(form.category==='extrusions'?'Profile name':'Item name','name'),field('Supplier','supplier'),field('Xero stock group','xeroGroup','text',xeroGroupChoices),field('Length (mm)','lengthMm','number'),field('Dimensions / profile size','dimensions'),field('Colour / finish','colour'),field('Additional notes','details'))),h('section',{className:'ws-form-section ws-profile-section'},h('h4',null,'02',h('span',null,'Profile image')),imageEditor())),
      h('section',{className:'ws-form-section ws-stock-section'},h('h4',null,'03',h('span',null,'Stock & storage')),h('div',{className:'ws-fields'},field('Stock unit','unit','text',['lengths','each','boxes','packs','rolls','tubes','litres','metres','kg'].map(v=>[v,v.charAt(0).toUpperCase()+v.slice(1)])),field('Opening quantity ('+form.unit+')','qty','number'),field('Reorder level ('+form.unit+')','reorderLevel','number'),pricingFields(),field('Rack / shelf / bin','location'),form.costBasis!=='pack'&&['boxes','packs'].includes(form.unit)&&field('Units per pack (reference only)','packSize','number')),h('p',{className:'ws-field-hint'},'Opening quantity is what you have in the workshop now. Reorder level flags when available stock runs low. Unit cost is optional, in AUD per stock unit, excluding GST.'))):
-    form.action==='metadata'?h('div',{className:'ws-create-content'},h('div',{className:'ws-create-top'},h('section',{className:'ws-form-section'},h('h4',null,'01',h('span',null,'Specifications')),h('div',{className:'ws-fields'},h('div',{className:'ws-full-field'},field('Stock item name','name')),!selected?.legacy&&field('Length (mm)','lengthMm','number'),!selected?.legacy&&field('Dimensions / profile size','dimensions'),!selected?.legacy&&field('Colour / finish','colour'),field('Supplier','supplier'),!selected?.legacy&&h('div',{className:'ws-full-field'},field('Additional notes','details')),selected?.legacy&&selected.category==='offcuts'&&h('div',{className:'ws-full-field'},field('Catalogue material','catalogId','text',[['','Keep current material'],...(data.catalog||[]).map(c=>[c.id,[c.color,c.material,c.thickness+' mm'].join(' · ')])]),h('p',{className:'ws-field-hint'},'Choose the correct catalogue entry to replace the old typed colour, material and thickness. Size and quantity stay the same.')),selected?.legacy&&selected.category!=='offcuts'&&h('p',{className:'ws-field-hint'},'Panel dimensions and material are managed in panel stock.'))),h('section',{className:'ws-form-section ws-profile-section'},h('h4',null,'02',h('span',null,'Profile image')),imageEditor())),h('section',{className:'ws-form-section ws-stock-section'},h('h4',null,'03',h('span',null,'Storage & reorder level')),h('div',{className:'ws-fields ws-edit-storage'},field('Rack / shelf / bin','location'),field('Reorder level ('+selected?.unit+')','reorderLevel','number'),pricingFields(),h('div',{className:'ws-readonly-stock'},h('span',null,'Current stock'),h('strong',null,qty(selected?.qty)+' '+selected?.unit),h('small',null,qty(selected?.available)+' available · '+qty(selected?.reserved)+' reserved'))))):
+    form.action==='metadata'?h('div',{className:'ws-create-content'},h('div',{className:'ws-create-top'},h('section',{className:'ws-form-section'},h('h4',null,'01',h('span',null,'Specifications')),h('div',{className:'ws-fields'},h('div',{className:'ws-full-field'},field('Stock item name','name')),!selected?.legacy&&field('Length (mm)','lengthMm','number'),!selected?.legacy&&field('Dimensions / profile size','dimensions'),!selected?.legacy&&field('Colour / finish','colour'),field('Supplier','supplier'),field('Xero stock group','xeroGroup','text',xeroGroupChoices),!selected?.legacy&&h('div',{className:'ws-full-field'},field('Additional notes','details')),selected?.legacy&&selected.category==='offcuts'&&h('div',{className:'ws-full-field'},field('Catalogue material','catalogId','text',[['','Keep current material'],...(data.catalog||[]).map(c=>[c.id,[c.color,c.material,c.thickness+' mm'].join(' · ')])]),h('p',{className:'ws-field-hint'},'Choose the correct catalogue entry to replace the old typed colour, material and thickness. Size and quantity stay the same.')),selected?.legacy&&selected.category!=='offcuts'&&h('p',{className:'ws-field-hint'},'Panel dimensions and material are managed in panel stock.'))),h('section',{className:'ws-form-section ws-profile-section'},h('h4',null,'02',h('span',null,'Profile image')),imageEditor())),h('section',{className:'ws-form-section ws-stock-section'},h('h4',null,'03',h('span',null,'Storage & reorder level')),h('div',{className:'ws-fields ws-edit-storage'},field('Rack / shelf / bin','location'),field('Reorder level ('+selected?.unit+')','reorderLevel','number'),pricingFields(),h('div',{className:'ws-readonly-stock'},h('span',null,'Current stock'),h('strong',null,qty(selected?.qty)+' '+selected?.unit),h('small',null,qty(selected?.available)+' available · '+qty(selected?.reserved)+' reserved'))))):
     h('div',{className:'ws-fields'},field(form.action==='stocktake'?'Actual counted quantity':'Quantity','quantity','number'),['use','return','reserve','release'].includes(form.action)&&field('Job reference','job'),field(['damage','stocktake'].includes(form.action)?'Reason (required)':'Delivery reference / notes','reason')),
     selected?.reservations&&Object.values(selected.reservations).some(q=>q>0)&&h('p',{className:'ws-field-hint'},'Reserved for jobs: '+Object.entries(selected.reservations).filter(([,q])=>q>0).map(([j,q])=>j+': '+q).join(', ')),
     error&&h('div',{className:'ws-error',role:'alert'},error),pending&&!busy&&h('p',null,'Save status is uncertain. Retry this unchanged request before starting another movement.'),
@@ -863,7 +916,7 @@ License: GPL-2+
  }
  function prepareSOHReport(input){
   const {costSummary:previousSummary,...report}=input;
-  const stockRows=input.rows.map(({unitCost,packCost,costBasis,packSize,effectiveUnitCost,lineValue,areaCost,areaCostStatus,areaRatePerM2,unitAreaM2,...stock})=>stock);
+  const stockRows=input.rows.map(({unitCost,packCost,costBasis,packSize,effectiveUnitCost,lineValue,areaCost,areaCostStatus,areaRatePerM2,unitAreaM2,catalogueCost,catalogueCostStatus,catalogueRatePerM2,ratePerM2,...stock})=>stock);
   if(input.includeCostings!==true)return {...report,kind:'soh',includeCostings:false,rows:stockRows};
   let totalCents=0n,unpricedItems=0;
   const limit=999999999999999n;
@@ -879,10 +932,23 @@ License: GPL-2+
   };
   const rows=input.rows.map((row,index)=>{
    const costBasis=row.costBasis||'unit',packSize=Number(row.packSize??1),quantity=Number(row.qty);
-   if(!['unit','pack','area'].includes(costBasis))throw Error('Choose unit, pack or area pricing for '+(row.name||'this item')+'.');
+   if(!['unit','pack','area','catalogue-area'].includes(costBasis))throw Error('Choose unit, pack or area pricing for '+(row.name||'this item')+'.');
    if(costBasis==='pack'&&(!Number.isSafeInteger(packSize)||packSize<1||packSize>1e9))throw Error('Enter a positive whole number of stock units per pack for '+(row.name||'this item')+'.');
    if(!Number.isFinite(quantity)||Math.abs(quantity)>1e9)throw Error('The quantity is too large to cost accurately for '+(row.name||'this item')+'.');
    const pricing={costBasis,packSize,unitCost:row.unitCost??null,packCost:costBasis==='pack'?(row.packCost??null):null};
+   if(costBasis==='catalogue-area'){
+    const source=row.catalogueCost?{...row.catalogueCost}:null;
+    const number=v=>(typeof v==='number'||typeof v==='string'&&v.trim()!=='')&&Number.isFinite(Number(v))?Number(v):null;
+    const dimensions=[number(row.width??source?.width),number(row.height??source?.height)],rate=source?.ratePerM2;
+    const unitAreaM2=dimensions.every(v=>v!==null&&v>0)?dimensions[0]*dimensions[1]/1e6:null;
+    const cataloguePricing={...pricing,catalogueCost:source,unitAreaM2:Number.isFinite(unitAreaM2)?unitAreaM2:null,areaRatePerM2:null};
+    if(!source||unitAreaM2===null||!Number.isFinite(unitAreaM2)||rate===null||rate===undefined||typeof rate!=='number'&&typeof rate!=='string'||typeof rate==='string'&&rate.trim()===''){
+     unpricedItems++;return {...stockRows[index],...cataloguePricing,effectiveUnitCost:null,lineValue:null};
+    }
+    const rateCents=centsFor(rate,source.name||row.name),[width,height]=dimensions.map(decimalFraction),q=decimalFraction(quantity);
+    const numerator=BigInt(rateCents)*width.n*height.n*q.n,denominator=1000000n*width.d*height.d*q.d;
+    return {...stockRows[index],...cataloguePricing,areaRatePerM2:rateCents/100,effectiveUnitCost:rateCents/100*unitAreaM2,lineValue:roundLine(numerator,denominator,row.name)};
+   }
    if(costBasis==='area'){
     const source=row.areaCost?{...row.areaCost}:null;
     const offcutWidth=Number(source?.offcutWidth??row.width),offcutHeight=Number(source?.offcutHeight??row.height);
@@ -909,12 +975,116 @@ License: GPL-2+
   if(totalCents>limit||totalCents<-limit)throw Error('The total value is too large to export accurately. Export a smaller group of items.');
   return {...report,kind:'soh',includeCostings:true,rows,costSummary:{currency:'AUD',taxBasis:'exGST',totalValue:Number(totalCents)/100,pricedItems:rows.length-unpricedItems,unpricedItems}};
  }
+ const xeroJournalGroups=Object.freeze([
+  Object.freeze({id:'cladding',label:'Cladding',accountCode:'51050'}),
+  Object.freeze({id:'fixings',label:'Fixings',accountCode:'51066'}),
+  Object.freeze({id:'materials',label:'Materials & Supplies',accountCode:'51097'}),
+  Object.freeze({id:'route-stiffeners',label:'Route Stiffeners & Z Tags',accountCode:'51085'}),
+  Object.freeze({id:'silicone',label:'Silicone',accountCode:'51090'})
+ ]);
+ const xeroJournalLimit=999999999999999n;
+ const xeroJournalMoney=cents=>{
+  const n=typeof cents==='bigint'?cents:BigInt(cents),absolute=n<0n?-n:n;
+  return (n<0n?'-':'')+String(absolute/100n)+'.'+String(absolute%100n).padStart(2,'0');
+ };
+ const xeroJournalCents=value=>{
+  if(typeof value!=='string'&&typeof value!=='number')return null;
+  const match=String(value).trim().match(/^([+-]?)(\d+)(?:\.(\d{1,2}))?$/);
+  if(!match)return null;
+  const cents=(BigInt(match[2])*100n+BigInt((match[3]||'').padEnd(2,'0')))*(match[1]==='-'?-1n:1n);
+  return cents>xeroJournalLimit||cents<-xeroJournalLimit?null:cents;
+ };
+ const xeroJournalDate=value=>{
+  const match=typeof value==='string'&&value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(!match)return '';
+  const year=Number(match[1]),month=Number(match[2]),day=Number(match[3]),leap=year%4===0&&(year%100!==0||year%400===0);
+  const days=[31,leap?29:28,31,30,31,30,31,31,30,31,30,31];
+  return year>0&&month>=1&&month<=12&&day>=1&&day<=days[month-1]?match[3]+'/'+match[2]+'/'+match[1]:'';
+ };
+ function xeroJournalPrepare(snapshot,options={}){
+  const issues=[],own=(object,key)=>object!=null&&Object.prototype.hasOwnProperty.call(object,key);
+  const groups=xeroJournalGroups,known=new Set(groups.map(group=>group.id));
+  const basis=options.basis,direction=options.direction,date=typeof options.date==='string'?options.date:'',formattedDate=xeroJournalDate(date),narration=typeof options.narration==='string'?options.narration.trim():'';
+  const trackingName=String(options.trackingName??'job').trim(),trackingOption=String(options.trackingOption??'Factory/Production - BAU').trim();
+  if(!['closing','adjustment'].includes(basis))issues.push('Choose the full closing value or an adjustment journal.');
+  if(!['asset-debit','asset-credit'].includes(direction))issues.push('Choose whether to debit or credit stock on hand.');
+  if(!formattedDate)issues.push('Enter a valid journal date.');
+  if(!narration)issues.push('Enter a journal narration.');
+  if(!trackingName||!trackingOption)issues.push('Enter the tracking name and option for the expense rows.');
+  const stockRows=Array.isArray(snapshot?.rows)?snapshot.rows:[];
+  if(!stockRows.length)issues.push('Choose at least one stock item for the journal.');
+  const closing=Object.fromEntries(groups.map(group=>[group.id,0n]));
+  for(const stock of stockRows){
+   const name=String(stock.name||stock.sku||'this item'),quantity=Number(stock.qty),nonzero=quantity!==0;
+   const groupId=own(options.itemGroups,stock.itemId)?options.itemGroups[stock.itemId]:own(options.categoryGroups,stock.categoryKey)?options.categoryGroups[stock.categoryKey]:'';
+   if(nonzero&&!known.has(groupId))issues.push('Choose an account group for '+name+'.');
+   let row;
+   try{row=prepareSOHReport({...snapshot,includeCostings:true,rows:[stock]}).rows[0];}
+   catch(error){issues.push(error?.message||'Unable to value '+name+'.');continue;}
+   if(nonzero&&(row.lineValue===null||row.lineValue===undefined)){
+    issues.push('Enter a valid price for '+name+' before exporting the journal.');continue;
+   }
+   if(known.has(groupId)&&row.lineValue!==null&&row.lineValue!==undefined)closing[groupId]+=BigInt(Math.round(row.lineValue*100));
+  }
+  const opening={},changes={};
+  for(const group of groups){
+   let amount=0n;
+   if(basis==='adjustment'){
+    const parsed=own(options.openingBalances,group.id)?xeroJournalCents(options.openingBalances[group.id]):null;
+    if(parsed===null)issues.push('Enter the opening balance for '+group.label+' with up to two decimal places.');
+    else amount=parsed;
+   }
+   opening[group.id]=amount;changes[group.id]=closing[group.id]-amount;
+  }
+  const sum=values=>Object.values(values).reduce((total,value)=>total+value,0n),closingTotal=sum(closing),openingTotal=sum(opening),changeTotal=sum(changes);
+  const within=(amount,label)=>{
+   if(amount>xeroJournalLimit||amount<-xeroJournalLimit){issues.push('The '+label+' is too large to export accurately. Choose fewer stock items.');return null;}
+   return Number(amount);
+  };
+  const factor=direction==='asset-debit'?1n:direction==='asset-credit'?-1n:0n;
+  const makeRow=(id,label,amount,close,open,change,isAsset=false)=>{
+   const code=own(options.accountCodes,id)?options.accountCodes[id]:(isAsset?'11356':groups.find(group=>group.id===id).accountCode),accountCode=typeof code==='string'||typeof code==='number'?String(code).trim():'';
+   if(!accountCode)issues.push('Enter an account code for '+label+'.');
+   const description=({cladding:'Cladding Stock',fixings:'Fixings Stock'}[id]||label)+' as at '+formattedDate.replace(/\//g,'-');
+   return {groupId:id,label,description,accountCode,taxRate:'BAS Excluded',amountCents:within(amount,label+' amount'),amount:xeroJournalMoney(amount),trackingName:isAsset?'':trackingName,trackingOption:isAsset?'':trackingOption,closingCents:within(close,label+' closing value'),openingCents:within(open,label+' opening balance'),changeCents:within(change,label+' change')};
+  };
+  const rows=groups.map(group=>makeRow(group.id,group.label,-factor*changes[group.id],closing[group.id],opening[group.id],changes[group.id]));
+  const assetAmount=factor*changeTotal;
+  rows.push(makeRow('asset','Factory Stock on Hand',assetAmount,closingTotal,openingTotal,changeTotal,true));
+  const debit=rows.reduce((total,row)=>{const cents=xeroJournalCents(row.amount);return total+(cents!==null&&cents>0n?cents:0n);},0n),credit=rows.reduce((total,row)=>{const cents=xeroJournalCents(row.amount);return total+(cents!==null&&cents<0n?-cents:0n);},0n);
+  const totals={closingCents:within(closingTotal,'closing total'),openingCents:within(openingTotal,'opening total'),changeCents:within(changeTotal,'change total'),assetCents:within(assetAmount,'stock-on-hand amount'),balanceCents:within(debit-credit,'journal balance'),debitCents:within(debit,'debit total'),creditCents:within(credit,'credit total')};
+  if(totals.balanceCents!==0)issues.push('The journal must balance to zero.');
+  if(['closing','adjustment'].includes(basis)&&['asset-debit','asset-credit'].includes(direction)&&debit===0n&&credit===0n)issues.push('The journal has no nonzero amounts to export.');
+  return {basis,direction,date,formattedDate,narration,trackingName,trackingOption,groups,rows,totals,issues:[...new Set(issues)]};
+ }
+ function xeroJournalCsv(prepared){
+  if(!prepared||!Array.isArray(prepared.issues)||prepared.issues.length)throw Error(prepared?.issues?.join(' ')||'Prepare a valid stock journal before exporting.');
+  const headers=['*Narration','*Date','Description','*AccountCode','*TaxRate','*Amount','TrackingName1','TrackingOption1'];
+  const ids=[...xeroJournalGroups.map(group=>group.id),'asset'];
+  if(!['closing','adjustment'].includes(prepared.basis)||!['asset-debit','asset-credit'].includes(prepared.direction)||!prepared.narration||!xeroJournalDate(prepared.date)||!Array.isArray(prepared.rows)||prepared.rows.length!==ids.length)throw Error('Prepare a valid stock journal before exporting.');
+  let balance=0n;
+  for(let index=0;index<ids.length;index++){
+   const row=prepared.rows[index],cents=xeroJournalCents(row.amount),asset=ids[index]==='asset';
+   if(row.groupId!==ids[index]||!String(row.accountCode||'').trim()||row.taxRate!=='BAS Excluded'||cents===null||row.amountCents!==Number(cents)||(!asset&&(!row.trackingName||!row.trackingOption))||(asset&&(row.trackingName||row.trackingOption)))throw Error('Prepare a valid stock journal before exporting.');
+   balance+=cents;
+  }
+  if(balance!==0n)throw Error('The journal must balance to zero.');
+  if(!prepared.rows.some(row=>xeroJournalCents(row.amount)!==0n))throw Error('The journal has no nonzero amounts to export.');
+  const quote=value=>{const text=String(value??'').replace(/\r\n|\r|\n/g,'\r\n');return /[",\r\n]/.test(text)?'"'+text.replace(/"/g,'""')+'"':text;};
+  const lines=prepared.rows.filter(row=>xeroJournalCents(row.amount)!==0n).map(row=>[prepared.narration,xeroJournalDate(prepared.date),row.description,row.accountCode,row.taxRate,xeroJournalMoney(xeroJournalCents(row.amount)),row.trackingName,row.trackingOption]);
+  return [headers,...lines].map(line=>line.map(quote).join(',')).join('\r\n')+'\r\n';
+ }
+
  const preciseCurrency=value=>Number(value).toLocaleString('en-AU',{style:'currency',currency:'AUD',minimumFractionDigits:2,maximumFractionDigits:12});
  const currency=value=>Number(value).toLocaleString('en-AU',{style:'currency',currency:'AUD',minimumFractionDigits:2,maximumFractionDigits:2});
  function xlsx(report){
-  const soh=report.kind==='soh',costed=soh&&report.includeCostings===true,packPricing=costed&&report.rows.some(r=>r.costBasis==='pack'),areaPricing=costed&&report.rows.some(r=>r.costBasis==='area'),precisionPricing=packPricing||areaPricing,areaStart=packPricing?18:15,lastColumn=soh?(costed?(areaPricing?(packPricing?'W':'T'):(packPricing?'R':'O')):'M'):'K',sheetName=soh?'Stock on hand':'Stocktake report',sheetRef="'"+sheetName+"'";
-  const headings=soh?['Stock code','Item','Category','Colour / size','Location','Supplier','Unit','On hand','Reserved','Available','On order','Reorder level','Status',...(costed?['Unit cost (AUD ex GST)','On-hand value (AUD ex GST)',...(packPricing?['Units per pack','Pack cost (AUD ex GST)','Price basis']:[]),...(areaPricing?['Source full sheet / price basis','Full sheet size (mm)','Full sheet cost (AUD ex GST)','Rate (AUD ex GST / m²)','Area per offcut (m²)']:[])]:[])]:columns;
+  const soh=report.kind==='soh',costed=soh&&report.includeCostings===true,packPricing=costed&&report.rows.some(r=>r.costBasis==='pack'),cataloguePricing=costed&&report.rows.some(r=>r.costBasis==='catalogue-area'),areaPricing=cataloguePricing||costed&&report.rows.some(r=>r.costBasis==='area'),precisionPricing=packPricing||areaPricing,areaStart=packPricing?18:15,lastColumn=soh?(costed?(areaPricing?(packPricing?'W':'T'):(packPricing?'R':'O')):'M'):'K',sheetName=soh?'Stock on hand':'Stocktake report',sheetRef="'"+sheetName+"'";
+  const headings=soh?['Stock code','Item','Category','Colour / size','Location','Supplier','Unit','On hand','Reserved','Available','On order','Reorder level','Status',...(costed?['Unit cost (AUD ex GST)','On-hand value (AUD ex GST)',...(packPricing?['Units per pack','Pack cost (AUD ex GST)','Price basis']:[]),...(areaPricing?(cataloguePricing?['Source panel / catalogue','Source size (mm)','Source cost (AUD ex GST)','Rate (AUD ex GST / m²)','Area per item (m²)']:['Source full sheet / price basis','Full sheet size (mm)','Full sheet cost (AUD ex GST)','Rate (AUD ex GST / m²)','Area per offcut (m²)']):[])]:[])]:columns;
   const areaValues=r=>{
+   if(r.costBasis==='catalogue-area'){
+    const source=r.catalogueCost||{},width=Number(r.width??source.width),height=Number(r.height??source.height);
+    return [[source.name,source.catalogId].filter(Boolean).join(' / ')||'Not priced',Number.isFinite(width)&&width>0&&Number.isFinite(height)&&height>0?width+' x '+height:'Not priced','Per square metre',r.areaRatePerM2??'Not priced',r.unitAreaM2??'Not priced'];
+   }
    if(r.costBasis!=='area')return ['','','','',''];
    const source=r.areaCost||{},number=v=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))?Number(v):null;
    const sourceUnitCost=number(source.sourceUnitCost),sourcePackCost=number(source.sourcePackCost),sourcePackSize=number(source.sourcePackSize);
@@ -925,7 +1095,7 @@ License: GPL-2+
    const rate=number(Object.prototype.hasOwnProperty.call(r,'areaRatePerM2')?r.areaRatePerM2:source.ratePerM2),area=number(r.unitAreaM2);
    return [[sourceName,packNote].filter(Boolean).join(' / ')||'Not priced',width!==null&&height!==null&&width>0&&height>0?width+' x '+height:'Not priced',sourceSheetCost??'Not priced',rate??'Not priced',area??'Not priced'];
   };
-  const exportedRows=soh?report.rows.map(r=>[r.sku,r.name,r.category,[r.colour,r.lengthMm?r.lengthMm+' mm':'',r.dimensions].filter(Boolean).join(' / '),r.location,r.supplier,r.unit,r.qty,r.reserved,r.available,r.onOrder,r.reorderLevel,r.status,...(costed?[(Object.prototype.hasOwnProperty.call(r,'effectiveUnitCost')?r.effectiveUnitCost:r.unitCost)??'Not priced',r.lineValue??'Not priced',...(packPricing?[r.costBasis==='pack'?r.packSize:'',r.costBasis==='pack'?(r.packCost??'Not priced'):'',r.costBasis==='pack'?'Per pack':r.costBasis==='area'?'Per square metre':'Per stock unit']:[]),...(areaPricing?areaValues(r):[])]:[])]):rows(report);
+  const exportedRows=soh?report.rows.map(r=>[r.sku,r.name,r.category,[r.colour,r.lengthMm?r.lengthMm+' mm':'',r.dimensions].filter(Boolean).join(' / '),r.location,r.supplier,r.unit,r.qty,r.reserved,r.available,r.onOrder,r.reorderLevel,r.status,...(costed?[(Object.prototype.hasOwnProperty.call(r,'effectiveUnitCost')?r.effectiveUnitCost:r.unitCost)??'Not priced',r.lineValue??'Not priced',...(packPricing?[r.costBasis==='pack'?r.packSize:'',r.costBasis==='pack'?(r.packCost??'Not priced'):'',r.costBasis==='pack'?'Per pack':['area','catalogue-area'].includes(r.costBasis)?'Per square metre':'Per stock unit']:[]),...(areaPricing?areaValues(r):[])]:[])]):rows(report);
   const ns='http://schemas.openxmlformats.org/spreadsheetml/2006/main',rels='http://schemas.openxmlformats.org/package/2006/relationships';
   const cell=(ref,v,style=0,numeric=false)=>'<c r="'+ref+'" s="'+style+'"'+(numeric&&typeof v==='number'&&Number.isFinite(v)?' t="n"><v>'+v+'</v>':' t="inlineStr"><is><t xml:space="preserve">'+xml(numeric&&(v===null||v===undefined)?'Unknown':v)+'</t></is>')+'</c>';
   const sheetRows=[],row=(n,height,cells)=>sheetRows.push('<row r="'+n+'" ht="'+height+'" customHeight="1">'+cells+'</row>');
@@ -960,7 +1130,7 @@ License: GPL-2+
    row(lastDataRow+1,10,'');
    row(lastDataRow+2,28,cell('A'+(lastDataRow+2),'Known on-hand value (AUD ex GST)',17)+cell('N'+(lastDataRow+2),costSummary.totalValue,20,true));
    row(lastDataRow+3,24,cell('A'+(lastDataRow+3),costSummary.unpricedItems+' unpriced items excluded from value / '+costSummary.pricedItems+' priced items',15));
-   row(lastDataRow+4,22,cell('A'+(lastDataRow+4),areaPricing?'Offcut values use the full-sheet cost and area ratio, without rounding the rate. Pack prices are apportioned per sheet; line totals are rounded only at the end. Reserved stock is included and stock on order is excluded.':packPricing?'Valuation uses on-hand quantity and the price per stock unit. Pack prices are apportioned before line totals are rounded; reserved stock is included and stock on order is excluded.':'Valuation = on-hand quantity x unit cost; includes reserved stock and excludes stock on order.',16));
+   row(lastDataRow+4,22,cell('A'+(lastDataRow+4),cataloguePricing?'Catalogue prices use the rate per square metre and each item\'s actual area. Full-sheet area and pack prices are apportioned before the line total is rounded. Reserved stock is included and stock on order is excluded.':areaPricing?'Offcut values use the full-sheet cost and area ratio, without rounding the rate. Pack prices are apportioned per sheet; line totals are rounded only at the end. Reserved stock is included and stock on order is excluded.':packPricing?'Valuation uses on-hand quantity and the price per stock unit. Pack prices are apportioned before line totals are rounded; reserved stock is included and stock on order is excluded.':'Valuation = on-hand quantity x unit cost; includes reserved stock and excludes stock on order.',16));
    row(lastDataRow+5,22,cell('A'+(lastDataRow+5),'All unit costs and stock values are in AUD, excluding GST.',16));
   }
   const merges=['E1:'+lastColumn+'1','E2:'+lastColumn+'2','E3:'+lastColumn+'4','A6:C6','E6:F6','G6:'+lastColumn+'6','A7:B7','C7:'+lastColumn+'7','A8:B8','C8:'+lastColumn+'8','A9:C9','D9:F9','G9:'+lastColumn+'9','A10:'+lastColumn+'10',...(historical||costed?['A11:'+lastColumn+'11']:[]),...(costed?['A'+(lastDataRow+2)+':M'+(lastDataRow+2),'N'+(lastDataRow+2)+':'+lastColumn+(lastDataRow+2),...Array.from({length:3},(_,i)=>'A'+(lastDataRow+3+i)+':'+lastColumn+(lastDataRow+3+i))]:[])];
@@ -1012,7 +1182,7 @@ License: GPL-2+
  const clean=v=>String(v??'').replace(/[–—]/g,'-').replace(/×/g,'x').replace(/·/g,' / ').normalize('NFKD').replace(/[^\x20-\x7e]/g,' ').replace(/\s+/g,' ').trim();
  const pdfEscape=v=>clean(v).replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)');
  function pdf(report){
-  const soh=report.kind==='soh',costed=soh&&report.includeCostings===true;
+  const soh=report.kind==='soh',costed=soh&&report.includeCostings===true,cataloguePricing=costed&&report.rows.some(r=>r.costBasis==='catalogue-area');
   const objects=[null],add=s=>(objects.push(s),objects.length-1),pages=add(''),ids=[];
   const makeFont=(data,name)=>{
    const file=add('<< /Length '+(data.hex.length+1)+' /Length1 '+data.hex.length/2+' /Filter /ASCIIHexDecode >>\nstream\n'+data.hex+'>\nendstream');
@@ -1036,7 +1206,9 @@ License: GPL-2+
    const name=wrap(r.name,280,9.2,true),spec=wrap([r.sku,r.colour,r.lengthMm?r.lengthMm+' mm':'',r.dimensions].filter(Boolean).join(' / '),280,7.5);
    const storage=wrap([soh&&r.category?'Category: '+r.category:'',r.location?'Location: '+r.location:'',r.supplier?'Supplier: '+r.supplier:''].filter(Boolean).join(' / '),280,7.2);
    const areaSourcePrice=r.areaCost?(r.areaCost.sourceCostBasis==='pack'?(r.areaCost.sourcePackCost===null?null:Number(r.areaCost.sourcePackCost)/Number(r.areaCost.sourcePackSize)):r.areaCost.sourceUnitCost):null;
-   const cost=costed?[...(r.costBasis==='area'?[...(r.areaCost?['Source full sheet: '+r.areaCost.sourceName+' / '+r.areaCost.sourceWidth+' x '+r.areaCost.sourceHeight+' mm','Full-sheet cost (AUD ex GST): '+(areaSourcePrice===null||!Number.isFinite(Number(areaSourcePrice))?'Not priced':preciseCurrency(areaSourcePrice))]:['Source full sheet: not available']), 'Rate (AUD ex GST / m2): '+(r.areaRatePerM2===null?'Not priced':preciseCurrency(r.areaRatePerM2))+' / Area per offcut: '+(r.unitAreaM2===null?'Unknown':Number(r.unitAreaM2).toLocaleString('en-AU',{maximumFractionDigits:12}))+' m2','Equivalent offcut cost (AUD ex GST): '+(r.effectiveUnitCost===null?'Not priced':preciseCurrency(r.effectiveUnitCost))]:r.costBasis==='pack'?['Pack price (AUD ex GST): '+(r.packCost===null?'Not priced':currency(r.packCost))+' / '+r.packSize+' '+r.unit+' per pack','Equivalent unit cost (AUD ex GST): '+(r.effectiveUnitCost===null?'Not priced':preciseCurrency(r.effectiveUnitCost))]:['Unit cost (AUD ex GST): '+(r.effectiveUnitCost===null?'Not priced':currency(r.effectiveUnitCost))]),'On-hand value (AUD ex GST): '+(r.lineValue===null?'Not priced':currency(r.lineValue))].flatMap(line=>wrap(line,280,8,true)):[];
+   const catalogue=r.catalogueCost,itemWidth=r.width??catalogue?.width,itemHeight=r.height??catalogue?.height,itemKind=r.categoryKey==='offcuts'||r.category==='Offcuts'||String(r.itemId||'').startsWith('offcut:')?'offcut':'sheet';
+   const catalogueLines=['Source catalogue: '+(catalogue?[catalogue.name,catalogue.catalogId].filter(Boolean).join(' / ')||'Not available':'Not available'),'Actual item size: '+(Number(itemWidth)>0&&Number(itemHeight)>0?itemWidth+' x '+itemHeight+' mm':'Unknown'),'Catalogue rate (AUD ex GST / m2): '+(r.areaRatePerM2===null?'Not priced':preciseCurrency(r.areaRatePerM2))+' / Area per '+itemKind+': '+(r.unitAreaM2===null?'Unknown':Number(r.unitAreaM2).toLocaleString('en-AU',{maximumFractionDigits:12}))+' m2','Equivalent '+itemKind+' cost (AUD ex GST): '+(r.effectiveUnitCost===null?'Not priced':preciseCurrency(r.effectiveUnitCost))];
+   const cost=costed?[...(r.costBasis==='catalogue-area'?catalogueLines:r.costBasis==='area'?[...(r.areaCost?['Source full sheet: '+r.areaCost.sourceName+' / '+r.areaCost.sourceWidth+' x '+r.areaCost.sourceHeight+' mm','Full-sheet cost (AUD ex GST): '+(areaSourcePrice===null||!Number.isFinite(Number(areaSourcePrice))?'Not priced':preciseCurrency(areaSourcePrice))]:['Source full sheet: not available']), 'Rate (AUD ex GST / m2): '+(r.areaRatePerM2===null?'Not priced':preciseCurrency(r.areaRatePerM2))+' / Area per offcut: '+(r.unitAreaM2===null?'Unknown':Number(r.unitAreaM2).toLocaleString('en-AU',{maximumFractionDigits:12}))+' m2','Equivalent offcut cost (AUD ex GST): '+(r.effectiveUnitCost===null?'Not priced':preciseCurrency(r.effectiveUnitCost))]:r.costBasis==='pack'?['Pack price (AUD ex GST): '+(r.packCost===null?'Not priced':currency(r.packCost))+' / '+r.packSize+' '+r.unit+' per pack','Equivalent unit cost (AUD ex GST): '+(r.effectiveUnitCost===null?'Not priced':preciseCurrency(r.effectiveUnitCost))]:['Unit cost (AUD ex GST): '+(r.effectiveUnitCost===null?'Not priced':currency(r.effectiveUnitCost))]),'On-hand value (AUD ex GST): '+(r.lineValue===null?'Not priced':currency(r.lineValue))].flatMap(line=>wrap(line,280,8,true)):[];
    const user=soh?[]:wrap(r.user||'Not recorded',182,8.4);
    return {r,name,spec,storage,cost,user,height:Math.max(36,14+name.length*11+spec.length*9+storage.length*9,16+user.length*10+10)};
   });
@@ -1083,7 +1255,7 @@ License: GPL-2+
     }
     if(!soh){item.user.forEach((v,index)=>text(612,top-index*10,8.4,v));text(612,top-item.user.length*10-3,7.2,date(r.at));}y-=item.height;
    });
-   const note=costed?'Valuation uses on-hand quantities with unit, pack or full-sheet area pricing (AUD ex GST). Incoming orders are excluded.':soh?'Quantities reflect the filtered SOH results at export time. Different stock units are not added together.':'Expected quantities are recorded at each item submission. Different stock units are not added together.';
+   const note=costed?(cataloguePricing?'Valuation uses on-hand quantities with catalogue rates per square metre, unit, pack or full-sheet area pricing (AUD ex GST). Incoming orders are excluded.':'Valuation uses on-hand quantities with unit, pack or full-sheet area pricing (AUD ex GST). Incoming orders are excluded.'):soh?'Quantities reflect the filtered SOH results at export time. Different stock units are not added together.':'Expected quantities are recorded at each item submission. Different stock units are not added together.';
    text(32,56,7.5,note,false,'0.35 0.43 0.49');
    if(costed)text(32,44,7.2,'All prices and values exclude GST. '+report.costSummary.unpricedItems+' unpriced item(s) are excluded from the known value total.',false,'0.35 0.43 0.49');
    if(report.rows.some(r=>r.historicalDetails))text(32,44,7.2,'Historical descriptions use available records; unrecoverable baselines are marked Unknown.',false,'0.35 0.43 0.49');
@@ -1092,5 +1264,5 @@ License: GPL-2+
   });
   objects[pages]='<< /Type /Pages /Kids ['+ids.map(id=>id+' 0 R').join(' ')+'] /Count '+ids.length+' >>';const catalog=add('<< /Type /Catalog /Pages '+pages+' 0 R >>');let result='%PDF-1.4\n',offsets=[0];for(let i=1;i<objects.length;i++){offsets[i]=enc.encode(result).length;result+=i+' 0 obj\n'+objects[i]+'\nendobj\n';}const xref=enc.encode(result).length;result+='xref\n0 '+objects.length+'\n0000000000 65535 f \n'+offsets.slice(1).map(n=>String(n).padStart(10,'0')+' 00000 n \n').join('')+'trailer\n<< /Size '+objects.length+' /Root '+catalog+' 0 R >>\nstartxref\n'+xref+'\n%%EOF';return new Blob([result],{type:'application/pdf'});
  }
- return {pdf,xlsx,soh:{prepare:prepareSOHReport,pdf:report=>pdf(prepareSOHReport(report)),xlsx:report=>xlsx(prepareSOHReport(report))},logo:'data:image/png;base64,'+brand.pngBase64};
+ return {pdf,xlsx,soh:{prepare:prepareSOHReport,pdf:report=>pdf(prepareSOHReport(report)),xlsx:report=>xlsx(prepareSOHReport(report)),xero:{prepare:xeroJournalPrepare,csv:xeroJournalCsv,groups:xeroJournalGroups}},logo:'data:image/png;base64,'+brand.pngBase64};
 })();
