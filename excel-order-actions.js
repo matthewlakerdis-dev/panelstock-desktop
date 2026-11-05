@@ -84,6 +84,12 @@
       if(locked||!current()||state.phase!=='confirm'||state.needsReview)return false;
       const panel=link.action==='dispatch'&&state.order.usesPanelLoads;
       if(link.action==='ready'&&!manualReady(state.order)||link.action==='drawn'&&(!drawingOrder(state.order)||drawn(state.order)||['dispatched','cancelled'].includes(state.order.status))||panel&&!siteLoad(state.selected||{}))return false;
+      let gateAreaM2;
+      if(link.action==='drawn'&&normalize(state.order.orderType)==='gate'){
+        const area=details.areaM2??state.order.manualProduction?.areaM2;
+        gateAreaM2=typeof area==='number'||typeof area==='string'?Number(area):NaN;
+        if(!Number.isFinite(gateAreaM2)||gateAreaM2<=0||gateAreaM2>99999){publish({error:'Enter the total Gate area greater than 0 and up to 99999 m².'});return false;}
+      }
       locked=true;publish({busy:true,error:''});
       try{
         if(link.action==='schedule'){
@@ -95,7 +101,7 @@
           publish({phase:'done',message:(result.unchanged?'Delivery schedule is unchanged.':clear?'Delivery schedule cleared.':'Delivery scheduled.')+' Use Refresh All in Excel to update the tracker.'});
         }else if(link.action==='drawn'){
           const gate=normalize(state.order.orderType)==='gate';
-          await request('/orders/'+encodeURIComponent(link.id)+(gate?'/progress':'/drawing'),{...(gate?{stages:{drawn:'complete'}}:{drawn:true}),expectedUpdatedAt:state.order.updatedAt||state.order.createdAt||''});
+          await request('/orders/'+encodeURIComponent(link.id)+(gate?'/progress':'/drawing'),{...(gate?{stages:{drawn:'complete'},areaM2:gateAreaM2}:{drawn:true}),expectedUpdatedAt:state.order.updatedAt||state.order.createdAt||''});
           publish({phase:'done',message:'Order marked Drawn.'+(gate?' Gate items are now queued for QA.':'')+' Use Refresh All in Excel to update the tracker.'});
         }else if(link.action==='ready'){
           await request('/orders/'+encodeURIComponent(link.id)+'/status',{status:'completed',expectedUpdatedAt:state.order.updatedAt||state.order.createdAt||''});
@@ -118,7 +124,7 @@
   function createComponent(React,client,baseUrl,link){
     const {createElement:h,useState,useEffect,useRef}=React;
     return function ExcelOrderAction({username}){
-      const [closed,setClosed]=useState(false),[state,setState]=useState({phase:'loading',busy:true}),[details,setDetails]=useState({destination:'',transport:'',driver:'',notes:'',scheduledDeliveryDate:'',scheduledDeliveryTime:''});
+      const [closed,setClosed]=useState(false),[state,setState]=useState({phase:'loading',busy:true}),[details,setDetails]=useState({destination:'',transport:'',driver:'',notes:'',scheduledDeliveryDate:'',scheduledDeliveryTime:'',areaM2:''});
       const controller=useRef(null),dialog=useRef(null);
       useEffect(()=>{
         if(!link||!username||closed)return;
@@ -127,6 +133,7 @@
       },[username,closed]);
       useEffect(()=>{
         if(link?.action==='schedule'&&state.phase==='confirm'&&state.order)setDetails(current=>({...current,scheduledDeliveryDate:state.order.scheduledDeliveryDate||'',scheduledDeliveryTime:state.order.scheduledDeliveryTime||''}));
+        if(link?.action==='drawn'&&normalize(state.order?.orderType)==='gate'&&state.phase==='confirm')setDetails(current=>({...current,areaM2:state.order.manualProduction?.areaM2??''}));
       },[state.order,state.phase]);
       useEffect(()=>{if(!closed&&link&&username)dialog.current?.focus();},[closed,username]);
       if(!link||!username||closed)return null;
@@ -155,6 +162,7 @@
         confirm&&h('form',{onSubmit:event=>{event.preventDefault();void controller.current?.submit(details);}},
           !dispatch&&!schedule&&!drawing&&h('p',null,'Confirm that this order is ready for dispatch. This will update its status in PanelStockHQ.'),
           drawing&&h('p',null,normalize(state.order.orderType)==='gate'?'Confirm the drawings for this gate order are complete. Each gate item will be sent to the QA Centre; QA approval will update dispatch readiness automatically.':'Confirm the drawings for this panel order are complete.'),
+          drawing&&normalize(state.order.orderType)==='gate'&&h('label',null,'Total Gate area (m²) ',h('span',{style:{color:'#dc2626'},'aria-hidden':true},'*'),h('input',{name:'areaM2',type:'number',required:true,min:'0.000001',max:'99999',step:'any',value:details.areaM2,disabled:state.busy,onChange:event=>{const value=event.target.value;setDetails(current=>({...current,areaM2:value}));}})),
           schedule&&h('div',null,
             h('p',null,'Requested delivery: '+(state.order.requestedDeliveryDate?state.order.requestedDeliveryDate.split('-').reverse().join('/'):'Not set')),
             h('label',null,'Scheduled delivery date',h('input',{type:'date',required:true,value:details.scheduledDeliveryDate,disabled:state.busy,onChange:event=>{const value=event.target.value;setDetails(current=>({...current,scheduledDeliveryDate:value}));}})),
