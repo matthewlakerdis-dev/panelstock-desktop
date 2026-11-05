@@ -191,7 +191,7 @@ async function runStartup(metadata){
   const context={console,PanelStock:{username:'a',init:async()=>({username:'a',isAdmin:true,offline:true}),snapshot:async()=>cache,apiFetch:async url=>{optionalCalls.push(url);return metadata(url);}},
     BAKED_WORKER_URL:'https://api.test',CNC_PUBLIC_TOKEN:null,DEFAULT_EMAIL_CONFIG:{},STORAGE_KEYS:{},loadKey:async()=>'',saveKey(){},
     ensureMissingPanelReason:value=>value||[],useEffect:callback=>callback(),TABS:[{id:'soh',tasks:[]}],setTab(){}};
-  for(const name of ['RememberedUsername','EmailConfig','OwnProfile','Variants','Offcuts','Transactions','Reasons','Catalog','Photos','CncPanels','Username','IsAdmin','TaskAccess'])context['set'+name]=value=>state[name]=value;
+  for(const name of ['RememberedUsername','EmailConfig','OwnProfile','Variants','Offcuts','Transactions','Reasons','Catalog','Photos','CncPanels','Username','IsAdmin','TaskAccess','ProductionTrackerShare'])context['set'+name]=value=>state[name]=value;
   context.setLoading=value=>{state.Loading=value;if(value===false)finished.resolve();};
   vm.runInNewContext(startupEffect,context);
   await finished.promise;
