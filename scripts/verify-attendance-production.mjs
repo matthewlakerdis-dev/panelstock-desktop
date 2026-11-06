@@ -43,7 +43,7 @@ export function validateAttendancePage(html,{manage=false,worker=false,headers,e
     assert.match(input(html,'username')||'',/\brequired\b/);
     assert.match(input(html,'pin')||'',/type="password"/);
     assert.match(html,/Use your PanelStock administrator account/);
-    for(const field of ['visitorSafetyAcknowledged','workshopAccess','ppeConfirmed'])assert.ok(scripts[0].includes(field),'Visitor safety register/export field missing: '+field);
+    for(const field of ['visitorSafetyAcknowledged','workshopAccess','ppeConfirmed','emergencyProcedureUnderstood','siteAccessUnderstood','hazardReportingUnderstood','undertakingWork','siteInductionCompleted','workRisksDiscussed'])assert.ok(scripts[0].includes(field),'Safety register/export field missing: '+field);
   }else{
     for(const id of ['name','company','host'])assert.match(input(html,id)||'',/\brequired\b/,'Missing required field: '+id);
     assert.ok(input(html,'contact'),'Contact field missing');
@@ -62,6 +62,8 @@ export function validateAttendancePage(html,{manage=false,worker=false,headers,e
     assert.match(input(html,'visitor-safety-acknowledged')||'',/type="checkbox"[^>]*\brequired\b/,'Visitor acknowledgement missing');
     for(const id of ['workshop-access-yes','workshop-access-no'])assert.match(input(html,id)||'',/type="radio"[^>]*\brequired\b/,'Workshop choice missing');
     for(const id of ['ppe-confirmed-yes','ppe-confirmed-no'])assert.match(input(html,id)||'',/type="radio"[^>]*\bdisabled\b/,'Conditional PPE choice missing');
+    for(const question of ['emergency-procedure-understood','site-access-understood','hazard-reporting-understood'])for(const answer of ['yes','no'])assert.match(input(html,question+'-'+answer)||'',/type="radio"[^>]*\brequired\b/,'Required safety choice missing: '+question+'-'+answer);
+    for(const question of ['undertaking-work','site-induction-completed','work-risks-discussed'])for(const answer of ['yes','no'])assert.match(input(html,question+'-'+answer)||'',/type="radio"[^>]*\bdisabled\b/,'Conditional contractor choice missing: '+question+'-'+answer);
     assert.ok(html.includes('visitor safety instructions provided by my host'),'Host-provided visitor acknowledgement missing');
     assert.ok(html.includes('Speak to your host before entering the workshop.'),'PPE host reminder missing');
   }
