@@ -43,6 +43,7 @@ export function validateAttendancePage(html,{manage=false,worker=false,headers,e
     assert.match(input(html,'username')||'',/\brequired\b/);
     assert.match(input(html,'pin')||'',/type="password"/);
     assert.match(html,/Use your PanelStock administrator account/);
+    for(const field of ['visitorSafetyAcknowledged','workshopAccess','ppeConfirmed'])assert.ok(scripts[0].includes(field),'Visitor safety register/export field missing: '+field);
   }else{
     for(const id of ['name','company','host'])assert.match(input(html,id)||'',/\brequired\b/,'Missing required field: '+id);
     assert.ok(input(html,'contact'),'Contact field missing');
@@ -54,6 +55,15 @@ export function validateAttendancePage(html,{manage=false,worker=false,headers,e
     assert.match(input(html,'attendance-admin-pin')||'',/type="password"/);
     assert.doesNotMatch(html,/station code|pairing code|connection code/i);
     assert.match(html,/People currently signed in/);
+    for(const id of ['action-screen','role-screen','in-screen','back-to-roles','back-to-actions-role','back-to-actions-out','visitor-safety','ppe-field','visitor-workshop-warning']){
+      assert.ok(html.includes('id="'+id+'"'),'Arrival wizard or visitor question missing: '+id);
+    }
+    for(const id of ['role-screen','in-screen','out-screen'])assert.match(html,new RegExp('<section\\b[^>]*id="'+id+'"[^>]*\\bhidden\\b'),'Wizard steps must start hidden: '+id);
+    assert.match(input(html,'visitor-safety-acknowledged')||'',/type="checkbox"[^>]*\brequired\b/,'Visitor acknowledgement missing');
+    for(const id of ['workshop-access-yes','workshop-access-no'])assert.match(input(html,id)||'',/type="radio"[^>]*\brequired\b/,'Workshop choice missing');
+    for(const id of ['ppe-confirmed-yes','ppe-confirmed-no'])assert.match(input(html,id)||'',/type="radio"[^>]*\bdisabled\b/,'Conditional PPE choice missing');
+    assert.ok(html.includes('visitor safety instructions provided by my host'),'Host-provided visitor acknowledgement missing');
+    assert.ok(html.includes('Speak to your host before entering the workshop.'),'PPE host reminder missing');
   }
 }
 
