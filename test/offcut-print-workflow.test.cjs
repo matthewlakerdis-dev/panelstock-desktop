@@ -40,7 +40,7 @@ function runtime({ panels = [], variants = [{ ...stock }], offcuts = [], failPer
   const events = [], popups = [], writes = [], toasts = [], stateChanges = [], storage = new Map();
   let id = 0, sku = 0;
   const context = vm.createContext({
-    module: { exports: {} }, cncPanels: panels, variants, offcuts, transactions: [], username: 'Coordinator',
+    module: { exports: {} }, cncPanels: panels, variants, offcuts, transactions: [], username: 'Coordinator', isAdmin: true,
     PanelStock: { username: 'Coordinator' },
     uid: () => 'id-' + (++id), genSku: () => 'OFFCUT-' + (++sku),
     fmtDim: (width, height) => width + ' × ' + height,
