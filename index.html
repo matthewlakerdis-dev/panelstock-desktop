@@ -192,6 +192,7 @@
 <script src="workshop-stock.js?v=3"></script>
 <script src="pull-refresh.js?v=20261029"></script>
 <script src="tab-workspace.js?v=20261102"></script>
+<script src="offcut-labels.js?v=1"></script>
 <script src="panelstock-client.js?v=20261102-multiple-tabs"></script>
 <script src="toolbox-launcher.js?v=20261013-safety"></script>
 <script>
@@ -14037,7 +14038,16 @@ ${xrefStart}
       }
       return "";
     }
-    function addCncPanel(input) {
+    function printScheduledOffcutLabels(rows = cncPanels) {
+      try {
+        const service=globalThis.PanelStockOffcutLabels;
+        if(!service)throw Error("Offcut label printing is unavailable. Refresh and try again.");
+        const labels=service.collectScheduled(rows,{variants,offcuts});
+        if(!labels.length){showToast("No approved offcuts to print", "err");return false;}
+        const result=service.print(labels,{onError:message=>showToast(message,"err")});
+        return result?.ok!==false;
+      } catch(error){showToast(error.message||"Offcut labels could not be printed. Try Print offcut labels in the CNC tracker.","err");return false;}
+    }    function addCncPanel(input) {
       const { orderNumber, jobReference, sheetNumber, panelNumber, stockItemType, stockItemId, stockSku, sheetWidth, sheetHeight, totalPanelArea, panelAreaScope, pendingOffcut, pendingOffcuts, pdfPage, isRemake, isTemplate, remakeReason } = normalizeCncInput(input);
       const validationError=cncOffcutError(input)||validateCncSchedule([{orderNumber,jobReference,sheetNumber,panelNumber,stockItemType,stockItemId}]);
       if(validationError){showToast(validationError,"err");return false;}
@@ -14066,11 +14076,21 @@ ${xrefStart}
         completedBy: null,
         completedAt: null
       };
-      const next = [...cncPanels, entry];
-      setCncPanels(next);
-      persist({ cncPanels: next });
-      logTxn({ type: "cnc", desc: `Scheduled panel for CNC: Order ${orderNumber}${jobReference ? ` \xB7 Job ${jobReference}` : ""} \xB7 Sheet ${sheetNumber} \xB7 Panel ${panelNumber}`, qty: "" });
+      try{
+        const service=globalThis.PanelStockOffcutLabels;
+        if(entry.pendingOffcuts.length&&!service)throw Error("Offcut label printing is unavailable. Refresh before scheduling these offcuts.");
+        if(service?.prepareScheduled){const prepared=service.prepareScheduled([entry],cncPanels,{uid,genSku,user:username,variants,offcuts})[0];entry.pendingOffcuts=prepared.pendingOffcuts;entry.pendingOffcut=prepared.pendingOffcut;}
+      }catch(error){showToast(error.message,"err");return false;}
+      const offcutSheetKey=panel=>JSON.stringify([panel.jobReference||"",panel.orderNumber||"",panel.sheetNumber||""].map(value=>String(value).trim().replace(/\s+/g," ").toLowerCase()));
+      const next = [...cncPanels.map(panel=>panel.status==="pending"&&offcutSheetKey(panel)===offcutSheetKey(entry)?{...panel,pendingOffcuts:entry.pendingOffcuts,pendingOffcut:entry.pendingOffcut}:panel), entry];
+      const previousById=new Map(cncPanels.map(panel=>[panel.id,panel]));
+      const editedPanelIds=next.filter(panel=>previousById.has(panel.id)&&JSON.stringify(previousById.get(panel.id))!==JSON.stringify(panel)).map(panel=>panel.id);
+      const activity={id:uid(),timestamp:new Date().toISOString(),user:username||"Unknown",type:"cnc",desc:`Scheduled panel for CNC: Order ${orderNumber}${jobReference ? ` \xB7 Job ${jobReference}` : ""} \xB7 Sheet ${sheetNumber} \xB7 Panel ${panelNumber}`,qty:"",...(editedPanelIds.length?{source:"cnc-edit",panelRecordIds:editedPanelIds}:{})};
+      const nextTransactions=[activity,...transactions];
+      try{persist({cncPanels:next,transactions:nextTransactions});}catch(error){showToast(error.message||"The CNC panel could not be saved","err");return false;}
+      setCncPanels(next);setTransactions(nextTransactions);
       showToast("Panel added to CNC schedule");
+      if(entry.pendingOffcuts.length&&globalThis.PanelStockOffcutLabels)printScheduledOffcutLabels([entry]);
       return true;
     }
     function editCncPanel(id, input) {
@@ -14097,8 +14117,13 @@ ${xrefStart}
       if(plan.error){showToast(plan.error,"err");return false;}
       const replacedIds=new Set([...plan.replacements.values()].map(panel=>panel.id));
       const remaining=cncPanels.filter(panel=>!replacedIds.has(panel.id));
-      const validationError=validateCncSchedule(rows,remaining);
+      const validationError=rows.map(row=>(row.pendingOffcut||row.pendingOffcuts?.length)?cncOffcutError(row):"").find(Boolean)||validateCncSchedule(rows,remaining);
       if(validationError){showToast(validationError,"err");return false;}
+      try{
+        const service=globalThis.PanelStockOffcutLabels;
+        if(rows.some(row=>Array.isArray(row.pendingOffcuts)?row.pendingOffcuts.length:row.pendingOffcut)&&!service)throw Error("Offcut label printing is unavailable. Refresh before scheduling these offcuts.");
+        if(service?.prepareScheduled)rows=service.prepareScheduled(rows,cncPanels,{uid,genSku,user:username,variants,offcuts});
+      }catch(error){showToast(error.message,"err");return false;}
       const now = (/* @__PURE__ */ new Date()).toISOString();
       const newEntries = rows.map((r) => ({
         id: plan.replacements.get(cncDuplicateKey(r))?.id || uid(),
@@ -14127,15 +14152,24 @@ ${xrefStart}
         completedAt: null
       }));
       const replacements=new Map(newEntries.filter(panel=>replacedIds.has(panel.id)).map(panel=>[panel.id,panel]));
-      const next = [...cncPanels.map(panel=>replacements.has(panel.id)?{...panel,...replacements.get(panel.id)}:panel),...newEntries.filter(panel=>!replacedIds.has(panel.id))];
+      const offcutSheetKey=panel=>JSON.stringify([panel.jobReference||"",panel.orderNumber||"",panel.sheetNumber||""].map(value=>String(value).trim().replace(/\s+/g," ").toLowerCase()));
+      const sheetOffcuts=new Map(newEntries.map(panel=>[offcutSheetKey(panel),panel.pendingOffcuts]));
+      const next = [...cncPanels.map(panel=>replacements.has(panel.id)?{...panel,...replacements.get(panel.id)}:panel),...newEntries.filter(panel=>!replacedIds.has(panel.id))].map(panel=>{
+        const key=offcutSheetKey(panel),proposals=sheetOffcuts.get(key);
+        const old=Array.isArray(panel.pendingOffcuts)?panel.pendingOffcuts:panel.pendingOffcut?[panel.pendingOffcut]:[];
+        return panel.status==="pending"&&sheetOffcuts.has(key)&&JSON.stringify(old)!==JSON.stringify(proposals)?{...panel,pendingOffcuts:proposals,pendingOffcut:proposals[0]||null}:panel;
+      });
       const updated=replacedIds.size,added=rows.length-updated;
       const message=fromPdf?`PDF schedule saved: ${updated} updated · ${added} added`:`${rows.length} panel${rows.length===1?"":"s"} added to CNC schedule`;
       const activity={id:uid(),type:"cnc",desc:fromPdf?message:`Bulk scheduled ${rows.length} panel${rows.length===1?"":"s"} for CNC`,qty:"",user:username||"Unknown",timestamp:now,...(fromPdf?{source:"cnc-pdf",panelRecordIds:newEntries.map(panel=>panel.id)}:{})};
-      const nextTransactions=[activity,...transactions];
-      setCncPanels(next);
-      setTransactions(nextTransactions);
-      persist({cncPanels:next,transactions:nextTransactions});
+      const previousById=new Map(cncPanels.map(panel=>[panel.id,panel]));
+      const editedPanelIds=next.filter(panel=>{const previous=previousById.get(panel.id);return previous&&panel.pdfRevision===previous.pdfRevision&&JSON.stringify(previous)!==JSON.stringify(panel);}).map(panel=>panel.id);
+      const offcutEditActivity=editedPanelIds.length?[{id:uid(),type:"cnc",source:"cnc-edit",panelRecordIds:editedPanelIds,desc:"Updated retained offcut decisions for scheduled CNC sheets",qty:"",user:username||"Unknown",timestamp:now}]:[];
+      const nextTransactions=[activity,...offcutEditActivity,...transactions];
+      try{persist({cncPanels:next,transactions:nextTransactions});}catch(error){showToast(error.message||"The CNC schedule could not be saved","err");return false;}
+      setCncPanels(next);setTransactions(nextTransactions);
       showToast(message);
+      if(newEntries.some(panel=>panel.pendingOffcuts.length)&&globalThis.PanelStockOffcutLabels)printScheduledOffcutLabels(newEntries);
       return true;
     }
     function completeCncPanel(id) {
@@ -14168,16 +14202,23 @@ ${xrefStart}
         for(let j=0;j<i;j++){const other=selected[j].rectangle;if(other&&Math.min(rectangle.x+rectangle.width,other.x+other.width)>Math.max(rectangle.x,other.x)&&Math.min(rectangle.y+rectangle.height,other.y+other.height)>Math.max(rectangle.y,other.y))return showToast("The saved offcuts overlap", "err");}
       }
       const completedAt = new Date().toISOString();
-      const additions=selected.map(item=>({id:uid(),sku:genSku(),color:stock.color,material:stock.material,thickness:stock.thickness,width:item.dimensionOrder==="sheet"||item.source==="manual"?Number(item.length):Math.max(Number(item.length),Number(item.width)),height:item.dimensionOrder==="sheet"||item.source==="manual"?Number(item.width):Math.min(Number(item.length),Number(item.width)),...(item.dimensionOrder==="sheet"||item.source==="manual"?{dimensionOrder:"sheet"}:{}),qty:1,note:item.note||`From Order ${orderNumber}, Sheet ${sheetNumber}`,sourceOrderNumber:orderNumber,sourceSheetNumber:sheetNumber,createdBy:username||"Unknown",createdAt:completedAt}));
+      const labelProposals=Array.isArray(scheduled.pendingOffcuts)?scheduled.pendingOffcuts:scheduled.pendingOffcut?[scheduled.pendingOffcut]:[];
+      const additions=selected.map((item,index)=>{
+        const proposal=labelProposals.find(value=>item.labelOffcutId&&value.labelOffcutId===item.labelOffcutId)||labelProposals.find(value=>Number(value.length)===Number(item.length)&&Number(value.width)===Number(item.width))||labelProposals[index]||{};
+        const spec=value=>({color:stock.color,material:stock.material,thickness:stock.thickness,width:value.dimensionOrder==="sheet"||value.source==="manual"?Number(value.length):Math.max(Number(value.length),Number(value.width)),height:value.dimensionOrder==="sheet"||value.source==="manual"?Number(value.width):Math.min(Number(value.length),Number(value.width)),dimensionOrder:value.dimensionOrder==="sheet"||value.source==="manual"?"sheet":undefined});
+        const actual=spec(item),planned=spec(proposal),existing=offcuts.find(value=>value.id===proposal.labelOffcutId||value.sku===proposal.labelSku);
+        const reusable=proposal.labelSku&&offcutStockKey(actual)===offcutStockKey(planned)&&(!existing||offcutStockKey(existing)===offcutStockKey(actual));
+        return {...actual,id:reusable?proposal.labelOffcutId||uid():uid(),sku:reusable?proposal.labelSku:genSku(),...(proposal.labelSku?{labelSku:proposal.labelSku,labelOffcutId:proposal.labelOffcutId}:{}),qty:1,note:item.note||`From Order ${orderNumber}, Sheet ${sheetNumber}`,sourceOrderNumber:orderNumber,sourceSheetNumber:sheetNumber,sourceJobReference:scheduled.jobReference||"",createdBy:username||"Unknown",createdAt:completedAt};
+      });
       const dispatchedOffcuts=stockType==="offcut"?offcuts.map(item=>item.id===stock.id?{...item,qty:item.qty-1}:item).filter(item=>item.qty>0):offcuts,nextVariants=stockType==="variant"?variants.map(item=>item.id===stock.id?{...item,qty:item.qty-1}:item):variants;
       const merged=mergeOffcutStock(dispatchedOffcuts,additions);
       if(merged.error)return showToast(merged.error,"err");
       const savedOffcuts=merged.additions,savedOffcut=savedOffcuts[0]||null,nextOffcuts=merged.offcuts;
-      const details=savedOffcuts.map(item=>({length:item.width,width:item.height,...(item.dimensionOrder==="sheet"?{dimensionOrder:"sheet"}:{}),color:item.color,material:item.material,thickness:item.thickness}));
+      const details=savedOffcuts.map(item=>({...(item.labelSku?{labelSku:item.labelSku,stockSku:item.sku}:{}),length:item.width,width:item.height,...(item.dimensionOrder==="sheet"?{dimensionOrder:"sheet"}:{}),color:item.color,material:item.material,thickness:item.thickness}));
       const next = cncPanels.map((p) => matches(p) ? { ...p, status: "completed", completedBy: username, completedAt,offcutOutcome:savedOffcuts.length?"confirmed":"none",offcutDetails:savedOffcut?details[0]:null,savedOffcuts:details } : p);
       const panelIds=sheetPanels.map(panel=>panel.panelNumber).filter(Boolean),panelLabel=panelIds.join(", ");
       const hasProposal=sheetPanels.some(panel=>Array.isArray(panel.pendingOffcuts)?panel.pendingOffcuts.length>0:!!panel.pendingOffcut);
-      const activity=[...(savedOffcuts.length?savedOffcuts.map(savedOffcut=>({id:uid(),timestamp:completedAt,user:username||"Unknown",type:"offcut_add",itemType:"offcut",sku:savedOffcut.sku,desc:`Saved CNC off-cut ${fmtStockDim(savedOffcut)} · Order ${orderNumber} · Sheet ${sheetNumber}`,qty:1,orderNumber,sheetNumber})):hasProposal?[{id:uid(),timestamp:completedAt,user:username||"Unknown",type:"cnc",desc:`Proposed CNC off-cut not saved · Order ${orderNumber} · Sheet ${sheetNumber}`,qty:"",orderNumber,sheetNumber}]:[]),{id:uid(),timestamp:completedAt,user:username||"Unknown",type:"dispatch",source:"cnc",desc:`${stockType==="offcut"?"Off-cut ":""}${stock.color} ${stock.material} ${stock.thickness}mm ${fmtStockDim(stock)} · Order ${orderNumber} · Panel ID${panelIds.length===1?"":"s"} ${panelLabel}`,qty:1,ref:scheduled.jobReference||orderNumber,customer:"CNC",orderNumber,panelIds,itemType:stockType,sku:stock.sku,color:stock.color,material:stock.material,thickness:stock.thickness,width:stock.width,height:stock.height,...(stock.dimensionOrder==="sheet"?{dimensionOrder:"sheet"}:{}),note:stock.note||""},{id:uid(),timestamp:completedAt,user:username||"Unknown",type:"cnc",desc:`Completed CNC sheet: Order ${orderNumber} · Sheet ${sheetNumber} · ${count} panel${count === 1 ? "" : "s"}`,qty:""},...transactions];
+      const activity=[...(savedOffcuts.length?savedOffcuts.map(savedOffcut=>({id:uid(),timestamp:completedAt,user:username||"Unknown",type:"offcut_add",itemType:"offcut",sku:savedOffcut.sku,...(savedOffcut.labelSku?{labelReference:savedOffcut.labelSku}:{}),desc:`Saved CNC off-cut ${fmtStockDim(savedOffcut)} · Order ${orderNumber} · Sheet ${sheetNumber}`,qty:1,orderNumber,sheetNumber})):hasProposal?[{id:uid(),timestamp:completedAt,user:username||"Unknown",type:"cnc",desc:`Proposed CNC off-cut not saved · Order ${orderNumber} · Sheet ${sheetNumber}`,qty:"",orderNumber,sheetNumber}]:[]),{id:uid(),timestamp:completedAt,user:username||"Unknown",type:"dispatch",source:"cnc",desc:`${stockType==="offcut"?"Off-cut ":""}${stock.color} ${stock.material} ${stock.thickness}mm ${fmtStockDim(stock)} · Order ${orderNumber} · Panel ID${panelIds.length===1?"":"s"} ${panelLabel}`,qty:1,ref:scheduled.jobReference||orderNumber,customer:"CNC",orderNumber,panelIds,itemType:stockType,sku:stock.sku,color:stock.color,material:stock.material,thickness:stock.thickness,width:stock.width,height:stock.height,...(stock.dimensionOrder==="sheet"?{dimensionOrder:"sheet"}:{}),note:stock.note||""},{id:uid(),timestamp:completedAt,user:username||"Unknown",type:"cnc",desc:`Completed CNC sheet: Order ${orderNumber} · Sheet ${sheetNumber} · ${count} panel${count === 1 ? "" : "s"}`,qty:""},...transactions];
       setCncPanels(next);
       setVariants(nextVariants);setOffcuts(nextOffcuts);setTransactions(activity);
       persist({ cncPanels: next, variants:nextVariants, offcuts:nextOffcuts, transactions:activity });
@@ -14433,6 +14474,10 @@ ${xrefStart}
       prepareExport(buildPdfBlob(lines), `SOH_${todayStr()}.pdf`);
     }
     function printLabel(item) {
+      if(item.itemType==="offcut"||offcuts.some(value=>value.id===item.id)){
+        try{const service=globalThis.PanelStockOffcutLabels;if(!service)throw Error("Offcut label printing is unavailable. Refresh and try again.");service.print([service.fromItem(item)],{onError:message=>showToast(message,"err")});}catch(error){showToast(error.message||"The offcut label could not be printed","err");}
+        return;
+      }
       const lines = buildLabelLines(item);
       prepareExport(buildPdfBlob(lines), `Label_${item.sku}.pdf`);
     }
@@ -14636,6 +14681,7 @@ ${xrefStart}
               onAddPanelsBulk: addCncPanelsBulk,
               onCompletePanel: completeCncPanel,
               onCompleteSheet: completeCncSheet,
+              onPrintOffcutLabels: printScheduledOffcutLabels,
               onRemovePanel: removeCncPanel,
               onRemoveScheduled: removeCncScheduled,
               onBackfillDimensions: backfillCncDimensions
@@ -14978,10 +15024,13 @@ ${xrefStart}
     return h("div",{className:"col-span-full overflow-hidden rounded-xl border border-slate-300 bg-white",children:[h("div",{className:"border-b border-slate-100 p-4",children:[h("label",{className:"mb-2 block text-xs font-semibold text-slate-600",children:"Select material / stock sheet *"}),h("div",{className:"relative",children:[h(Search,{size:16,className:"absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"}),h("input",{value:query,onChange:event=>setQuery(event.target.value),placeholder:"Search colour, material, size, SKU…",style:{paddingLeft:"2.5rem"},className:"w-full rounded-lg border border-slate-300 bg-slate-50 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-cyan-800 focus:bg-white"})]})]}),h("div",{className:"max-h-80 overflow-y-auto divide-y divide-slate-100",children:choices.length?choices.map(item=>{const key=`${item.itemType}:${item.id}`,active=key===selected,count=reserved.get(key)||0;return h("button",{type:"button",onClick:()=>onSelect(item),className:`w-full flex items-center gap-3 px-4 py-3 text-left ${active?"bg-cyan-50":"hover:bg-slate-50"}`,children:[h("div",{className:"h-7 w-7 shrink-0 rounded",style:{backgroundColor:swatchColour(item.color)}}),h("div",{className:"min-w-0 flex-1",children:[h("div",{className:"truncate text-sm font-medium text-slate-800",children:`${item.color} · ${item.material}`}),h("div",{className:"text-xs text-slate-400",children:`${item.kind} · ${item.thickness}mm · ${fmtStockDim(item)} · ${item.sku||"No SKU"}`})]}),h("div",{className:"flex shrink-0 items-center gap-3",children:[count>0&&h("span",{className:"inline-flex shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800",children:`${count} CNC`}),h("span",{className:"text-sm font-semibold text-slate-500",children:`${item.qty} SOH`})]}),active&&h(Check,{size:17,className:"text-cyan-800"})]},key);}):h("p",{className:"p-5 text-center text-sm text-slate-500",children:"No in-stock material matches your search."})})]});
   }
   function cncOffcutError(form) {
-    if(!form.pendingOffcut)return "";
-    const length=Number(form.pendingOffcut.length),width=Number(form.pendingOffcut.width);
-    if(!Number.isFinite(length)||!Number.isFinite(width)||length<=0||width<=0)return "Enter the off-cut length and width.";
-    if(Math.max(length,width)>Math.max(Number(form.sheetWidth),Number(form.sheetHeight))||Math.min(length,width)>Math.min(Number(form.sheetWidth),Number(form.sheetHeight)))return "The off-cut must fit within the selected stock sheet.";
+    const proposals=Array.isArray(form.pendingOffcuts)?form.pendingOffcuts:form.pendingOffcut?[form.pendingOffcut]:[];
+    if(proposals.length>20)return "Keep no more than 20 offcuts from one sheet.";
+    for(const proposal of proposals){
+      const length=Number(proposal.length),width=Number(proposal.width);
+      if(!Number.isFinite(length)||!Number.isFinite(width)||length<=0||width<=0)return "Enter the off-cut length and width.";
+      if(Math.max(length,width)>Math.max(Number(form.sheetWidth),Number(form.sheetHeight))||Math.min(length,width)>Math.min(Number(form.sheetWidth),Number(form.sheetHeight)))return "The off-cut must fit within the selected stock sheet.";
+    }
     return "";
   }
   function CncSingleForm({ form, setForm, onSave, onClose, variants, offcuts, cncPanels }) {
@@ -15739,7 +15788,7 @@ function compareCncOrders(a, b) {
       if (!sheetNumber || !panelNumber) { errors.push(`Line ${i + 1}: enter both a sheet number and panel ID.`); return; }
       const totalPanelArea=Number(line.totalPanelArea);
       if(!(totalPanelArea>0))errors.push(`Line ${i + 1}: enter the total panel area in m².`);
-      const row = normalizeCncInput({ orderNumber: shared.orderNumber, jobReference: shared.jobReference,stockItemType:line.stockItemType||order.stockItemType,stockItemId:line.stockItemId||order.stockItemId,stockSku:line.stockSku||order.stockSku,sheetWidth:Number(line.sheetWidth||order.sheetWidth),sheetHeight:Number(line.sheetHeight||order.sheetHeight),totalPanelArea, sheetNumber, panelNumber,isRemake:line.isRemake===true,isTemplate:line.isTemplate===true,remakeReason:line.remakeReason||"" });
+      const row = normalizeCncInput({ orderNumber: shared.orderNumber, jobReference: shared.jobReference,stockItemType:line.stockItemType||order.stockItemType,stockItemId:line.stockItemId||order.stockItemId,stockSku:line.stockSku||order.stockSku,sheetWidth:Number(line.sheetWidth||order.sheetWidth),sheetHeight:Number(line.sheetHeight||order.sheetHeight),totalPanelArea,...(line.pendingOffcut?{pendingOffcut:line.pendingOffcut}:{}), sheetNumber, panelNumber,isRemake:line.isRemake===true,isTemplate:line.isTemplate===true,remakeReason:line.remakeReason||"" });
       if(!row.stockItemId)errors.push(`Line ${i + 1}: select the material / stock sheet.`);
       if(row.isRemake&&row.isTemplate)errors.push(`Line ${i + 1}: choose either Remake or Template, not both.`);
       if(row.isRemake&&!row.remakeReason)errors.push(`Line ${i + 1}: enter a reason for the remake.`);
@@ -15805,8 +15854,8 @@ function compareCncOrders(a, b) {
     }
     const field = (label, props) => h("label", { className: "block min-w-0 text-xs font-semibold text-slate-600", children: [label, h("input", { ...props, type: "text", className: inputCls + " mt-1 w-full", autoComplete: "off" })] });
     const firstLine=lines[0];
-    const chooseLineStock=(line,stock)=>{setLines(current=>current.map(item=>item.id===line.id?{...item,stockItemType:stock?.itemType||"",stockItemId:stock?.id||"",stockSku:stock?.sku||"",sheetWidth:stock?.width||"",sheetHeight:stock?.height||""}:item));setErrors([]);};
-    const panelEditor=(line,lineNumber)=>h("div",{className:"space-y-4",children:[h("div",{className:"grid grid-cols-2 gap-4",children:[field("Sheet number", { "aria-label":"Sheet number line "+lineNumber,value:line.sheetNumber,placeholder:"e.g. 1",onChange:e=>updateLine(line.id,"sheetNumber",e.target.value) }),field("Panel ID", { "aria-label":"Panel ID line "+lineNumber,value:line.panelNumber,placeholder:"A73-219",onChange:e=>updateLine(line.id,"panelNumber",e.target.value) }),h("div",{className:"col-span-full",children:field("Total panel area (m²)", { min:"0.01",step:"0.01","aria-label":"Total panel area line "+lineNumber,value:line.totalPanelArea,placeholder:"4.75",onChange:e=>updateLine(line.id,"totalPanelArea",e.target.value) })})]}),h(CncPanelTypeFields,{value:line,onChange:patch=>{setLines(current=>current.map(item=>item.id===line.id?{...item,...patch}:item));setErrors([]);}}),line.stockItemId&&h("p",{className:"text-xs text-slate-500",children:`Selected sheet: ${fmtStockDim({width:line.sheetWidth,height:line.sheetHeight,dimensionOrder:line.stockItemType==="offcut"?"sheet":undefined})} mm (Length × Width)`})]});
+    const chooseLineStock=(line,stock)=>{setLines(current=>current.map(item=>item.id===line.id?{...item,stockItemType:stock?.itemType||"",stockItemId:stock?.id||"",stockSku:stock?.sku||"",sheetWidth:stock?.width||"",sheetHeight:stock?.height||"",pendingOffcut:null}:item));setErrors([]);};
+    const panelEditor=(line,lineNumber)=>h("div",{className:"space-y-4",children:[h("div",{className:"grid grid-cols-2 gap-4",children:[field("Sheet number", { "aria-label":"Sheet number line "+lineNumber,value:line.sheetNumber,placeholder:"e.g. 1",onChange:e=>updateLine(line.id,"sheetNumber",e.target.value) }),field("Panel ID", { "aria-label":"Panel ID line "+lineNumber,value:line.panelNumber,placeholder:"A73-219",onChange:e=>updateLine(line.id,"panelNumber",e.target.value) }),h("div",{className:"col-span-full",children:field("Total panel area (m²)", { min:"0.01",step:"0.01","aria-label":"Total panel area line "+lineNumber,value:line.totalPanelArea,placeholder:"4.75",onChange:e=>updateLine(line.id,"totalPanelArea",e.target.value) })})]}),h(CncPanelTypeFields,{value:line,onChange:patch=>{setLines(current=>current.map(item=>item.id===line.id?{...item,...patch}:item));setErrors([]);}}),h("div",{className:"rounded-lg border border-slate-200 p-3 space-y-3",children:[h("label",{className:"flex items-center gap-2 text-sm",children:[h("input",{type:"checkbox",checked:!!line.pendingOffcut,onChange:event=>updateLine(line.id,"pendingOffcut",event.target.checked?{length:"",width:"",status:"pending",source:"manual"}:null)}),"Approve off-cut and print 50 × 30 mm sticker"]}),line.pendingOffcut&&h("div",{className:"grid grid-cols-2 gap-3",children:[...['length','width'].map(key=>h("label",{className:"text-xs font-semibold text-slate-600",children:[key==='length'?'Off-cut length (mm)':'Off-cut width (mm)',h("input",{type:"number",min:1,value:line.pendingOffcut[key],className:inputCls,onChange:event=>updateLine(line.id,"pendingOffcut",{...line.pendingOffcut,[key]:event.target.value})})]},key)),h("p",{className:"col-span-full text-xs text-slate-500",children:"The label is printed now; stock is added only after the cut is confirmed."})]})]}),line.stockItemId&&h("p",{className:"text-xs text-slate-500",children:`Selected sheet: ${fmtStockDim({width:line.sheetWidth,height:line.sheetHeight,dimensionOrder:line.stockItemType==="offcut"?"sheet":undefined})} mm (Length × Width)`})]});
     return h("form", { onSubmit: submit, noValidate: true, className: "ps-entry", children: [
       h("h2", { children: "Schedule CNC panels" }),
       h("p", { className: "ps-entry-intro", children: "Enter the order and material once, then add one or more panels." }),
@@ -15930,7 +15979,7 @@ function compareCncOrders(a, b) {
         h(CncPanelTypeFields,{value:page,onChange:patch=>update(index,patch)}),
         h("div",{className:"space-y-3"},page.offcutRows.map((item,offcutIndex)=>h("div",{key:offcutIndex,className:"rounded-lg bg-cyan-50 border border-cyan-200 p-3"},[
           h("label",{className:"flex items-center gap-2 text-sm font-semibold text-cyan-900"},[h("input",{type:"checkbox",checked:!!item.keep,disabled:busy,"aria-label":`Keep offcut for sheet ${page.sheetNumber}${offcutIndex?` offcut ${offcutIndex+1}`:""}`,onChange:event=>updateOffcut(index,offcutIndex,{keep:event.target.checked})}),page.offcutRows.length>1?`Keep offcut ${offcutIndex+1}`:"Keep this offcut"]),
-          h("p",{className:"mt-1 text-xs text-cyan-900"},item.keep?"Confirm the dimensions when completing the sheet; no stock is added now.":item.length&&item.width?`Detected leftover: ${item.length} × ${item.width} mm. Tick to keep it; otherwise it will not be saved.`:"Tick to enter a usable leftover; otherwise no offcut will be saved."),
+          h("p",{className:"mt-1 text-xs text-cyan-900"},item.keep?"A 50 × 30 mm sticker prints when scheduled. Confirm the dimensions when completing the sheet; no stock is added now.":item.length&&item.width?`Detected leftover: ${item.length} × ${item.width} mm. Tick to keep it; otherwise it will not be saved.`:"Tick to enter a usable leftover; otherwise no offcut will be saved."),
           item.keep&&h("div",{className:"mt-2 grid grid-cols-2 gap-3"},[
             h("input",{type:"number",min:0.001,step:"any",className:inputCls,"aria-label":offcutIndex?`Off-cut ${offcutIndex+1} length`:"Off-cut length",value:item.length,onChange:event=>updateOffcut(index,offcutIndex,{length:event.target.value})}),
             h("input",{type:"number",min:0.001,step:"any",className:inputCls,"aria-label":offcutIndex?`Off-cut ${offcutIndex+1} width`:"Off-cut width",value:item.width,onChange:event=>updateOffcut(index,offcutIndex,{width:event.target.value})})
@@ -15995,7 +16044,7 @@ function compareCncOrders(a, b) {
     async function save(event){event.preventDefault();setBusy(true);setMessage("");try{const payload=Object.fromEntries(Object.keys(DEFAULT_CNC_SETTINGS).map(key=>[key,Number(form[key])])),response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/cnc-settings",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}),result=await response.json().catch(()=>({}));if(!response.ok)throw Error(result.error||"CNC settings could not be saved.");onSaved(result.settings);setMessage("CNC settings saved.");}catch(error){setMessage(error.message||"CNC settings could not be saved.");}finally{setBusy(false);}}
     return h("div",{className:"mx-auto max-w-3xl px-4 py-6"},[h("div",{className:"mb-5"},[h("h1",{className:"text-2xl font-bold text-slate-900"},"CNC Settings"),h("p",{className:"mt-1 text-sm text-slate-500"},"Control off-cut suggestions and the waste colours used in newly downloaded shared Excel trackers.")]),h("form",{onSubmit:save,className:"space-y-5 rounded-xl border border-slate-200 bg-white p-5"},[field("minimumOffcutSizeMm","Minimum off-cut size (mm)","Both finished sides must be at least this size.",1,10000),field("cutEdgeAllowanceMm","Off-cut allowance on cut edge (mm)","Removed from the newly cut edge before an off-cut is proposed.",0,1000),h("fieldset",{className:"rounded-xl border border-slate-200 p-4"},[h("legend",{className:"px-1 text-sm font-semibold text-slate-800"},"Wastage percentage colours"),h("p",{className:"mb-3 text-xs text-slate-500"},"Set the upper limit for green and yellow. Anything above yellow displays red."),h("div",{className:"grid gap-4 sm:grid-cols-2"},[field("wasteGreenMax","Green up to (%)","Low wastage.",0,100),field("wasteYellowMax","Yellow up to (%)","Moderate wastage.",0,100)])]),message&&h("p",{role:"status",className:message.includes("saved")?"text-sm text-green-700":"text-sm text-red-700"},message),h("button",{type:"submit",disabled:busy,className:"rounded-lg bg-cyan-800 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"},busy?"Saving…":"Save CNC settings")])]);
   }
-  function CncPage({ cncPanels, variants, offcuts, isAdmin, onAddPanel, onEditPanel, onAddPanelsBulk, onCompletePanel, onCompleteSheet, onRemovePanel, onRemoveScheduled, onBackfillDimensions }) {
+  function CncPage({ cncPanels, variants, offcuts, isAdmin, onAddPanel, onEditPanel, onAddPanelsBulk, onCompletePanel, onCompleteSheet, onRemovePanel, onRemoveScheduled, onBackfillDimensions, onPrintOffcutLabels }) {
     const h = import_react.createElement;
     const [sheetToComplete, setSheetToComplete] = useState(null);
     const [inputError, setInputError] = useState("");
@@ -16059,6 +16108,7 @@ function compareCncOrders(a, b) {
       ),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex flex-wrap items-center gap-2 mb-3", children: [
         isAdmin && completed.some(panel => !(Number(panel.sheetWidth) > 0 && Number(panel.sheetHeight) > 0 && Number(panel.totalPanelArea) > 0)) && h("button", { type: "button", onClick: () => { setBackfillOpen(true); setAddOpen(false); setBulkOpen(false); }, className: "flex items-center gap-1.5 text-sm font-medium text-amber-900 border border-amber-300 bg-amber-50 rounded-lg px-3 py-2 hover:bg-amber-100", children: `Add historical dimensions and panel area (${new Set(completed.filter(panel => !(Number(panel.sheetWidth) > 0 && Number(panel.sheetHeight) > 0 && Number(panel.totalPanelArea) > 0)).map(panel => JSON.stringify([panel.jobReference || "", panel.orderNumber || "", panel.sheetNumber || ""]))).size})` }),
+        typeof onPrintOffcutLabels==="function"&&view==="pending"&&h("button",{type:"button",disabled:!filtered.some(panel=>Array.isArray(panel.pendingOffcuts)?panel.pendingOffcuts.length:panel.pendingOffcut),onClick:()=>onPrintOffcutLabels(filtered),className:"flex items-center gap-1.5 text-sm font-medium text-slate-600 border border-slate-300 bg-white rounded-lg px-3 py-2 hover:bg-slate-50"},"Print offcut labels"),
         CNC_PUBLIC_TOKEN && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", { href: excelLink, className: "flex items-center gap-1.5 text-sm font-medium text-slate-600 border border-slate-300 bg-white rounded-lg px-3 py-2 hover:bg-slate-50", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FileSpreadsheet, { size: 15 }),
           " Production Tracker"

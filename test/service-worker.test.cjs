@@ -51,3 +51,11 @@ test('desktop first installation includes offline CSS and only existing local as
  assert.ok([...h.buckets.get('panelstock-shell-v2').keys()].every(url=>!new URL(url).pathname.startsWith('/sign-in')),'Attendance pages must not be cached by the desktop service worker');
  assert.doesNotMatch(source,/cdn.tailwindcss.com/);
 });
+
+
+test('versioned offcut sticker printer remains available from the offline cache',async()=>{
+ const root=path.resolve(__dirname,'..'),source=fs.readFileSync(path.join(root,'push-sw.js'),'utf8');
+ const h=workerHarness(source,'https://web.example/');await h.dispatch('install');await h.dispatch('activate');h.offline();
+ const response=await h.dispatch('fetch',new Request('https://web.example/offcut-labels.js?v=build-content-hash'));
+ assert.equal(response.status,200);assert.equal(await response.text(),'static asset');
+});
