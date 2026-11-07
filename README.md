@@ -29,3 +29,13 @@ One editing tab per app origin is allowed. Pending changes remain tied to the us
 Site Orders require Villa for new Gate orders, or Location with separate optional Notes for Panels. Saved drafts retain these fields. Gate progress uses Drawn and total order area (m²), required when completing Drawn. Fabricated/QA and Ready for dispatch continue to update from QA.
 
 Site Order forms use the same Order details, Site contact, Requested delivery and Notes sections for every type. Gate Villa and Panel Location appear within Order details; Notes is optional for all types. Older note text is restored into the common editor, with distinct historical text retained separately when both saved note fields contain content.
+
+## 50 × 30 mm offcut stickers
+
+Retaining offcuts in CNC scheduling opens the print window after the schedule is saved locally. Each retained physical piece gets one 50 × 30 mm sticker; multiple panels on the same sheet do not duplicate its labels. The sticker has three large, centred fields: dimensions, thickness and material, then colour/finish. Proposed pieces remain outside SOH until the operator confirms the completed cut. Matching offcuts continue to share their existing stock line and SKU.
+
+Use **Print offcut labels** in the CNC tracker to reprint the currently filtered pending work. In SOH, use the offcut's **Manage → Print offcut label** action, or its stock-detail print action. Workshop profile offcuts are supported too. Each manual print defaults to one physical piece.
+
+For a **NIIMBOT B1 connected to Windows by USB**, install the model-compatible Windows software/driver from the [NIIMBOT download centre](https://www.niimbot.com/us/downloadCenter), then select the B1 in the browser/system print dialog if it is available. Set paper to **50 mm wide × 30 mm high**, **100% / Actual size**, zero margins, and browser headers/footers off. Print one test sticker to check alignment before a batch.
+
+The print window's **Print / Save PDF** action also provides a file hand-off: choose **Save as PDF**, then import the file into printing software that supports PDF and use the same 50 × 30 mm paper settings. If your installed NIIMBOT software accepts images rather than PDFs, convert each PDF page to a high-contrast image and import it at the original label size. Printing uses the installed print driver or this file hand-off. `offcut-labels.js` is shared verbatim by the desktop and mobile apps.
