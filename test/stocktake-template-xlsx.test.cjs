@@ -64,7 +64,7 @@ test('template workbook keeps compact A:H, selected counted rows, zero, safe cod
  const widths=xml=>[...xml.matchAll(/<col min="(\d+)"[^>]*width="([\d.]+)"/g)].map(match=>Number(match[2]));
  const originalWidths=widths(text('xl/worksheets/sheet1.xml')),wide=sample();wide.rows[0].supplier='An exceptionally wide supplier name '.repeat(12);
  const expanded=await workbook(wide),expandedWidths=widths(expanded.text('xl/worksheets/sheet1.xml'));assert.ok(expandedWidths[1]>originalWidths[1]);assert.ok(expandedWidths.every(width=>width>=8&&width<=255));
- assert.equal(details.AC4.value,'Source stocktake');assert.match(text('xl/worksheets/sheet4.xml'),/autoFilter ref="A4:AC10"/);
+ assert.equal(details.AC4.value,'Source stocktake');assert.equal(details.AD4.value,'Quantity source');assert.equal(details.K4.value,'Quantity');assert.equal(details.R4.value,'Stock value (AUD ex GST)');assert.equal(details['AD'+findRow(details,'A','pack200')].value,'Manual count');assert.match(text('xl/worksheets/sheet4.xml'),/autoFilter ref="A4:AD10"/);
  assert.doesNotMatch(text('xl/worksheets/sheet1.xml'),/Prices captured at|Current prices at export|Valued at:|Pricing:/);
  assert.match(text('xl/worksheets/sheet1.xml'),/topLeftCell="A5"/);assert.match(text('xl/worksheets/sheet1.xml'),new RegExp('autoFilter ref="A4:H'+Math.max(...itemRows)+'"'));assert.match(text('xl/worksheets/sheet1.xml'),/fitToPage="1"/);
  const borderOf=cell=>Number(xfs[cell.style][0].match(/borderId="(\d+)"/)[1]);
@@ -141,7 +141,7 @@ test('monthly XLSX includes Brisbane-month partial submissions once with winning
  assert.equal(JSON.stringify(stocktakes),original);assert.equal(prepared.rows.length,3);assert.equal(prepared.monthlyScope.submittedCounts,4);assert.equal(prepared.monthlyScope.duplicatesRemoved,1);
  const r=mainRow(main,'Latest frozen spacer');assert.equal(main['E'+r].value,200);assert.equal(main['G'+r].value,.1234);assert.equal(main['H'+r].value,24.68);assert.equal(main.H3.value,43.04);assert.equal(main.H3.formula,'ROUND(SUM(H5:H9),2)');
  assert.match(main.C3.value,/October 2026/);assert.equal(main.G3.value,Date.UTC(2026,9,31)/86400000+25569);assert.equal(main['E'+mainRow(main,'Zero count')].value,0);
- assert.doesNotMatch(text('xl/worksheets/sheet1.xml'),/EXCLUDE|LIVE NAME|Superseded|Current prices at export|Prices captured at/);assert.match(text('xl/worksheets/sheet1.xml'),/autoFilter ref="A4:H9"/);assert.match(text('xl/worksheets/sheet4.xml'),/autoFilter ref="A4:AC7"/);
+ assert.doesNotMatch(text('xl/worksheets/sheet1.xml'),/EXCLUDE|LIVE NAME|Superseded|Current prices at export|Prices captured at/);assert.match(text('xl/worksheets/sheet1.xml'),/autoFilter ref="A4:H9"/);assert.match(text('xl/worksheets/sheet4.xml'),/autoFilter ref="A4:AD7"/);
  const audit=findRow(details,'A','pack200');assert.equal(details['K'+audit].value,200);assert.equal(details['J'+audit].value,180);assert.equal(details['M'+audit].value,'Latest worker');assert.equal(details['U'+audit].value,12.34);assert.equal(details['AC'+audit].value,'Open partial count');assert.match(details['O'+audit].value,/captured at completion/);
  assert.equal(details['AC'+findRow(details,'A','area')].value,'September UTC, October Brisbane');
  assert.equal(summary['G'+findRow(summary,'A','cladding')].value,18.36);assert.equal(summary['G'+findRow(summary,'A','fixings')].value,24.68);assert.match(summary['G'+findRow(summary,'A','cladding')].formula,/\$B\$5:\$B\$7/);
