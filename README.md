@@ -40,4 +40,4 @@ For a **NIIMBOT B1 connected to Windows by USB**, install the model-compatible W
 
 The print window's **Print / Save PDF** action also provides a file hand-off: choose **Save as PDF**, then import the file into printing software that supports PDF and use the same 50 × 30 mm paper settings. If your installed NIIMBOT software accepts images rather than PDFs, convert each PDF page to a high-contrast image and import it at the original label size. Printing uses the installed print driver or this file hand-off. `offcut-labels.js` is shared verbatim by the desktop and mobile apps.
 
-Ungrouped Site Order list headings show order number, project, order type and location/Villa, separated by hyphens. Older Panel locations remain available; Notes are not used as locations for non-panel orders. Grouped headings retain their existing format.
+Ungrouped Site Order list headings show order number, project, order type and location/Villa, separated by hyphens. Older Panel locations remain available; Notes are not used as locations for non-panel orders. Grouped headings show order number, order type and location/Villa, with the project shown once in the group heading.
