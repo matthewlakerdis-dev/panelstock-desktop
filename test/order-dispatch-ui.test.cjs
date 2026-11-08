@@ -92,3 +92,10 @@ test('web dispatch payload excludes dropdown choice IDs',async()=>{
  nodes(h.render()).find(n=>n.tag==='form').props.onSubmit({preventDefault(){}});await new Promise(setImmediate);
  assert.deepEqual(body,{destination:'Site',transport:'Truck',driver:'Sam Driver',notes:'',id:order.id,mutationId:'stable-id',expectedUpdatedAt:'v1'});
 });
+
+test('opening web Site Order dispatch prefills the current project address and keeps it editable',async()=>{
+ let body;const h=harness({fetcher:async(url,options)=>{if(options){body=JSON.parse(options.body);return Response.json({orders:[]});}return Response.json({orders:[{...order,siteAddress:'1 Current Project Road'}]});}});
+ await button(h.render(),'Dispatch order').props.onClick();assert.equal(h.values[4].destination,'1 Current Project Road');
+ const address=nodes(h.render()).find(n=>n.tag==='input'&&n.props.value==='1 Current Project Road');assert.equal(address.props.required,true);address.props.onChange({target:{value:'Alternative entrance'}});
+ nodes(h.render()).find(n=>n.tag==='form').props.onSubmit({preventDefault(){}});await new Promise(setImmediate);assert.equal(body.destination,'Alternative entrance');
+});

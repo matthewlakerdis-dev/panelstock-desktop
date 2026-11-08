@@ -26,3 +26,14 @@ test('tracker external choices remain required and a changed account receives fr
  assert.equal(field(tree,'Vehicle / transport company').props.value,'external');assert.equal(field(tree,'Other vehicle / transport company').props.required,true);assert.equal(field(tree,'Other driver name').props.required,true);
  field(tree,'Other driver name').props.onChange({target:{value:'Old account driver'}});ui.client.username='new-account';ui.render();await tick();tree=ui.render();assert.equal(field(tree,'Other driver name').props.value,'');
 });
+
+test('tracker fills the project address once and preserves an edited address across refresh',async()=>{
+ let address='1 Project Road';const ui=screen(async()=>Response.json({orders:[{...order,siteAddress:address}]}));ui.render();await tick();let tree=ui.render();assert.equal(field(tree,'Site address').props.value,address);
+ field(tree,'Site address').props.onChange({target:{value:'Alternative delivery entrance'}});address='2 Updated Road';button(ui.render(),'Refresh status').props.onClick();await tick();tree=ui.render();assert.equal(field(tree,'Site address').props.value,'Alternative delivery entrance');
+});
+test('tracker panel dispatch uses the selected load address, with the order address as fallback',()=>{
+ const {dispatchFormDefaults}=require('../excel-order-actions.js');
+ assert.equal(dispatchFormDefaults({}, {siteAddress:'Order site'}, {siteAddress:'Panel load site'}).details.destination,'Panel load site');
+ assert.equal(dispatchFormDefaults({}, {siteAddress:'Order site'}, {}).details.destination,'Order site');
+ assert.equal(dispatchFormDefaults().details.destination,'');
+});
