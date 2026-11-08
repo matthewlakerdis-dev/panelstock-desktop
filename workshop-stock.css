@@ -621,3 +621,6 @@ body:has(.ws-stock-screen,.ws-receiving-screen) #root header.sticky:has(img[alt=
  .ws-monthly-export .ws-fields{grid-template-columns:1fr;gap:12px}
  .ws-monthly-export .ws-actions button{width:100%}
 }
+
+/* Keep stocktake validation messages readable on narrow screens. */
+.ws-count-identity>.ws-error{display:block;padding:8px 10px;margin:6px 0;font-size:11px;line-height:1.45;overflow-wrap:anywhere}

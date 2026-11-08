@@ -30,9 +30,9 @@ function harness({missingMonth=false,failFirst=false}={}){
  return {states,sent,storage,render,button,control,monthly,set(key,value){control(key).props.onChange({target:{value}});},toggle(checked){monthly().props.onChange({target:{checked}});},choose(key,checked=true){control(key).props.onChange({target:{checked}});},categoryCount(key){return text(walk(label(key)).find(n=>n.type==='small'));},selectedCategory(key){return control(key).props.checked;},submit:async()=>{const form=render().find(n=>n.type==='form');await form.props.onSubmit({preventDefault(){}});return sent.at(-1);},save:()=>render().find(n=>n.type==='button'&&n.props.type==='submit')};
 }
 
-test('new stocktakes default to all eligible workshop items and omit the month lease from the ordinary POST',async()=>{
+test('new stocktakes default to all eligible stock items and omit the month lease from the ordinary POST',async()=>{
  const x=harness(),before=structuredClone(x.states[0]);assert.ok(x.monthly());assert.equal(x.monthly().props.checked,false);assert.equal(x.monthly().props.disabled,false);
- assert.match(x.categoryCount('extrusions'),/4 items/);assert.match(x.categoryCount('fixings'),/2 items/);assert.match(x.categoryCount('offcuts'),/1 items/);assert.equal(x.control('panels'),undefined);
+ assert.match(x.categoryCount('extrusions'),/4 items/);assert.match(x.categoryCount('fixings'),/2 items/);assert.match(x.categoryCount('offcuts'),/1 items/);assert.match(x.categoryCount('panels'),/1 items/);
  x.set('name','November workshop count');x.choose('extrusions');assert.equal(text(x.render().find(n=>n.props['aria-label']==='Items in new stocktake')),'4 items to count');const payload=await x.submit();assert.equal(payload.action,'stocktake_create');assert.equal(payload.name,'November workshop count');assert.deepEqual(payload.categories,['extrusions']);assert.ok(payload.uncountedThisMonth===undefined||payload.uncountedThisMonth===false);assert.equal(Object.hasOwn(payload,'stocktakeMonth'),false);assert.deepEqual(x.states[0],before);
 });
 
@@ -43,8 +43,8 @@ test('monthly eligibility combines category and supplier filters while retaining
  const payload=await x.submit();assert.equal(payload.uncountedThisMonth,true);assert.equal(payload.stocktakeMonth,'2026-11');assert.equal(payload.supplier,'Rondo');assert.deepEqual(payload.categories,['extrusions','fixings']);assert.equal(payload.name,'Remaining Rondo items');
 });
 
-test('monthly category counts exclude items submitted in an open partial stocktake and retain panel exclusions',()=>{
- const x=harness();x.toggle(true);assert.match(x.categoryCount('extrusions'),/3 items/);assert.match(x.categoryCount('fixings'),/1 items/);assert.match(x.categoryCount('offcuts'),/1 items/);assert.equal(x.control('panels'),undefined);
+test('monthly category counts exclude items submitted in an open partial stocktake and include uncounted full panels',()=>{
+ const x=harness();x.toggle(true);assert.match(x.categoryCount('extrusions'),/3 items/);assert.match(x.categoryCount('fixings'),/1 items/);assert.match(x.categoryCount('offcuts'),/1 items/);assert.match(x.categoryCount('panels'),/1 items/);
  const zero=x.states[0].items.find(i=>i.id==='zero-uncounted');assert.equal(zero.qty,0);assert.equal(zero.countedThisMonth,false);assert.equal(x.states[0].stocktakes[0].status,'open');assert.equal(x.states[0].items.find(i=>i.id==='counted-in-partial').countedThisMonth,true);
 });
 
