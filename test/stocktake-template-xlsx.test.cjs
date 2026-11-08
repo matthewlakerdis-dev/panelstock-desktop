@@ -33,49 +33,56 @@ function cells(xml){
  }
  return result;
 }
+const mainRow=(sheet,name)=>Number(Object.entries(sheet).find(([ref,cell])=>/^C\d+$/.test(ref)&&(cell.value===name||String(cell.value).startsWith(name+' / ')))?.[0].slice(1));
 const findRow=(sheet,column,value)=>Number(Object.entries(sheet).find(([ref,cell])=>new RegExp('^'+column+'\\d+$').test(ref)&&cell.value===value)?.[0].slice(column.length));
 async function workbook(raw=sample(),options={}){
  const api=setup(),prepared=api.prepareWorkbook(raw,options),files=unzip(Buffer.from(await api.xlsx(prepared).arrayBuffer())),text=name=>files[name].toString();
  return {prepared,files,main:cells(text('xl/worksheets/sheet1.xml')),summary:cells(text('xl/worksheets/sheet2.xml')),journal:cells(text('xl/worksheets/sheet3.xml')),details:cells(text('xl/worksheets/sheet4.xml')),text};
 }
 
-test('template workbook keeps A:L, selected counted rows, zero, safe codes and Australian dates',async()=>{
+test('template workbook keeps compact A:H, selected counted rows, zero, safe codes and Australian dates',async()=>{
  const raw=sample(),{main,details,files,text}=await workbook(raw,{currentRows:[{id:'not-counted',name:'DO NOT EXPORT',qty:99999,unitCost:100}]});
- assert.deepEqual('ABCDEFGHIJKL'.split('').map(c=>main[c+'4'].value),['Account','Name','Type','Supplier','Code','Description','Size','Type','Qty','Unit of Measure','Unit Rate','Total Value']);
- const itemRows=raw.rows.map(item=>findRow(main,'H',item.name));assert.ok(itemRows.every(Number.isFinite));
+ assert.deepEqual('ABCDEFGH'.split('').map(c=>main[c+'4'].value),['Name','Supplier','Description','Size','Qty','UOM','Unit Rate','Total Value']);
+ const itemRows=raw.rows.map(item=>mainRow(main,item.name));assert.ok(itemRows.every(Number.isFinite));
  for(const r of itemRows)assert.match(text('xl/worksheets/sheet1.xml'),new RegExp('<row r="'+r+'" ht="18.75" customHeight="1"'));
- assert.equal((text('xl/worksheets/sheet1.xml').match(/bestFit="1"/g)||[]).length,12);
- assert.equal(main['I'+findRow(main,'F','Zero count')].value,0);assert.equal(main['L'+findRow(main,'F','Free item')].value,0);
- const code=main['E'+findRow(main,'H','Pack two hundred')];assert.equal(code.value,'=1+1');assert.equal(code.inline,true);assert.equal(code.formula,undefined);assert.match(main['F'+findRow(main,'H','Pack two hundred')].value,/Keep upright.*Legacy note/);
+ assert.equal((text('xl/worksheets/sheet1.xml').match(/bestFit="1"/g)||[]).length,8);
+ assert.equal(main['E'+mainRow(main,'Zero count')].value,0);assert.equal(main['H'+mainRow(main,'Free item')].value,0);
+ const code=details['C'+findRow(details,'A','pack200')];assert.equal(code.value,'=1+1');assert.equal(code.inline,true);assert.equal(code.formula,undefined);assert.match(main['C'+mainRow(main,'Pack two hundred')].value,/Keep upright.*Legacy note/);
  assert.doesNotMatch(text('xl/worksheets/sheet1.xml'),/DO NOT EXPORT/);assert.match(text('xl/worksheets/sheet1.xml'),/Selected count only:/);
- assert.equal(main.I2.value,Date.UTC(2026,9,31)/86400000+25569);
- const styles=text('xl/styles.xml'),xfs=[...styles.match(/<cellXfs\b[^>]*>([\s\S]*?)<\/cellXfs>/)[1].matchAll(/<xf\b[^>]*>/g)],format=xfs[main.I2.style][0].match(/numFmtId="(\d+)"/)[1];
+ assert.equal(main.G3.value,Date.UTC(2026,9,31)/86400000+25569);
+ const styles=text('xl/styles.xml'),xfs=[...styles.match(/<cellXfs\b[^>]*>([\s\S]*?)<\/cellXfs>/)[1].matchAll(/<xf\b[^>]*>/g)],format=xfs[main.G3.style][0].match(/numFmtId="(\d+)"/)[1];
  assert.match(styles,new RegExp('<numFmt numFmtId="'+format+'" formatCode="dd/mm/yyyy"'));
- const bars=Object.entries(main).filter(([ref,cell])=>/^B\d+$/.test(ref)&&/^COS - /.test(cell.value||'')&&!main['H'+ref.slice(1)]?.value).map(([ref])=>Number(ref.slice(1)));
+ const bars=Object.entries(main).filter(([ref,cell])=>/^A\d+$/.test(ref)&&/^COS - /.test(cell.value||'')&&!main['C'+ref.slice(1)]?.value).map(([ref])=>Number(ref.slice(1)));
  assert.equal(bars.length,3);
  for(const r of bars){
-  assert.ok('CDEFGHIJKL'.split('').every(c=>main[c+r].value===''));
-  assert.doesNotMatch(text('xl/worksheets/sheet1.xml'),new RegExp('mergeCell ref="A'+r+':L'+r+'"'));
+  assert.ok('BCDEFGH'.split('').every(c=>main[c+r].value===''));
+  assert.doesNotMatch(text('xl/worksheets/sheet1.xml'),new RegExp('mergeCell ref="A'+r+':H'+r+'"'));
   const fillId=xfs[main['A'+r].style][0].match(/fillId="(\d+)"/)[1],fills=[...styles.match(/<fills\b[^>]*>([\s\S]*?)<\/fills>/)[1].matchAll(/<fill>[\s\S]*?<\/fill>/g)];assert.match(fills[Number(fillId)][0],/FFD9D9D9/);
  }
  const xfBlocks=[...styles.match(/<cellXfs\b[^>]*>([\s\S]*?)<\/cellXfs>/)[1].matchAll(/<xf\b[^>]*>[\s\S]*?<\/xf>/g)];
- for(const r of itemRows)for(const c of ['F','I','K','L'])assert.doesNotMatch(xfBlocks[main[c+r].style][0],/wrapText="1"/);
+ for(const r of itemRows)for(const c of ['C','E','G','H'])assert.doesNotMatch(xfBlocks[main[c+r].style][0],/wrapText="1"/);
  const widths=xml=>[...xml.matchAll(/<col min="(\d+)"[^>]*width="([\d.]+)"/g)].map(match=>Number(match[2]));
  const originalWidths=widths(text('xl/worksheets/sheet1.xml')),wide=sample();wide.rows[0].supplier='An exceptionally wide supplier name '.repeat(12);
- const expanded=await workbook(wide),expandedWidths=widths(expanded.text('xl/worksheets/sheet1.xml'));assert.ok(expandedWidths[3]>originalWidths[3]);assert.ok(expandedWidths.every(width=>width>=8&&width<=255));
+ const expanded=await workbook(wide),expandedWidths=widths(expanded.text('xl/worksheets/sheet1.xml'));assert.ok(expandedWidths[1]>originalWidths[1]);assert.ok(expandedWidths.every(width=>width>=8&&width<=255));
  assert.equal(details.AC4.value,'Source stocktake');assert.match(text('xl/worksheets/sheet4.xml'),/autoFilter ref="A4:AC10"/);
  assert.doesNotMatch(text('xl/worksheets/sheet1.xml'),/Prices captured at|Current prices at export|Valued at:|Pricing:/);
- assert.match(text('xl/worksheets/sheet1.xml'),/topLeftCell="F5"/);assert.match(text('xl/worksheets/sheet1.xml'),new RegExp('autoFilter ref="A4:L'+Math.max(...itemRows)+'"'));assert.match(text('xl/worksheets/sheet1.xml'),/fitToPage="1"/);
- assert.match(text('xl/workbook.xml'),/'Lennox Stocktake'!\$A\$1:\$L\$/);assert.match(text('xl/workbook.xml'),/COS Summary.*Journal.*Count details/);
+ assert.match(text('xl/worksheets/sheet1.xml'),/topLeftCell="A5"/);assert.match(text('xl/worksheets/sheet1.xml'),new RegExp('autoFilter ref="A4:H'+Math.max(...itemRows)+'"'));assert.match(text('xl/worksheets/sheet1.xml'),/fitToPage="1"/);
+ const borderOf=cell=>Number(xfs[cell.style][0].match(/borderId="(\d+)"/)[1]);
+ const tables=[{sheet:main,index:1,start:4,end:Math.max(...itemRows)},{sheet:cells(text('xl/worksheets/sheet2.xml')),index:2,start:4,end:4+settings().cosGroups.length},{sheet:cells(text('xl/worksheets/sheet3.xml')),index:3,start:8,end:9+settings().cosGroups.length},{sheet:details,index:4,start:4,end:4+raw.rows.length}];
+ for(const table of tables){
+  const sheetXml=text('xl/worksheets/sheet'+table.index+'.xml');assert.match(sheetXml,/<pane[^>]*xSplit="0"[^>]*ySplit="[1-9]\d*"[^>]*topLeftCell="A\d+"[^>]*state="frozen"/);assert.doesNotMatch(sheetXml,/bottomRight/);
+  for(const [ref,cell] of Object.entries(table.sheet)){const r=Number(ref.match(/\d+$/)[0]);assert.equal(borderOf(cell)>0,r>=table.start&&r<=table.end,'borders stay inside the actual table: sheet '+table.index+' '+ref);}
+ }
+ assert.match(text('xl/workbook.xml'),/'Lennox Stocktake'!\$A\$1:\$H\$/);assert.match(text('xl/workbook.xml'),/COS Summary.*Journal.*Count details/);
  assert.deepEqual([...files['xl/media/lennox-logo.png'].subarray(0,8)],[137,80,78,71,13,10,26,10]);assert.ok(!Object.keys(files).some(name=>/vbaProject|externalLink/i.test(name)));
 });
 
 test('pack and area values retain precise rates and formula caches aggregate by group ID',async()=>{
  const {main,summary,details}=await workbook();
  for(const [name,quantity,rate,total] of [['Pack two hundred',200,.1234,24.68],['Pack one',1,.1234,.12],['Area offcut',3,6.12,18.36],['Catalogue panel',2,48.96,97.92]]){
-  const r=findRow(main,'H',name);assert.equal(main['I'+r].value,quantity);assert.equal(main['K'+r].value,rate);assert.equal(main['L'+r].value,total);
+  const r=mainRow(main,name);assert.equal(main['E'+r].value,quantity);assert.equal(main['G'+r].value,rate);assert.equal(main['H'+r].value,total);
  }
- const lastMain=Math.max(...sample().rows.map(item=>findRow(main,'H',item.name)));assert.equal(main.L3.formula,'ROUND(SUM(L5:L'+lastMain+'),2)');assert.equal(main.L3.value,141.08);
+ const lastMain=Math.max(...sample().rows.map(item=>mainRow(main,item.name)));assert.equal(main.H3.formula,'ROUND(SUM(H5:H'+lastMain+'),2)');assert.equal(main.H3.value,141.08);
  const cladding=findRow(summary,'A','cladding'),fixings=findRow(summary,'A','fixings');
  assert.equal(summary['B'+cladding].value,summary['B'+fixings].value,'separate COS groups may share an account code');
  assert.equal(summary['G'+cladding].value,116.28);assert.equal(summary['G'+fixings].value,24.8);
@@ -110,7 +117,7 @@ test('historical current-price fallback preserves count audit and labels pricing
  const pack=findRow(details,'A','pack200'),unknown=findRow(details,'A','pack1');
  assert.equal(details['J'+pack].value,180);assert.equal(details['K'+pack].value,200);assert.equal(details['L'+pack].value,20);assert.equal(details['M'+pack].value,'Count worker');assert.match(details['N'+pack].value,/31\/10\/2026/);
  assert.equal(details['J'+unknown].value,null);assert.equal(details['L'+unknown].value,null);assert.equal(details['O'+pack].value,'Current prices at export');assert.match(details['P'+pack].value,/08\/11\/2026/);
- assert.equal(main.H3.value,'Recorded stocktake results');assert.equal(main.L3.value,141.08);assert.doesNotMatch(main['F'+findRow(main,'H','Pack two hundred')].value,/Current prices at export|Pricing:/);assert.match(journal.B4.value,/Current prices at export/);
+ assert.equal(main.C3.value,sample().name);assert.equal(main.H3.value,141.08);assert.doesNotMatch(main['C'+mainRow(main,'Pack two hundred')].value,/Current prices at export|Pricing:/);assert.match(journal.B4.value,/Current prices at export/);
  assert.doesNotMatch(text('xl/worksheets/sheet1.xml'),/Current prices at export/);assert.match(text('xl/worksheets/sheet4.xml'),/quantities in this completed stocktake/);assert.match(text('xl/worksheets/sheet4.xml'),/Blank values are unavailable, not zero/);
 });
 
@@ -132,9 +139,9 @@ test('monthly XLSX includes Brisbane-month partial submissions once with winning
  const original=JSON.stringify(stocktakes),currentRows=sample().rows.map(row=>({...row,id:row.itemId,name:'LIVE NAME DO NOT EXPORT',qty:99999,packCost:999,unitCost:999}));
  const {prepared,main,summary,journal,details,text}=await monthlyWorkbook(stocktakes,{month:'2026-10',currentRows,currentSettings:settings(),allowCurrentPricing:true,generatedAt:'2026-11-08T01:00:00Z'});
  assert.equal(JSON.stringify(stocktakes),original);assert.equal(prepared.rows.length,3);assert.equal(prepared.monthlyScope.submittedCounts,4);assert.equal(prepared.monthlyScope.duplicatesRemoved,1);
- const r=findRow(main,'H','Latest frozen spacer');assert.equal(main['I'+r].value,200);assert.equal(main['K'+r].value,.1234);assert.equal(main['L'+r].value,24.68);assert.equal(main.L3.value,43.04);assert.equal(main.L3.formula,'ROUND(SUM(L5:L9),2)');
- assert.match(main.H3.value,/October 2026/);assert.equal(main.I2.value,Date.UTC(2026,9,31)/86400000+25569);assert.equal(main['I'+findRow(main,'H','Zero count')].value,0);
- assert.doesNotMatch(text('xl/worksheets/sheet1.xml'),/EXCLUDE|LIVE NAME|Superseded|Current prices at export|Prices captured at/);assert.match(text('xl/worksheets/sheet1.xml'),/autoFilter ref="A4:L9"/);assert.match(text('xl/worksheets/sheet4.xml'),/autoFilter ref="A4:AC7"/);
+ const r=mainRow(main,'Latest frozen spacer');assert.equal(main['E'+r].value,200);assert.equal(main['G'+r].value,.1234);assert.equal(main['H'+r].value,24.68);assert.equal(main.H3.value,43.04);assert.equal(main.H3.formula,'ROUND(SUM(H5:H9),2)');
+ assert.match(main.C3.value,/October 2026/);assert.equal(main.G3.value,Date.UTC(2026,9,31)/86400000+25569);assert.equal(main['E'+mainRow(main,'Zero count')].value,0);
+ assert.doesNotMatch(text('xl/worksheets/sheet1.xml'),/EXCLUDE|LIVE NAME|Superseded|Current prices at export|Prices captured at/);assert.match(text('xl/worksheets/sheet1.xml'),/autoFilter ref="A4:H9"/);assert.match(text('xl/worksheets/sheet4.xml'),/autoFilter ref="A4:AC7"/);
  const audit=findRow(details,'A','pack200');assert.equal(details['K'+audit].value,200);assert.equal(details['J'+audit].value,180);assert.equal(details['M'+audit].value,'Latest worker');assert.equal(details['U'+audit].value,12.34);assert.equal(details['AC'+audit].value,'Open partial count');assert.match(details['O'+audit].value,/captured at completion/);
  assert.equal(details['AC'+findRow(details,'A','area')].value,'September UTC, October Brisbane');
  assert.equal(summary['G'+findRow(summary,'A','cladding')].value,18.36);assert.equal(summary['G'+findRow(summary,'A','fixings')].value,24.68);assert.match(summary['G'+findRow(summary,'A','cladding')].formula,/\$B\$5:\$B\$7/);
@@ -149,7 +156,7 @@ test('monthly XLSX keeps the latest zero balance and exports another month indep
   recorded('next','November winner',[{...pack,name:'November balance',quantity:999,packCost:500,at:'2026-11-01T00:00:00Z'}])
  ];
  const options={currentSettings:settings(),allowCurrentPricing:true,generatedAt:'2026-11-08T01:00:00Z'},oct=await monthlyWorkbook(stocktakes,{...options,month:'2026-10'}),nov=await monthlyWorkbook(stocktakes,{...options,month:'2026-11'});
- assert.equal(oct.prepared.rows.length,2);assert.equal(oct.main.L3.value,0);assert.equal(oct.main['I'+findRow(oct.main,'H','October zero balance')].value,0);assert.equal(oct.details['AC'+findRow(oct.details,'A','pack200')].value,'October zero winner');assert.doesNotMatch(oct.text('xl/worksheets/sheet1.xml'),/November balance|superseded positive/);
+ assert.equal(oct.prepared.rows.length,2);assert.equal(oct.main.H3.value,0);assert.equal(oct.main['E'+mainRow(oct.main,'October zero balance')].value,0);assert.equal(oct.details['AC'+findRow(oct.details,'A','pack200')].value,'October zero winner');assert.doesNotMatch(oct.text('xl/worksheets/sheet1.xml'),/November balance|superseded positive/);
  assert.equal(oct.journal.F13.value,0);assert.equal(oct.journal.B5.value,'COMPLETE / MONTHLY STOCKTAKE CLOSING VALUE');
- assert.equal(nov.prepared.rows.length,1);assert.equal(nov.main['I'+findRow(nov.main,'H','November balance')].value,999);assert.equal(nov.main.L3.value,4995);assert.equal(nov.details['AC'+findRow(nov.details,'A','pack200')].value,'November winner');assert.match(nov.main.H3.value,/November 2026/);assert.doesNotMatch(nov.text('xl/worksheets/sheet1.xml'),/October zero|Free item/);
+ assert.equal(nov.prepared.rows.length,1);assert.equal(nov.main['E'+mainRow(nov.main,'November balance')].value,999);assert.equal(nov.main.H3.value,4995);assert.equal(nov.details['AC'+findRow(nov.details,'A','pack200')].value,'November winner');assert.match(nov.main.C3.value,/November 2026/);assert.doesNotMatch(nov.text('xl/worksheets/sheet1.xml'),/October zero|Free item/);
 });
