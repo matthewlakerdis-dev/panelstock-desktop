@@ -369,11 +369,13 @@ window.createWorkshopStock = function(React) {
    const footer=h('div',{className:'ws-actions ws-count-footer'},h('span',{className:'ws-soh-export-count'},exportItems.length+' '+(exportItems.length===1?'item':'items')+' selected for export'),button('Cancel',()=>setSohExport(null)),button('Xero journal CSV',openXeroExport,busy||!exportItems.length),button('Download Excel',()=>exportSOH('xlsx'),busy||!exportItems.length),button('Download PDF',()=>exportSOH('pdf'),busy||!exportItems.length));
    return h('div',{className:'ws-overlay'},h('div',{className:'ws-dialog ws-count-dialog ws-soh-export',role:'dialog','aria-modal':true,'aria-label':'Export stock on hand'},header,h('div',{className:'ws-count-body'},scope,filters,summary,error&&h('div',{className:'ws-error',role:'alert'},error)),footer));
   }
+  function prepareReportWorkbook(){return window.PanelStockStocktakeReport.prepareWorkbook(report,{currentRows:allItems,currentSettings:data?.stocktakeSettings,categoryLabels:categories,allowCurrentPricing:true});}
   function downloadReport(format){
-   try{const blob=window.PanelStockStocktakeReport[format](report),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='Lennox-Stocktake-'+report.name.replace(/[^a-zA-Z0-9_-]+/g,'-').slice(0,80)+'.'+format;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}catch(e){setError('Report could not be downloaded: '+e.message);}
+   try{const exported=format==='xlsx'?prepareReportWorkbook():report,blob=window.PanelStockStocktakeReport[format](exported),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='Lennox-Stocktake-'+report.name.replace(/[^a-zA-Z0-9_-]+/g,'-').slice(0,80)+'.'+format;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}catch(e){setError('Report could not be downloaded: '+e.message);}
   }
   function renderReport(){
    const amount=v=>v===null||v===undefined?'Unknown':qty(v),stamp=v=>v?new Date(v).toLocaleString('en-AU',{timeZone:'Australia/Brisbane'}):'';
+   const workbook=report?prepareReportWorkbook():null;
    const close=()=>{setReportId(null);setCountList(true);};
    const header=h('div',{className:'ws-count-header'},
     h('div',{className:'ws-report-brand'},h('img',{src:window.PanelStockStocktakeReport.logo,alt:'Lennox Facades',width:180,height:91}),h('div',null,h('div',{className:'ws-eyebrow'},'INVENTORY / COMPLETED COUNT'),h('h3',null,'Stocktake report')),button('Close',close)),
@@ -384,7 +386,7 @@ window.createWorkshopStock = function(React) {
    const table=report&&h('div',{className:'ws-report-table'},h('table',null,h('thead',null,h('tr',null,...['Item / stock code','Location / supplier','Unit','Expected','Counted','Variance','Counted by / time'].map(label=>h('th',{key:label},label)))),h('tbody',null,reportRows)));
    const body=h('div',{className:'ws-count-body'},!report?h('p',{role:'alert'},'This report is not available yet. Close and refresh stocktakes to try again.'):h(React.Fragment,null,
     h('div',{className:'ws-report-summary'},h('strong',null,report.rows.length+' items counted'),h('strong',null,report.rows.filter(r=>r.variance!==null&&r.variance!==0).length+' with variance')),
-    h('p',null,'Expected quantities are recorded when each item is submitted. Different stock units are not added together.'),
+    h('p',null,'Expected quantities are recorded when each item is submitted. Different stock units are not added together.'),workbook&&h('p',{className:'ws-costing-note','aria-label':'Stocktake workbook valuation'},workbook.valuation.message),
     report.rows.some(r=>r.historicalDetails)&&h('p',{className:'ws-po-warning'},'Historical report: item descriptions use available records. Expected quantities that cannot be recovered are marked Unknown.'),h('p',{className:'ws-report-scroll-hint'},'Scroll across the table to view all columns.'),table),error&&h('div',{className:'ws-error',role:'alert'},error));
    const footer=h('div',{className:'ws-actions ws-count-footer'},button('Back to stocktakes',close),report&&button('Download Excel',()=>downloadReport('xlsx')),report&&button('Download PDF',()=>downloadReport('pdf')));
    return h('div',{className:'ws-overlay'},h('div',{className:'ws-dialog ws-count-dialog ws-report',role:'dialog','aria-modal':true,'aria-label':'Completed stocktake report'},header,body,footer));
@@ -1053,6 +1055,39 @@ License: GPL-2+
   if(totalCents>limit||totalCents<-limit)throw Error('The total value is too large to export accurately. Export a smaller group of items.');
   return {...report,kind:'soh',includeCostings:true,rows,costSummary:{currency:'AUD',taxBasis:'exGST',totalValue:Number(totalCents)/100,pricedItems:rows.length-unpricedItems,unpricedItems}};
  }
+ function prepareStocktakeReport(input,options={}){
+  if(!input||!Array.isArray(input.rows))throw Error('The completed stocktake report is unavailable.');
+  const own=(object,key)=>object!=null&&Object.prototype.hasOwnProperty.call(object,key),copy=value=>value&&typeof value==='object'?{...value}:null;
+  const generatedAt=options.generatedAt||options.valuedAt||new Date().toISOString(),allowCurrent=options.allowCurrentPricing===true;
+  const live=new Map((Array.isArray(options.currentRows)?options.currentRows:[]).map(row=>[row.id??row.itemId,row]));
+  const savedSettings=input.stocktakeSettings,currentSettings=allowCurrent?options.currentSettings:null,sourceSettings=savedSettings||currentSettings;
+  const stocktakeSettings=sourceSettings?{...sourceSettings,cosGroups:(sourceSettings.cosGroups||[]).map(group=>({...group}))}:undefined;
+  const cosGroups=(stocktakeSettings?.cosGroups||input.cosGroups||[]).map(group=>({...group})),groupById=new Map(cosGroups.map(group=>[group.id,group]));
+  let totalCents=0n,completionItems=0,currentItems=0,unpricedItems=0;const issues=[];
+  const rows=input.rows.map(original=>{
+   const row=original&&typeof original==='object'?original:{},frozen=own(row,'pricingCapturedAt')||own(input,'pricingCapturedAt')||input.pricing?.basis==='completion';
+   const previousCurrent=row.pricing?.basis==='current',current=allowCurrent?live.get(row.itemId):null,source=frozen||previousCurrent?row:current;
+   const basis=frozen?'completion':previousCurrent||current?'current':'unpriced',capturedAt=row.pricingCapturedAt??input.pricingCapturedAt??input.pricing?.capturedAt??null,valuedAt=basis==='current'?(previousCurrent?row.pricing.valuedAt||generatedAt:generatedAt):null;
+   if(basis==='completion')completionItems++;else if(basis==='current')currentItems++;
+   const rawQuantity=row.quantity,parsedQuantity=Number(rawQuantity),quantity=rawQuantity!==null&&rawQuantity!==undefined&&(typeof rawQuantity==='number'||typeof rawQuantity==='string'&&rawQuantity.trim()!=='')&&Number.isFinite(parsedQuantity)&&parsedQuantity>=0&&parsedQuantity<=1e9&&Math.abs(parsedQuantity*1000-Math.round(parsedQuantity*1000))<=Number.EPSILON*Math.max(1,Math.abs(parsedQuantity*1000))*4?parsedQuantity:null;
+   const costs={costBasis:source?.costBasis||'unit',unitCost:source?.unitCost??null,packCost:source?.packCost??null,packSize:source?.packSize??1,areaCost:copy(source?.areaCost),areaCostStatus:source?.areaCostStatus||'',catalogueCost:copy(source?.catalogueCost),width:source?.width??row.width??null,height:source?.height??row.height??null};
+   let computed={...row,...costs,qty:quantity,effectiveUnitCost:null,lineValue:null},reason='';
+   if(quantity===null)reason='The counted quantity is unknown; this item cannot be valued.';
+   else if(!source)reason='No saved price or matching current stock item is available.';
+   else try{computed=prepareSOHReport({includeCostings:true,rows:[computed]}).rows[0];if(computed.lineValue===null)reason='The '+(basis==='completion'?'saved completion':'current')+' price or pricing dimensions are unavailable.';}
+   catch(error){reason=error?.message||'The saved price cannot be used to value this item.';}
+   const xeroGroup=source?source.xeroGroup??row.xeroGroup??'':row.xeroGroup||'',group=groupById.get(xeroGroup);
+   const pricingSource=basis==='completion'?'Prices captured at completion':basis==='current'?'Current prices at export':'Price unavailable';
+   if(computed.lineValue===null){unpricedItems++;if(reason)issues.push((row.name||row.itemId||'Unknown item')+': '+reason);}else totalCents+=BigInt(Math.round(computed.lineValue*100));
+   return {...computed,quantity,categoryLabel:row.categoryLabel||options.categoryLabels?.[row.categoryKey||row.category]||row.category||row.categoryKey||'',xeroGroup,xeroGroupLabel:(frozen?row.xeroGroupLabel:'')||group?.label||'',xeroAccountCode:(frozen?row.xeroAccountCode:'')||group?.accountCode||'',pricing:{basis,label:pricingSource,...(basis==='completion'?{capturedAt}:basis==='current'?{valuedAt}:{}),priced:computed.lineValue!==null},pricingSource,pricingStatus:computed.lineValue===null?'Not priced':'Priced',pricingNote:reason};
+  });
+  const basis=completionItems&&currentItems?'mixed':currentItems?'current':completionItems?'completion':'unpriced',capturedAt=input.pricingCapturedAt||input.pricing?.capturedAt||rows.find(row=>row.pricing.capturedAt)?.pricing.capturedAt||null;
+  const timestamp=date(generatedAt),missing=unpricedItems?' '+unpricedItems+' item(s) are not priced and are excluded from the known value total.':'';
+  const message=(basis==='completion'?'Prices captured at stocktake completion'+(capturedAt?' ('+date(capturedAt)+', Brisbane time)':'')+'.':basis==='current'?'Current prices at export ('+timestamp+', Brisbane time) are applied to the quantities in this completed stocktake.':basis==='mixed'?'Saved completion prices are used where available. Current prices at export ('+timestamp+', Brisbane time) are used for '+currentItems+' older item(s).':'Prices were not saved with this stocktake and no current-price fallback was used.')+missing+' All prices and values exclude GST.';
+  const totalValue=totalCents<=999999999999999n&&totalCents>=-999999999999999n?Number(totalCents)/100:null;
+  if(totalValue===null)issues.push('The known stocktake value is too large to export accurately.');
+  return {...input,kind:'stocktake',generatedAt,...(stocktakeSettings?{stocktakeSettings}:{}),cosGroups,rows,costSummary:{currency:'AUD',taxBasis:'exGST',totalValue,pricedItems:rows.length-unpricedItems,unpricedItems},pricing:{...(input.pricing||{}),basis,...(capturedAt?{capturedAt}:{}),...(currentItems?{valuedAt:generatedAt}:{})},valuation:{basis,capturedAt,valuedAt:currentItems?generatedAt:null,completionItems,currentItems,unpricedItems,message,issues}};
+ }
  const xeroJournalGroups=Object.freeze([
   Object.freeze({id:'cladding',label:'Cladding',accountCode:'51050'}),
   Object.freeze({id:'fixings',label:'Fixings',accountCode:'51066'}),
@@ -1169,7 +1204,136 @@ License: GPL-2+
 
  const preciseCurrency=value=>Number(value).toLocaleString('en-AU',{style:'currency',currency:'AUD',minimumFractionDigits:2,maximumFractionDigits:12});
  const currency=value=>Number(value).toLocaleString('en-AU',{style:'currency',currency:'AUD',minimumFractionDigits:2,maximumFractionDigits:2});
+ function stocktakeTemplateXlsx(report){
+  const own=(object,key)=>object!=null&&Object.prototype.hasOwnProperty.call(object,key),text=value=>String(value??''),finite=value=>value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value))?Number(value):null;
+  const cents=value=>{const match=String(value??'').match(/^([+-]?)(\d+)(?:\.(\d{1,2}))?$/);return match?(BigInt(match[2])*100n+BigInt((match[3]||'').padEnd(2,'0')))*(match[1]==='-'?-1n:1n):null;};
+  const money=value=>{const absolute=value<0n?-value:value;return (value<0n?'-':'')+String(absolute/100n)+'.'+String(absolute%100n).padStart(2,'0');};
+  const column=value=>{let result='';for(let n=value+1;n;n=Math.floor((n-1)/26))result=String.fromCharCode(65+(n-1)%26)+result;return result;};
+  const settings=report.stocktakeSettings||{},configured=report.cosGroups||settings.cosGroups||[],groups=Array.isArray(configured)?configured:[],groupMap=new Map(),configurationIssues=[];
+  for(const group of groups){
+   const id=text(group?.id).trim(),label=text(group?.label).trim(),accountCode=text(group?.accountCode).trim();
+   if(!id||groupMap.has(id)){configurationIssues.push('Each COS group needs a unique group ID.');continue;}
+   if(!label||!accountCode)configurationIssues.push('Each COS group needs a name and account code.');
+   groupMap.set(id,{id,label:label||id,accountCode,order:groupMap.size});
+  }
+  if(!groupMap.size)configurationIssues.push('COS account groups are unavailable.');
+  const categoryNames=new Map((Array.isArray(report.rows)?report.rows:[]).map(row=>[row.categoryKey||row.category,row.categoryLabel||row.category||row.categoryKey]));
+  const scopeCategories=Array.isArray(report.categories)?report.categories.map(value=>categoryNames.get(value)||value).join(' / '):'',scopeText='Selected count only: '+text(report.name||'Stocktake')+' / Supplier: '+text(report.supplier||'All suppliers')+' / Categories: '+(scopeCategories||'As selected for this count');
+  const accountName=group=>group?(/^COS\s*-/i.test(group.label)?group.label:'COS - '+group.label):'Unassigned';
+  const category=row=>text(row.categoryLabel||row.category||row.categoryKey),pricingMessage=text(report.valuation?.message||report.pricing?.label||'Pricing basis unavailable'),valuedAt=report.valuation?.valuedAt||report.pricing?.valuedAt||report.pricing?.capturedAt||report.pricingCapturedAt||'';
+  const stamp=value=>{if(!value)return '';const parsed=new Date(value);return Number.isNaN(parsed.getTime())?'':parsed.toLocaleString('en-AU',{timeZone:'Australia/Brisbane'});};
+  const completed=new Date(report.completedAt),validDate=!Number.isNaN(completed.getTime()),dateParts=validDate?new Intl.DateTimeFormat('en-AU',{timeZone:'Australia/Brisbane',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(completed):[],part=type=>dateParts.find(entry=>entry.type===type)?.value||'',dateText=validDate?part('day')+'/'+part('month')+'/'+part('year'):'',excelDate=validDate?Date.UTC(Number(part('year')),Number(part('month'))-1,Number(part('day')))/86400000+25569:null,monthText=validDate?completed.toLocaleDateString('en-AU',{timeZone:'Australia/Brisbane',month:'short',year:'numeric'}):'';
+  const size=row=>[text(row.dimensions).trim(),finite(row.lengthMm)>0?text(row.lengthMm)+' mm':'',finite(row.width)>0&&finite(row.height)>0?text(row.width)+' x '+text(row.height)+' mm':''].filter((entry,index,all)=>entry&&all.indexOf(entry)===index).join(' / ');
+  const sourceRows=Array.isArray(report.rows)?report.rows:[],ordered=sourceRows.map((row,index)=>({row,index})).sort((left,right)=>{
+   const a=left.row,b=right.row,groupA=groupMap.get(a.xeroGroup)?.order??groupMap.size,groupB=groupMap.get(b.xeroGroup)?.order??groupMap.size;
+   return groupA-groupB||category(a).localeCompare(category(b),'en',{numeric:true})||text(a.supplier).localeCompare(text(b.supplier),'en',{numeric:true})||text(a.name).localeCompare(text(b.name),'en',{numeric:true})||left.index-right.index;
+  }).map(entry=>entry.row);
+  const entries=ordered.map(row=>{const line=cents(row.lineValue),rate=finite(row.effectiveUnitCost),quantity=finite(row.quantity),group=groupMap.get(row.xeroGroup),pricing=row.pricing||{},status=text(row.pricingNote||row.pricingStatus||(line===null||rate===null?'Not priced':'Priced'));return {row,line,rate,quantity,group,groupId:group?.id||'__unassigned__',pricing,status};});
+  const knownTotal=entries.reduce((sum,entry)=>sum+(entry.line??0n),0n),unpriced=entries.filter(entry=>entry.line===null||entry.rate===null).length,unassigned=entries.filter(entry=>!entry.group).length;
+  const grouped=[...groupMap.values()].map(group=>({group,id:group.id,entries:entries.filter(entry=>entry.groupId===group.id)}));
+  if(unassigned)grouped.push({group:null,id:'__unassigned__',entries:entries.filter(entry=>!entry.group)});
+  for(const bucket of grouped)bucket.total=bucket.entries.reduce((sum,entry)=>sum+(entry.line??0n),0n);
+  const issues=[...configurationIssues],nonzero=entries.filter(entry=>entry.quantity!==0),direction=settings.direction,assetCode=text(settings.assetAccountCode).trim(),trackingName=text(settings.trackingName).trim(),trackingOption=text(settings.trackingOption).trim();
+  if(!report.stocktakeSettings)issues.push('Stocktake accounting settings are unavailable.');
+  if(!['asset-debit','asset-credit'].includes(direction))issues.push('Choose the stock asset debit or credit direction in Stocktake settings.');
+  if(!assetCode)issues.push('The stock asset account code is missing.');
+  if(!trackingName||!trackingOption)issues.push('The expense tracking name and option are missing.');
+  if(!validDate)issues.push('The stocktake completion date is unavailable.');
+  if(!entries.length)issues.push('This stocktake has no counted items.');
+  if(entries.some(entry=>entry.quantity===null))issues.push('One or more items have no valid counted quantity.');
+  const missingPrices=nonzero.filter(entry=>entry.line===null||entry.rate===null).length,missingGroups=nonzero.filter(entry=>!entry.group).length;
+  if(missingPrices)issues.push(missingPrices+' nonzero counted item(s) are not priced.');
+  if(missingGroups)issues.push(missingGroups+' nonzero counted item(s) need a COS account group.');
+  const limit=999999999999999n;
+  if(knownTotal>limit||knownTotal<-limit||grouped.some(bucket=>bucket.total>limit||bucket.total<-limit))issues.push('The counted stock value exceeds the supported journal amount.');
+  const journalIssues=[...new Set(issues)],journalComplete=journalIssues.length===0;
+  const S={body:0,title:1,header:2,qty:3,money:4,rate:5,totalLabel:6,totalValue:7,date:8,meta:9,note:10,subheading:11,number:12,signed:13,warning:14,green:15};
+  const cell=(ref,value,style=S.body,type='text')=>{
+   if(value===null||value===undefined)return '<c r="'+ref+'" s="'+style+'"/>';
+   if(type==='number')return '<c r="'+ref+'" s="'+style+'"><v>'+xml(value)+'</v></c>';
+   return '<c r="'+ref+'" s="'+style+'" t="inlineStr"><is><t xml:space="preserve">'+xml(value)+'</t></is></c>';
+  };
+  const formula=(ref,expression,cached,style=S.money)=>'<c r="'+ref+'" s="'+style+'"><f>'+xml(expression)+'</f><v>'+xml(cached)+'</v></c>';
+  const row=(index,height,cells)=>'<row r="'+index+'" ht="'+height+'" customHeight="1">'+cells+'</row>';
+  const ns='http://schemas.openxmlformats.org/spreadsheetml/2006/main',relNs='http://schemas.openxmlformats.org/officeDocument/2006/relationships',packageNs='http://schemas.openxmlformats.org/package/2006/relationships';
+  const sheet=(body,{lastColumn,lastRow,widths,merges=[],filter='',freeze='A5',hidden=[],orientation='landscape',logo=false})=>{
+   const split=freeze.match(/^([A-Z]+)(\d+)$/),top=split?Number(split[2])-1:4,left=split?[...split[1]].reduce((n,c)=>n*26+c.charCodeAt(0)-64,0)-1:0;
+   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="'+ns+'" xmlns:r="'+relNs+'"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><dimension ref="A1:'+lastColumn+lastRow+'"/><sheetViews><sheetView showGridLines="0" workbookViewId="0"><pane xSplit="'+left+'" ySplit="'+top+'" topLeftCell="'+freeze+'" activePane="'+(left?'bottomRight':'bottomLeft')+'" state="frozen"/><selection pane="'+(left?'bottomRight':'bottomLeft')+'" activeCell="'+freeze+'" sqref="'+freeze+'"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="21"/><cols>'+widths.map((width,index)=>'<col min="'+(index+1)+'" max="'+(index+1)+'" width="'+width+'" customWidth="1"'+(hidden.includes(index)?' hidden="1"':'')+'/>').join('')+'</cols><sheetData>'+body.join('')+'</sheetData>'+(filter?'<autoFilter ref="'+filter+'"/>':'')+(merges.length?'<mergeCells count="'+merges.length+'">'+merges.map(ref=>'<mergeCell ref="'+ref+'"/>').join('')+'</mergeCells>':'')+'<printOptions horizontalCentered="1"/><pageMargins left="0.25" right="0.25" top="0.35" bottom="0.4" header="0.15" footer="0.2"/><pageSetup paperSize="9" orientation="'+orientation+'" fitToWidth="1" fitToHeight="0"/><headerFooter><oddFooter>&amp;L'+xml('Lennox Facades | AUD ex GST')+'&amp;RPage &amp;P of &amp;N</oddFooter></headerFooter>'+(logo?'<drawing r:id="rId1"/>':'')+'</worksheet>';
+  };
+  const tableHeader=(labels,index=4)=>row(index,34,labels.map((label,i)=>cell(column(i)+index,label,S.header)).join(''));
+  const valuationLabel=report.valuation?.basis==='completion'?'Prices captured at completion':report.valuation?.basis==='current'?'Current prices':report.valuation?.basis==='mixed'?'Mixed pricing dates':report.pricing?.label||'See valuation basis below';
+  const main=[],mainMerges=['C2:G2','C3:G3','H3:K3'];
+  main.push(row(1,8,''),row(2,32,cell('C2','LENNOX MONTHLY FACTORY STOCKTAKE',S.title)+cell('H2','Date:',S.meta)+cell('I2',excelDate,S.date,'number')+cell('L2',unpriced?'KNOWN STOCK VALUE':'TOTAL STOCK VALUE',S.totalLabel)));
+  const mainLast=4+entries.length,mainDataEnd=Math.max(5,mainLast);
+  main.push(row(3,26,cell('C3',report.name||'Stocktake results',S.subheading)+cell('H3',valuationLabel,S.meta)+formula('L3','ROUND(SUM(L5:L'+mainDataEnd+'),2)',money(knownTotal),S.totalValue)),tableHeader(['Account','Name','Type','Supplier','Code','Description','Size','Type','Qty','Unit of Measure','Unit Rate','Total Value']));
+  entries.forEach((entry,index)=>{
+   const {row:r,group,line,rate,quantity}=entry,n=index+5,currentLabel=entry.pricing.basis==='current'?text(entry.pricing.label||'Current price'):'';
+   const description=[r.description||r.name,r.colour||r.color,r.details,r.notes&&r.notes!==r.details?r.notes:null,currentLabel,entry.line===null||entry.rate===null?'Pricing: '+entry.status:''].filter(Boolean).join('\n');
+   const values=[group?.accountCode||'',accountName(group),category(r),r.supplier||'',r.sku||'',description,size(r),r.profileType||r.profile||r.name||'',quantity,r.unit||'',rate,line===null?null:money(line)];
+   const cells=values.map((value,index)=>cell(column(index)+n,value,index===8?S.qty:index===10?S.rate:index===11?S.money:S.body,[8,10,11].includes(index)?'number':'text')).join('');
+   const longest=Math.max(description.split('\n').length,Math.ceil(text(r.description||r.name).length/65));main.push(row(n,Math.min(120,Math.max(25,longest*15+8)),cells));
+  });
+  const mainFooter=mainLast+2;
+  [[scopeText+'. '+unpriced+' unpriced item(s); '+unassigned+' item(s) without a COS group. '+(unpriced?'Known value excludes unpriced items.':'All counted items are priced.'),S.note],[pricingMessage,S.note],['Valued at: '+(stamp(valuedAt)||'Unavailable')+' (Brisbane). All prices and values exclude GST.',S.note],['Counted quantities and item-level values are recorded results. Count details includes reconciliation and pricing sources.',S.note]].forEach(([value,style],index)=>{const n=mainFooter+index;main.push(row(n,index===0?44:index===1?36:28,cell('A'+n,value,style)));mainMerges.push('A'+n+':L'+n);});
+  const mainSheet=sheet(main,{lastColumn:'L',lastRow:mainFooter+3,widths:[14,31,20,22,25,65,31,24,14,19,24,25],merges:mainMerges,filter:entries.length?'A4:L'+mainLast:'',freeze:'F5',logo:!!brand.pngBase64});
+  const summary=[],summaryMerges=['A2:G2','A3:G3'];
+  summary.push(row(1,8,''),row(2,30,cell('A2','LENNOX FACADES / COS SUMMARY',S.title)),row(3,60,cell('A3',scopeText+' / '+dateText+' / '+pricingMessage,S.note)),tableHeader(['Group ID','Account','Name','Items','Priced','Unpriced','Counted value (AUD ex GST)']));
+  grouped.forEach((bucket,index)=>{const n=index+5,missing=bucket.entries.filter(entry=>entry.line===null||entry.rate===null).length;summary.push(row(n,30,cell('A'+n,bucket.id)+cell('B'+n,bucket.group?.accountCode||'')+cell('C'+n,accountName(bucket.group),bucket.group?S.body:S.warning)+cell('D'+n,bucket.entries.length,S.number,'number')+cell('E'+n,bucket.entries.length-missing,S.number,'number')+cell('F'+n,missing,S.number,'number')+formula('G'+n,'ROUND(SUMIF(\'Count details\'!$B$5:$B$'+mainDataEnd+',A'+n+',\'Count details\'!$R$5:$R$'+mainDataEnd+'),2)',money(bucket.total))));});
+  const summaryEnd=4+grouped.length,summaryTotal=summaryEnd+2;
+  summary.push(row(summaryTotal,30,cell('C'+summaryTotal,unpriced?'KNOWN STOCK VALUE':'TOTAL STOCK VALUE',S.subheading)+cell('D'+summaryTotal,entries.length,S.number,'number')+cell('E'+summaryTotal,entries.length-unpriced,S.number,'number')+cell('F'+summaryTotal,unpriced,S.number,'number')+formula('G'+summaryTotal,'ROUND(SUM(G5:G'+Math.max(summaryEnd,5)+'),2)',money(knownTotal),S.totalValue)),row(summaryTotal+2,32,cell('A'+(summaryTotal+2),'Values use counted stock units. Unpriced items are excluded from the known value. All prices and values exclude GST.',S.note)));
+  summaryMerges.push('A'+(summaryTotal+2)+':G'+(summaryTotal+2));
+  const summarySheet=sheet(summary,{lastColumn:'G',lastRow:summaryTotal+2,widths:[22,18,49,13,13,13,29],merges:summaryMerges,filter:grouped.length?'A4:G'+summaryEnd:'',freeze:'D5',hidden:[0]});
+  const journal=[],journalMerges=['B3:H3','B4:H4','B5:H5','B6:H6'];
+  const narration='Stock Take for Factory '+monthText+' / '+text(report.name||'Stocktake');
+  journal.push(row(1,24,cell('A1','Journal Date',S.meta)+cell('B1',excelDate,S.date,'number')),row(2,24,cell('A2','Month',S.meta)+cell('B2',monthText)),row(3,30,cell('A3','Description',S.meta)+cell('B3',narration,S.subheading)),row(4,64,cell('A4','Valuation / scope',S.meta)+cell('B4',pricingMessage+' / '+scopeText,S.note)),row(5,30,cell('A5','Status',S.meta)+cell('B5',journalComplete?'COMPLETE / SELECTED STOCKTAKE CLOSING VALUE':'JOURNAL INCOMPLETE',journalComplete?S.green:S.warning)),row(6,30,cell('A6','Direction',S.meta)+cell('B6',direction==='asset-debit'?'Debit stock on hand; credit COS accounts':direction==='asset-credit'?'Credit stock on hand; debit COS accounts':'Direction has not been configured',S.note)));
+  let journalLast;
+  if(journalComplete){
+   journal.push(tableHeader(['*Narration','*Date','Description','*AccountCode','*TaxRate','*Amount','TrackingName1','TrackingOption1'],8));
+   const factor=direction==='asset-debit'?1n:-1n;
+   const journalRows=[...groupMap.values()].map(group=>({group,amount:-(grouped.find(bucket=>bucket.id===group.id)?.total||0n)*factor}));
+   journalRows.push({group:{id:'asset',label:'Factory Stock on Hand',accountCode:assetCode},amount:knownTotal*factor});
+   journalRows.forEach((entry,index)=>{const n=index+9,asset=entry.group.id==='asset';journal.push(row(n,32,cell('A'+n,narration)+cell('B'+n,excelDate,S.date,'number')+cell('C'+n,entry.group.label+' as at '+dateText)+cell('D'+n,entry.group.accountCode)+cell('E'+n,'BAS Excluded')+cell('F'+n,money(entry.amount),S.signed,'number')+cell('G'+n,asset?'':trackingName)+cell('H'+n,asset?'':trackingOption)));});
+   journalLast=8+journalRows.length;journal.push(row(journalLast+2,28,cell('E'+(journalLast+2),'Balance',S.subheading)+formula('F'+(journalLast+2),'ROUND(SUM(F9:F'+journalLast+'),2)','0.00',S.money)),row(journalLast+4,32,cell('A'+(journalLast+4),'Full counted closing stock value, including configured COS groups with zero value. All prices and values exclude GST.',S.note)));journalMerges.push('A'+(journalLast+4)+':H'+(journalLast+4));journalLast+=4;
+  }else{
+   journal.push(row(8,30,cell('A8','JOURNAL INCOMPLETE',S.warning)));journalMerges.push('A8:H8');
+   journalIssues.forEach((issue,index)=>{const n=index+10;journal.push(row(n,32,cell('A'+n,issue,S.note)));journalMerges.push('A'+n+':H'+n);});
+   journalLast=10+journalIssues.length;journal.push(row(journalLast,40,cell('A'+journalLast,'No journal amounts have been generated. The stock register and COS Summary show known counted values and identify missing information.',S.note)));journalMerges.push('A'+journalLast+':H'+journalLast);
+  }
+  const journalSheet=sheet(journal,{lastColumn:'H',lastRow:journalLast,widths:[37,17,48,20,20,24,23,36],merges:journalMerges,freeze:journalComplete?'C9':'A9'});
+  const details=[],detailsMerges=['A2:AB2','A3:AB3'];
+  details.push(row(1,8,''),row(2,30,cell('A2','LENNOX FACADES / COUNT DETAILS',S.title)),row(3,52,cell('A3',scopeText+' / Completed '+stamp(report.completedAt)+' (Brisbane) / '+pricingMessage,S.note)),tableHeader(['Item ID','COS group ID','Stock code','Item','Category','Supplier','Colour / size','Location','Unit','Expected','Counted','Variance','Counted by','Counted at (Brisbane)','Pricing basis','Pricing captured / valued at (Brisbane)','Unit rate (AUD ex GST)','Counted value (AUD ex GST)','Price basis','Units per pack','Pack cost (AUD ex GST)','Source panel / catalogue','Source size (mm)','Source cost (AUD ex GST)','Rate (AUD ex GST / m²)','Area per unit (m²)','Pricing status','Pricing source']));
+  entries.forEach((entry,index)=>{
+   const r=entry.row,n=index+5,source=r.areaCost||r.catalogueCost||{},sourcePack=source.sourceCostBasis==='pack',sourcePackSize=finite(source.sourcePackSize),sourcePackCost=finite(source.sourcePackCost),sourceUnitCost=finite(source.sourceUnitCost),sourceCost=r.costBasis==='catalogue-area'?null:sourcePack?(sourcePackCost!==null&&sourcePackSize>0?sourcePackCost/sourcePackSize:null):sourceUnitCost,sourceWidth=source.sourceWidth??source.width,sourceHeight=source.sourceHeight??source.height;
+   const sourceName=[source.sourceName||source.name,source.sourceItemId||source.catalogId].filter(Boolean).join(' / '),sourceSize=finite(sourceWidth)>0&&finite(sourceHeight)>0?text(sourceWidth)+' x '+text(sourceHeight):'',priceSource=text(r.pricingSource||(sourcePack&&sourcePackCost!==null?'Source pack: '+sourcePackSize+' sheets at '+sourcePackCost.toFixed(2)+' AUD ex GST':''));
+   const values=[r.itemId||r.id||'',entry.groupId,r.sku||'',r.name||'',category(r),r.supplier||'',[r.colour||r.color,size(r)].filter(Boolean).join(' / '),r.location||'',r.unit||'',r.expectedQty??null,entry.quantity,r.variance??null,r.user||'',stamp(r.at),entry.pricing.label||entry.pricing.basis||report.pricing?.label||'',stamp(entry.pricing.capturedAt||entry.pricing.valuedAt||r.pricingCapturedAt||valuedAt),entry.rate,entry.line===null?null:money(entry.line),r.costBasis||'unit',r.costBasis==='pack'?finite(r.packSize):null,r.costBasis==='pack'?finite(r.packCost):null,sourceName,sourceSize,sourceCost,finite(own(r,'areaRatePerM2')?r.areaRatePerM2:source.ratePerM2),finite(r.unitAreaM2),entry.status,priceSource];
+   const numeric=new Set([9,10,11,16,17,19,20,23,24,25]);
+   details.push(row(n,48,values.map((value,index)=>cell(column(index)+n,value,index===11?S.signed:[17,20].includes(index)?S.money:[16,23,24].includes(index)?S.rate:index===25?S.number:[9,10,19].includes(index)?S.number:index===26&&(entry.line===null||entry.rate===null)?S.warning:S.body,numeric.has(index)?'number':'text')).join('')));
+  });
+  const detailFooter=mainLast+2;details.push(row(detailFooter,38,cell('A'+detailFooter,'Blank values are unavailable, not zero. Prices and stock-account settings use the valuation basis shown above. All prices and values exclude GST.',S.note)));detailsMerges.push('A'+detailFooter+':AB'+detailFooter);
+  const detailsSheet=sheet(details,{lastColumn:'AB',lastRow:detailFooter,widths:[33,23,25,35,22,24,45,25,16,15,15,15,24,29,37,31,27,29,23,19,26,50,28,28,29,24,42,48],merges:detailsMerges,filter:entries.length?'A4:AB'+mainLast:'',freeze:'E5',hidden:[1]});
+  const border=(weight='thin')=>'<border><left style="'+weight+'"><color rgb="FF64748B"/></left><right style="'+weight+'"><color rgb="FF64748B"/></right><top style="'+weight+'"><color rgb="FF64748B"/></top><bottom style="'+weight+'"><color rgb="FF64748B"/></bottom><diagonal/></border>';
+  const xf=(font=0,fill=0,numFmt=0,borderId=1,alignment='left',wrap=true)=>'<xf numFmtId="'+numFmt+'" fontId="'+font+'" fillId="'+fill+'" borderId="'+borderId+'" xfId="0" applyAlignment="1"'+(numFmt?' applyNumberFormat="1"':'')+'><alignment horizontal="'+alignment+'" vertical="center"'+(wrap?' wrapText="1"':'')+'/></xf>';
+  const styles='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="'+ns+'"><numFmts count="5"><numFmt numFmtId="168" formatCode="dd/mm/yyyy"/><numFmt numFmtId="164" formatCode="&quot;$&quot;#,##0.00;[Red](&quot;$&quot;#,##0.00);&quot;$&quot;0.00"/><numFmt numFmtId="165" formatCode="&quot;$&quot;#,##0.00##########;[Red](&quot;$&quot;#,##0.00##########);&quot;$&quot;0.00"/><numFmt numFmtId="166" formatCode="0.############;[Red](0.############);0"/><numFmt numFmtId="167" formatCode="+0.############;[Red]-0.############;0"/></numFmts><fonts count="6"><font><sz val="12"/><color rgb="FF172B3D"/><name val="Calibri"/><family val="2"/></font><font><b/><sz val="23"/><color rgb="FF155E75"/><name val="Calibri"/></font><font><b/><sz val="14"/><color rgb="FF172B3D"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FF172B3D"/><name val="Calibri"/></font><font><sz val="11"/><color rgb="FF526779"/><name val="Calibri"/></font><font><b/><sz val="12"/><color rgb="FF172B3D"/><name val="Calibri"/></font></fonts><fills count="8"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFD9D9D9"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFF2CC"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE2EFDA"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFC000"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE7F6FD"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFE8B3"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="3"><border><left/><right/><top/><bottom/><diagonal/></border>'+border()+border('medium')+'</borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="16">'+[xf(),xf(1,0,0,0),xf(2,2,0,2),xf(0,3,166,2,'center'),xf(0,4,164,1,'right'),xf(0,0,165,1,'right'),xf(3,5,0,2,'center'),xf(5,5,164,2,'right'),xf(3,3,168,1,'center'),xf(3,0,0,0),xf(4,0,0,0),xf(5,0,0,0),xf(0,0,166,1,'right'),xf(0,0,167,1,'right'),xf(3,7,0,1),xf(3,4,0,1)].join('')+'</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles><dxfs count="0"/><tableStyles count="0" defaultTableStyle="TableStyleMedium2" defaultPivotStyle="PivotStyleLight16"/></styleSheet>';
+  const names=['Lennox Stocktake','COS Summary','Journal','Count details'],lastRows=[mainFooter+3,summaryTotal+2,journalLast,detailFooter],lastColumns=['L','G','H','AB'];
+  const files={
+   '[Content_Types].xml':'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>'+(brand.pngBase64?'<Default Extension="png" ContentType="image/png"/><Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>':'')+'<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'+names.map((name,index)=>'<Override PartName="/xl/worksheets/sheet'+(index+1)+'.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>').join('')+'</Types>',
+   '_rels/.rels':'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="'+packageNs+'"><Relationship Id="rId1" Type="'+relNs+'/officeDocument" Target="xl/workbook.xml"/></Relationships>',
+   'xl/workbook.xml':'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="'+ns+'" xmlns:r="'+relNs+'"><bookViews><workbookView activeTab="0"/></bookViews><sheets>'+names.map((name,index)=>'<sheet name="'+name+'" sheetId="'+(index+1)+'" r:id="rId'+(index+1)+'"/>').join('')+'</sheets><definedNames>'+names.map((name,index)=>'<definedName name="_xlnm.Print_Area" localSheetId="'+index+'">\''+name+'\'!$A$1:$'+lastColumns[index]+'$'+lastRows[index]+'</definedName><definedName name="_xlnm.Print_Titles" localSheetId="'+index+'">\''+name+'\'!$'+(index===2?8:4)+':$'+(index===2?8:4)+'</definedName>').join('')+'</definedNames><calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>',
+   'xl/_rels/workbook.xml.rels':'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="'+packageNs+'">'+names.map((name,index)=>'<Relationship Id="rId'+(index+1)+'" Type="'+relNs+'/worksheet" Target="worksheets/sheet'+(index+1)+'.xml"/>').join('')+'<Relationship Id="rId5" Type="'+relNs+'/styles" Target="styles.xml"/></Relationships>',
+   'xl/styles.xml':styles,'xl/worksheets/sheet1.xml':mainSheet,'xl/worksheets/sheet2.xml':summarySheet,'xl/worksheets/sheet3.xml':journalSheet,'xl/worksheets/sheet4.xml':detailsSheet
+  };
+  if(brand.pngBase64){
+   const logo=Uint8Array.from(atob(brand.pngBase64),character=>character.charCodeAt(0)),cx=175*9525,cy=Math.round(175*(brand.height/brand.width||0.505)*9525);
+   files['xl/media/lennox-logo.png']=logo;
+   files['xl/worksheets/_rels/sheet1.xml.rels']='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="'+packageNs+'"><Relationship Id="rId1" Type="'+relNs+'/drawing" Target="../drawings/drawing1.xml"/></Relationships>';
+   files['xl/drawings/_rels/drawing1.xml.rels']='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="'+packageNs+'"><Relationship Id="rId1" Type="'+relNs+'/image" Target="../media/lennox-logo.png"/></Relationships>';
+   files['xl/drawings/drawing1.xml']='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><xdr:oneCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>19050</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>19050</xdr:rowOff></xdr:from><xdr:ext cx="'+cx+'" cy="'+cy+'"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="1" name="Lennox Facades"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr><xdr:blipFill><a:blip xmlns:r="'+relNs+'" r:embed="rId1"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="'+cx+'" cy="'+cy+'"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor></xdr:wsDr>';
+  }
+  return zip(files);
+ }
+
  function xlsx(report){
+  if(report.kind!=='soh')return stocktakeTemplateXlsx(report.valuation?report:prepareStocktakeReport(report));
   const soh=report.kind==='soh',costed=soh&&report.includeCostings===true,packPricing=costed&&report.rows.some(r=>r.costBasis==='pack'),cataloguePricing=costed&&report.rows.some(r=>r.costBasis==='catalogue-area'),areaPricing=cataloguePricing||costed&&report.rows.some(r=>r.costBasis==='area'),precisionPricing=packPricing||areaPricing,areaStart=packPricing?18:15,lastColumn=soh?(costed?(areaPricing?(packPricing?'W':'T'):(packPricing?'R':'O')):'M'):'K',sheetName=soh?'Stock on hand':'Stocktake report',sheetRef="'"+sheetName+"'";
   const headings=soh?['Stock code','Item','Category','Colour / size','Location','Supplier','Unit','On hand','Reserved','Available','On order','Reorder level','Status',...(costed?['Unit cost (AUD ex GST)','On-hand value (AUD ex GST)',...(packPricing?['Units per pack','Pack cost (AUD ex GST)','Price basis']:[]),...(areaPricing?(cataloguePricing?['Source panel / catalogue','Source size (mm)','Source cost (AUD ex GST)','Rate (AUD ex GST / m²)','Area per item (m²)']:['Source full sheet / price basis','Full sheet size (mm)','Full sheet cost (AUD ex GST)','Rate (AUD ex GST / m²)','Area per offcut (m²)']):[])]:[])]:columns;
   const areaValues=r=>{
@@ -1356,5 +1520,5 @@ License: GPL-2+
   });
   objects[pages]='<< /Type /Pages /Kids ['+ids.map(id=>id+' 0 R').join(' ')+'] /Count '+ids.length+' >>';const catalog=add('<< /Type /Catalog /Pages '+pages+' 0 R >>');let result='%PDF-1.4\n',offsets=[0];for(let i=1;i<objects.length;i++){offsets[i]=enc.encode(result).length;result+=i+' 0 obj\n'+objects[i]+'\nendobj\n';}const xref=enc.encode(result).length;result+='xref\n0 '+objects.length+'\n0000000000 65535 f \n'+offsets.slice(1).map(n=>String(n).padStart(10,'0')+' 00000 n \n').join('')+'trailer\n<< /Size '+objects.length+' /Root '+catalog+' 0 R >>\nstartxref\n'+xref+'\n%%EOF';return new Blob([result],{type:'application/pdf'});
  }
- return {pdf,xlsx,soh:{prepare:prepareSOHReport,pdf:report=>pdf(prepareSOHReport(report)),xlsx:report=>xlsx(prepareSOHReport(report)),xero:{prepare:xeroJournalPrepare,csv:xeroJournalCsv,groups:xeroJournalGroups}},logo:'data:image/png;base64,'+brand.pngBase64};
+ return {pdf,xlsx,prepareWorkbook:prepareStocktakeReport,soh:{prepare:prepareSOHReport,pdf:report=>pdf(prepareSOHReport(report)),xlsx:report=>xlsx(prepareSOHReport(report)),xero:{prepare:xeroJournalPrepare,csv:xeroJournalCsv,groups:xeroJournalGroups}},logo:'data:image/png;base64,'+brand.pngBase64};
 })();
