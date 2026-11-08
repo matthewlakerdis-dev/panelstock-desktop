@@ -3,19 +3,19 @@ const source=fs.readFileSync(require('node:path').join(__dirname,'../index.html'
 const code=source.slice(source.indexOf('  function SiteOrderDispatch('),source.indexOf('  function PanelDispatchLoads()'));
 const order={id:'one',project:'Test project',orderNumber:'007',orderType:'Fixings',status:'completed',ready:true,usesPanelLoads:false,updatedAt:'v1',siteContact:'Test contact',phone:'123',items:[{quantity:3,description:'Fixing pack'}]};
 function nodes(tree){if(!tree||typeof tree!=='object')return [];if(Array.isArray(tree))return tree.flatMap(nodes);return [tree,...nodes(tree.children)];}
-function harness({orders=[order],selected=null,form={},filter='ready',fetcher=async()=>{throw Error('Unexpected request');}}={}){
+function harness({orders=[order],selected=null,form={},filter='ready',fetcher=async()=>Response.json({orders})}={}){
   const values=[orders,false,'',selected,form,filter,''],refs=[{current:false},{current:true}];let stateIndex=0,refIndex=0,panelLoads=0;
-  const context={import_react:{createElement:(tag,props,...children)=>({tag,props,children})},useState:initial=>{const index=stateIndex++;if(!(index in values))values[index]=initial;return [values[index],value=>{values[index]=typeof value==='function'?value(values[index]):value;}];},useRef:()=>refs[refIndex++],useEffect:()=>{},PageHeading:'heading',Truck:'truck',crypto:webcrypto,Uint8Array,PanelStock:{apiFetch:fetcher},BAKED_WORKER_URL:'https://example.test'};
+  const context={import_react:{createElement:(tag,props,...children)=>({tag,props,children})},useState:initial=>{const index=stateIndex++;if(!(index in values))values[index]=initial;return [values[index],value=>{values[index]=typeof value==='function'?value(values[index]):value;}];},useRef:initial=>{const i=refIndex++;return refs[i]||(refs[i]={current:initial});},useEffect:()=>{},PageHeading:'heading',Truck:'truck',crypto:webcrypto,Uint8Array,PanelStock:{username:'alex',apiFetch:fetcher},BAKED_WORKER_URL:'https://example.test'};
   vm.createContext(context);vm.runInContext(code+'globalThis.component=SiteOrderDispatch;',context);
   return {values,refs,render(){stateIndex=0;refIndex=0;return context.component({onPanelLoads:()=>panelLoads++});},get panelLoads(){return panelLoads;}};
 }
 const button=(tree,label)=>nodes(tree).find(node=>node.tag==='button'&&node.children.includes(label));
 
-test('ready order cards dispatch non-panels and route panels through existing load controls',()=>{
+test('ready order cards dispatch non-panels and route panels through existing load controls',async()=>{
   const h=harness({orders:[order,{...order,id:'panel',orderType:'Panels',usesPanelLoads:true}]});let tree=h.render();
   assert.ok(button(tree,'Dispatch order'));assert.ok(button(tree,'Dispatch panel loads'));
   button(tree,'Dispatch panel loads').props.onClick();assert.equal(h.panelLoads,1);
-  button(tree,'Dispatch order').props.onClick();tree=h.render();
+  await button(tree,'Dispatch order').props.onClick();tree=h.render();
   assert.equal(h.values[3].id,'one');assert.match(h.values[3].mutationId,/^[a-f0-9]{32}$/);
   assert.ok(button(tree,'Confirm dispatch'));assert.ok(nodes(tree).some(node=>node.children?.includes('3 ×')));assert.ok(nodes(tree).some(node=>node.children?.includes('Fixing pack')));
 });
@@ -48,7 +48,7 @@ test('successful dispatch updates the ready queue and clears the submitted form'
   assert.equal(button(h.render(),'Dispatch order'),undefined);assert.equal(h.values[2],'Order dispatched.');
 });
 
-test('collapsed rows keep delivery details and dispatch available without opening items',()=>{
+test('collapsed rows keep delivery details and dispatch available without opening items',async()=>{
   const h=harness({orders:[{...order,locationNotes:'Rack V135'}]});
   const tree=h.render(),summary=nodes(tree).find(node=>node.props?.className==='ps-order-dispatch-summary');
   assert.ok(nodes(summary).some(node=>node.children?.includes('Test project')));
@@ -57,11 +57,11 @@ test('collapsed rows keep delivery details and dispatch available without openin
   assert.ok(nodes(summary).some(node=>node.children?.includes('Rack V135')));
   assert.ok(button(summary,'Dispatch order'));
   assert.equal(nodes(tree).find(node=>node.props?.className==='ps-order-dispatch-expanded').props.hidden,true);
-  button(summary,'Dispatch order').props.onClick();
+  await button(summary,'Dispatch order').props.onClick();
   assert.ok(button(h.render(),'Confirm dispatch'));
 });
 
-test('items expand independently and preserve their state while searching and returning from dispatch',()=>{
+test('items expand independently and preserve their state while searching and returning from dispatch',async()=>{
   const h=harness({orders:[order,{...order,id:'two',project:'Another project',orderNumber:'008'}]});
   const toggle=tree=>nodes(tree).find(node=>node.props?.['aria-controls']==='site-dispatch-items-one');
   let tree=h.render();assert.equal(toggle(tree).props['aria-expanded'],false);
@@ -71,7 +71,24 @@ test('items expand independently and preserve their state while searching and re
   assert.equal(nodes(tree).find(node=>node.props?.id==='site-dispatch-items-two').props.hidden,true);
   h.values[6]='Another';assert.equal(toggle(h.render()),undefined);
   h.values[6]='';tree=h.render();assert.equal(toggle(tree).props['aria-expanded'],true);
-  button(tree,'Dispatch order').props.onClick();button(h.render(),'Back to orders').props.onClick();
+  await button(tree,'Dispatch order').props.onClick();button(h.render(),'Back to orders').props.onClick();
   assert.equal(toggle(h.render()).props['aria-expanded'],true);
   toggle(h.render()).props.onClick();assert.equal(toggle(h.render()).props['aria-expanded'],false);
+});
+
+test('opening web dispatch uses fresh settings, current readiness and only an eligible default driver',async()=>{
+ for(const [dispatchDefaultDriver,expected] of [['sam','user:sam'],['inactive',''],['','']]){
+  const h=harness({fetcher:async()=>Response.json({orders:[{...order,updatedAt:'v2'}],dispatchVehicles:['Updated Ute','Truck'],dispatchDrivers:[{username:'sam',displayName:'Sam Driver'}],dispatchDefaultDriver})});
+  await button(h.render(),'Dispatch order').props.onClick();
+  assert.equal(h.values[3].updatedAt,'v2');assert.equal(h.values[4].transport,'Updated Ute');assert.equal(h.values[4].driverChoice,expected);assert.equal(h.values[4].driver,expected?'Sam Driver':'');
+  const selects=nodes(h.render()).filter(n=>n.tag==='select');assert.equal(selects[0].props.value,'vehicle:0');assert.equal(selects[1].props.value,expected);
+  selects[0].props.onChange({target:{value:'external'}});nodes(h.render()).filter(n=>n.tag==='select')[1].props.onChange({target:{value:'external'}});
+  const inputs=nodes(h.render()).filter(n=>n.tag==='input');assert.ok(inputs.find(n=>n.props['aria-label']==='Other vehicle / transport company')?.props.required);assert.ok(inputs.find(n=>n.props['aria-label']==='Other driver name')?.props.required);
+ }
+ const stale=harness({fetcher:async()=>Response.json({orders:[{...order,ready:false}]})});await button(stale.render(),'Dispatch order').props.onClick();assert.equal(stale.values[3],null);assert.match(stale.values[2],/no longer ready/);
+});
+test('web dispatch payload excludes dropdown choice IDs',async()=>{
+ let body;const h=harness({selected:{...order,mutationId:'stable-id'},form:{destination:'Site',transport:'Truck',driver:'Sam Driver',driverChoice:'user:sam',transportChoice:'vehicle:0'},fetcher:async(url,options)=>{body=JSON.parse(options.body);return Response.json({orders:[]});}});
+ nodes(h.render()).find(n=>n.tag==='form').props.onSubmit({preventDefault(){}});await new Promise(setImmediate);
+ assert.deepEqual(body,{destination:'Site',transport:'Truck',driver:'Sam Driver',notes:'',id:order.id,mutationId:'stable-id',expectedUpdatedAt:'v1'});
 });
