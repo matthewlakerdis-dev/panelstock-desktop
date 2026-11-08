@@ -109,3 +109,27 @@ test('changed delivery schedules require reload and a new confirmation against t
  const count=h.calls.length;await h.controller.submit({scheduledDeliveryDate:'2026-11-09'});assert.equal(h.calls.length,count);
  stamp='v2';await h.controller.load();await h.controller.submit({scheduledDeliveryDate:'2026-11-10'});assert.equal(JSON.parse(h.calls.at(-1).options.body).expectedUpdatedAt,'v2');
 });
+
+test('tracker dispatch reads saved vehicle and eligible driver defaults for orders and panel loads',async()=>{
+ const defaults={dispatchVehicles:['Configured Ute','Configured Truck'],dispatchDrivers:[{username:'sam',displayName:'Sam Driver'}],dispatchDefaultDriver:'sam'};
+ for(const usesPanelLoads of [false,true]){
+  const h=harness('dispatch',async url=>url.endsWith('/dispatch/orders')?Response.json({orders:[{...order,status:'completed',ready:true,usesPanelLoads}],...defaults}):Response.json({loads:[{id:'load-one',project:order.project,orderNumber:order.orderNumber,status:'ready_for_site',readyForSite:true}],...defaults,dispatchVehicles:['Panel truck']}));
+  await h.controller.load();
+  if(usesPanelLoads)h.controller.selectLoad('load-one');
+  const {dispatchFormDefaults}=require('../excel-order-actions.js'),config=dispatchFormDefaults(h.controller.state.dispatchDefaults);
+  assert.equal(h.controller.state.phase,'confirm');assert.equal(config.details.transport,usesPanelLoads?'Panel truck':'Configured Ute');assert.equal(config.details.driver,'Sam Driver');assert.equal(config.details.driverChoice,'user:sam');assert.equal(config.details.destination,'');assert.ok(h.calls.every(call=>!call.options));
+ }
+});
+test('tracker dispatch does not silently choose a different driver when a default is unavailable',()=>{
+ const {dispatchFormDefaults}=require('../excel-order-actions.js');
+ for(const dispatchDefaultDriver of ['disabled','']){
+  const config=dispatchFormDefaults({dispatchVehicles:['Ute'],dispatchDrivers:[{username:'sam',displayName:'Sam Driver'}],dispatchDefaultDriver});
+  assert.equal(config.details.driverChoice,'');assert.equal(config.details.driver,'');
+ }
+ const external=dispatchFormDefaults();assert.equal(external.details.driverChoice,'external');assert.equal(external.details.transportChoice,'external');assert.equal(external.details.transport,'');
+});
+test('tracker sends only delivery text fields; dropdown IDs never enter the saved dispatch',async()=>{
+ const h=harness('dispatch',async(url,options)=>options?Response.json({ok:true}):Response.json({orders:[{...order,status:'completed',ready:true}]}));
+ await h.controller.load();await h.controller.submit({destination:'Site',transport:'Ute',driver:'Sam Driver',notes:'Keep dry',transportChoice:'vehicle:0',driverChoice:'user:sam'});
+ assert.deepEqual(JSON.parse(h.calls.at(-1).options.body),{destination:'Site',transport:'Ute',driver:'Sam Driver',notes:'Keep dry',id,expectedUpdatedAt:'v1',mutationId:id});
+});

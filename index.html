@@ -15248,33 +15248,39 @@ ${xrefStart}
   function SiteOrderDispatch({onPanelLoads}) {
     const siteOrderDetailsText=order=>[order.villa?"Villa: "+order.villa:"",order.location?"Location: "+order.location:"",order.notes?"Notes: "+order.notes:"",order.locationNotes||""].filter(Boolean).join(" · ");
 
-    const h=import_react.createElement,[orders,setOrders]=useState([]),[busy,setBusy]=useState(false),[notice,setNotice]=useState(""),[selected,setSelected]=useState(null),[form,setForm]=useState({}),[filter,setFilter]=useState("ready"),[query,setQuery]=useState("");
+    const h=import_react.createElement,[orders,setOrders]=useState([]),[busy,setBusy]=useState(false),[notice,setNotice]=useState(""),[selected,setSelected]=useState(null),[form,setForm]=useState({}),[filter,setFilter]=useState("ready"),[query,setQuery]=useState(""),[vehicles,setVehicles]=useState([]),[drivers,setDrivers]=useState([]);
     const [expandedOrders,setExpandedOrders]=useState({});
-    const lock=useRef(false),alive=useRef(true);
+    const lock=useRef(false),alive=useRef(true),owner=useRef(PanelStock.username),opening=useRef(false);
     const inputClass="mt-1.5 h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm";
     async function request(body){
       if(lock.current)return;lock.current=true;setBusy(true);setNotice("");
       try{
         const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/dispatch/orders",body?{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}:undefined),data=await response.json();
-        if(!alive.current)return;
+        if(!alive.current||owner.current!==PanelStock.username)return false;
         if(!response.ok)throw Error(data.error||"Could not load Site Orders for dispatch");
-        setOrders(data.orders||[]);
-        if(body){setSelected(null);setNotice(data.idempotent?"This dispatch was already saved.":"Order dispatched.");}
-      }catch(error){if(alive.current)setNotice(error.message);return false;}finally{lock.current=false;if(alive.current)setBusy(false);}
+        setOrders(data.orders||[]);if(!selected||body){setVehicles(data.dispatchVehicles||[]);setDrivers(data.dispatchDrivers||[]);}
+        if(body){setSelected(null);setNotice(data.idempotent?"This dispatch was already saved.":"Order dispatched.");}return data;
+      }catch(error){if(alive.current&&owner.current===PanelStock.username)setNotice(error.message);return false;}finally{lock.current=false;if(alive.current&&owner.current===PanelStock.username)setBusy(false);}
     }
     useEffect(()=>window.PanelStockPullRefresh?.subscribe(()=>request()));
     useEffect(()=>{alive.current=true;void request();return()=>{alive.current=false;};},[]);
     const date=value=>value?new Date(value).toLocaleString("en-AU",{timeZone:"Australia/Brisbane",day:"numeric",month:"short",hour:"numeric",minute:"2-digit"}):"—";
     const items=order=>h("ul",{className:"ps-order-dispatch-items"},(order.items||[]).map((item,index)=>h("li",{key:index},h("strong",null,`${item.quantity} ×`),h("span",null,item.description))));
-    function open(order){
-      const mutationId=Array.from(crypto.getRandomValues(new Uint8Array(16)),value=>value.toString(16).padStart(2,"0")).join("");
-      setSelected({...order,mutationId});setForm({destination:"",transport:"",driver:"",notes:""});setNotice("");
+    async function open(order){
+      if(opening.current||lock.current)return;opening.current=true;
+      try{const data=await request();if(!data||!alive.current||owner.current!==PanelStock.username)return;const current=(data.orders||[]).find(item=>item.id===order.id);
+        if(!current?.ready){setNotice("This order is no longer ready for dispatch. Review the refreshed list.");return;}if(current.usesPanelLoads){onPanelLoads();return;}
+        const nextVehicles=data.dispatchVehicles||[],nextDrivers=data.dispatchDrivers||[],driver=nextDrivers.find(user=>user.username===data.dispatchDefaultDriver),mutationId=Array.from(crypto.getRandomValues(new Uint8Array(16)),value=>value.toString(16).padStart(2,"0")).join("");
+        setSelected({...current,mutationId});setForm({destination:"",transport:nextVehicles[0]||"",transportChoice:nextVehicles.length?"vehicle:0":"external",driver:driver?.displayName||driver?.username||"",driverChoice:driver?"user:"+driver.username:nextDrivers.length?"":"external",notes:""});setNotice("");
+      }finally{opening.current=false;}
     }
     if(selected)return h("section",{className:"ps-dispatch ps-order-dispatch ps-order-dispatch-confirm"},
       h("div",{className:"ps-order-dispatch-confirm-heading"},h("p",{className:"ps-dispatch-order"},"Site order dispatch"),h("h2",null,`Dispatch Order #${selected.orderNumber} · ${selected.project}`),h("p",null,"Review the order and add the delivery details to confirm dispatch.")),
       h("div",{className:"ps-order-dispatch-review"},h("div",null,h("h3",null,"Items"),items(selected)),h("div",{className:"ps-order-dispatch-meta"},h("div",null,h("h4",null,"Site contact"),h("p",null,[selected.siteContact,selected.phone].filter(Boolean).join(" · ")||"Not provided")),siteOrderDetailsText(selected)&&h("div",null,h("h4",null,"Location / notes"),h("p",null,siteOrderDetailsText(selected))))),
-      h("form",{className:"ps-order-dispatch-form",onSubmit:event=>{event.preventDefault();void request({...form,id:selected.id,mutationId:selected.mutationId,expectedUpdatedAt:selected.updatedAt||selected.createdAt||""});}},
-        [["destination","Site / delivery address"],["transport","Vehicle / transport company"],["driver","Driver"]].map(([key,label])=>h("label",{key,className:"block text-sm font-semibold"},label,h("input",{required:true,maxLength:300,disabled:busy,className:inputClass,value:form[key]||"",onChange:event=>setForm({...form,[key]:event.target.value})}))),
+      h("form",{className:"ps-order-dispatch-form",onSubmit:event=>{event.preventDefault();void request({destination:form.destination,transport:form.transport,driver:form.driver,notes:form.notes||"",id:selected.id,mutationId:selected.mutationId,expectedUpdatedAt:selected.updatedAt||selected.createdAt||""});}},
+        h("label",{className:"block text-sm font-semibold"},"Site / delivery address",h("input",{required:true,maxLength:300,disabled:busy,className:inputClass,value:form.destination||"",onChange:event=>setForm({...form,destination:event.target.value})})),
+        h("div",null,h("label",{className:"block text-sm font-semibold"},"Vehicle / transport company",h("select",{required:true,disabled:busy,className:inputClass,value:form.transportChoice||"external",onChange:event=>{const value=event.target.value;setForm({...form,transportChoice:value,transport:value==="external"?"":vehicles[Number(value.slice(8))]||""});}},vehicles.map((vehicle,index)=>h("option",{key:vehicle,value:"vehicle:"+index},vehicle)),h("option",{value:"external"},"Other vehicle / transport"))),(!form.transportChoice||form.transportChoice==="external")&&h("label",{className:"block text-sm font-semibold",style:{marginTop:8}},"Transport details",h("input",{required:true,maxLength:300,disabled:busy,className:inputClass,"aria-label":"Other vehicle / transport company",value:form.transport||"",onChange:event=>setForm({...form,transport:event.target.value})}))),
+        h("div",null,h("label",{className:"block text-sm font-semibold"},"Driver",h("select",{required:true,disabled:busy,className:inputClass,value:form.driverChoice===undefined?"external":form.driverChoice,onChange:event=>{const value=event.target.value,user=drivers.find(item=>"user:"+item.username===value);setForm({...form,driverChoice:value,driver:user?(user.displayName||user.username):""});}},h("option",{value:"",disabled:true},"Choose driver"),drivers.map(user=>h("option",{key:user.username,value:"user:"+user.username},user.displayName||user.username)),h("option",{value:"external"},"Other / external driver"))),(form.driverChoice===undefined||form.driverChoice==="external")&&h("label",{className:"block text-sm font-semibold",style:{marginTop:8}},"Driver name",h("input",{required:true,maxLength:300,disabled:busy,className:inputClass,"aria-label":"Other driver name",value:form.driver||"",onChange:event=>setForm({...form,driver:event.target.value})}))),
         h("label",{className:"block text-sm font-semibold ps-order-dispatch-form-wide"},"Notes",h("textarea",{rows:3,maxLength:5000,disabled:busy,className:inputClass,value:form.notes||"",onChange:event=>setForm({...form,notes:event.target.value})})),
         notice&&h("p",{role:"alert",className:"ps-order-dispatch-form-wide text-sm text-red-700"},notice),
         h("div",{className:"ps-order-dispatch-form-actions"},h("button",{disabled:busy,className:"ps-dispatch-primary"},busy?"Saving…":"Confirm dispatch"),h("button",{type:"button",disabled:busy,onClick:()=>{setSelected(null);setNotice("");},className:"ps-dispatch-secondary"},"Back to orders"))));

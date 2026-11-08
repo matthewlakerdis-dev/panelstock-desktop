@@ -18,7 +18,7 @@
   function createController({link,client,baseUrl,onChange,uuid=()=>crypto.randomUUID()}){
     const owner=client.username;
     let version=0,disposed=false,locked=false;
-    let state={phase:'loading',busy:false,order:null,loads:[],selected:null,error:'',message:'',needsReview:false,mutationId:uuid()};
+    let state={phase:'loading',busy:false,order:null,loads:[],selected:null,error:'',message:'',needsReview:false,mutationId:uuid(),dispatchDefaults:{}};
     const current=()=>!disposed&&client.username===owner;
     const publish=change=>{if(current()){state={...state,...change};onChange({...state});}};
     async function request(path,body){
@@ -60,18 +60,18 @@
           else if(!manualReady(order))publish({order,phase:'blocked',message:'Readiness for panels and gates is set by production and QA. Complete the required checks in PanelStockHQ.'});
           else publish({order,phase:'confirm',message:''});
         }else{
-          const {orders}=await request('/dispatch/orders');
+          const data=await request('/dispatch/orders'),{orders}=data;
           if(generation!==version||!current())return;
           const order=orders.find(value=>value.id===link.id);
           if(!order){publish({phase:'blocked',message:'This order is no longer ready for dispatch, or is unavailable to your account.'});return;}
           if(order.status==='dispatched'){publish({order,phase:'done',message:'This order has been dispatched. Use Refresh All in Excel to update the tracker.'});return;}
           if(!order.ready){publish({order,phase:'blocked',message:'This order is no longer ready for dispatch.'});return;}
           if(order.usesPanelLoads){
-            const {loads}=await request('/dispatch/panels');
+            const panelData=await request('/dispatch/panels'),{loads}=panelData;
             if(generation!==version||!current())return;
             const matching=loads.filter(load=>normalize(load.project)===normalize(order.project)&&normalize(load.orderNumber)===normalize(order.orderNumber));
-            publish({order,loads:matching,phase:'loads'});
-          }else publish({order,phase:'confirm',message:'',mutationId:uuid()});
+            publish({order,loads:matching,phase:'loads',dispatchDefaults:panelData});
+          }else publish({order,phase:'confirm',message:'',mutationId:uuid(),dispatchDefaults:data});
         }
       }catch(error){if(generation===version)publish({phase:'blocked',error:error.message});}
       finally{if(generation===version)publish({busy:false});}
@@ -84,6 +84,7 @@
       if(locked||!current()||state.phase!=='confirm'||state.needsReview)return false;
       const panel=link.action==='dispatch'&&state.order.usesPanelLoads;
       if(link.action==='ready'&&!manualReady(state.order)||link.action==='drawn'&&(!drawingOrder(state.order)||drawn(state.order)||['dispatched','cancelled'].includes(state.order.status))||panel&&!siteLoad(state.selected||{}))return false;
+      const delivery=Object.fromEntries(['destination','transport','driver','notes'].filter(key=>Object.hasOwn(details,key)).map(key=>[key,details[key]]));
       let gateAreaM2;
       if(link.action==='drawn'&&normalize(state.order.orderType)==='gate'){
         const area=details.areaM2??state.order.manualProduction?.areaM2;
@@ -107,12 +108,12 @@
           await request('/orders/'+encodeURIComponent(link.id)+'/status',{status:'completed',expectedUpdatedAt:state.order.updatedAt||state.order.createdAt||''});
           publish({phase:'done',message:'Order marked Ready for dispatch. Use Refresh All in Excel to update the tracker.'});
         }else if(panel){
-          await request('/dispatch/panels',{...details,id:state.selected.id,action:'dispatch',destinationType:'site'});
+          await request('/dispatch/panels',{...delivery,id:state.selected.id,action:'dispatch',destinationType:'site'});
           locked=false;
           publish({message:'Load dispatched. The order becomes Dispatched once every load has been sent to site.'});
           await load();
         }else{
-          await request('/dispatch/orders',{...details,id:link.id,expectedUpdatedAt:state.order.updatedAt||state.order.createdAt||'',mutationId:state.mutationId});
+          await request('/dispatch/orders',{...delivery,id:link.id,expectedUpdatedAt:state.order.updatedAt||state.order.createdAt||'',mutationId:state.mutationId});
           publish({phase:'done',message:'Order dispatched. Use Refresh All in Excel to update the tracker.'});
         }
         return true;
@@ -121,14 +122,25 @@
     }
     return {load,selectLoad,submit,get state(){return state;},dispose(){disposed=true;version++;}};
   }
+  function dispatchFormDefaults(data={}){
+    const vehicles=data.dispatchVehicles||[],drivers=data.dispatchDrivers||[],driver=drivers.find(user=>user.username===data.dispatchDefaultDriver);
+    return {vehicles,drivers,details:{destination:'',transport:vehicles[0]||'',transportChoice:vehicles.length?'vehicle:0':'external',driver:driver?.displayName||driver?.username||'',driverChoice:driver?'user:'+driver.username:drivers.length?'':'external',notes:''}};
+  }
   function createComponent(React,client,baseUrl,link){
     const {createElement:h,useState,useEffect,useRef}=React;
     return function ExcelOrderAction({username}){
-      const [closed,setClosed]=useState(false),[state,setState]=useState({phase:'loading',busy:true}),[details,setDetails]=useState({destination:'',transport:'',driver:'',notes:'',scheduledDeliveryDate:'',scheduledDeliveryTime:'',areaM2:''});
+      const [closed,setClosed]=useState(false),[state,setState]=useState({phase:'loading',busy:true}),[dispatchOptions,setDispatchOptions]=useState({vehicles:[],drivers:[]}),[details,setDetails]=useState({destination:'',transport:'',driver:'',notes:'',scheduledDeliveryDate:'',scheduledDeliveryTime:'',areaM2:''});
       const controller=useRef(null),dialog=useRef(null);
       useEffect(()=>{
         if(!link||!username||closed)return;
-        const instance=createController({link,client,baseUrl,onChange:setState});controller.current=instance;void instance.load();
+        let formKey='';
+        const instance=createController({link,client,baseUrl,onChange:next=>{
+          setState(next);
+          if(link.action==='dispatch'&&next.phase==='confirm'){
+            const key=next.selected?.id||next.order.id;
+            if(key!==formKey){formKey=key;const defaults=dispatchFormDefaults(next.dispatchDefaults);setDispatchOptions(defaults);setDetails(defaults.details);}
+          }
+        }});controller.current=instance;void instance.load();
         return()=>{instance.dispose();controller.current=null;};
       },[username,closed]);
       useEffect(()=>{
@@ -142,7 +154,7 @@
       const keyDown=event=>{
         if(event.key==='Escape'){event.preventDefault();close();}
         if(event.key==='Tab'){
-          const controls=[...dialog.current.querySelectorAll('button:not([disabled]),input:not([disabled]),textarea:not([disabled])')];
+          const controls=[...dialog.current.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled])')];
           const first=controls[0],last=controls[controls.length-1];
           if(event.shiftKey&&(document.activeElement===first||document.activeElement===dialog.current)){event.preventDefault();last?.focus();}
           else if(!event.shiftKey&&(document.activeElement===last||document.activeElement===dialog.current)){event.preventDefault();first?.focus();}
@@ -168,11 +180,15 @@
             h('label',null,'Scheduled delivery date',h('input',{type:'date',required:true,value:details.scheduledDeliveryDate,disabled:state.busy,onChange:event=>{const value=event.target.value;setDetails(current=>({...current,scheduledDeliveryDate:value}));}})),
             h('label',null,'Delivery time (optional)',h('input',{type:'time',value:details.scheduledDeliveryTime,disabled:state.busy,onChange:event=>{const value=event.target.value;setDetails(current=>({...current,scheduledDeliveryTime:value}));}}))),
           dispatch&&h('div',null,state.selected&&h('p',null,'Dispatching the selected panel load to site.'),
-            [['destination','Site address'],['transport','Vehicle / transport company'],['driver','Driver']].map(([key,label])=>h('label',{key},label,h('input',{required:true,maxLength:300,value:details[key],disabled:state.busy,onChange:event=>{const value=event.target.value;setDetails(current=>({...current,[key]:value}));}}))),
+            h('label',null,'Site address',h('input',{required:true,maxLength:300,value:details.destination,disabled:state.busy,onChange:event=>{const value=event.target.value;setDetails(current=>({...current,destination:value}));}})),
+            h('label',null,'Vehicle / transport company',h('select',{required:true,value:details.transportChoice,disabled:state.busy,onChange:event=>{const value=event.target.value;setDetails(current=>({...current,transportChoice:value,transport:value==='external'?'':dispatchOptions.vehicles[Number(value.slice(8))]||''}));}},dispatchOptions.vehicles.map((vehicle,index)=>h('option',{key:vehicle,value:'vehicle:'+index},vehicle)),h('option',{value:'external'},'Other vehicle / transport'))),
+            details.transportChoice==='external'&&h('label',null,'Other vehicle / transport company',h('input',{required:true,maxLength:300,value:details.transport,disabled:state.busy,onChange:event=>{const value=event.target.value;setDetails(current=>({...current,transport:value}));}})),
+            h('label',null,'Driver',h('select',{required:true,value:details.driverChoice,disabled:state.busy,onChange:event=>{const value=event.target.value,user=dispatchOptions.drivers.find(item=>'user:'+item.username===value);setDetails(current=>({...current,driverChoice:value,driver:user?(user.displayName||user.username):''}));}},h('option',{value:'',disabled:true},'Choose driver'),dispatchOptions.drivers.map(user=>h('option',{key:user.username,value:'user:'+user.username},user.displayName||user.username)),h('option',{value:'external'},'Other / external driver'))),
+            details.driverChoice==='external'&&h('label',null,'Other driver name',h('input',{required:true,maxLength:300,value:details.driver,disabled:state.busy,onChange:event=>{const value=event.target.value;setDetails(current=>({...current,driver:value}));}})),
             h('label',null,'Notes (optional)',h('textarea',{maxLength:5000,rows:3,value:details.notes,disabled:state.busy,onChange:event=>{const value=event.target.value;setDetails(current=>({...current,notes:value}));}}))),
           h('footer',null,h('button',{type:'button',disabled:state.busy,onClick:close},'Cancel'),schedule&&state.order.scheduledDeliveryDate&&h('button',{type:'button',disabled:state.busy||state.needsReview,onClick:()=>{void controller.current?.submit({...details,clearSchedule:true});}},'Clear schedule'),h('button',{type:'submit',className:'ps-excel-action-primary',disabled:state.busy||state.needsReview},state.busy?'Saving…':drawing?'Confirm drawn':schedule?'Save schedule':dispatch?'Confirm dispatch':'Confirm ready for dispatch'))),
         !state.busy&&h('footer',null,h('button',{type:'button',onClick:reload},state.needsReview?'Reload latest status':'Refresh status'),state.phase!=='confirm'&&h('button',{type:'button',onClick:close},'Close'))));
     };
   }
-  return {parseLink,manualReady,siteLoad,createController,createComponent};
+  return {parseLink,manualReady,siteLoad,createController,dispatchFormDefaults,createComponent};
 });
