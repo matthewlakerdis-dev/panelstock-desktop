@@ -15271,7 +15271,7 @@ ${xrefStart}
       try{const data=await request();if(!data||!alive.current||owner.current!==PanelStock.username)return;const current=(data.orders||[]).find(item=>item.id===order.id);
         if(!current?.ready){setNotice("This order is no longer ready for dispatch. Review the refreshed list.");return;}if(current.usesPanelLoads){onPanelLoads();return;}
         const nextVehicles=data.dispatchVehicles||[],nextDrivers=data.dispatchDrivers||[],driver=nextDrivers.find(user=>user.username===data.dispatchDefaultDriver),mutationId=Array.from(crypto.getRandomValues(new Uint8Array(16)),value=>value.toString(16).padStart(2,"0")).join("");
-        setSelected({...current,mutationId});setForm({destination:"",transport:nextVehicles[0]||"",transportChoice:nextVehicles.length?"vehicle:0":"external",driver:driver?.displayName||driver?.username||"",driverChoice:driver?"user:"+driver.username:nextDrivers.length?"":"external",notes:""});setNotice("");
+        setSelected({...current,mutationId});setForm({destination:current.siteAddress||"",transport:nextVehicles[0]||"",transportChoice:nextVehicles.length?"vehicle:0":"external",driver:driver?.displayName||driver?.username||"",driverChoice:driver?"user:"+driver.username:nextDrivers.length?"":"external",notes:""});setNotice("");
       }finally{opening.current=false;}
     }
     if(selected)return h("section",{className:"ps-dispatch ps-order-dispatch ps-order-dispatch-confirm"},

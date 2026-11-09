@@ -122,9 +122,9 @@
     }
     return {load,selectLoad,submit,get state(){return state;},dispose(){disposed=true;version++;}};
   }
-  function dispatchFormDefaults(data={}){
+  function dispatchFormDefaults(data={},order={},load=null){
     const vehicles=data.dispatchVehicles||[],drivers=data.dispatchDrivers||[],driver=drivers.find(user=>user.username===data.dispatchDefaultDriver);
-    return {vehicles,drivers,details:{destination:'',transport:vehicles[0]||'',transportChoice:vehicles.length?'vehicle:0':'external',driver:driver?.displayName||driver?.username||'',driverChoice:driver?'user:'+driver.username:drivers.length?'':'external',notes:''}};
+    return {vehicles,drivers,details:{destination:load?.siteAddress||order.siteAddress||'',transport:vehicles[0]||'',transportChoice:vehicles.length?'vehicle:0':'external',driver:driver?.displayName||driver?.username||'',driverChoice:driver?'user:'+driver.username:drivers.length?'':'external',notes:''}};
   }
   function createComponent(React,client,baseUrl,link){
     const {createElement:h,useState,useEffect,useRef}=React;
@@ -138,7 +138,7 @@
           setState(next);
           if(link.action==='dispatch'&&next.phase==='confirm'){
             const key=next.selected?.id||next.order.id;
-            if(key!==formKey){formKey=key;const defaults=dispatchFormDefaults(next.dispatchDefaults);setDispatchOptions(defaults);setDetails(defaults.details);}
+            if(key!==formKey){formKey=key;const defaults=dispatchFormDefaults(next.dispatchDefaults,next.order,next.selected);setDispatchOptions(defaults);setDetails(defaults.details);}
           }
         }});controller.current=instance;void instance.load();
         return()=>{instance.dispose();controller.current=null;};
