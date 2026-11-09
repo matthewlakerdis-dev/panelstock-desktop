@@ -16864,17 +16864,19 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
       ? (!searchProject || order.project === searchProject) && (searchStatus === "all" || order.status === searchStatus) && [order.orderNumber,order.project,order.requestedBy,order.siteContact,order.orderType,order.orderTypeOther,...(order.items||[]).map(item=>item.description)].join(" ").toLocaleLowerCase().includes(orderSearch.trim().toLocaleLowerCase())
       : filter === "active" ? activeStatuses.includes(order.status) : order.status === filter);
     const orderDate=value=>value?new Date(value+"T00:00:00").toLocaleDateString("en-AU",{day:"numeric",month:"short",year:"numeric"}):"Not set";
+    const orderPlacedDate=order=>{const value=order.dateOrdered||order.createdAt,date=value?new Date(value):null;return date&&Number.isFinite(date.getTime())?date.toLocaleDateString("en-AU",{day:"numeric",month:"short",year:"numeric",timeZone:"Australia/Brisbane"}):"Not set";};
     function renderOrderRow(order) {
       const expanded=!!expandedOrders[order.id],detailsId="order-details-"+order.id,title=orderListTitle(order,groupByProject);
       const readyAt=order.status==="dispatched"?order.dispatchedAt:order.completedAt;
       return e("article",{key:order.id,className:"ps-order-row"},
         e("button",{type:"button",className:"ps-order-summary","aria-expanded":expanded,"aria-controls":detailsId,"aria-label":title,onClick:()=>setExpandedOrders(current=>({...current,[order.id]:!current[order.id]}))},
           e("span",{className:"ps-order-identity"},e("strong",{className:"ps-order-title"},title),e("span",{className:"ps-order-meta"},`${order.items?.length||0} item${order.items?.length===1?"":"s"} · Requested by ${order.requestedBy||"Unknown"}`)),
-          e("span",{className:"ps-order-badge"},orderStatusLabel(order.status)),
           e("span",{className:"ps-order-delivery-dates"},
-            e("span",{className:"ps-order-delivery"},e("span",null,"Requested delivery"),e("strong",null,orderDate(order.requestedDeliveryDate))),
-            e("span",{className:"ps-order-delivery"},e("span",null,"Scheduled delivery"),e("strong",null,order.scheduledDeliveryDate?orderDate(order.scheduledDeliveryDate):"Not scheduled"),order.scheduledDeliveryDate&&order.scheduledDeliveryTime&&e("small",{className:"is-confirmed"},order.scheduledDeliveryTime))
+            e("span",{className:"ps-order-delivery"},e("span",null,"Date ordered"),e("strong",null,orderPlacedDate(order))),
+            e("span",{className:"ps-order-delivery"},e("span",null,"Requested date"),e("strong",null,orderDate(order.requestedDeliveryDate))),
+            e("span",{className:"ps-order-delivery"},e("span",null,"Scheduled date"),e("strong",null,order.scheduledDeliveryDate?orderDate(order.scheduledDeliveryDate):"Not scheduled"),order.scheduledDeliveryDate&&order.scheduledDeliveryTime&&e("small",{className:"is-confirmed"},order.scheduledDeliveryTime))
           ),
+          e("span",{className:"ps-order-badge"},orderStatusLabel(order.status)),
           e("svg",{className:"ps-order-chevron","aria-hidden":true,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:1.8},e("path",{d:"m9 5 7 7-7 7",strokeLinecap:"round",strokeLinejoin:"round"}))
         ),
         e("div",{id:detailsId,className:"ps-order-expanded",hidden:!expanded},
