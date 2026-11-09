@@ -5,7 +5,7 @@ test('activity selects only the selected project orders and saves order identity
 test('activity waits for project selection and factory keeps free text',()=>{assert.equal(render({projectId:''}).tree.children[1].props.disabled,true);assert.equal(render({projectId:'factory'}).tree.type,'input');});
 
 test('panel and gate dropdown choices and saved activities show villa or location',()=>{
- for(const orderType of ['Panels','Gate']){
+ for(const orderType of ['Panels','Gate','Bin Gate','Buggy Gate']){
   const h=render({projectId:'p1'},[{id:'a',projectId:'p1',orderNumber:'1',orderType,locationNotes:' Villa 9\n Level 2 '}]),select=h.tree.children[1];
   assert.equal(select.children[2][0].children[0],`Order 1 · ${orderType} · Villa 9 Level 2`);
   select.props.onChange({target:{value:'a'}});assert.equal(h.current().title,`Order 1 · ${orderType} · Villa 9 Level 2`);
@@ -26,8 +26,8 @@ test('saved custom activities reopen under Other and can switch back to an order
 });
 
 test('order choices and saved titles use panel Location and gate Villa before legacy notes',()=>{
- for(const order of [{id:'a',projectId:'p1',orderNumber:'1',orderType:'Panels',location:'North elevation',locationNotes:'Old note'},{id:'a',projectId:'p1',orderNumber:'1',orderType:'Gate',villa:'V135',locationNotes:'Old note'}]){
-  const h=render({projectId:'p1'},[order]),select=h.tree.children[1],label=`Order 1 · ${order.orderType} · ${order.location||order.villa}`;assert.equal(select.children[2][0].children[0],label);select.props.onChange({target:{value:'a'}});assert.equal(h.current().title,label);
+ for(const order of [{id:'a',projectId:'p1',orderNumber:'1',orderType:'Panels',location:'North elevation',locationNotes:'Old note'},...['Gate','Bin Gate','Buggy Gate'].map(orderType=>({id:'a',projectId:'p1',orderNumber:'1',orderType,villa:'V135',location:'Old bay',locationNotes:'Old note'}))]){
+  const h=render({projectId:'p1'},[order]),select=h.tree.children[1],label=`Order 1 · ${order.orderType} · ${order.orderType==='Panels'?order.location:order.villa}`;assert.equal(select.children[2][0].children[0],label);select.props.onChange({target:{value:'a'}});assert.equal(h.current().title,label);
  }
 });
 
