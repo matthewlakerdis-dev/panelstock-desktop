@@ -9,7 +9,7 @@ self.addEventListener('activate',event=>{
 });
 self.addEventListener('fetch',event=>{
   const request=event.request,url=new URL(request.url);
-  const isNavigation=request.mode==='navigate'&&url.origin===self.location.origin&&['/','/index.html'].includes(url.pathname)&&[...url.searchParams.keys()].every(key=>key==='open');
+  const isNavigation=request.mode==='navigate'&&url.origin===self.location.origin&&['/','/index.html'].includes(url.pathname)&&[...url.searchParams.keys()].every(key=>key==='open'||key==='page');
   const isOffcutScript=url.origin===self.location.origin&&url.pathname===new URL('./offcut-labels.js',self.registration.scope).pathname&&[...url.searchParams.keys()].every(key=>key==='v');
   const assetUrl=isNavigation?new URL('./index.html',self.registration.scope).href:isOffcutScript?new URL('./offcut-labels.js?v=1',self.registration.scope).href:request.url;
   if(request.method!=='GET'||request.headers.has('Authorization')||!STATIC_URLS.has(assetUrl))return;
