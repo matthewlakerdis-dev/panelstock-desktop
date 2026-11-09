@@ -51,3 +51,8 @@ test('Excel Gate drawing requires total area before writing and allows correctio
  }
  const h=harness({...order,orderType:'Gate',manualProduction:{areaM2:9,stages:{drawn:'pending'}}});await h.controller.load();assert.equal(await h.controller.submit(),true);assert.equal(JSON.parse(h.calls.at(-1).options.body).areaM2,9);
 });
+
+test('both new Gate types require area and use the QA-managed Gate progress route',async()=>{
+ const {createController}=require('../excel-order-actions.js'),id='11111111-1111-4111-8111-111111111111';
+ for(const orderType of ['Bin Gate','Buggy Gate']){const calls=[],order={id,orderNumber:'42',project:'Example',orderType,status:'approved',updatedAt:'v1'},client={username:'admin',apiFetch:async(url,options)=>{calls.push({url,options});return Response.json(options?{ok:true}:url.endsWith('/session')?{isAdmin:true}:{order});}};const drawn=createController({link:{id,action:'drawn'},client,baseUrl:'https://api.test',onChange(){},uuid:()=>id});await drawn.load();assert.equal(drawn.state.phase,'confirm');assert.equal(await drawn.submit(),false);assert.equal(calls.filter(c=>c.options).length,0);await drawn.submit({areaM2:5});assert.ok(calls.find(c=>c.options&&c.url.endsWith('/progress')));assert.match(drawn.state.message,/queued for QA/);const ready=createController({link:{id,action:'ready'},client,baseUrl:'https://api.test',onChange(){},uuid:()=>id});await ready.load();assert.equal(ready.state.phase,'blocked');}
+});
