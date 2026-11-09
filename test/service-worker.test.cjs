@@ -59,3 +59,16 @@ test('versioned offcut sticker printer remains available from the offline cache'
  const response=await h.dispatch('fetch',new Request('https://web.example/offcut-labels.js?v=build-content-hash'));
  assert.equal(response.status,200);assert.equal(await response.text(),'static asset');
 });
+
+test('new-tab page links can load the cached shell offline without caching private requests',async()=>{
+ const root=path.resolve(__dirname,'..'),source=fs.readFileSync(path.join(root,'push-sw.js'),'utf8');
+ const h=workerHarness(source,'https://web.example/');await h.dispatch('install');await h.dispatch('activate');h.offline();
+ const navigation=url=>({url,method:'GET',mode:'navigate',headers:new Headers()});
+ for(const path of ['/?page=cnc','/index.html?page=workshop','/?page=schedule&open=notifications']){
+  const response=await h.dispatch('fetch',navigation('https://web.example'+path));
+  assert.equal(response.status,200);assert.equal(await response.text(),'static asset');
+ }
+ assert.equal(await h.dispatch('fetch',navigation('https://web.example/?page=cnc&token=secret')),undefined);
+ assert.equal(await h.dispatch('fetch',{...navigation('https://web.example/?page=cnc'),headers:new Headers({Authorization:'Bearer test'})}),undefined);
+ assert.equal(await h.dispatch('fetch',navigation('https://other.example/?page=cnc')),undefined);
+});
