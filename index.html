@@ -221,13 +221,19 @@
 </script>
 <link rel="stylesheet" href="excel-order-actions.css?v=20261102">
 <script src="excel-order-actions.js?v=20261106-gate-area"></script>
+<script src="tracker-tab-handoff.js?v=1"></script>
 <script src="workshop-stock.js?v=3"></script>
 <script src="pull-refresh.js?v=20261029"></script>
 <script src="tab-workspace.js?v=20261102"></script>
 <script src="offcut-labels.js?v=1"></script>
-<script src="panelstock-client.js?v=20261102-multiple-tabs"></script>
+<script>
+window.PanelStockClientReady = window.PanelStockTrackerHandoff?.relayTab ? new Promise(function(){}) : new Promise(function(resolve,reject){
+  var clientScript=document.createElement('script');clientScript.src='panelstock-client.js?v=20261102-multiple-tabs';clientScript.onload=resolve;clientScript.onerror=function(){reject(new Error('PanelStock could not load its session client. Refresh and try again.'));};document.head.appendChild(clientScript);
+});
+</script>
 <script src="toolbox-launcher.js?v=20261013-safety"></script>
 <script>
+window.PanelStockClientReady.then(function(){
 (() => {
   var __create = Object.create;
   var __defProp = Object.defineProperty;
@@ -18502,6 +18508,7 @@ react/cjs/react-jsx-runtime.production.js:
    * LICENSE file in the root directory of this source tree.
    *)
 */
+}).catch(function(error){var app=document.getElementById('root');if(app)app.textContent=error.message||'PanelStock could not start. Refresh and try again.';});
 </script>
 </body>
 </html>

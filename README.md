@@ -48,6 +48,9 @@ The web dispatch address prefills from the Site Order's saved project address. T
 
 View order includes Admin notes for admins and the order requester. Admins add notes without editing the submitted order; requesters see a read-only list with author and Brisbane timestamp. Notes use a separate, retry-safe API and remain separate from the order's submitted Notes, PDF and Excel. Release the matching Worker/Site notification-and-notes API before this frontend.
 
+
+Excel Production Tracker links for Open PDF, Action and Schedule delivery first try an existing signed-in PanelStock web tab. A free tab displays the requested PDF or action without navigating away from an unfinished order form. An existing tracker dialog is left alone; when no free tab responds, the link opens normally in its new tab. Browser tab focus and closing the temporary tab are best effort. The temporary relay never loads the session client or syncs drafts/outboxes. PDF previews use the existing short-lived, single-use PDF ticket; no credentials or PDF tickets are broadcast between tabs.
+
 New order choices replace Gate with Bin Gate and Buggy Gate. Both use the existing Gate production workflow and require Villa plus Colour: Spruce or Norwegian Beech. The field starts blank, persists with drafts, and is also required when correcting a mistaken Panel order into a Gate. The server appends one uppercase colour suffix to every item and safely replaces a previous selection. Existing Gate production and receipt edit locks continue to apply. Release the companion Worker/Site colour change before this form update.
 
 Historical orders labelled Gate retain their type and production/QA links. The generic Gate choice is hidden in new-order and correction selectors; older saved/queued Gate requests stay compatible. No existing order is guessed into a new subtype.
