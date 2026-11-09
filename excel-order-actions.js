@@ -7,8 +7,8 @@
   const active=['submitted','approved','ordered','in_stock'];
   const normalize=value=>String(value||'').trim().toLowerCase();
   function parseLink(href){
-    try{const params=new URL(href).searchParams,id=params.get('orderId'),action=params.get('orderAction');
-      return /^[a-zA-Z0-9-]{16,100}$/.test(id||'')&&['ready','dispatch','schedule','drawn'].includes(action)?{id,action}:null;
+    try{const params=new URL(href).searchParams,id=params.has('orderPdf')?params.get('orderPdf'):params.get('orderId'),action=params.has('orderPdf')?'pdf':params.get('orderAction');
+      return /^[a-zA-Z0-9-]{16,100}$/.test(id||'')&&['ready','dispatch','schedule','drawn','pdf'].includes(action)?{id,action}:null;
     }catch{return null;}
   }
   const manualReady=order=>active.includes(order.status)&&!['panels','gate'].includes(normalize(order.orderType));
@@ -34,7 +34,10 @@
       const generation=++version;
       publish({phase:'loading',busy:true,error:'',needsReview:false,selected:null});
       try{
-        if(link.action==='schedule'){
+        if(link.action==='pdf'){
+          const {order}=await request('/orders/'+encodeURIComponent(link.id));
+          if(generation!==version||!current())return;publish({order,phase:'pdf',message:''});
+        }else if(link.action==='schedule'){
           const actor=await request('/session');
           if(generation!==version||!current())return;
           if(actor.isAdmin!==true){publish({phase:'blocked',message:'Only administrators can schedule deliveries.'});return;}
@@ -126,48 +129,68 @@
     const vehicles=data.dispatchVehicles||[],drivers=data.dispatchDrivers||[],driver=drivers.find(user=>user.username===data.dispatchDefaultDriver);
     return {vehicles,drivers,details:{destination:load?.siteAddress||order.siteAddress||'',transport:vehicles[0]||'',transportChoice:vehicles.length?'vehicle:0':'external',driver:driver?.displayName||driver?.username||'',driverChoice:driver?'user:'+driver.username:drivers.length?'':'external',notes:''}};
   }
-  function createComponent(React,client,baseUrl,link){
+  function createComponent(React,client,baseUrl,initialLink){
     const {createElement:h,useState,useEffect,useRef}=React;
     return function ExcelOrderAction({username}){
-      const [closed,setClosed]=useState(false),[state,setState]=useState({phase:'loading',busy:true}),[dispatchOptions,setDispatchOptions]=useState({vehicles:[],drivers:[]}),[details,setDetails]=useState({destination:'',transport:'',driver:'',notes:'',scheduledDeliveryDate:'',scheduledDeliveryTime:'',areaM2:''});
-      const controller=useRef(null),dialog=useRef(null);
+      const [link,setLink]=useState(initialLink?.action==='pdf'?null:initialLink),[pdf,setPdf]=useState({url:'',owner:'',error:''}),[closed,setClosed]=useState(false),[state,setState]=useState({phase:'loading',busy:true}),[dispatchOptions,setDispatchOptions]=useState({vehicles:[],drivers:[]}),[details,setDetails]=useState({destination:'',transport:'',driver:'',notes:'',scheduledDeliveryDate:'',scheduledDeliveryTime:'',areaM2:''});
+      const controller=useRef(null),dialog=useRef(null),handoffClaim=useRef(false);
       useEffect(()=>{
         if(!link||!username||closed)return;
         let formKey='';
         const instance=createController({link,client,baseUrl,onChange:next=>{
-          setState(next);
+          setState({...next,owner:username});
           if(link.action==='dispatch'&&next.phase==='confirm'){
             const key=next.selected?.id||next.order.id;
             if(key!==formKey){formKey=key;const defaults=dispatchFormDefaults(next.dispatchDefaults,next.order,next.selected);setDispatchOptions(defaults);setDetails(defaults.details);}
           }
         }});controller.current=instance;void instance.load();
         return()=>{instance.dispose();controller.current=null;};
-      },[username,closed]);
+      },[username,closed,link]);
+      useEffect(()=>{
+        if(typeof window==='undefined'||!window.PanelStockTrackerHandoff?.register)return;
+        if(!link||closed)handoffClaim.current=false;
+        return window.PanelStockTrackerHandoff.register({
+          canOpen:()=>!!username&&client.username===username&&!handoffClaim.current&&(!link||closed)&&(!link||!state.busy),
+          open:next=>{handoffClaim.current=true;setState({phase:'loading',busy:true,owner:username});setPdf({url:'',owner:'',error:''});setClosed(false);setLink({...next});try{window.focus();}catch{}return true;}
+        });
+      },[username,link,closed,state.busy]);
+      useEffect(()=>{
+        if(link?.action!=='pdf'||state.phase!=='pdf'||closed||!username)return;
+        let live=true;const owner=username;setPdf({url:'',owner,error:''});
+        void (async()=>{try{
+          const response=await client.apiFetch(baseUrl+'/orders/'+encodeURIComponent(link.id)+'/pdf-link',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}),data=await response.json();
+          if(!response.ok)throw Error(data.error||'The order PDF could not be opened.');
+          if(!/^[a-f0-9]{64}$/.test(data.pdfToken||''))throw Error('The order PDF link could not be verified.');
+          if(!live||client.username!==owner)return;const previewUrl=baseUrl+'/orders/'+encodeURIComponent(link.id)+'/pdf?ticket='+encodeURIComponent(data.pdfToken);setPdf({url:previewUrl,owner,error:''});
+        }catch(error){if(live&&client.username===owner)setPdf({url:'',owner,error:error.message});}})();
+        return()=>{live=false;};
+      },[username,link,state.phase,closed]);
       useEffect(()=>{
         if(link?.action==='schedule'&&state.phase==='confirm'&&state.order)setDetails(current=>({...current,scheduledDeliveryDate:state.order.scheduledDeliveryDate||'',scheduledDeliveryTime:state.order.scheduledDeliveryTime||''}));
         if(link?.action==='drawn'&&normalize(state.order?.orderType)==='gate'&&state.phase==='confirm')setDetails(current=>({...current,areaM2:state.order.manualProduction?.areaM2??''}));
       },[state.order,state.phase]);
       useEffect(()=>{if(!closed&&link&&username)dialog.current?.focus();},[closed,username]);
-      if(!link||!username||closed)return null;
+      if(!link||!username||closed||state.owner&&state.owner!==username)return null;
       const close=()=>{if(!state.busy)setClosed(true);};
       const reload=()=>{void controller.current?.load();};
       const keyDown=event=>{
         if(event.key==='Escape'){event.preventDefault();close();}
         if(event.key==='Tab'){
-          const controls=[...dialog.current.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled])')];
+          const controls=[...dialog.current.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),a[href],iframe')];
           const first=controls[0],last=controls[controls.length-1];
           if(event.shiftKey&&(document.activeElement===first||document.activeElement===dialog.current)){event.preventDefault();last?.focus();}
           else if(!event.shiftKey&&(document.activeElement===last||document.activeElement===dialog.current)){event.preventDefault();first?.focus();}
         }
       };
-      const heading=link.action==='drawn'?'Mark drawn':link.action==='schedule'?'Schedule delivery':link.action==='ready'?'Mark ready for dispatch':'Dispatch to site';
+      const heading=link.action==='pdf'?'Order PDF':link.action==='drawn'?'Mark drawn':link.action==='schedule'?'Schedule delivery':link.action==='ready'?'Mark ready for dispatch':'Dispatch to site';
       const confirm=state.phase==='confirm',dispatch=link.action==='dispatch',schedule=link.action==='schedule',drawing=link.action==='drawn';
-      return h('div',{className:'ps-excel-action-backdrop'},h('section',{className:'ps-excel-action',role:'dialog','aria-modal':true,'aria-label':heading,tabIndex:-1,ref:dialog,onKeyDown:keyDown},
+      return h('div',{className:'ps-excel-action-backdrop'},h('section',{className:'ps-excel-action'+(link.action==='pdf'?' ps-excel-action-pdf':''),role:'dialog','aria-modal':true,'aria-label':heading,tabIndex:-1,ref:dialog,onKeyDown:keyDown},
         h('header',null,h('div',null,h('small',null,'Production Tracker'),h('h2',null,heading)),h('button',{type:'button',disabled:state.busy,onClick:close,'aria-label':'Close order action'},'Close')),
         state.order&&h('p',{className:'ps-excel-action-order'},'Order #'+state.order.orderNumber+' · '+state.order.project),
         state.phase==='loading'&&h('p',{role:'status'},'Checking the latest order status…'),
         state.message&&h('p',{role:'status'},state.message),
         state.error&&h('p',{role:'alert',className:'ps-excel-action-error'},state.error),
+        state.phase==='pdf'&&h('div',null,pdf.owner===username&&pdf.error?h('p',{role:'alert',className:'ps-excel-action-error'},pdf.error):pdf.owner===username&&pdf.url?h('div',null,h('p',null,'Use the PDF toolbar to print or download.'),h('iframe',{src:pdf.url,title:'Site order PDF',referrerPolicy:'no-referrer',className:'ps-excel-order-pdf'})):h('p',{role:'status'},'Loading order PDF…')),
         state.phase==='loads'&&h('div',null,h('p',null,'Choose a load to dispatch to site. Production, coating and QA checks apply to each load.'),
           !state.loads.length&&h('p',null,'No panel loads are available for this order.'),
           state.loads.map(load=>h('article',{key:load.id,className:'ps-excel-action-load'},h('div',null,h('strong',null,load.project+' · Order '+load.orderNumber),h('p',null,(load.items?.length||load.panelIds?.length||0)+' panels · '+(load.status==='dispatched_to_site'?'Dispatched to site':siteLoad(load)?'Ready for site':'Waiting for production / coating / QA'))),siteLoad(load)&&h('button',{type:'button',disabled:state.busy,onClick:()=>controller.current?.selectLoad(load.id)},'Dispatch this load')))),
