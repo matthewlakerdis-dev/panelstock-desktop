@@ -111,6 +111,38 @@
 .ps-order-list-heading>span{font-size:12px;color:#64748b}
 @media(max-width:600px){.ps-order-status-filters{gap:6px}.ps-order-filter{justify-content:center;padding:7px 10px;gap:6px}}
 
+
+/* A compact clock dialog keeps the entire dial visible on short screens. */
+.ps-clock-field{min-width:0;margin:16px 0 0;padding:0;border:0}
+.ps-clock-field legend{font-size:12px;font-weight:500;color:#475569}
+.ps-clock-field legend span{font-weight:400;color:#64748b}
+.ps-clock-field-row{display:flex;gap:8px;margin-top:6px}
+.ps-clock-field button{min-height:44px}
+.ps-clock-trigger{display:flex;align-items:center;justify-content:space-between;gap:12px;flex:1;min-width:0;padding:10px 12px;border:1px solid #cbd5e1;border-radius:12px;background:#fff;color:#155e75;font-size:14px;font-weight:600;text-align:left}
+.ps-clock-trigger:disabled{background:#f1f5f9}
+.ps-clock-trigger svg{flex:none}
+.ps-clock-clear{padding:8px;font-size:12px;color:#155e75}
+.ps-clock-overlay{position:fixed;inset:0;z-index:80;display:grid;place-items:center;padding:16px;background:rgb(15 23 42 / .4)}
+.ps-clock-panel{width:min(360px,calc(100vw - 32px));max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);overflow-y:auto;margin:0;padding:20px;border:1px solid #dbe5ed;border-radius:16px;background:#f8fafc;box-shadow:0 24px 70px rgb(15 23 42 / .25)}
+.ps-clock-title{margin:0 0 12px;font-size:14px;font-weight:600;color:#0f172a}
+.ps-clock-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.ps-clock-digits{display:flex;align-items:center;gap:3px;color:#64748b;font-size:26px}
+.ps-clock-digits button{width:48px;min-height:48px;border-radius:8px;color:#64748b;font-size:28px;font-weight:600;font-variant-numeric:tabular-nums}
+.ps-clock-digits button[aria-pressed=true]{background:#e0f2f4;color:#155e75}
+.ps-clock-period{display:flex;border:1px solid #cbd5e1;border-radius:8px;background:#fff}
+.ps-clock-period button{min-width:44px;min-height:44px;padding:8px;font-size:12px;font-weight:600;color:#475569}
+.ps-clock-period button[aria-pressed=true]{background:#155e75;color:#fff}
+.ps-clock-instruction{margin:12px 0 8px;color:#475569;font-size:12px;text-align:center}
+.ps-clock-dial{width:min(100%,248px);margin:0 auto;border-radius:50%;background:#eaf0f4;touch-action:none;cursor:pointer;user-select:none;-webkit-user-select:none}
+.ps-clock-dial svg{display:block;width:100%;height:auto;pointer-events:none}
+.ps-clock-dial:focus-visible{outline:3px solid #67e8f9;outline-offset:3px}
+.ps-clock-help{margin:12px 0;color:#64748b;font-size:11px;line-height:1.5;text-align:center}
+.ps-clock-footer{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.ps-clock-adjust{display:flex;align-items:center;gap:6px;font-size:12px;color:#475569}
+.ps-clock-adjust button{width:44px;background:#fff;border:1px solid #cbd5e1;border-radius:8px;font-size:20px;color:#155e75}
+.ps-clock-next{padding:8px;font-size:12px;color:#155e75}
+.ps-clock-done{min-width:72px;padding:10px 16px;border-radius:8px;background:#155e75;color:#fff;font-size:13px;font-weight:600}
+@media(max-width:380px){.ps-clock-panel{padding:16px}.ps-clock-digits{gap:0}.ps-clock-digits button{width:44px;font-size:26px}.ps-clock-period button{min-width:44px;padding:6px}.ps-clock-clear{padding:6px}}
 </style>
 
 <!-- Cloudflare Web Analytics -->
@@ -16384,17 +16416,38 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
     return e("label",{className:`text-xs font-medium text-slate-600 ${label==="End time"?"md:col-start-2":""} ${className}`},label,e("div",{className:"mt-1.5 grid grid-cols-[1fr_1fr_auto] gap-2"},e("select",{value:hour12,onChange:event=>set(event.target.value),className:cls,"aria-label":label+" hour"},Array.from({length:12},(_,index)=>e("option",{key:index+1,value:index+1},index+1))),e("select",{value:minute,onChange:event=>set(hour12,event.target.value),className:cls,"aria-label":label+" minute"},Array.from({length:60},(_,index)=>e("option",{key:index,value:index},String(index).padStart(2,"0")))),e("div",{className:"grid overflow-hidden rounded-lg border border-slate-300"},["AM","PM"].map(value=>e("button",{type:"button",key:value,onClick:()=>set(hour12,minute,value),className:`px-3 text-xs font-semibold ${period===value?"bg-cyan-100 text-cyan-800":"bg-white text-slate-500"}`},value)))));
   }
   function DeliveryTimePicker({value,onChange,disabled=false}) {
-    const e=import_react.createElement,hasTime=/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value||""),[rawHour,rawMinute]=hasTime?value.split(":"):["00","00"],hour24=Number(rawHour),hour12=hour24%12||12,period=hour24>=12?"PM":"AM";
-    const update=(hour=hour12,minute=rawMinute,nextPeriod=period)=>{const converted=Number(hour)%12+(nextPeriod==="PM"?12:0);onChange(String(converted).padStart(2,"0")+":"+String(minute).padStart(2,"0"));};
-    const control="mt-1.5 h-11 min-w-0 w-full rounded-lg border border-slate-300 bg-white px-2 text-base font-semibold text-slate-900 focus:border-cyan-700 focus:outline-none focus:ring-2 focus:ring-cyan-100 disabled:cursor-default disabled:bg-slate-100 disabled:text-slate-400";
-    return e("fieldset",{disabled,className:"mt-4 min-w-0"},
-      e("legend",{className:"text-xs font-medium text-slate-600"},"Scheduled delivery time ",e("span",{className:"font-normal text-slate-500"},"(optional)")),
-      e("div",{className:"mt-1.5 rounded-xl border border-slate-200 bg-slate-50 p-3"},
-        e("div",{className:"grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2"},
-          e("label",{className:"min-w-0 text-xs font-medium text-slate-600"},"Hour",e("select",{"aria-label":"Delivery hour",value:hasTime?hour12:"",onChange:event=>update(event.target.value),className:control},e("option",{value:"",disabled:true},"—"),Array.from({length:12},(_,index)=>e("option",{key:index+1,value:index+1},String(index+1).padStart(2,"0"))))),
-          e("label",{className:"min-w-0 text-xs font-medium text-slate-600"},"Minute",e("select",{"aria-label":"Delivery minute",value:hasTime?rawMinute:"",disabled:disabled||!hasTime,onChange:event=>update(hour12,event.target.value),className:control},e("option",{value:"",disabled:true},"—"),Array.from({length:60},(_,minute)=>e("option",{key:minute,value:String(minute).padStart(2,"0")},String(minute).padStart(2,"0"))))),
-          e("div",null,e("span",{className:"text-xs font-medium text-slate-600"},"AM / PM"),e("div",{role:"group","aria-label":"Delivery AM or PM",className:"mt-1.5 flex rounded-lg bg-white ring-1 ring-inset ring-slate-300"},["AM","PM"].map(nextPeriod=>e("button",{type:"button",key:nextPeriod,disabled:disabled||!hasTime,"aria-pressed":hasTime&&period===nextPeriod,onClick:()=>update(hour12,rawMinute,nextPeriod),className:"min-h-11 min-w-11 rounded-md px-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-700 disabled:cursor-default disabled:text-slate-400 "+(hasTime&&period===nextPeriod?"bg-cyan-800 text-white shadow-sm":"text-slate-600 hover:bg-slate-100")},nextPeriod))))),
-        hasTime&&e("div",{className:"mt-2 flex justify-end"},e("button",{type:"button",disabled,onClick:()=>onChange(""),className:"min-h-11 rounded-lg px-2 text-xs font-medium text-cyan-800 hover:bg-cyan-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-700"},"Clear time"))));
+    const e=import_react.createElement,[open,setOpen]=useState(false),[mode,setMode]=useState("hour"),trigger=useRef(null),dial=useRef(null),panel=useRef(null),drag=useRef(null);
+    const hasTime=/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/.test(value||""),[rawHour,rawMinute]=hasTime?value.split(":"):["00","00"],hour24=Number(rawHour),hour12=hour24%12||12,minute=Number(rawMinute),period=hour24>=12?"PM":"AM";
+    useEffect(()=>{if(open&&!disabled)dial.current?.focus();},[open,disabled]);
+    const update=(hour=hour12,nextMinute=minute,nextPeriod=period)=>{if(disabled)return;const converted=Number(hour)%12+(nextPeriod==="PM"?12:0);onChange(String(converted).padStart(2,"0")+":"+String(nextMinute).padStart(2,"0"));};
+    const close=()=>{drag.current=null;setOpen(false);trigger.current?.focus();};
+    const trapFocus=event=>{if(event.key==="Escape"){event.preventDefault();event.stopPropagation();close();return;}if(event.key!=="Tab")return;const controls=panel.current?.querySelectorAll('button:not(:disabled),[tabindex="0"]');if(!controls?.length)return;const first=controls[0],last=controls[controls.length-1];if(event.shiftKey&&event.target===first){event.preventDefault();last.focus();}else if(!event.shiftKey&&event.target===last){event.preventDefault();first.focus();}};
+    const choose=(event,part)=>{const box=event.currentTarget.getBoundingClientRect(),x=event.clientX-box.left-box.width/2,y=event.clientY-box.top-box.height/2;if(Math.hypot(x,y)<box.width*.12)return false;const angle=(Math.atan2(x,-y)+Math.PI*2)%(Math.PI*2),count=part==="hour"?12:60,picked=Math.round(angle/(Math.PI*2)*count)%count;if(part==="hour")update(picked||12);else update(hour12,picked);return true;};
+    const keyDown=event=>{
+      if(disabled)return;let next=mode==="hour"?hour12:minute;const max=mode==="hour"?12:59,min=mode==="hour"?1:0;
+      if(["ArrowRight","ArrowUp","ArrowLeft","ArrowDown","Home","End","PageUp","PageDown"].includes(event.key)){
+        event.preventDefault();if(event.key==="Home")next=min;else if(event.key==="End")next=max;else{const direction=["ArrowRight","ArrowUp","PageUp"].includes(event.key)?1:-1,step=mode==="minute"&&event.key.startsWith("Page")?5:1;next=min+((next-min+direction*step)%(max-min+1)+(max-min+1))%(max-min+1);}
+        if(mode==="hour")update(next);else update(hour12,next);
+      }else if(event.key==="Enter"||event.key===" "){event.preventDefault();if(mode==="hour"){if(!hasTime)update();setMode("minute");}else close();}
+      else if(event.key==="Escape"){event.preventDefault();event.stopPropagation();close();}
+    };
+    const position=(number,count,radius=39)=>({x:50+radius*Math.sin(number/count*Math.PI*2),y:50-radius*Math.cos(number/count*Math.PI*2)}),selected=position(mode==="hour"?hour12:minute,mode==="hour"?12:60),numbers=Array.from({length:12},(_,index)=>mode==="hour"?index||12:index*5);
+    return e("fieldset",{disabled,className:"ps-clock-field"},
+      e("legend",null,"Scheduled delivery time ",e("span",null,"(optional)")),
+      e("div",{className:"ps-clock-field-row"},e("button",{ref:trigger,type:"button",disabled,"aria-label":"Choose delivery time","aria-expanded":open&&!disabled,onClick:()=>{setMode("hour");setOpen(current=>!current);},className:"ps-clock-trigger"},e("span",null,hasTime?String(hour12).padStart(2,"0")+":"+rawMinute+" "+period:"Choose a time"),e("svg",{viewBox:"0 0 24 24",width:19,height:19,fill:"none",stroke:"currentColor",strokeWidth:1.8,"aria-hidden":true},e("circle",{cx:12,cy:12,r:9}),e("path",{d:"M12 7v5l3 2"}))),hasTime&&e("button",{type:"button",disabled,onClick:()=>{onChange("");setMode("hour");close();},className:"ps-clock-clear"},"Clear time")),
+      open&&!disabled&&e("div",{className:"ps-clock-overlay",onPointerDown:event=>{if(event.target===event.currentTarget)close();}},e("div",{ref:panel,role:"dialog","aria-modal":true,"aria-label":"Choose delivery time",className:"ps-clock-panel",onKeyDown:trapFocus},e("h3",{className:"ps-clock-title"},"Delivery time"),
+        e("div",{className:"ps-clock-heading"},e("div",{className:"ps-clock-digits"},e("button",{type:"button","aria-label":"Choose delivery hour","aria-pressed":mode==="hour",onClick:()=>setMode("hour")},hasTime?String(hour12).padStart(2,"0"):"—"),e("span",{"aria-hidden":true},":"),e("button",{type:"button",disabled:!hasTime,"aria-label":"Choose delivery minute","aria-pressed":mode==="minute",onClick:()=>setMode("minute")},hasTime?rawMinute:"—")),e("div",{role:"group","aria-label":"Delivery AM or PM",className:"ps-clock-period"},["AM","PM"].map(nextPeriod=>e("button",{type:"button",key:nextPeriod,disabled:!hasTime,"aria-pressed":hasTime&&period===nextPeriod,onClick:()=>update(hour12,minute,nextPeriod)},nextPeriod)))),
+        e("p",{className:"ps-clock-instruction",id:"delivery-clock-instruction"},mode==="hour"?"Select an hour":"Select minutes"),
+        e("div",{ref:dial,role:"slider",tabIndex:0,"aria-label":mode==="hour"?"Delivery hour clock":"Delivery minute clock","aria-valuemin":mode==="hour"?1:0,"aria-valuemax":mode==="hour"?12:59,"aria-valuenow":mode==="hour"?hour12:minute,"aria-valuetext":hasTime?(mode==="hour"?hour12+" "+period:rawMinute+" minutes"):"Choose an hour","aria-describedby":"delivery-clock-help",className:"ps-clock-dial",onKeyDown:keyDown,
+          onPointerDown:event=>{if(disabled||event.button!==0)return;event.preventDefault();event.currentTarget.focus({preventScroll:true});drag.current={id:event.pointerId,mode,picked:false};event.currentTarget.setPointerCapture(event.pointerId);drag.current.picked=choose(event,mode);},
+          onPointerMove:event=>{if(drag.current?.id===event.pointerId)drag.current.picked=choose(event,drag.current.mode)||drag.current.picked;},
+          onPointerUp:event=>{if(drag.current?.id!==event.pointerId)return;const part=drag.current.mode,picked=choose(event,part)||drag.current.picked;drag.current=null;event.currentTarget.releasePointerCapture(event.pointerId);if(part==="hour"&&picked)setMode("minute");},onPointerCancel:()=>{drag.current=null;}},
+          e("svg",{viewBox:"0 0 100 100","aria-hidden":true},
+            Array.from({length:60},(_,index)=>{const outside=position(index,60,48),inside=position(index,60,index%5===0?45.5:47);return e("line",{key:"tick"+index,x1:outside.x,y1:outside.y,x2:inside.x,y2:inside.y,stroke:index%5===0?"#94a3b8":"#cbd5e1",strokeWidth:.45});}),
+            hasTime&&e("g",{fill:"#155e75",stroke:"#155e75"},e("line",{x1:50,y1:50,x2:selected.x,y2:selected.y,strokeWidth:1}),e("circle",{cx:selected.x,cy:selected.y,r:mode==="hour"||minute%5===0?8:3,stroke:"none"}),e("circle",{cx:50,cy:50,r:1.7,stroke:"none"})),
+            numbers.map(number=>{const point=position(number,mode==="hour"?12:60),active=hasTime&&number===(mode==="hour"?hour12:minute);return e("text",{key:number,x:point.x,y:point.y,dy:".35em",textAnchor:"middle",fontSize:5.5,fontWeight:active?700:500,fill:active?"#fff":"#334155"},mode==="hour"?number:String(number).padStart(2,"0"));}))),
+        e("p",{id:"delivery-clock-help",className:"ps-clock-help"},"Tap or drag the hand. Arrow keys adjust by one."),
+        e("div",{className:"ps-clock-footer"},mode==="minute"?e("div",{className:"ps-clock-adjust",role:"group","aria-label":"Adjust delivery minutes"},e("button",{type:"button","aria-label":"Previous minute",onClick:()=>update(hour12,(minute+59)%60)},"−"),e("span",null,"1 min"),e("button",{type:"button","aria-label":"Next minute",onClick:()=>update(hour12,(minute+1)%60)},"+")):e("button",{type:"button",disabled:!hasTime,onClick:()=>{setMode("minute");dial.current?.focus();},className:"ps-clock-next"},"Minutes →"),e("button",{type:"button",disabled:!hasTime,onClick:close,className:"ps-clock-done"},"Done")))));
   }
   function ScheduleAvatar({person,className="h-10 w-10"}) {
     const e=import_react.createElement,initials=String(person?.displayName||"?").split(/\s+/).map(part=>part[0]).join("").slice(0,2).toUpperCase();
