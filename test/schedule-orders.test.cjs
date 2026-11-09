@@ -24,3 +24,14 @@ test('saved custom activities reopen under Other and can switch back to an order
  assert.equal(select.props.value,'__other__');assert.equal(h.tree.children[2].children[1].props.value,'Site clean up');
  select.props.onChange({target:{value:'a'}});assert.equal(h.current().activityOther,false);assert.equal(h.current().orderId,'a');assert.equal(h.current().title,'Order 1 · Panels');
 });
+
+test('order choices and saved titles use panel Location and gate Villa before legacy notes',()=>{
+ for(const order of [{id:'a',projectId:'p1',orderNumber:'1',orderType:'Panels',location:'North elevation',locationNotes:'Old note'},{id:'a',projectId:'p1',orderNumber:'1',orderType:'Gate',villa:'V135',locationNotes:'Old note'}]){
+  const h=render({projectId:'p1'},[order]),select=h.tree.children[1],label=`Order 1 · ${order.orderType} · ${order.location||order.villa}`;assert.equal(select.children[2][0].children[0],label);select.props.onChange({target:{value:'a'}});assert.equal(h.current().title,label);
+ }
+});
+
+test('dispatched orders are hidden while previously scheduled orders are marked and remain selectable',()=>{
+ const orders=[{id:'shipped',projectId:'p1',orderNumber:'1',status:'dispatched'},{id:'active',projectId:'p1',orderNumber:'2',orderType:'Panels',alreadyScheduled:true}],h=render({projectId:'p1'},orders),select=h.tree.children[1];
+ assert.equal(select.children[2].length,1);assert.equal(select.children[2][0].props.value,'active');assert.equal(select.children[2][0].children[0],'Order 2 · Panels · Already scheduled');select.props.onChange({target:{value:'active'}});assert.equal(h.current().title,'Order 2 · Panels');
+});
