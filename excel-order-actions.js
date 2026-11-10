@@ -112,7 +112,7 @@
           await request('/orders/'+encodeURIComponent(link.id)+'/status',{status:'completed',expectedUpdatedAt:state.order.updatedAt||state.order.createdAt||''});
           publish({phase:'done',message:'Order marked Ready for dispatch. Use Refresh All in Excel to update the tracker.'});
         }else if(panel){
-          await request('/dispatch/panels',{...delivery,id:state.selected.id,action:'dispatch',destinationType:'site'});
+          await request('/dispatch/panels',{...delivery,id:state.selected.id,action:'dispatch',destinationType:'site',...(state.selected.dispatchRevision?{dispatchRevision:state.selected.dispatchRevision}:{})});
           locked=false;
           publish({message:'Load dispatched. The order becomes Dispatched once every load has been sent to site.'});
           await load();
