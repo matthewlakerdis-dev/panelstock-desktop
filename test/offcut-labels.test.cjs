@@ -174,8 +174,9 @@ test('popup blocking returns a useful fallback and printing keeps a user-operate
  const item={length:200,width:50,sku:'OC-1'};
  assert.equal(host.PanelStockOffcutLabels.print(item).reason,'popup-blocked');assert.match(warning,/Allow pop-ups/);
  host.open=()=>popup;assert.equal(host.PanelStockOffcutLabels.print(item).ok,true);
- assert.equal(printed,1);assert.equal(preference,'50x30');assert.match(written,/id="print-labels"/);
- host.PanelStockOffcutLabels.print(item,{autoPrint:false});assert.equal(printed,1);
+ assert.equal(printed,0);assert.equal(preference,'50x30');assert.match(written,/id="print-labels"/);assert.match(written,/id="download-labels"/);
+ host.PanelStockOffcutLabels.print(item,{autoPrint:false});assert.equal(printed,0);
+ host.PanelStockOffcutLabels.print(item,{autoPrint:true});assert.equal(printed,1);
  assert.equal(host.PanelStockOffcutLabels.getDefaultSize(),'50x30');
 });
 

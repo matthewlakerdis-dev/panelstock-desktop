@@ -237,10 +237,10 @@
 <script src="excel-order-actions.js?v=20261106-gate-area"></script>
 <script src="order-dispatch-reversal.js?v=1"></script>
 <script src="tracker-tab-handoff.js?v=1"></script>
-<script src="workshop-stock.js?v=3"></script>
+<script src="workshop-stock.js?v=4"></script>
 <script src="pull-refresh.js?v=20261029"></script>
 <script src="tab-workspace.js?v=20261102"></script>
-<script src="offcut-labels.js?v=2"></script>
+<script src="offcut-labels.js?v=3"></script>
 <script>
 window.PanelStockClientReady = window.PanelStockTrackerHandoff?.relayTab ? new Promise(function(){}) : new Promise(function(resolve,reject){
   var clientScript=document.createElement('script');clientScript.src='panelstock-client.js?v=20261102-multiple-tabs';clientScript.onload=resolve;clientScript.onerror=function(){reject(new Error('PanelStock could not load its session client. Refresh and try again.'));};document.head.appendChild(clientScript);
@@ -14093,6 +14093,7 @@ ${xrefStart}
       return "";
     }
     function printScheduledOffcutLabels(rows = cncPanels) {
+      if (!isAdmin) { showToast("Admin access required to print offcut labels", "err"); return false; }
       try {
         const service=globalThis.PanelStockOffcutLabels;
         if(!service)throw Error("Offcut label printing is unavailable. Refresh and try again.");
@@ -14529,6 +14530,7 @@ ${xrefStart}
     }
     function printLabel(item) {
       if(item.itemType==="offcut"||offcuts.some(value=>value.id===item.id)){
+        if (!isAdmin) { showToast("Admin access required to print offcut labels", "err"); return false; }
         try{const service=globalThis.PanelStockOffcutLabels;if(!service)throw Error("Offcut label printing is unavailable. Refresh and try again.");service.print([service.fromItem(item)],{onError:message=>showToast(message,"err")});}catch(error){showToast(error.message||"The offcut label could not be printed","err");}
         return;
       }
@@ -14735,7 +14737,7 @@ ${xrefStart}
               onAddPanelsBulk: addCncPanelsBulk,
               onCompletePanel: completeCncPanel,
               onCompleteSheet: completeCncSheet,
-              onPrintOffcutLabels: printScheduledOffcutLabels,
+              onPrintOffcutLabels: isAdmin ? printScheduledOffcutLabels : null,
               onRemovePanel: removeCncPanel,
               onRemoveScheduled: removeCncScheduled,
               onBackfillDimensions: backfillCncDimensions
@@ -14803,7 +14805,7 @@ ${xrefStart}
             editOffcut(detailItem.id, vals);
             setDetailItem({ ...detailItem, ...vals });
           },
-          onPrintLabel: () => printLabel(detailItem)
+          onPrintLabel: isAdmin || !(detailItem.itemType === "offcut" || offcuts.some(value => value.id === detailItem.id)) ? () => printLabel(detailItem) : null
         }
       ),
       damageLogOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -16319,7 +16321,7 @@ function compareCncOrders(a, b) {
       ),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex flex-wrap items-center gap-2 mb-3", children: [
         isAdmin && completed.some(panel => !(Number(panel.sheetWidth) > 0 && Number(panel.sheetHeight) > 0 && Number(panel.totalPanelArea) > 0)) && h("button", { type: "button", onClick: () => { setBackfillOpen(true); setAddOpen(false); setBulkOpen(false); }, className: "flex items-center gap-1.5 text-sm font-medium text-amber-900 border border-amber-300 bg-amber-50 rounded-lg px-3 py-2 hover:bg-amber-100", children: `Add historical dimensions and panel area (${new Set(completed.filter(panel => !(Number(panel.sheetWidth) > 0 && Number(panel.sheetHeight) > 0 && Number(panel.totalPanelArea) > 0)).map(panel => JSON.stringify([panel.jobReference || "", panel.orderNumber || "", panel.sheetNumber || ""]))).size})` }),
-        typeof onPrintOffcutLabels==="function"&&view==="pending"&&h("button",{type:"button",disabled:!filtered.some(panel=>Array.isArray(panel.pendingOffcuts)?panel.pendingOffcuts.length:panel.pendingOffcut),onClick:()=>onPrintOffcutLabels(filtered),className:"flex items-center gap-1.5 text-sm font-medium text-slate-600 border border-slate-300 bg-white rounded-lg px-3 py-2 hover:bg-slate-50"},"Print offcut labels"),
+        isAdmin&&typeof onPrintOffcutLabels==="function"&&view==="pending"&&h("button",{type:"button",disabled:!filtered.some(panel=>Array.isArray(panel.pendingOffcuts)?panel.pendingOffcuts.length:panel.pendingOffcut),onClick:()=>onPrintOffcutLabels(filtered),className:"flex items-center gap-1.5 text-sm font-medium text-slate-600 border border-slate-300 bg-white rounded-lg px-3 py-2 hover:bg-slate-50"},"Print offcut labels"),
         CNC_PUBLIC_TOKEN && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", { href: excelLink, className: "flex items-center gap-1.5 text-sm font-medium text-slate-600 border border-slate-300 bg-white rounded-lg px-3 py-2 hover:bg-slate-50", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FileSpreadsheet, { size: 15 }),
           " Production Tracker"
@@ -16357,7 +16359,7 @@ function compareCncOrders(a, b) {
             ] })
           ] })
         ] }) }),
-        filtered.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyState, { text: view === "pending" ? "No panels currently scheduled for the CNC." : "No completed panels yet." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncJobGroups, { panels: filtered, allPanels: cncPanels, query: q, onPrintOffcutLabels, onCompleteSheet: view === "pending" ? setSheetToComplete : null, onRemoveScheduled: isAdmin && view === "pending" ? onRemoveScheduled : null, renderGroup: (groupPanels) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", { className: "w-full text-sm", children: [
+        filtered.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyState, { text: view === "pending" ? "No panels currently scheduled for the CNC." : "No completed panels yet." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncJobGroups, { panels: filtered, allPanels: cncPanels, query: q, onPrintOffcutLabels: isAdmin ? onPrintOffcutLabels : null, onCompleteSheet: view === "pending" ? setSheetToComplete : null, onRemoveScheduled: isAdmin && view === "pending" ? onRemoveScheduled : null, renderGroup: (groupPanels) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", { className: "w-full text-sm", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: groupPanels.map((p, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { className: `border-t border-slate-100 ${i % 2 === 1 ? "bg-slate-50/30" : ""}`, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center gap-2 pl-2", children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "font-bold text-slate-800", children: ["Panel ", normalizeCncInput(p).panelNumber] }),
@@ -17511,7 +17513,7 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Note (optional)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CapitalizedInput, { value: editForm.note, onChange: (v) => setEditForm({ ...editForm, note: v }), placeholder: "e.g. leftover from WO-1042" }) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: saveEdit, disabled: !canSaveEdit, className: "w-full bg-cyan-800 disabled:opacity-40 text-white font-semibold rounded-lg py-2.5 text-sm hover:bg-cyan-900", children: "Save changes" })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: onPrintLabel, className: "w-full flex items-center justify-center gap-2 border border-slate-300 bg-slate-50 rounded-lg py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-100 mt-3", children: [
+      typeof onPrintLabel === "function" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: onPrintLabel, className: "w-full flex items-center justify-center gap-2 border border-slate-300 bg-slate-50 rounded-lg py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-100 mt-3", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Tag, { size: 14 }),
         " Print label"
       ] })
