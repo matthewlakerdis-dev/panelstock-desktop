@@ -5,21 +5,21 @@ const order={id:'o',project:'Project',orderNumber:'007',orderType:'Fixings',site
 const entry={key:'order:o',kind:'order',project:'Project',orderNumber:'007',orderType:'Fixings',status:'ready',ready:true,reason:'Ready for site',order};
 const pending={...entry,key:'order:waiting',orderNumber:'008',status:'waiting',ready:false,reason:'Waiting for production / approval',order:{...order,id:'waiting',status:'approved'}};
 const panel={key:'load:l',kind:'load',project:'Project',orderNumber:'009',orderType:'Panels',status:'ready',ready:true,reason:'Ready for powder coaters',load:{id:'l',project:'Project',orderNumber:'009',status:'waiting',ready:true,requiresPowderCoating:true,routing:true,qaComplete:true,siteAddress:'Panel site',items:[{id:'p',reference:'P1'}],legs:[]}};
-function nodes(tree){if(Array.isArray(tree))return tree.flatMap(nodes);return tree&&typeof tree==='object'?[tree,...nodes(tree.children)]:[];}
+function nodes(tree){if(Array.isArray(tree))return tree.flatMap(nodes);return tree&&typeof tree==='object'?[tree,...nodes(tree.children),...nodes(tree.props?.action)]:[];}
 function text(tree){if(Array.isArray(tree))return tree.map(text).join(' ');return tree&&typeof tree==='object'?text(tree.children):tree==null||typeof tree==='boolean'?'':String(tree);}
 const button=(tree,label)=>nodes(tree).find(node=>node.tag==='button'&&node.children.includes(label));
 function fixture({entries=[entry,pending,panel],canFinalQa=false,post}={}){
  const data={entries,dispatchVehicles:['Lennox Truck','Lennox Ute'],dispatchDrivers:[{username:'alex',displayName:'Alex'}],dispatchDefaultDriver:'alex',canFinalQa};
- const states=[entries,data,false,false,'','active','all','',{},null,{}],refs=[],calls=[];let cursor=0,refIndex=0;
+ const states=[entries,data,false,false,'','ready','all','',{},null,{}],refs=[],calls=[];let cursor=0,refIndex=0;
  const context={import_react:{createElement:(tag,props,...children)=>({tag,props:props||{},children})},useState:initial=>{const i=cursor++;if(!(i in states))states[i]=initial;return [states[i],value=>{states[i]=typeof value==='function'?value(states[i]):value;}];},useRef:initial=>{const i=refIndex++;return refs[i]||(refs[i]={current:initial});},useEffect:()=>{},crypto:webcrypto,Uint8Array,PanelStock:{username:'alex',confirm:async()=>true,apiFetch:async(url,options)=>{calls.push({url,options,body:options?JSON.parse(options.body):null});return options&&post?post(url,JSON.parse(options.body)):Response.json(data);}},Response,BAKED_WORKER_URL:'https://worker.test',Truck:'truck',PageHeading:'heading'};
  vm.createContext(context);vm.runInContext(code,context);
  return {states,calls,render(){cursor=refIndex=0;return context.DispatchCenter();}};
 }
-test('one queue combines types, filters by type and stage and keeps waiting orders non-dispatchable',()=>{
- const view=fixture();let tree=view.render();assert.equal(nodes(tree).filter(n=>n.tag==='article').length,3);
+test('Dispatch shows only ready orders; tracking retains waiting orders and history',()=>{
+ const view=fixture();let tree=view.render();assert.equal(nodes(tree).filter(n=>n.tag==='article').length,2);
  assert.equal(button(tree,'Site orders'),undefined);assert.equal(button(tree,'Panel loads'),undefined);
  nodes(tree).find(n=>n.tag==='select').props.onChange({target:{value:'Panels'}});tree=view.render();assert.equal(nodes(tree).filter(n=>n.tag==='article').length,1);
- nodes(tree).find(n=>n.tag==='select').props.onChange({target:{value:'all'}});button(view.render(),'Waiting').props.onClick();tree=view.render();assert.equal(nodes(tree).filter(n=>n.tag==='article').length,1);assert.equal(button(tree,'Dispatch to site'),undefined);
+ button(view.render(),'Tracking & history').props.onClick();tree=view.render();assert.equal(nodes(tree).filter(n=>n.tag==='article').length,1);assert.equal(button(tree,'Dispatch to site'),undefined);button(tree,'Back to dispatch').props.onClick();assert.equal(nodes(view.render()).filter(n=>n.tag==='article').length,2);
 });
 test('shared form prefills defaults and submits non-panel orders with the concurrency and retry guards',async()=>{
  const view=fixture();await button(view.render(),'Dispatch to site').props.onClick();let tree=view.render();
@@ -43,7 +43,7 @@ test('a stale ready entry is rechecked and a failed save preserves the entered f
 });
 test('final QA remains a confirmed action shown only to users with QA access',async()=>{
  const final={...panel,status:'waiting',ready:false,reason:'Awaiting final QA',load:{...panel.load,status:'awaiting_final_qa'}};
- assert.equal(button(fixture({entries:[final]}).render(),'Approve final QA'),undefined);
- const view=fixture({entries:[final],canFinalQa:true});await button(view.render(),'Approve final QA').props.onClick();
+ const denied=fixture({entries:[final]});button(denied.render(),'Tracking & history').props.onClick();assert.equal(button(denied.render(),'Approve final QA'),undefined);
+ const view=fixture({entries:[final],canFinalQa:true});button(view.render(),'Tracking & history').props.onClick();await button(view.render(),'Approve final QA').props.onClick();
  assert.deepEqual(JSON.parse(JSON.stringify(view.calls.find(call=>call.body).body)),{id:'l',action:'final-qa',confirmed:true});
 });

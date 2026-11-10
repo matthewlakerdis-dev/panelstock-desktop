@@ -15302,7 +15302,7 @@ ${xrefStart}
   }
   function DispatchCenter() {
     const h=import_react.createElement;
-    const [entries,setEntries]=useState([]),[defaults,setDefaults]=useState({dispatchVehicles:[],dispatchDrivers:[]}),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[filter,setFilter]=useState('active'),[type,setType]=useState('all'),[query,setQuery]=useState(''),[expanded,setExpanded]=useState({}),[selected,setSelected]=useState(null),[form,setForm]=useState({});
+    const [entries,setEntries]=useState([]),[defaults,setDefaults]=useState({dispatchVehicles:[],dispatchDrivers:[]}),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[filter,setFilter]=useState('ready'),[type,setType]=useState('all'),[query,setQuery]=useState(''),[expanded,setExpanded]=useState({}),[selected,setSelected]=useState(null),[form,setForm]=useState({});
     const alive=useRef(true),owner=useRef(PanelStock.username),version=useRef(0),locked=useRef(false),opening=useRef(false);
     const current=()=>alive.current&&owner.current===PanelStock.username;
     const inputClass='ps-unified-input';
@@ -15327,9 +15327,9 @@ ${xrefStart}
     const details=entry=>[entry.order?.villa?'Villa: '+entry.order.villa:'',entry.order?.location?'Location: '+entry.order.location:'',entry.order?.notes||'',entry.order?.locationNotes||''].filter(Boolean).join(' · ');
     const date=value=>value?new Date(value).toLocaleString('en-AU',{timeZone:'Australia/Brisbane',day:'numeric',month:'short',hour:'numeric',minute:'2-digit'}):'—';
     const typeMatches=entry=>type==='all'||entry.orderType===type;
-    const statusMatches=(entry,value)=>value==='active'?entry.status!=='dispatched':entry.status===value;
-    const filters=[['active','Active'],['ready','Ready'],['waiting','Waiting'],['coating','At powder coaters'],['dispatched','Dispatched']];
-    const types=Array.from(new Set(entries.map(entry=>entry.orderType))).sort();
+    const statusMatches=(entry,value)=>entry.status===value&&(value!=='ready'||entry.ready===true);
+    const filters=filter==='ready'?[['ready','Ready for dispatch']]:[['waiting','Waiting'],['coating','At powder coaters'],['dispatched','Dispatched']];
+    const types=Array.from(new Set(entries.filter(entry=>filter==='ready'?statusMatches(entry,'ready'):entry.status!=='ready').map(entry=>entry.orderType))).sort();
     const visible=entries.filter(entry=>typeMatches(entry)&&statusMatches(entry,filter)&&`${entry.project} ${entry.orderNumber} ${entry.orderType} ${entry.destination} ${details(entry)}`.toLowerCase().includes(query.trim().toLowerCase()));
     async function open(entry){
       if(locked.current||opening.current)return;opening.current=true;setBusy(true);setNotice('');
@@ -15383,10 +15383,10 @@ ${xrefStart}
           notice&&h('p',{role:'alert',className:'ps-unified-wide'},notice),h('div',{className:'ps-unified-actions ps-unified-wide'},h('button',{className:'ps-dispatch-primary',disabled:busy},busy?'Saving…':'Confirm dispatch'),h('button',{type:'button',className:'ps-dispatch-secondary',disabled:busy,onClick:()=>{setSelected(null);setNotice('');}},'Back to dispatch'))));
     }
     return h('section',{className:'ps-dispatch ps-unified-dispatch'},
-      h(PageHeading,{icon:h(Truck,{size:20}),title:'Dispatch',subtitle:'All order types, from production to delivery.',action:h('button',{className:'ps-dispatch-secondary',disabled:busy||loading,onClick:()=>{setNotice('');void refresh();}},'Refresh')}),
+      h(PageHeading,{icon:h(Truck,{size:20}),title:filter==='ready'?'Dispatch':'Delivery tracking',subtitle:filter==='ready'?'Orders ready to send.':'Coating progress, final QA and past deliveries.',action:h('div',{className:'ps-unified-actions'},h('button',{type:'button',className:'ps-dispatch-secondary',disabled:busy,onClick:()=>{setFilter(filter==='ready'?'waiting':'ready');setType('all');setQuery('');setNotice('');}},filter==='ready'?'Tracking & history':'Back to dispatch'),h('button',{className:'ps-dispatch-secondary',disabled:busy||loading,onClick:()=>{setNotice('');void refresh();}},'Refresh'))}),
       h('div',{className:'ps-dispatch-filters',role:'group','aria-label':'Filter dispatch by status'},filters.map(([value,label])=>h('button',{key:value,type:'button','aria-pressed':filter===value,onClick:()=>setFilter(value),className:'ps-dispatch-filter'+(filter===value?' is-active':'')},label,h('strong',null,entries.filter(entry=>typeMatches(entry)&&statusMatches(entry,value)).length)))),
       h('div',{className:'ps-unified-toolbar'},h('input',{type:'search',className:inputClass,placeholder:'Search project, order or destination…','aria-label':'Search dispatch',value:query,onChange:event=>setQuery(event.target.value)}),h('label',null,'Order type',h('select',{className:inputClass,value:type,onChange:event=>setType(event.target.value)},h('option',{value:'all'},'All order types'),types.map(value=>h('option',{key:value,value},value)))),h('span',{role:'status'},`${visible.length} dispatch${visible.length===1?'':'es'}`)),
-      notice&&h('p',{role:'status'},notice),loading&&h('p',{role:'status'},'Loading dispatch orders…'),!loading&&!visible.length&&h('div',{className:'ps-dispatch-empty'},h('strong',null,'No matching dispatch orders'),h('p',null,'Change the filters or search to see other orders.')),
+      notice&&h('p',{role:'status'},notice),loading&&h('p',{role:'status'},'Loading dispatch orders…'),!loading&&!visible.length&&h('div',{className:'ps-dispatch-empty'},h('strong',null,filter==='ready'?'No orders ready for dispatch':'No matching deliveries'),h('p',null,'Change the filters or search to see other orders.')),
       h('div',{className:'ps-unified-list'},visible.map(entry=>{
         const load=entry.load,history=entry.kind==='load'?(load.legs||[]):entry.order.dispatch?[entry.order.dispatch]:[];
         return h('article',{key:entry.key,className:'ps-dispatch-card ps-dispatch-'+(entry.status==='waiting'?'production':entry.status)},
