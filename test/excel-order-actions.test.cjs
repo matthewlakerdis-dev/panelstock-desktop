@@ -133,3 +133,8 @@ test('tracker sends only delivery text fields; dropdown IDs never enter the save
  await h.controller.load();await h.controller.submit({destination:'Site',transport:'Ute',driver:'Sam Driver',notes:'Keep dry',transportChoice:'vehicle:0',driverChoice:'user:sam'});
  assert.deepEqual(JSON.parse(h.calls.at(-1).options.body),{destination:'Site',transport:'Ute',driver:'Sam Driver',notes:'Keep dry',id,expectedUpdatedAt:'v1',mutationId:id});
 });
+test('Excel dispatch carries the revision of a load returned from dispatch',async()=>{
+ const load={id:'returned-load',project:'Example',orderNumber:'007',status:'waiting',readyForSite:true,dispatchRevision:2,panelIds:['panel-one']};let sent;
+ const h=harness('dispatch',async(url,options)=>{if(options){sent=JSON.parse(options.body);return Response.json({ok:true});}return url.endsWith('/dispatch/orders')?Response.json({orders:[{...order,usesPanelLoads:true,ready:true,status:'completed'}]}):Response.json({loads:[load]});});
+ await h.controller.load();h.controller.selectLoad(load.id);await h.controller.submit({destination:'Site',transport:'Truck',driver:'Alex'});assert.equal(sent.dispatchRevision,2);
+});

@@ -2,7 +2,7 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),fs=requir
 const source=fs.readFileSync(path.join(__dirname,'../scripts/build-production.cjs'),'utf8'),start=source.indexOf('const indexPath='),end=source.indexOf('fs.cpSync',start);
 function published(css,labels='label js',handoff='handoff js'){
  let html='<script src="tracker-tab-handoff.js?v=old"></script><script src="offcut-labels.js?v=old"></script><link href="tailwind.css?v=old"><script src="workshop-stock.js?v=old"></script><link href="workshop-stock.css?v=old">';
- const files={'tracker-tab-handoff.js':handoff,'tailwind.css':css,'workshop-stock.js':'stock js','workshop-stock.css':'stock css','excel-order-actions.js':'action js','excel-order-actions.css':'action css','tab-workspace.js':'workspace js','panelstock-client.js':'client js','offcut-labels.js':labels};
+ const files={'order-dispatch-reversal.js':'reversal js','tracker-tab-handoff.js':handoff,'tailwind.css':css,'workshop-stock.js':'stock js','workshop-stock.css':'stock css','excel-order-actions.js':'action js','excel-order-actions.css':'action css','tab-workspace.js':'workspace js','panelstock-client.js':'client js','offcut-labels.js':labels};
  vm.runInNewContext(source.slice(start,end),{out:'/build',path,require,fs:{readFileSync:file=>path.basename(file)==='index.html'?html:files[path.basename(file)],writeFileSync:(file,value)=>{html=value;}}});return html;
 }
 test('published desktop stylesheet URL changes with CSS content so cached styles cannot hide validation errors',()=>{

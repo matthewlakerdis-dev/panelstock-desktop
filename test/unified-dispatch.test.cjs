@@ -47,3 +47,7 @@ test('final QA remains a confirmed action shown only to users with QA access',as
  const view=fixture({entries:[final],canFinalQa:true});button(view.render(),'Tracking & history').props.onClick();await button(view.render(),'Approve final QA').props.onClick();
  assert.deepEqual(JSON.parse(JSON.stringify(view.calls.find(call=>call.body).body)),{id:'l',action:'final-qa',confirmed:true});
 });
+
+test('returned panel loads submit their current revision when dispatching again',async()=>{
+ const view=fixture({entries:[{...panel,load:{...panel.load,dispatchRevision:3}}]});await button(view.render(),'Send to powder coaters').props.onClick();view.states[10].destination='Coater';await nodes(view.render()).find(node=>node.tag==='form').props.onSubmit({preventDefault(){}});await new Promise(r=>setImmediate(r));assert.equal(view.calls.find(call=>call.body).body.dispatchRevision,3);
+});
