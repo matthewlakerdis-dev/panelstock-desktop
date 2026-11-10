@@ -32,6 +32,8 @@ Site Order forms use the same Order details, Site contact, Requested delivery an
 
 ## 50 × 30 mm offcut stickers
 
+In the CNC Tracker, use **Print offcut labels** beside an order or sheet to reprint its retained pieces. Each physical offcut gets one 50 × 30 mm label, including equal-sized pieces, without duplicating labels for panels sharing a sheet. Group printing includes records hidden by search or status filters. Completed sheets use their saved offcut details; historical completions without saved offcut dimensions cannot be reprinted. Printing does not complete a cut or add stock.
+
 Retaining offcuts in CNC scheduling opens the print window after the schedule is saved locally. Each retained physical piece gets one 50 × 30 mm sticker; multiple panels on the same sheet do not duplicate its labels. The sticker has three large, centred fields: dimensions, thickness and material, then colour/finish. Proposed pieces remain outside SOH until the operator confirms the completed cut. Matching offcuts continue to share their existing stock line and SKU.
 
 Use **Print offcut labels** in the CNC tracker to reprint the currently filtered pending work. In SOH, use the offcut's **Manage → Print offcut label** action, or its stock-detail print action. Workshop profile offcuts are supported too. Each manual print defaults to one physical piece.

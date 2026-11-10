@@ -164,6 +164,68 @@
     });
     return labels;
   }
+  function collectForCnc(rows, stock) {
+    stock = stock || {};
+    var sheets = new Map(), labels = [];
+    (Array.isArray(rows) ? rows : []).forEach(function (row) {
+      if (!row || !text(row.orderNumber) || !text(row.sheetNumber) || (row.status && row.status !== 'pending' && row.status !== 'completed')) return;
+      var key = sheetKey(row);
+      if (!sheets.has(key)) sheets.set(key, []);
+      sheets.get(key).push(row);
+    });
+    sheets.forEach(function (panels) {
+      // A completed sheet's recorded decision replaces its old proposals,
+      // including proposals left on a sibling that was not completed with it.
+      var completed = panels.filter(function (row) {
+        return row.status === 'completed' && (row.offcutOutcome != null || Array.isArray(row.savedOffcuts) || row.offcutDetails);
+      });
+      if (completed.length) {
+        if (completed.some(function (row) {
+          return (row.offcutOutcome && row.offcutOutcome !== 'confirmed') || (Array.isArray(row.savedOffcuts) && !row.savedOffcuts.length);
+        })) return;
+        var saved = new Map();
+        completed.forEach(function (row) {
+          var list = Array.isArray(row.savedOffcuts) ? row.savedOffcuts : row.offcutDetails ? [row.offcutDetails] : [];
+          if (list.length > 20) throw new Error('A physical CNC sheet can retain at most 20 offcuts.');
+          list.forEach(function (piece, index) {
+            if (!piece || piece.approved === false) return;
+            var status = text(piece.status).toLowerCase();
+            if (status && status !== 'confirmed' && status !== 'saved' && status !== 'retained') return;
+            var size = proposalSize(piece);
+            if (!size || saved.has(index)) return;
+            // Use the retained-piece snapshot, not a possibly edited or removed
+            // stock line and never the dimensions/identity of the old proposal.
+            saved.set(index, {
+              material: text(piece.material), color: text(piece.color || piece.colour), thickness: positive(piece.thickness),
+              length: size.length, width: size.width, dimensionOrder: proposalOrder(piece), proposalIndex: index,
+              job: text(row.jobReference), order: text(row.orderNumber), sheet: text(row.sheetNumber),
+              sku: text(piece.stockSku || piece.sku || piece.labelSku), provisional: false
+            });
+          });
+        });
+        saved.forEach(function (label) { labels.push(label); });
+        return;
+      }
+      var declined = new Set(), pending = panels.filter(function (row) { return row.status !== 'completed'; });
+      function approved(proposal) {
+        var status = text(proposal && proposal.status).toLowerCase();
+        return proposal && proposal.approved !== false && (!status || status === 'pending');
+      }
+      pending.forEach(function (row) {
+        rowProposals(row).forEach(function (proposal, index) {
+          if (proposal && !approved(proposal)) declined.add(index);
+        });
+      });
+      var printable = pending.map(function (row) {
+        return Object.assign({}, row, { pendingOffcuts: rowProposals(row).map(function (proposal, index) {
+          return !declined.has(index) && approved(proposal) ? proposal : null;
+        }) });
+      });
+      labels.push.apply(labels, collectScheduled(printable, stock));
+    });
+    return labels;
+  }
+  function countForCnc(rows, stock) { return collectForCnc(rows, stock).length; }
   function fromItem(item) {
     if (!item) return null;
     var size = dimensions(item.width, item.height, item.dimensionOrder);
@@ -264,6 +326,6 @@
     }
     return { ok: true, window: popup };
   }
-  return { prepareScheduled: prepareScheduled, collectScheduled: collectScheduled, fromItem: fromItem, formatDimensions: formatDimensions, escapeHtml: escapeHtml,
+  return { prepareScheduled: prepareScheduled, collectScheduled: collectScheduled, collectForCnc: collectForCnc, countForCnc: countForCnc, fromItem: fromItem, formatDimensions: formatDimensions, escapeHtml: escapeHtml,
     buildDocument: buildDocument, fitLabels: fitLabels, print: print, getDefaultSize: getDefaultSize, setDefaultSize: setDefaultSize };
 });
