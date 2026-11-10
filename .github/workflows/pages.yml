@@ -46,3 +46,6 @@ jobs:
         uses: actions/deploy-pages@v4
       - name: Verify published attendance pages without changing live attendance
         run: node scripts/verify-attendance-production.mjs --web
+
+      - name: Verify published Gate Progress
+        run: node scripts/verify-gate-production.cjs

@@ -1,6 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const html=fs.readFileSync(new URL('../index.html',`file://${__filename}`),'utf8');
-test('Gate Progress is a native Work page under the normal order-view permission and staging flag',()=>{
+test('Gate Progress is a native Work page under the normal order-view permission and enabled production flag',()=>{
+ assert.match(html,/globalThis.PANELSTOCK_GATE_PROGRESS_ENABLED=true/);
  assert.match(html,/PANELSTOCK_GATE_PROGRESS_ENABLED\?\[\['gate-progress','site.orders.view'\]\]/);
  assert.match(html,/key:"gate-progress",label:"Gate Progress",target:"gate-progress"/);
  assert.match(html,/tab === "gate-progress"[\s\S]*?\(GateProgressPage, \{username\}\)/);
