@@ -15301,8 +15301,105 @@ ${xrefStart}
     return /* @__PURE__ */ (0,import_jsx_runtime.jsxs)("div",{className:"max-w-4xl",children:[/* @__PURE__ */ (0,import_jsx_runtime.jsx)(PageHeading,{icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Scissors,{size:18}),title:"Convert sheet sizes",subtitle:"Cut larger full sheets into user-defined smaller full-panel sizes."}),/* @__PURE__ */ (0,import_jsx_runtime.jsxs)("section",{className:"ps-split-picker-form rounded-xl border border-slate-300 bg-white p-6",children:[/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Field,{label:"Select full panel",children:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(ItemPicker,{variants,offcuts:[],selected:source,onSelect:item=>{setSource(item);setOutputs([{length:"",width:"",qty:"1"}]);},sortLikeSoh:true})}),/* @__PURE__ */ (0,import_jsx_runtime.jsx)(ConvertMaterialSummary,{selected:source}),/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Field,{label:"Source quantity",children:/* @__PURE__ */ (0,import_jsx_runtime.jsx)("input",{className:inputCls,type:"number",min:1,max:source?.qty,value:sourceQty,disabled:!source,onChange:event=>setSourceQty(event.target.value)})}),outputs.map((output,index)=>/* @__PURE__ */ (0,import_jsx_runtime.jsxs)("div",{className:"grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_44px] gap-3 items-end",children:[/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Field,{label:"Length (mm)",children:/* @__PURE__ */ (0,import_jsx_runtime.jsx)("input",{className:inputCls,type:"number",min:"0.001",step:"any",placeholder:"e.g. 4000",value:output.length,disabled:!source,onChange:event=>update(index,"length",event.target.value)})}),/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Field,{label:"Width (mm)",children:/* @__PURE__ */ (0,import_jsx_runtime.jsx)("input",{className:inputCls,type:"number",min:"0.001",step:"any",placeholder:"e.g. 1500",value:output.width,disabled:!source,onChange:event=>update(index,"width",event.target.value)})}),/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Field,{label:"Quantity",children:/* @__PURE__ */ (0,import_jsx_runtime.jsx)("input",{className:inputCls,type:"number",min:1,value:output.qty,disabled:!source,onChange:event=>update(index,"qty",event.target.value)})}),/* @__PURE__ */ (0,import_jsx_runtime.jsx)("button",{type:"button",title:"Remove output",onClick:()=>setOutputs(outputs.filter((_,i)=>i!==index)),disabled:!source||outputs.length===1,className:"h-11 rounded-lg border border-slate-300 disabled:opacity-30",children:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Trash2,{size:16,className:"mx-auto"})})]},index)),/* @__PURE__ */ (0,import_jsx_runtime.jsx)("button",{type:"button",disabled:!source,onClick:()=>setOutputs([...outputs,{length:"",width:"",qty:"1"}]),className:"w-full rounded-lg border border-dashed border-cyan-700 py-2.5 text-sm font-semibold text-cyan-800 disabled:opacity-40",children:"+ Add another output size"}),/* @__PURE__ */ (0,import_jsx_runtime.jsx)("button",{type:"button",onClick:submit,disabled:!valid,className:"rounded-lg bg-cyan-800 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-40",children:"Convert stock"})]})]});
   }
   function DispatchCenter() {
-    const h=import_react.createElement,[mode,setMode]=useState("panels");
-    return h("div",null,h("div",{className:"ps-dispatch-mode"},["orders","panels"].map(value=>h("button",{key:value,onClick:()=>setMode(value),"aria-pressed":mode===value},value==="orders"?"Site orders":"Panel loads"))),mode==="orders"?h(SiteOrderDispatch,{onPanelLoads:()=>setMode("panels")}):h(PanelDispatchLoads));
+    const h=import_react.createElement;
+    const [entries,setEntries]=useState([]),[defaults,setDefaults]=useState({dispatchVehicles:[],dispatchDrivers:[]}),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[filter,setFilter]=useState('active'),[type,setType]=useState('all'),[query,setQuery]=useState(''),[expanded,setExpanded]=useState({}),[selected,setSelected]=useState(null),[form,setForm]=useState({});
+    const alive=useRef(true),owner=useRef(PanelStock.username),version=useRef(0),locked=useRef(false),opening=useRef(false);
+    const current=()=>alive.current&&owner.current===PanelStock.username;
+    const inputClass='ps-unified-input';
+    async function refresh(){
+      const requestVersion=++version.current;
+      try{
+        const response=await PanelStock.apiFetch(BAKED_WORKER_URL+'/dispatch'),data=await response.json();
+        if(!current()||requestVersion!==version.current)return null;
+        if(!response.ok)throw Error(data.error||'Could not load dispatch orders');
+        setEntries(data.entries||[]);setDefaults(data);return data;
+      }catch(error){if(current()&&requestVersion===version.current)setNotice(error.message);return null;}
+      finally{if(current()&&requestVersion===version.current)setLoading(false);}
+    }
+    useEffect(()=>{
+      alive.current=true;void refresh();
+      const reload=()=>{if(!document.hidden&&!locked.current)void refresh();};
+      window.addEventListener('panelstock-remote-change',reload);window.addEventListener('online',reload);document.addEventListener('visibilitychange',reload);
+      const timer=setInterval(reload,30000),unsubscribe=window.PanelStockPullRefresh?.subscribe(()=>refresh());
+      return()=>{alive.current=false;++version.current;clearInterval(timer);window.removeEventListener('panelstock-remote-change',reload);window.removeEventListener('online',reload);document.removeEventListener('visibilitychange',reload);if(unsubscribe)unsubscribe();};
+    },[]);
+    const itemLines=entry=>entry.kind==='load'?(entry.load.items||[]).map(item=>({quantity:1,description:`Sheet ${item.sheetNumber||'—'} · Panel ${item.reference}${item.replaced?' · Replaced':''}`})):(entry.order.items||[]);
+    const details=entry=>[entry.order?.villa?'Villa: '+entry.order.villa:'',entry.order?.location?'Location: '+entry.order.location:'',entry.order?.notes||'',entry.order?.locationNotes||''].filter(Boolean).join(' · ');
+    const date=value=>value?new Date(value).toLocaleString('en-AU',{timeZone:'Australia/Brisbane',day:'numeric',month:'short',hour:'numeric',minute:'2-digit'}):'—';
+    const typeMatches=entry=>type==='all'||entry.orderType===type;
+    const statusMatches=(entry,value)=>value==='active'?entry.status!=='dispatched':entry.status===value;
+    const filters=[['active','Active'],['ready','Ready'],['waiting','Waiting'],['coating','At powder coaters'],['dispatched','Dispatched']];
+    const types=Array.from(new Set(entries.map(entry=>entry.orderType))).sort();
+    const visible=entries.filter(entry=>typeMatches(entry)&&statusMatches(entry,filter)&&`${entry.project} ${entry.orderNumber} ${entry.orderType} ${entry.destination} ${details(entry)}`.toLowerCase().includes(query.trim().toLowerCase()));
+    async function open(entry){
+      if(locked.current||opening.current)return;opening.current=true;setBusy(true);setNotice('');
+      try{
+        const data=await refresh();if(!data||!current())return;
+        const latest=(data.entries||[]).find(value=>value.key===entry.key);
+        if(!latest?.ready){setNotice('This order is no longer ready. Review the refreshed list.');return;}
+        const vehicles=data.dispatchVehicles||[],drivers=data.dispatchDrivers||[],driver=drivers.find(user=>user.username===data.dispatchDefaultDriver);
+        const destinationType=latest.kind==='load'&&latest.load.status==='waiting'&&latest.load.requiresPowderCoating?'powder_coaters':'site';
+        const mutationId=Array.from(crypto.getRandomValues(new Uint8Array(16)),value=>value.toString(16).padStart(2,'0')).join('');
+        setSelected({...latest,mutationId});setForm({destinationType,destination:destinationType==='site'?(latest.load?.siteAddress||latest.order?.siteAddress||''):'',transportChoice:vehicles.length?'vehicle:0':'external',transport:vehicles[0]||'',driverChoice:driver?'user:'+driver.username:drivers.length?'':'external',driver:driver?.displayName||driver?.username||'',notes:''});
+      }finally{opening.current=false;if(current())setBusy(false);}
+    }
+    async function save(entry,body){
+      if(locked.current)return;locked.current=true;++version.current;setBusy(true);setNotice('');
+      try{
+        const path=entry.kind==='load'?'/dispatch/panels':'/dispatch/orders';
+        const response=await PanelStock.apiFetch(BAKED_WORKER_URL+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),data=await response.json();
+        if(!current())return;
+        if(!response.ok){
+          if(data.code==='ORDER_CONFLICT'){setSelected(null);await refresh();throw Error('This order changed. Review it before dispatching again.');}
+          throw Error(data.error||'Dispatch could not be saved. Your details are still here.');
+        }
+        setSelected(null);await refresh();if(current())setNotice(body.action==='coating-complete'?'Coating complete. Final QA is required.':body.action==='final-qa'?'Final QA approved. The load is ready for site.':'Dispatch saved.');
+      }catch(error){if(current())setNotice(error.message);}
+      finally{locked.current=false;if(current())setBusy(false);}
+    }
+    async function coatingAction(entry,action){
+      if(busy||locked.current)return;
+      const finalQa=action==='final-qa';
+      if(!await PanelStock.confirm({title:finalQa?'Final QA after coating':'Powder coating complete?',message:finalQa?'Confirm every panel has passed inspection after coating and is ready for site.':'Confirm coating is complete. The load must then pass final QA before delivery to site.',confirmLabel:finalQa?'Approve final QA':'Coating complete'}))return;
+      await save(entry,{id:entry.load.id,action,...(finalQa?{confirmed:true}:{})});
+    }
+    const itemList=entry=>h('ul',{className:'ps-unified-items'},itemLines(entry).map((item,index)=>h('li',{key:index},h('strong',null,`${item.quantity||1} × `),item.description)));
+    if(selected){
+      const vehicles=defaults.dispatchVehicles||[],drivers=defaults.dispatchDrivers||[],load=selected.load;
+      return h('section',{className:'ps-dispatch ps-unified-dispatch'},h('p',{className:'ps-dispatch-order'},selected.orderType),h('h2',{className:'ps-unified-title'},`Dispatch · ${selected.project} · Order ${selected.orderNumber}`),
+        h('div',{className:'ps-unified-review'},itemList(selected),details(selected)&&h('p',null,details(selected)),selected.order?.siteContact&&h('p',null,[selected.order.siteContact,selected.order.phone].filter(Boolean).join(' · '))),
+        h('form',{className:'ps-unified-form',onSubmit:event=>{
+          event.preventDefault();
+          const details={destination:form.destination,transport:form.transport,driver:form.driver,notes:form.notes||''};
+          void save(selected,selected.kind==='load'?{...details,id:load.id,action:'dispatch',destinationType:form.destinationType}:{...details,id:selected.order.id,mutationId:selected.mutationId,expectedUpdatedAt:selected.order.updatedAt||selected.order.createdAt||''});
+        }},
+          load&&h('label',null,'Send load to',h('select',{className:inputClass,disabled:busy,value:form.destinationType,onChange:event=>setForm({...form,destinationType:event.target.value,destination:event.target.value==='site'?(load.siteAddress||selected.order?.siteAddress||''):''})},(load.status!=='waiting'||!load.requiresPowderCoating)&&h('option',{value:'site'},'Site'),load.status==='waiting'&&h('option',{value:'powder_coaters'},'Powder coaters'))),
+          h('label',null,form.destinationType==='powder_coaters'?'Powder coater / address':'Site / delivery address',h('input',{required:true,maxLength:300,className:inputClass,disabled:busy,value:form.destination||'',onChange:event=>setForm({...form,destination:event.target.value})})),
+          h('label',null,'Vehicle / transport company',h('select',{'aria-label':'Vehicle / transport company',required:true,className:inputClass,disabled:busy,value:form.transportChoice,onChange:event=>{const choice=event.target.value;setForm({...form,transportChoice:choice,transport:choice==='external'?'':vehicles[Number(choice.slice(8))]||''});}},vehicles.map((vehicle,index)=>h('option',{key:vehicle,value:'vehicle:'+index},vehicle)),h('option',{value:'external'},'Other vehicle / transport'))),
+          form.transportChoice==='external'&&h('label',null,'Transport details',h('input',{required:true,maxLength:300,className:inputClass,disabled:busy,value:form.transport||'',onChange:event=>setForm({...form,transport:event.target.value})})),
+          h('label',null,'Driver',h('select',{'aria-label':'Driver',required:true,className:inputClass,disabled:busy,value:form.driverChoice,onChange:event=>{const choice=event.target.value,user=drivers.find(user=>'user:'+user.username===choice);setForm({...form,driverChoice:choice,driver:user?(user.displayName||user.username):''});}},h('option',{value:'',disabled:true},'Choose driver'),drivers.map(user=>h('option',{key:user.username,value:'user:'+user.username},user.displayName||user.username)),h('option',{value:'external'},'Other / external driver'))),
+          form.driverChoice==='external'&&h('label',null,'Driver name',h('input',{required:true,maxLength:300,className:inputClass,disabled:busy,value:form.driver||'',onChange:event=>setForm({...form,driver:event.target.value})})),
+          h('label',{className:'ps-unified-wide'},'Notes',h('textarea',{rows:3,maxLength:5000,className:inputClass,disabled:busy,value:form.notes||'',onChange:event=>setForm({...form,notes:event.target.value})})),
+          notice&&h('p',{role:'alert',className:'ps-unified-wide'},notice),h('div',{className:'ps-unified-actions ps-unified-wide'},h('button',{className:'ps-dispatch-primary',disabled:busy},busy?'Saving…':'Confirm dispatch'),h('button',{type:'button',className:'ps-dispatch-secondary',disabled:busy,onClick:()=>{setSelected(null);setNotice('');}},'Back to dispatch'))));
+    }
+    return h('section',{className:'ps-dispatch ps-unified-dispatch'},
+      h(PageHeading,{icon:h(Truck,{size:20}),title:'Dispatch',subtitle:'All order types, from production to delivery.',action:h('button',{className:'ps-dispatch-secondary',disabled:busy||loading,onClick:()=>{setNotice('');void refresh();}},'Refresh')}),
+      h('div',{className:'ps-dispatch-filters',role:'group','aria-label':'Filter dispatch by status'},filters.map(([value,label])=>h('button',{key:value,type:'button','aria-pressed':filter===value,onClick:()=>setFilter(value),className:'ps-dispatch-filter'+(filter===value?' is-active':'')},label,h('strong',null,entries.filter(entry=>typeMatches(entry)&&statusMatches(entry,value)).length)))),
+      h('div',{className:'ps-unified-toolbar'},h('input',{type:'search',className:inputClass,placeholder:'Search project, order or destination…','aria-label':'Search dispatch',value:query,onChange:event=>setQuery(event.target.value)}),h('label',null,'Order type',h('select',{className:inputClass,value:type,onChange:event=>setType(event.target.value)},h('option',{value:'all'},'All order types'),types.map(value=>h('option',{key:value,value},value)))),h('span',{role:'status'},`${visible.length} dispatch${visible.length===1?'':'es'}`)),
+      notice&&h('p',{role:'status'},notice),loading&&h('p',{role:'status'},'Loading dispatch orders…'),!loading&&!visible.length&&h('div',{className:'ps-dispatch-empty'},h('strong',null,'No matching dispatch orders'),h('p',null,'Change the filters or search to see other orders.')),
+      h('div',{className:'ps-unified-list'},visible.map(entry=>{
+        const load=entry.load,history=entry.kind==='load'?(load.legs||[]):entry.order.dispatch?[entry.order.dispatch]:[];
+        return h('article',{key:entry.key,className:'ps-dispatch-card ps-dispatch-'+(entry.status==='waiting'?'production':entry.status)},
+          h('div',{className:'ps-unified-row'},h('div',null,h('p',{className:'ps-dispatch-order'},`Order ${entry.orderNumber} · ${entry.orderType}`),h('h3',null,entry.project||'No project'),h('p',{className:'ps-unified-muted'},entry.kind==='load'?`${(load.items||[]).filter(item=>!item.replaced).length} panels · Panel load`:`${(entry.order.items||[]).length} item${(entry.order.items||[]).length===1?'':'s'}`)),
+            h('div',null,h('span',{className:'ps-unified-label'},'Destination'),h('p',null,entry.destination||'Site address not set'),details(entry)&&h('p',{className:'ps-unified-muted'},details(entry))),
+            h('div',null,h('span',{className:'ps-dispatch-badge'},entry.reason)),
+            h('div',{className:'ps-unified-actions'},entry.ready&&h('button',{type:'button',disabled:busy,className:'ps-dispatch-primary',onClick:()=>open(entry)},load?.requiresPowderCoating&&load.status==='waiting'?'Send to powder coaters':'Dispatch to site'),
+              load?.status==='at_powder_coaters'&&h('button',{type:'button',disabled:busy,className:'ps-dispatch-primary',onClick:()=>coatingAction(entry,'coating-complete')},'Mark coating complete'),
+              load?.status==='awaiting_final_qa'&&defaults.canFinalQa&&h('button',{type:'button',disabled:busy||!load.routing||!load.qaComplete,className:'ps-dispatch-primary',onClick:()=>coatingAction(entry,'final-qa')},'Approve final QA'),
+              h('button',{type:'button',className:'ps-dispatch-secondary','aria-expanded':!!expanded[entry.key],'aria-label':`Details for Order ${entry.orderNumber} · ${entry.project}`,onClick:()=>setExpanded(value=>({...value,[entry.key]:!value[entry.key]}))},expanded[entry.key]?'Hide details':'Details'))),
+          expanded[entry.key]&&h('div',{className:'ps-unified-details'},h('h4',null,'Items'),itemList(entry),load&&h('div',{className:'ps-unified-checks'},[['Routing',load.routing],['Fabrication / QA',load.qaComplete],...(load.finalQaRequired?[['Final QA',!!load.finalQa]]:[])].map(([label,done])=>h('span',{key:label},`${done?'✓':'Waiting'} · ${label}`))),
+            history.length>0&&h('div',null,h('h4',null,'Dispatch history'),history.map((leg,index)=>h('div',{key:index,className:'ps-unified-history'},h('strong',null,leg.destinationType==='powder_coaters'?'Powder coaters':'Site delivery'),h('p',null,leg.destination),h('p',null,[leg.transport,leg.driver,date(leg.at),leg.by].filter(Boolean).join(' · ')),leg.notes&&h('p',null,leg.notes))))));
+      })));
   }
   function SiteOrderDispatch({onPanelLoads}) {
     const siteOrderDetailsText=order=>[order.villa?"Villa: "+order.villa:"",order.location?"Location: "+order.location:"",order.notes?"Notes: "+order.notes:"",order.locationNotes||""].filter(Boolean).join(" · ");
