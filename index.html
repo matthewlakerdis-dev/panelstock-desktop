@@ -15304,10 +15304,42 @@ ${xrefStart}
     const submit=()=>{if(onSubmit({sourceId:source?.id,sourceQty,outputs})===true){setSource(null);setSourceQty("1");setOutputs([{length:"",width:"",qty:"1"}]);}};
     return /* @__PURE__ */ (0,import_jsx_runtime.jsxs)("div",{className:"max-w-4xl",children:[/* @__PURE__ */ (0,import_jsx_runtime.jsx)(PageHeading,{icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Scissors,{size:18}),title:"Convert sheet sizes",subtitle:"Cut larger full sheets into user-defined smaller full-panel sizes."}),/* @__PURE__ */ (0,import_jsx_runtime.jsxs)("section",{className:"ps-split-picker-form rounded-xl border border-slate-300 bg-white p-6",children:[/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Field,{label:"Select full panel",children:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(ItemPicker,{variants,offcuts:[],selected:source,onSelect:item=>{setSource(item);setOutputs([{length:"",width:"",qty:"1"}]);},sortLikeSoh:true})}),/* @__PURE__ */ (0,import_jsx_runtime.jsx)(ConvertMaterialSummary,{selected:source}),/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Field,{label:"Source quantity",children:/* @__PURE__ */ (0,import_jsx_runtime.jsx)("input",{className:inputCls,type:"number",min:1,max:source?.qty,value:sourceQty,disabled:!source,onChange:event=>setSourceQty(event.target.value)})}),outputs.map((output,index)=>/* @__PURE__ */ (0,import_jsx_runtime.jsxs)("div",{className:"grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_44px] gap-3 items-end",children:[/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Field,{label:"Length (mm)",children:/* @__PURE__ */ (0,import_jsx_runtime.jsx)("input",{className:inputCls,type:"number",min:"0.001",step:"any",placeholder:"e.g. 4000",value:output.length,disabled:!source,onChange:event=>update(index,"length",event.target.value)})}),/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Field,{label:"Width (mm)",children:/* @__PURE__ */ (0,import_jsx_runtime.jsx)("input",{className:inputCls,type:"number",min:"0.001",step:"any",placeholder:"e.g. 1500",value:output.width,disabled:!source,onChange:event=>update(index,"width",event.target.value)})}),/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Field,{label:"Quantity",children:/* @__PURE__ */ (0,import_jsx_runtime.jsx)("input",{className:inputCls,type:"number",min:1,value:output.qty,disabled:!source,onChange:event=>update(index,"qty",event.target.value)})}),/* @__PURE__ */ (0,import_jsx_runtime.jsx)("button",{type:"button",title:"Remove output",onClick:()=>setOutputs(outputs.filter((_,i)=>i!==index)),disabled:!source||outputs.length===1,className:"h-11 rounded-lg border border-slate-300 disabled:opacity-30",children:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Trash2,{size:16,className:"mx-auto"})})]},index)),/* @__PURE__ */ (0,import_jsx_runtime.jsx)("button",{type:"button",disabled:!source,onClick:()=>setOutputs([...outputs,{length:"",width:"",qty:"1"}]),className:"w-full rounded-lg border border-dashed border-cyan-700 py-2.5 text-sm font-semibold text-cyan-800 disabled:opacity-40",children:"+ Add another output size"}),/* @__PURE__ */ (0,import_jsx_runtime.jsx)("button",{type:"button",onClick:submit,disabled:!valid,className:"rounded-lg bg-cyan-800 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-40",children:"Convert stock"})]})]});
   }
+  function DispatchOrderPdfModal({order,onClose}) {
+    const h=import_react.createElement,[pdf,setPdf]=useState({loading:true,url:'',error:''}),[attempt,setAttempt]=useState(0);
+    const owner=useRef(PanelStock.username),dialog=useRef(null);
+    useEffect(()=>{
+      let live=true;const current=()=>live&&owner.current===PanelStock.username;
+      if(!current())return;setPdf({loading:true,url:'',error:''});
+      void (async()=>{try{
+        const response=await PanelStock.apiFetch(BAKED_WORKER_URL+'/orders/'+encodeURIComponent(order.id)+'/pdf-link',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}),data=await response.json();
+        if(!response.ok)throw Error(data.error||'The order PDF could not be opened.');
+        if(!/^[a-f0-9]{64}$/.test(data.pdfToken||''))throw Error('The order PDF link could not be verified.');
+        if(current())setPdf({loading:false,error:'',url:BAKED_WORKER_URL+'/orders/'+encodeURIComponent(order.id)+'/pdf?ticket='+encodeURIComponent(data.pdfToken)});
+      }catch(error){if(current())setPdf({loading:false,url:'',error:error.message||'The order PDF could not be opened.'});}})();
+      return()=>{live=false;};
+    },[order.id,attempt]);
+    useEffect(()=>{const previous=document.activeElement;dialog.current?.focus({preventScroll:true});return()=>{if(owner.current===PanelStock.username&&previous?.isConnected)previous.focus({preventScroll:true});};},[]);
+    if(owner.current!==PanelStock.username)return null;
+    const keyDown=event=>{
+      if(event.key==='Escape'){event.preventDefault();onClose();}
+      if(event.key==='Tab'){
+        const controls=[...dialog.current.querySelectorAll('button:not([disabled]),iframe')],first=controls[0],last=controls[controls.length-1];
+        if(event.shiftKey&&(document.activeElement===first||document.activeElement===dialog.current)){event.preventDefault();last?.focus();}
+        else if(!event.shiftKey&&(document.activeElement===last||document.activeElement===dialog.current)){event.preventDefault();first?.focus();}
+      }
+    };
+    return h('div',{className:'ps-excel-action-backdrop'},h('section',{ref:dialog,className:'ps-excel-action ps-excel-action-pdf',role:'dialog','aria-modal':true,'aria-label':'Site order PDF',tabIndex:-1,onKeyDown:keyDown},
+      h('header',null,h('div',null,h('small',null,'Dispatch'),h('h2',null,'Site order PDF')),h('button',{type:'button',onClick:onClose,'aria-label':'Close site order PDF'},'Close')),
+      h('p',{className:'ps-excel-action-order'},'Order #'+order.orderNumber+' · '+order.project),
+      pdf.loading&&h('p',{role:'status'},'Loading order PDF…'),
+      pdf.error&&h('div',null,h('p',{role:'alert',className:'ps-excel-action-error'},pdf.error),h('button',{type:'button',onClick:()=>setAttempt(value=>value+1)},'Retry PDF')),
+      pdf.url&&h('div',null,h('p',null,'Use the PDF toolbar to print or download.'),h('iframe',{src:pdf.url,title:'Site order PDF',referrerPolicy:'no-referrer',className:'ps-excel-order-pdf'}))));
+  }
   function DispatchCenter() {
     const h=import_react.createElement;
     const [entries,setEntries]=useState([]),[defaults,setDefaults]=useState({dispatchVehicles:[],dispatchDrivers:[]}),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[filter,setFilter]=useState('ready'),[type,setType]=useState('all'),[query,setQuery]=useState(''),[expanded,setExpanded]=useState({}),[selected,setSelected]=useState(null),[form,setForm]=useState({});
     const [reverseDispatchOrder,setReverseDispatchOrder]=useState(null);
+    const [pdfOrder,setPdfOrder]=useState(null);
     const alive=useRef(true),owner=useRef(PanelStock.username),version=useRef(0),locked=useRef(false),opening=useRef(false);
     const current=()=>alive.current&&owner.current===PanelStock.username;
     const inputClass='ps-unified-input';
@@ -15392,6 +15424,7 @@ ${xrefStart}
       h('div',{className:'ps-dispatch-filters',role:'group','aria-label':'Filter dispatch by status'},filters.map(([value,label])=>h('button',{key:value,type:'button','aria-pressed':filter===value,onClick:()=>setFilter(value),className:'ps-dispatch-filter'+(filter===value?' is-active':'')},label,h('strong',null,entries.filter(entry=>typeMatches(entry)&&statusMatches(entry,value)).length)))),
       h('div',{className:'ps-unified-toolbar'},h('input',{type:'search',className:inputClass,placeholder:'Search project, order or destination…','aria-label':'Search dispatch',value:query,onChange:event=>setQuery(event.target.value)}),h('label',null,'Order type',h('select',{className:inputClass,value:type,onChange:event=>setType(event.target.value)},h('option',{value:'all'},'All order types'),types.map(value=>h('option',{key:value,value},value)))),h('span',{role:'status'},`${visible.length} dispatch${visible.length===1?'':'es'}`)),
       notice&&h('p',{role:'status'},notice),loading&&h('p',{role:'status'},'Loading dispatch orders…'),!loading&&!visible.length&&h('div',{className:'ps-dispatch-empty'},h('strong',null,filter==='ready'?'No orders ready for dispatch':'No matching deliveries'),h('p',null,'Change the filters or search to see other orders.')),
+      pdfOrder&&h(DispatchOrderPdfModal,{key:pdfOrder.id,order:pdfOrder,onClose:()=>setPdfOrder(null)}),
       reverseDispatchOrder&&h(ReverseDispatchModal,{key:reverseDispatchOrder.id,order:reverseDispatchOrder,onClose:()=>setReverseDispatchOrder(null),onSaved:(saved,duplicate)=>{setReverseDispatchOrder(null);setNotice((duplicate?'Reversal already recorded. Current status: ':'Dispatch reversed. ')+orderStatusLabel(saved.status)+'.');void refresh();}}),
       h('div',{className:'ps-unified-list'},visible.map(entry=>{
         const load=entry.load,history=entry.kind==='load'?(load.legs||[]):entry.order.dispatch?[entry.order.dispatch]:[];
@@ -15403,6 +15436,7 @@ ${xrefStart}
               defaults.canReverseDispatch&&entry.order?.status==='dispatched'&&h('button',{type:'button',disabled:busy||entry.order.hasDeliveryReceipts||entry.order.usesGateComponents,title:entry.order.usesGateComponents?'Review individual component shipments before correcting dispatch':entry.order.hasDeliveryReceipts?'A delivery has been recorded; review it before reversing dispatch':undefined,className:'ps-dispatch-secondary',onClick:()=>setReverseDispatchOrder(entry.order)},entry.kind==='load'?'Reverse order dispatch':'Reverse dispatch'),
               load?.status==='at_powder_coaters'&&h('button',{type:'button',disabled:busy,className:'ps-dispatch-primary',onClick:()=>coatingAction(entry,'coating-complete')},'Mark coating complete'),
               load?.status==='awaiting_final_qa'&&defaults.canFinalQa&&h('button',{type:'button',disabled:busy||!load.routing||!load.qaComplete,className:'ps-dispatch-primary',onClick:()=>coatingAction(entry,'final-qa')},'Approve final QA'),
+              entry.order?.id&&h('button',{type:'button',className:'ps-dispatch-secondary',onClick:()=>setPdfOrder(entry.order),'aria-label':`Open PDF for Order ${entry.orderNumber} · ${entry.project}`},'Open PDF'),
               h('button',{type:'button',className:'ps-dispatch-secondary ps-unified-row-toggle','aria-expanded':!!expanded[entry.key],'aria-label':`Details for Order ${entry.orderNumber} · ${entry.project}`,onClick:()=>setExpanded(value=>({...value,[entry.key]:!value[entry.key]}))},expanded[entry.key]?'Hide details':'Details'))),
           expanded[entry.key]&&h('div',{className:'ps-unified-details'},h('h4',null,'Items'),itemList(entry),load&&h('div',{className:'ps-unified-checks'},[['Routing',load.routing],['Fabrication / QA',load.qaComplete],...(load.finalQaRequired?[['Final QA',!!load.finalQa]]:[])].map(([label,done])=>h('span',{key:label},`${done?'✓':'Waiting'} · ${label}`))),
             history.length>0&&h('div',null,h('h4',null,'Dispatch history'),history.map((leg,index)=>h('div',{key:index,className:'ps-unified-history'},h('strong',null,leg.destinationType==='powder_coaters'?'Powder coaters':'Site delivery'),h('p',null,leg.destination),h('p',null,[leg.transport,leg.driver,date(leg.at),leg.by].filter(Boolean).join(' · ')),leg.notes&&h('p',null,leg.notes))))));

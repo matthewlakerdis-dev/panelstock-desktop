@@ -11,7 +11,7 @@ const button=(tree,label)=>nodes(tree).find(node=>node.tag==='button'&&node.chil
 function fixture({entries=[entry,pending,panel],canFinalQa=false,post}={}){
  const data={entries,dispatchVehicles:['Lennox Truck','Lennox Ute'],dispatchDrivers:[{username:'alex',displayName:'Alex'}],dispatchDefaultDriver:'alex',canFinalQa};
  const states=[entries,data,false,false,'','ready','all','',{},null,{}],refs=[],calls=[];let cursor=0,refIndex=0;
- const context={import_react:{createElement:(tag,props,...children)=>({tag,props:props||{},children})},useState:initial=>{const i=cursor++;if(!(i in states))states[i]=initial;return [states[i],value=>{states[i]=typeof value==='function'?value(states[i]):value;}];},useRef:initial=>{const i=refIndex++;return refs[i]||(refs[i]={current:initial});},useEffect:()=>{},crypto:webcrypto,Uint8Array,PanelStock:{username:'alex',confirm:async()=>true,apiFetch:async(url,options)=>{calls.push({url,options,body:options?JSON.parse(options.body):null});return options&&post?post(url,JSON.parse(options.body)):Response.json(data);}},Response,BAKED_WORKER_URL:'https://worker.test',Truck:'truck',PageHeading:'heading'};
+ const context={import_react:{createElement:(tag,props,...children)=>({tag,props:props||{},children})},useState:initial=>{const i=cursor++;if(!(i in states))states[i]=initial;return [states[i],value=>{states[i]=typeof value==='function'?value(states[i]):value;}];},useRef:initial=>{const i=refIndex++;return refs[i]||(refs[i]={current:initial});},useEffect:()=>{},crypto:webcrypto,Uint8Array,PanelStock:{username:'alex',confirm:async()=>true,apiFetch:async(url,options)=>{calls.push({url,options,body:options?JSON.parse(options.body):null});return options&&post?post(url,JSON.parse(options.body)):Response.json(data);}},Response,BAKED_WORKER_URL:'https://worker.test',Truck:'truck',PageHeading:'heading',DispatchOrderPdfModal:'pdf-modal'};
  vm.createContext(context);vm.runInContext(code,context);
  return {states,calls,render(){cursor=refIndex=0;return context.DispatchCenter();}};
 }
@@ -50,4 +50,8 @@ test('final QA remains a confirmed action shown only to users with QA access',as
 
 test('returned panel loads submit their current revision when dispatching again',async()=>{
  const view=fixture({entries:[{...panel,load:{...panel.load,dispatchRevision:3}}]});await button(view.render(),'Send to powder coaters').props.onClick();view.states[10].destination='Coater';await nodes(view.render()).find(node=>node.tag==='form').props.onSubmit({preventDefault(){}});await new Promise(r=>setImmediate(r));assert.equal(view.calls.find(call=>call.body).body.dispatchRevision,3);
+});
+
+test('PDF actions use the exact linked Site Order and stay absent for unlinked factory loads',()=>{
+ const linked={...panel,order:{...order,id:'panel-order'}};const view=fixture({entries:[entry,linked,panel]});let tree=view.render();const pdfs=nodes(tree).filter(n=>n.tag==='button'&&n.children.includes('Open PDF'));assert.equal(pdfs.length,2);pdfs[1].props.onClick();tree=view.render();const modal=nodes(tree).find(n=>n.tag==='pdf-modal');assert.equal(modal.props.order.id,'panel-order');assert.deepEqual(view.states[8],{});assert.equal(view.calls.length,0);modal.props.onClose();assert.equal(nodes(view.render()).some(n=>n.tag==='pdf-modal'),false);
 });
