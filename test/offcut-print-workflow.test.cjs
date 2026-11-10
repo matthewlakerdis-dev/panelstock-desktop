@@ -75,7 +75,9 @@ function runtime({ panels = [], variants = [{ ...stock }], offcuts = [], failPer
 function labelsIn(popup) { return (popup.html.match(/<article class="label"/g) || []).length; }
 function printableLabels(popup) { return Array.from(popup.html.matchAll(/<article class="label"[^>]*>([\s\S]*?)<\/article>/g), match => match[1]); }
 function assertCompactLabel(popup, count = 1) {
-  assert.equal(popup.printed, 1, 'the browser print dialog is requested');
+  assert.equal(popup.printed, 0, 'the mobile-friendly preview does not open the default paper print dialog');
+  assert.match(popup.html, /id="download-labels">Download 50 × 30 mm PDF/);
+  assert.match(popup.html, /id="print-labels">Print from browser/);
   assert.match(popup.html, /@page\s*\{\s*size:\s*50mm\s+30mm/);
   assert.match(popup.html, /text-align:\s*center/);
   assert.equal(labelsIn(popup), count, 'one 50 × 30 mm page per physical offcut');

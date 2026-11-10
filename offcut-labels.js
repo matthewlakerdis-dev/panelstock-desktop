@@ -285,6 +285,66 @@
       }
     });
   }
+  function buildPdfBytes(images) {
+    if (!Array.isArray(images) || !images.length) throw new Error('There are no offcut labels to download.');
+    var parts = [], offsets = [0], length = 0, pageWidth = '141.732283', pageHeight = '85.039370';
+    function append(value) {
+      var bytes = typeof value === 'string' ? Uint8Array.from(value, function (character) { return character.charCodeAt(0); }) : value;
+      parts.push(bytes); length += bytes.length;
+    }
+    function object(id, content) { offsets[id] = length; append(id + ' 0 obj\n' + content + '\nendobj\n'); }
+    append('%PDF-1.4\n%\xe2\xe3\xcf\xd3\n');
+    object(1, '<< /Type /Catalog /Pages 2 0 R /ViewerPreferences << /PrintScaling /None /PickTrayByPDFSize true >> >>');
+    object(2, '<< /Type /Pages /Count ' + images.length + ' /Kids [' + images.map(function (_, index) { return (3 + index * 3) + ' 0 R'; }).join(' ') + '] >>');
+    images.forEach(function (image, index) {
+      if (!image || !(image.bytes instanceof Uint8Array) || !image.bytes.length || !Number.isSafeInteger(image.width) || image.width < 1 || !Number.isSafeInteger(image.height) || image.height < 1) throw new Error('The offcut label image could not be prepared.');
+      var page = 3 + index * 3, content = page + 1, picture = page + 2;
+      object(page, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + pageWidth + ' ' + pageHeight + '] /CropBox [0 0 ' + pageWidth + ' ' + pageHeight + '] /Resources << /XObject << /Label ' + picture + ' 0 R >> >> /Contents ' + content + ' 0 R >>');
+      var commands = 'q\n' + pageWidth + ' 0 0 ' + pageHeight + ' 0 0 cm\n/Label Do\nQ\n';
+      object(content, '<< /Length ' + commands.length + ' >>\nstream\n' + commands + 'endstream');
+      offsets[picture] = length;
+      append(picture + ' 0 obj\n<< /Type /XObject /Subtype /Image /Width ' + image.width + ' /Height ' + image.height + ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ' + image.bytes.length + ' >>\nstream\n');
+      append(image.bytes); append('\nendstream\nendobj\n');
+    });
+    var start = length, count = 3 + images.length * 3;
+    append('xref\n0 ' + count + '\n0000000000 65535 f \n');
+    for (var id = 1; id < count; id++) append(String(offsets[id]).padStart(10, '0') + ' 00000 n \n');
+    append('trailer\n<< /Size ' + count + ' /Root 1 0 R >>\nstartxref\n' + start + '\n%%EOF\n');
+    var result = new Uint8Array(length), position = 0;
+    parts.forEach(function (part) { result.set(part, position); position += part.length; });
+    return result;
+  }
+  function renderPdf(document) {
+    fitLabels(document);
+    var view = document.defaultView, images = [];
+    Array.prototype.forEach.call(document.querySelectorAll('.label'), function (label) {
+      // 1000 x 600 pixels keeps the 5:3 ratio and gives sharp text at 508 dpi.
+      var canvas = document.createElement('canvas'); canvas.width = 1000; canvas.height = 600;
+      var context = canvas.getContext('2d'), bounds = label.getBoundingClientRect();
+      if (!context || !bounds.width || !bounds.height) throw new Error('The label preview is not ready. Try downloading again.');
+      context.fillStyle = '#ffffff'; context.fillRect(0, 0, canvas.width, canvas.height);
+      context.scale(canvas.width / bounds.width, canvas.height / bounds.height);
+      context.textAlign = 'center'; context.textBaseline = 'middle';
+      Array.prototype.forEach.call(label.querySelectorAll('.label-line'), function (line) {
+        var style = view.getComputedStyle(line), rectangle = line.getBoundingClientRect();
+        context.font = style.fontWeight + ' ' + style.fontSize + ' ' + style.fontFamily;
+        context.fillStyle = style.color;
+        context.fillText(line.textContent, rectangle.left - bounds.left + rectangle.width / 2, rectangle.top - bounds.top + rectangle.height / 2);
+      });
+      var binary = view.atob(canvas.toDataURL('image/jpeg', 0.98).split(',')[1]);
+      images.push({width:canvas.width,height:canvas.height,bytes:Uint8Array.from(binary, function (character) { return character.charCodeAt(0); })});
+    });
+    return buildPdfBytes(images);
+  }
+  function downloadPdf(document) {
+    var view = document.defaultView, bytes = renderPdf(document), blob = new view.Blob([bytes], {type:'application/pdf'});
+    var url = view.URL.createObjectURL(blob), link = document.createElement('a');
+    link.href = url; link.download = 'Offcut-labels-50x30mm.pdf'; link.target = '_blank'; link.rel = 'noopener';
+    document.body.appendChild(link); link.click(); link.remove();
+    // Mobile PDF viewers need the Blob URL after the click has returned.
+    view.setTimeout(function () { view.URL.revokeObjectURL(url); }, 60000);
+    return {url:url,bytes:bytes};
+  }
   function buildDocument(labels, options) {
     options = options || {};
     var list = readyLabels(labels, options);
@@ -306,8 +366,8 @@
       '.label:last-child{break-after:auto;page-break-after:auto}.label-line{width:100%;flex-shrink:0;line-height:1.12;white-space:nowrap;text-align:center}.dimensions{font-size:17pt;font-weight:700}.material{font-size:12.4pt}.finish{font-size:13pt}' +
       '@media print{html,body{width:50mm;margin:0;background:white}.toolbar{display:none}.label{margin:0;box-shadow:none;-webkit-print-color-adjust:exact;print-color-adjust:exact}}' +
       '</style></head><body><nav class="toolbar" aria-label="Print controls"><strong>50 × 30 mm · ' + list.length + ' label' + (list.length === 1 ? '' : 's') + '</strong>' +
-      '<button type="button" id="print-labels">Print / Save PDF</button><p>Paper: 50 × 30 mm · Scale: 100% / Actual size · Margins: none · Headers and footers: off. For NIIMBOT B1, save as PDF and import into NIIMBOT for Windows, or select an installed B1 printer driver.</p><p>Long descriptions may be shortened with an ellipsis to keep the label readable. Hover over a line to view its full text.</p></nav>' + pages +
-      '<script>' + fitLabels.toString() + ';fitLabels(document);window.addEventListener("beforeprint",function(){fitLabels(document);});document.getElementById("print-labels").onclick=function(){fitLabels(document);window.focus();window.print();};try{localStorage.setItem("' + preferenceKey + '","50x30");}catch(e){}<\/script></body></html>';
+      '<button type="button" id="download-labels">Download 50 × 30 mm PDF</button><button type="button" id="print-labels">Print from browser</button><p>On your phone, download the PDF and open or share it in your label-printer app. Each PDF page is 50 × 30 mm. A phone print dialog may default to A4; select matching 50 × 30 mm label media and Actual size / 100%. Browser printing cannot set your printer paper size.</p><p>Long descriptions may be shortened with an ellipsis to keep the label readable. Hover over a line to view its full text.</p></nav>' + pages +
+      '<script>' + fitLabels.toString() + ';' + buildPdfBytes.toString() + ';' + renderPdf.toString() + ';' + downloadPdf.toString() + ';fitLabels(document);document.getElementById("download-labels").onclick=function(){try{downloadPdf(document);}catch(error){window.alert(error.message||"The label PDF could not be downloaded.");}};window.addEventListener("beforeprint",function(){fitLabels(document);});document.getElementById("print-labels").onclick=function(){fitLabels(document);window.focus();window.print();};try{localStorage.setItem("' + preferenceKey + '","50x30");}catch(e){}<\/script></body></html>';
   }
   function print(labels, options) {
     options = options || {};
@@ -321,11 +381,11 @@
     }
     popup.document.open(); popup.document.write(html); popup.document.close();
     setDefaultSize('50x30');
-    try { popup.focus(); if (options.autoPrint !== false) popup.print(); } catch (_) {
+    try { popup.focus(); if (options.autoPrint === true) popup.print(); } catch (_) {
       // The visible toolbar remains available if this browser delays printing.
     }
     return { ok: true, window: popup };
   }
   return { prepareScheduled: prepareScheduled, collectScheduled: collectScheduled, collectForCnc: collectForCnc, countForCnc: countForCnc, fromItem: fromItem, formatDimensions: formatDimensions, escapeHtml: escapeHtml,
-    buildDocument: buildDocument, fitLabels: fitLabels, print: print, getDefaultSize: getDefaultSize, setDefaultSize: setDefaultSize };
+    buildDocument: buildDocument, buildPdfBytes: buildPdfBytes, renderPdf: renderPdf, downloadPdf: downloadPdf, fitLabels: fitLabels, print: print, getDefaultSize: getDefaultSize, setDefaultSize: setDefaultSize };
 });
