@@ -31,7 +31,7 @@ test('shared form prefills defaults and submits non-panel orders with the concur
 test('milled panels use the load endpoint and cannot select site before powder coating',async()=>{
  const view=fixture();await button(view.render(),'Send to powder coaters').props.onClick();let tree=view.render();
  assert.equal(view.states[10].destinationType,'powder_coaters');assert.equal(view.states[10].destination,'');
- assert.deepEqual(nodes(nodes(tree).find(n=>n.tag==='select')).filter(n=>n.tag==='option').map(n=>n.props.value),['powder_coaters']);
+ assert.deepEqual(nodes(nodes(tree).find(n=>n.tag==='select'&&n.props.value==='powder_coaters')).filter(n=>n.tag==='option').map(n=>n.props.value),['powder_coaters']);
  view.states[10].destination='Coater';nodes(tree).find(n=>n.tag==='form').props.onSubmit({preventDefault(){}});await new Promise(r=>setImmediate(r));
  const posted=view.calls.find(call=>call.body);assert.equal(posted.url,'https://worker.test/dispatch/panels');assert.equal(posted.body.action,'dispatch');assert.equal(posted.body.destinationType,'powder_coaters');
 });
@@ -54,4 +54,27 @@ test('returned panel loads submit their current revision when dispatching again'
 
 test('PDF actions use the exact linked Site Order and stay absent for unlinked factory loads',()=>{
  const linked={...panel,order:{...order,id:'panel-order'}};const view=fixture({entries:[entry,linked,panel]});let tree=view.render();const pdfs=nodes(tree).filter(n=>n.tag==='button'&&n.children.includes('Open PDF'));assert.equal(pdfs.length,2);pdfs[1].props.onClick();tree=view.render();const modal=nodes(tree).find(n=>n.tag==='pdf-modal');assert.equal(modal.props.order.id,'panel-order');assert.deepEqual(view.states[8],{});assert.equal(view.calls.length,0);modal.props.onClose();assert.equal(nodes(view.render()).some(n=>n.tag==='pdf-modal'),false);
+});
+
+test('part delivery submits selected quantities and preserves the remaining-balance choices',async()=>{
+ const partialOrder={...order,items:[{quantity:10,description:'Fixings'},{quantity:2,description:'Brackets'}],dispatchItems:[{index:0,quantity:10,dispatched:4,remaining:6,description:'Fixings'},{index:1,quantity:2,dispatched:0,remaining:2,description:'Brackets'}]};
+ const view=fixture({entries:[{...entry,order:partialOrder}],post:()=>Response.json({ok:true,partial:true})});await button(view.render(),'Dispatch to site').props.onClick();
+ nodes(view.render()).find(n=>n.props['aria-label']==='Delivery amount').props.onChange({target:{value:'part'}});
+ nodes(view.render()).find(n=>n.props['aria-label']==='Quantity to send: Fixings').props.onChange({target:{value:'3'}});
+ nodes(view.render()).find(n=>n.props['aria-label']==='Quantity to send: Brackets').props.onChange({target:{value:'0'}});
+ nodes(view.render()).find(n=>n.tag==='form').props.onSubmit({preventDefault(){}});await new Promise(r=>setImmediate(r));
+ assert.deepEqual(view.calls.find(call=>call.body).body.lines,[{index:0,quantity:3}]);assert.match(view.states[4],/Part delivery saved/);
+});
+test('part panel deliveries submit individual panels with the reviewed manifest snapshot',async()=>{
+ const load={...panel.load,panelIds:['p','p2'],items:[...panel.load.items,{id:'p2',reference:'P2'}]},view=fixture({entries:[{...panel,load}]});await button(view.render(),'Send to powder coaters').props.onClick();
+ nodes(view.render()).find(n=>n.props['aria-label']==='Delivery amount').props.onChange({target:{value:'part'}});
+ nodes(view.render()).find(n=>n.props['aria-label']==='Send Sheet — · Panel P2').props.onChange({target:{checked:false}});
+ view.states[10].destination='Coater';nodes(view.render()).find(n=>n.tag==='form').props.onSubmit({preventDefault(){}});await new Promise(r=>setImmediate(r));
+ const posted=view.calls.find(call=>call.body).body;assert.deepEqual(posted.panelIds,['p']);assert.deepEqual(posted.expectedPanelIds,['p','p2']);assert.equal(posted.expectedStatus,'waiting');assert.ok(posted.mutationId);
+});
+
+test('Gate part deliveries submit the selected physical component IDs',async()=>{
+ const gate={...entry,orderType:'Buggy Gate',order:{...order,usesGateComponents:true,dispatchComponents:[{id:'gate-a',set:1,label:'Gate A',ready:true},{id:'gate-b',set:1,label:'Gate B',ready:true}]}};
+ const view=fixture({entries:[gate]});await button(view.render(),'Dispatch to site').props.onClick();nodes(view.render()).find(n=>n.props['aria-label']==='Delivery amount').props.onChange({target:{value:'part'}});nodes(view.render()).find(n=>n.props['aria-label']==='Send Set 1 · Gate B').props.onChange({target:{checked:false}});nodes(view.render()).find(n=>n.tag==='form').props.onSubmit({preventDefault(){}});await new Promise(r=>setImmediate(r));
+ const posted=view.calls.find(call=>call.body).body;assert.deepEqual(posted.componentIds,['gate-a']);assert.equal(posted.lines,undefined);
 });
