@@ -49,3 +49,5 @@ jobs:
 
       - name: Verify published Gate Progress
         run: node scripts/verify-gate-production.cjs
+      - name: Verify published spreadsheet tab focus
+        run: node scripts/verify-tracker-handoff-production.cjs
