@@ -15435,7 +15435,10 @@ ${xrefStart}
       notice&&h('p',{role:'status'},notice),loading&&h('p',{role:'status'},'Loading dispatch orders…'),!loading&&!visible.length&&h('div',{className:'ps-dispatch-empty'},h('strong',null,filter==='ready'?'No orders ready for dispatch':'No matching deliveries'),h('p',null,'Change the filters or search to see other orders.')),
       h('div',{className:'ps-unified-list'},visible.map(entry=>{
         const load=entry.load,history=entry.kind==='load'?(load.legs||[]):entry.order.dispatches?.length?entry.order.dispatches:entry.order.dispatch?[entry.order.dispatch]:[];
-        return h('article',{key:entry.key,className:'ps-dispatch-card ps-dispatch-'+(entry.status==='waiting'?'production':entry.status)},
+        return h('article',{key:entry.key,className:'ps-dispatch-card ps-dispatch-'+(entry.status==='waiting'?'production':entry.status),style:{cursor:'pointer'},onClick:event=>{
+          if(event.target.closest('button,a,input,select,textarea,label,[role="button"],.ps-unified-details')||window.getSelection()?.toString())return;
+          setExpanded(value=>({...value,[entry.key]:!value[entry.key]}));
+        }},
           h('div',{className:'ps-unified-row'},h('div',null,h('p',{className:'ps-dispatch-order'},`Order ${entry.orderNumber} · ${entry.orderType}`),h('h3',null,entry.project||'No project'),h('p',{className:'ps-unified-muted'},entry.kind==='load'?`${(load.items||[]).filter(item=>!item.replaced).length} panels · Panel load`:`${itemLines(entry).length} item${itemLines(entry).length===1?'':'s'}${entry.status==='dispatched'?'':' remaining'}`)),
             h('div',null,h('span',{className:'ps-unified-label'},'Destination'),h('p',null,entry.destination||'Site address not set'),details(entry)&&h('p',{className:'ps-unified-muted'},details(entry))),
             h('div',null,h('span',{className:'ps-dispatch-badge'},entry.reason)),
@@ -15444,7 +15447,7 @@ ${xrefStart}
               load?.status==='awaiting_final_qa'&&defaults.canFinalQa&&h('button',{type:'button',disabled:busy||!load.routing||!load.qaComplete,className:'ps-dispatch-primary',onClick:()=>coatingAction(entry,'final-qa')},'Approve final QA'),
               entry.order?.id&&h('button',{type:'button',className:'ps-dispatch-secondary',onClick:()=>setPdfOrder(entry.order),'aria-label':`Open PDF for Order ${entry.orderNumber} · ${entry.project}`},'Open PDF'),
               h('button',{type:'button',className:'ps-dispatch-secondary','aria-expanded':!!expanded[entry.key],'aria-label':`Details for Order ${entry.orderNumber} · ${entry.project}`,onClick:()=>setExpanded(value=>({...value,[entry.key]:!value[entry.key]}))},expanded[entry.key]?'Hide details':'Details'))),
-          expanded[entry.key]&&h('div',{className:'ps-unified-details'},h('h4',null,'Items'),itemList(entry),load&&h('div',{className:'ps-unified-checks'},[['Routing',load.routing],['Fabrication / QA',load.qaComplete],...(load.finalQaRequired?[['Final QA',!!load.finalQa]]:[])].map(([label,done])=>h('span',{key:label},`${done?'✓':'Waiting'} · ${label}`))),
+          expanded[entry.key]&&h('div',{className:'ps-unified-details',style:{cursor:'auto'}},h('h4',null,'Items'),itemList(entry),load&&h('div',{className:'ps-unified-checks'},[['Routing',load.routing],['Fabrication / QA',load.qaComplete],...(load.finalQaRequired?[['Final QA',!!load.finalQa]]:[])].map(([label,done])=>h('span',{key:label},`${done?'✓':'Waiting'} · ${label}`))),
             history.length>0&&h('div',null,h('h4',null,'Dispatch history'),history.map((leg,index)=>h('div',{key:index,className:'ps-unified-history'},h('strong',null,leg.destinationType==='powder_coaters'?'Powder coaters':'Site delivery'),h('p',null,leg.destination),h('p',null,[leg.transport,leg.driver,date(leg.at),leg.by].filter(Boolean).join(' · ')),leg.lines?.length&&h('ul',null,leg.lines.map((line,i)=>h('li',{key:i},`${line.quantity} × ${line.description}`))),leg.notes&&h('p',null,leg.notes))))));
       })));
   }
