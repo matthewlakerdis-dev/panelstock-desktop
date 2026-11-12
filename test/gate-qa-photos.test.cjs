@@ -38,8 +38,8 @@ const save=tree=>form(tree).props.onSubmit({preventDefault(){}});
  await select(chooser(tree),[file('front'),file('rear')]);tree=view.render();assert.deepEqual(gallery(tree),[encoded('front'),encoded('rear')]);assert.match(text(tree),/2 of 10 photos/);assert.equal(button(tree,'Approve QA').props.disabled,false);
  await select(camera(tree),[file('hinges')]);tree=view.render();assert.deepEqual(gallery(tree),[encoded('front'),encoded('rear'),encoded('hinges')]);nodes(tree).find(node=>node.props['aria-label']==='Remove photo 2').props.onClick();tree=view.render();assert.deepEqual(gallery(tree),[encoded('front'),encoded('hinges')]);
  await save(tree);assert.equal(saved.kind,'metalwork');assert.equal(saved.id,'gate');assert.deepEqual(saved.photos,[encoded('front'),encoded('hinges')]);assert.equal(Object.hasOwn(saved,'photo'),false);assert.match(text(view.render()),/QA check approved/);
- view.states[8]='approved';tree=expand(view);button(tree,'View report').props.onClick();tree=view.render();const images=nodes(tree).filter(node=>node.tag==='img');assert.deepEqual(images.map(node=>node.props.src),saved.photos,'compatibility photo does not duplicate the first array entry');
- const reload=fixture({items:[gate({status:'approved',history:[{id:'stored',status:'approved',photos:saved.photos,photo:saved.photos[0]}],latest:{status:'approved'}})]});reload.states[8]='approved';tree=expand(reload);button(tree,'View report').props.onClick();assert.deepEqual(nodes(reload.render()).filter(node=>node.tag==='img').map(node=>node.props.src),saved.photos);
+ view.states[8]='approved';tree=expand(view);button(tree,'Inspection details').props.onClick();tree=view.render();const images=nodes(tree).filter(node=>node.tag==='img');assert.deepEqual(images.map(node=>node.props.src),saved.photos,'compatibility photo does not duplicate the first array entry');
+ const reload=fixture({items:[gate({status:'approved',history:[{id:'stored',status:'approved',photos:saved.photos,photo:saved.photos[0]}],latest:{status:'approved'}})]});reload.states[8]='approved';tree=expand(reload);button(tree,'Inspection details').props.onClick();assert.deepEqual(nodes(reload.render()).filter(node=>node.tag==='img').map(node=>node.props.src),saved.photos);
  button(view.render(),'← Back to QA Centre').props.onClick();tree=expand(view);button(tree,'Reopen').props.onClick();assert.deepEqual(gallery(view.render()),[],'a new inspection starts with fresh evidence');
 });
 
@@ -83,7 +83,7 @@ for(const kind of ['panel','metalwork'])test(`${kind} keeps single-photo selecti
 });
 
 test('legacy Gate inspection history still displays its single evidence photo',()=>{
- const attempt={id:'legacy',status:'approved',photo:encoded('legacy')},view=fixture({items:[gate({status:'approved',latest:attempt,history:[attempt]})]});view.states[8]='approved';let tree=expand(view);button(tree,'View report').props.onClick();assert.deepEqual(nodes(view.render()).filter(node=>node.tag==='img').map(node=>node.props.src),[encoded('legacy')]);
+ const attempt={id:'legacy',status:'approved',photo:encoded('legacy')},view=fixture({items:[gate({status:'approved',latest:attempt,history:[attempt]})]});view.states[8]='approved';let tree=expand(view);button(tree,'Inspection details').props.onClick();assert.deepEqual(nodes(view.render()).filter(node=>node.tag==='img').map(node=>node.props.src),[encoded('legacy')]);
 });
 
 for(const result of ['success','rejection'])test(`late ${result} from a cancelled save cannot change a new Gate inspection or its photos`,async()=>{
