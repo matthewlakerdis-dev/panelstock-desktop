@@ -1,3 +1,10 @@
+function stocktakeReportingMonth(value){
+ if(!value||value.status&&value.status!=='completed')return '';
+ const valid=month=>typeof month==='string'&&/^\d{4}-(0[1-9]|1[0-2])$/.test(month)&&Number(month.slice(0,4))>0;
+ return valid(value.reportingMonth)?value.reportingMonth:valid(value.report?.reportingMonth)?value.report.reportingMonth:'';
+}
+function stocktakeMonthEnd(month){return new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5,7)),0)).toISOString().slice(0,10);}
+
 /* Keep wheel gestures from changing a focused numeric value. */
 if(typeof document!=='undefined')document.addEventListener('wheel',event=>{
  const input=event.target;
@@ -378,9 +385,9 @@ window.createWorkshopStock = function(React) {
    const footer=h('div',{className:'ws-actions ws-count-footer'},h('span',{className:'ws-soh-export-count'},exportItems.length+' '+(exportItems.length===1?'item':'items')+' selected for export'),button('Cancel',()=>setSohExport(null)),button('Xero journal CSV',openXeroExport,busy||!exportItems.length),button('Download Excel',()=>exportSOH('xlsx'),busy||!exportItems.length),button('Download PDF',()=>exportSOH('pdf'),busy||!exportItems.length));
    return h('div',{className:'ws-overlay'},h('div',{className:'ws-dialog ws-count-dialog ws-soh-export',role:'dialog','aria-modal':true,'aria-label':'Export stock on hand'},header,h('div',{className:'ws-count-body'},scope,filters,summary,error&&h('div',{className:'ws-error',role:'alert'},error)),footer));
   }
-  function reportExportMonth(){const snapshotMonth=monthFromDate(report?.panelSnapshot?.capturedAt);if(snapshotMonth)return snapshotMonth;const session=(data?.stocktakes||[]).find(count=>count.id===reportId),entries=session?.counts||{},saved=new Map((report?.rows||[]).map(row=>[row.itemId,row])),valid=value=>typeof value==='string'&&value.trim()&&Number.isFinite(Date.parse(value))?Date.parse(value):null,submitted=value=>value!==null&&value!==undefined&&(typeof value==='number'||typeof value==='string'&&value.trim()!=='')&&Number.isFinite(Number(value))&&Number(value)>=0;let latest=null;for(const id of new Set([...Object.keys(entries),...saved.keys()])){if(!submitted(entries[id]?.quantity)&&!submitted(saved.get(id)?.quantity))continue;const movement=(data?.movements||[]).filter(row=>row.action==='stocktake'&&row.stocktakeId===reportId&&row.itemId===id).map(row=>valid(row.at)).filter(value=>value!==null),at=(submitted(entries[id]?.quantity)?valid(entries[id]?.at):null)??(movement.length?Math.max(...movement):null)??valid(saved.get(id)?.at);if(at!==null&&(latest===null||at>latest))latest=at;}return latest!==null?monthFromDate(new Date(latest)):monthFromDate(report?.completedAt)||stocktakeExportMonth;}
+  function reportExportMonth(){const assignedMonth=stocktakeReportingMonth((data?.stocktakes||[]).find(count=>count.id===reportId))||stocktakeReportingMonth(report);if(assignedMonth)return assignedMonth;const snapshotMonth=monthFromDate(report?.panelSnapshot?.capturedAt);if(snapshotMonth)return snapshotMonth;const session=(data?.stocktakes||[]).find(count=>count.id===reportId),entries=session?.counts||{},saved=new Map((report?.rows||[]).map(row=>[row.itemId,row])),valid=value=>typeof value==='string'&&value.trim()&&Number.isFinite(Date.parse(value))?Date.parse(value):null,submitted=value=>value!==null&&value!==undefined&&(typeof value==='number'||typeof value==='string'&&value.trim()!=='')&&Number.isFinite(Number(value))&&Number(value)>=0;let latest=null;for(const id of new Set([...Object.keys(entries),...saved.keys()])){if(!submitted(entries[id]?.quantity)&&!submitted(saved.get(id)?.quantity))continue;const movement=(data?.movements||[]).filter(row=>row.action==='stocktake'&&row.stocktakeId===reportId&&row.itemId===id).map(row=>valid(row.at)).filter(value=>value!==null),at=(submitted(entries[id]?.quantity)?valid(entries[id]?.at):null)??(movement.length?Math.max(...movement):null)??valid(saved.get(id)?.at);if(at!==null&&(latest===null||at>latest))latest=at;}return latest!==null?monthFromDate(new Date(latest)):monthFromDate(report?.completedAt)||stocktakeExportMonth;}
   function downloadMonthlyWorkbook(month){
-   try{const exported=window.PanelStockStocktakeReport.prepareMonthly(data?.stocktakes||[],{month,currentRows:allItems,currentSettings:data?.stocktakeSettings,movements:data?.movements,categoryLabels:categories,allowCurrentPricing:true});if(!exported.rows.length&&!exported.monthlyScope?.panelSnapshotCount){setError('No submitted counts were found for '+countMonthLabel(month)+'.');return;}const blob=window.PanelStockStocktakeReport.xlsx(exported),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='Lennox-Stocktake-'+month+'.xlsx';document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);setError('');setNotice('Exported '+exported.rows.length+' stock items for '+countMonthLabel(month)+'.');}catch(e){setError('Monthly report could not be downloaded: '+e.message);}
+   try{const exported=window.PanelStockStocktakeReport.prepareYear(data?.stocktakes||[],{year:month.slice(0,4),selectedMonth:month,currentRows:allItems,currentSettings:data?.stocktakeSettings,movements:data?.movements,categoryLabels:categories,allowCurrentPricing:true});if(!exported.months.length){setError('No submitted counts were found for '+month.slice(0,4)+'.');return;}const blob=window.PanelStockStocktakeReport.xlsx(exported),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='Lennox-Stocktake-'+exported.year+'.xlsx';document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);setError('');setNotice('Exported '+exported.months.length+' monthly stock sheets for '+exported.year+'.');}catch(e){setError('Yearly report could not be downloaded: '+e.message);}
   }
   function downloadReport(format){
    if(format==='xlsx'){downloadMonthlyWorkbook(reportExportMonth());return;}
@@ -392,14 +399,14 @@ window.createWorkshopStock = function(React) {
    const close=()=>{setReportId(null);setCountList(true);};
    const header=h('div',{className:'ws-count-header'},
     h('div',{className:'ws-report-brand'},h('img',{src:window.PanelStockStocktakeReport.logo,alt:'Lennox Facades',width:180,height:91}),h('div',null,h('div',{className:'ws-eyebrow'},'INVENTORY / COMPLETED STOCKTAKE'),h('h3',null,'Stocktake report')),button('Close',close)),
-    report&&h('div',null,h('h4',null,report.name),h('p',null,'Completed '+stamp(report.completedAt)+' · Brisbane time'),h('p',null,(report.panelSnapshot?'Workshop supplier: ':'Supplier: ')+(report.supplier||'All suppliers')+' · '+report.categories.map(c=>categories[c]||c).join(' / '))));
+    report&&h('div',null,h('h4',null,report.name),stocktakeReportingMonth(report)&&h('p',null,'Reporting month: '+countMonthLabel(stocktakeReportingMonth(report))),h('p',null,'Completed '+stamp(report.completedAt)+' · Brisbane time'),h('p',null,(report.panelSnapshot?'Workshop supplier: ':'Supplier: ')+(report.supplier||'All suppliers')+' · '+report.categories.map(c=>categories[c]||c).join(' / '))));
    const reportRows=report?.rows.map(r=>h('tr',{key:r.itemId},
     h('td',null,h('strong',null,r.name),h('small',null,[r.sku,r.colour,r.lengthMm?r.lengthMm+' mm':'',r.dimensions].filter(Boolean).join(' / '))),
     h('td',null,r.location,h('small',null,r.supplier)),h('td',null,r.unit),h('td',null,r.quantitySource==='soh-snapshot'?'—':amount(r.expectedQty)),h('td',null,amount(r.quantity)),h('td',{className:r.variance?'ws-report-variance':''},r.quantitySource==='soh-snapshot'?'—':amount(r.variance)),h('td',null,r.quantitySource==='soh-snapshot'?'SOH snapshot':r.user,h('small',null,stamp(r.quantityCapturedAt||r.at)))));
    const table=report&&h('div',{className:'ws-report-table'},h('table',null,h('thead',null,h('tr',null,...['Item / stock code','Location / supplier','Unit','Expected','Quantity','Variance','Count / snapshot details'].map(label=>h('th',{key:label},label)))),h('tbody',null,reportRows)));
    const body=h('div',{className:'ws-count-body'},!report?h('p',{role:'alert'},'This report is not available yet. Close and refresh stocktakes to try again.'):h(React.Fragment,null,
     h('div',{className:'ws-report-summary'},h('strong',null,manualRows.length+' items counted'),report.panelSnapshot&&h('strong',null,panelRows.length+' panel types captured from SOH'),h('strong',null,manualRows.filter(r=>r.variance!==null&&r.variance!==0).length+' with variance')),
-    h('p',null,'Expected quantities apply to manual workshop counts. Panel quantities and material values are saved from SOH at stocktake completion.'),h('p',{className:'ws-costing-note','aria-label':'Stocktake monthly Excel scope'},'Excel combines workshop counts for '+countMonthLabel(reportExportMonth())+' with the latest saved panel SOH snapshot in that month. Panel quantities are not manually counted. PDF contains this stocktake only.'),
+    h('p',null,'Expected quantities apply to manual workshop counts. Panel quantities and material values are saved from SOH at stocktake completion.'),h('p',{className:'ws-costing-note','aria-label':'Stocktake monthly Excel scope'},'Excel contains a stock sheet for each month with counts in '+reportExportMonth().slice(0,4)+', opening at '+countMonthLabel(reportExportMonth())+'. Each month combines workshop counts with its latest saved panel SOH snapshot. Panel quantities are not manually counted. PDF contains this stocktake only.'),
     report.rows.some(r=>r.historicalDetails)&&h('p',{className:'ws-po-warning'},'Historical report: item descriptions use available records. Expected quantities that cannot be recovered are marked Unknown.'),h('p',{className:'ws-report-scroll-hint'},'Scroll across the table to view all columns.'),table),error&&h('div',{className:'ws-error',role:'alert'},error));
    const footer=h('div',{className:'ws-actions ws-count-footer'},button('Back to stocktakes',close),report&&button('Download Excel',()=>downloadReport('xlsx')),report&&button('Download PDF',()=>downloadReport('pdf')));
    return h('div',{className:'ws-overlay'},h('div',{className:'ws-dialog ws-count-dialog ws-report',role:'dialog','aria-modal':true,'aria-label':'Completed stocktake report'},header,body,footer));
@@ -417,8 +424,8 @@ window.createWorkshopStock = function(React) {
   }
   function renderStocktakeList(){
    try{return h('div',{className:'ws-overlay'},h('div',{className:'ws-dialog ws-count-dialog',role:'dialog','aria-modal':true,'aria-label':'Stocktakes'},
-    h('div',{className:'ws-count-header'},h('div',{className:'ws-heading'},h('h3',null,'Stocktakes'),button('Close',()=>setCountList(false))),h('p',null,'Choose a count to start or continue. Submitted quantities update stock and shared progress.'),isAdmin&&button('Create stocktake',()=>{setCountList(false);open(null,'stocktake_create');setForm(f=>({...f,name:'',categories:[],uncountedThisMonth:false}));})),h('div',{className:'ws-monthly-export'},h('div',{className:'ws-fields'},h('label',{className:'ws-field'},'Excel month',h('input',{type:'month','aria-label':'Stocktake export month',value:stocktakeExportMonth,onChange:e=>setStocktakeExportMonth(e.target.value)})),h('div',{className:'ws-actions'},button('Download monthly Excel',()=>downloadMonthlyWorkbook(stocktakeExportMonth),busy||!/^\d{4}-(0[1-9]|1[0-2])$/.test(stocktakeExportMonth)))),h('p',{className:'ws-field-hint'},'Includes workshop counts and the latest saved panel SOH snapshot for the month, in Brisbane time. Panel quantities and prices stay fixed at stocktake completion.')),
-    h('div',{className:'ws-count-body'},error&&h('div',{className:'ws-error',role:'alert'},error),!(data?.stocktakes||[]).length&&h('p',null,'No stocktakes yet. An administrator can create a named count and choose its categories.'),...(data?.stocktakes||[]).map(c=>h('div',{key:c.id,className:'ws-count-session'},h('div',null,h('strong',null,c.name),h('p',null,[c.categories.map(k=>categories[k]||k).join(' · '),c.supplier?'Supplier: '+c.supplier:'',c.uncountedThisMonth?'Uncounted in '+countMonthLabel(c.stocktakeMonth):''].filter(Boolean).join(' · ')),h('small',null,manualCountIds(c).filter(id=>Object.prototype.hasOwnProperty.call(c.counts||{},id)).length+' of '+manualCountIds(c).length+' workshop items counted · '+(c.status==='completed'?'Completed':'Open'))),c.status==='completed'&&button('View report',()=>{setCountList(false);setReportId(c.id);},busy),c.status==='open'&&button(!manualCountIds(c).some(id=>!Object.prototype.hasOwnProperty.call(c.counts||{},id))?'Complete stocktake':Object.keys(c.counts).length?'Continue count':'Start count',()=>startCount(c),busy))))));}
+    h('div',{className:'ws-count-header'},h('div',{className:'ws-heading'},h('h3',null,'Stocktakes'),button('Close',()=>setCountList(false))),h('p',null,'Choose a count to start or continue. Submitted quantities update stock and shared progress.'),isAdmin&&button('Create stocktake',()=>{setCountList(false);open(null,'stocktake_create');setForm(f=>({...f,name:'',categories:[],uncountedThisMonth:false}));})),h('div',{className:'ws-monthly-export'},h('div',{className:'ws-fields'},h('label',{className:'ws-field'},'Excel year / opening month',h('input',{type:'month','aria-label':'Stocktake export month',value:stocktakeExportMonth,onChange:e=>setStocktakeExportMonth(e.target.value)})),h('div',{className:'ws-actions'},button('Download yearly Excel',()=>downloadMonthlyWorkbook(stocktakeExportMonth),busy||!/^\d{4}-(0[1-9]|1[0-2])$/.test(stocktakeExportMonth)))),h('p',{className:'ws-field-hint'},'One stock sheet for each month with counts in the selected year. Counts in the same month are combined with that month’s latest saved panel SOH snapshot. Panel quantities and prices stay fixed at stocktake completion.')),
+    h('div',{className:'ws-count-body'},error&&h('div',{className:'ws-error',role:'alert'},error),!(data?.stocktakes||[]).length&&h('p',null,'No stocktakes yet. An administrator can create a named count and choose its categories.'),...(data?.stocktakes||[]).map(c=>h('div',{key:c.id,className:'ws-count-session'},h('div',null,h('strong',null,c.name),h('p',null,[c.categories.map(k=>categories[k]||k).join(' · '),c.supplier?'Supplier: '+c.supplier:'',stocktakeReportingMonth(c)?'Counted in '+countMonthLabel(stocktakeReportingMonth(c)):c.uncountedThisMonth?'Uncounted in '+countMonthLabel(c.stocktakeMonth):''].filter(Boolean).join(' · ')),h('small',null,manualCountIds(c).filter(id=>Object.prototype.hasOwnProperty.call(c.counts||{},id)).length+' of '+manualCountIds(c).length+' workshop items counted · '+(c.status==='completed'?'Completed':'Open'))),c.status==='completed'&&button('View report',()=>{setCountList(false);setReportId(c.id);},busy),c.status==='open'&&button(!manualCountIds(c).some(id=>!Object.prototype.hasOwnProperty.call(c.counts||{},id))?'Complete stocktake':Object.keys(c.counts).length?'Continue count':'Start count',()=>startCount(c),busy))))));}
    catch(e){return h('div',{className:'ws-overlay'},h('div',{className:'ws-dialog',role:'dialog','aria-modal':true,'aria-label':'Stocktake error'},h('h3',null,'Stocktakes could not be opened'),h('p',{role:'alert'},'Please share the message below so we can repair this stocktake.'),h('pre',{style:{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}},String(e.message||e)),button('Back to stock',()=>setCountList(false))));}
   }
   return h('section',{className:'ws ws-stock-screen'},
@@ -1110,7 +1117,7 @@ License: GPL-2+
   const label=new Date(month+'-01T00:00:00+10:00').toLocaleDateString('en-AU',{timeZone:'Australia/Brisbane',month:'long',year:'numeric'}),live=new Map((options.currentRows||[]).map(row=>[row.id??row.itemId,row]));
   const movements=new Map();for(const movement of options.movements||[]){const at=timestamp(movement.at);if(movement.action!=='stocktake'||!movement.stocktakeId||!movement.itemId||at===null)continue;const key=JSON.stringify([movement.stocktakeId,movement.itemId]),prior=movements.get(key);if(!prior||at>prior.at)movements.set(key,{at,value:movement.at});}
   const winners=new Map(),sources=new Map(),panelSnapshots=[];let submittedCounts=0,undatedCounts=0;
-  for(const count of Array.isArray(stocktakes)?stocktakes:[]){const snapshot=count?.report?.panelSnapshot,at=timestamp(snapshot?.capturedAt);if(count?.status!=='completed'||!snapshot||!Array.isArray(snapshot.itemIds)||at===null||monthOf(at)!==month)continue;panelSnapshots.push({count,snapshot,at,tie:JSON.stringify([String(count.id||''),count.name||count.report?.name||''])});}
+  for(const count of Array.isArray(stocktakes)?stocktakes:[]){const snapshot=count?.report?.panelSnapshot,at=timestamp(snapshot?.capturedAt);if(count?.status!=='completed'||!snapshot||!Array.isArray(snapshot.itemIds)||at===null||(stocktakeReportingMonth(count)||monthOf(at))!==month)continue;panelSnapshots.push({count,snapshot,at,tie:JSON.stringify([String(count.id||''),count.name||count.report?.name||''])});}
   const latestPanelSnapshot=panelSnapshots.reduce((latest,entry)=>!latest||entry.at>latest.at||entry.at===latest.at&&entry.tie>latest.tie?entry:latest,null);
   const submitted=value=>value!==null&&value!==undefined&&(typeof value==='number'||typeof value==='string'&&value.trim()!=='')&&Number.isFinite(Number(value))&&Number(value)>=0&&Number(value)<=1e9&&Math.abs(Number(value)*1000-Math.round(Number(value)*1000))<=Number.EPSILON*Math.max(1,Math.abs(Number(value)*1000))*4;
   const identityFields=['name','sku','category','categoryLabel','colour','lengthMm','dimensions','location','supplier','unit','details','catalogId','color','material','thickness','width','height'];
@@ -1124,7 +1131,7 @@ License: GPL-2+
     const submittedAt=timestamp(entry.at),linked=movements.get(JSON.stringify([count.id,id])),reportAt=timestamp(record?.at),validQuantity=true;
     const completion=count.status==='completed'&&validQuantity?(timestamp(count.completedAt)??timestamp(saved.completedAt)):null;
     const at=submittedAt??linked?.at??reportAt??completion,submissionDateSource=submittedAt!==null?'submitted':linked?'movement':reportAt!==null?'report':'completion-fallback';
-    if(at===null||at===undefined){undatedCounts++;continue;}if(monthOf(at)!==month)continue;
+    if(at===null||at===undefined){undatedCounts++;continue;}if((stocktakeReportingMonth(count)||monthOf(at))!==month)continue;
     const snapshot={...(entry.item||{}),...(record||{})},current=live.get(id);if(latestPanelSnapshot&&(String(id).startsWith('variant:')||snapshot.category==='panels'||snapshot.categoryKey==='panels'))continue;if(!entry.item&&!record&&current){for(const key of identityFields)if(own(current,key))snapshot[key]=current[key];snapshot.historicalDetails=true;}
     const expectedQty=own(entry,'expectedQty')?entry.expectedQty:record?.expectedQty??null;
     const variance=record?.variance??(Number.isFinite(expectedQty)&&validQuantity?Math.round((Number(quantity)-expectedQty)*1000)/1000:null),sourceName=count.name||saved.name||count.id||'Stocktake';
@@ -1159,10 +1166,20 @@ License: GPL-2+
   const groupMap=new Map((normalized.stocktakeSettings?.cosGroups||[]).map(group=>[group.id,group])),groupSettingsProvenance={basis:'current-at-export',revision:currentSettings?.revision??null,valuedAt:generatedAt};
   const rows=normalized.rows.map(row=>{const group=groupMap.get(row.xeroGroup),reason=blocked.get(row.itemId);return {...row,xeroGroupLabel:group?.label||'',xeroAccountCode:group?.accountCode||'',groupSettingsProvenance:{...groupSettingsProvenance},...(reason?{pricingNote:reason,pricingSource:'Current price not applied',pricing:{basis:'unpriced',label:'Current price not applied',priced:false}}:{})};});
   const latestPanelSnapshotAt=latestPanelSnapshot?new Date(latestPanelSnapshot.at).toISOString():null,workshopRows=manualChosen.filter(entry=>!String(entry.row.itemId).startsWith('variant:')&&entry.row.category!=='panels'&&entry.row.categoryKey!=='panels').length;
-  const scopeNote='Manual counts submitted in '+label+' (Brisbane time), including ongoing stocktakes, use the latest submitted count per item without adding repeated balances. '+(latestPanelSnapshot?'Panels use the entire latest saved SOH snapshot at completion ('+date(latestPanelSnapshotAt)+', Brisbane time), including zero stock.':'No automatic panel SOH snapshot was recorded for this month; no current panel inventory is added.');
+  const assignedPeriod=[...sources.keys()].some(key=>(Array.isArray(stocktakes)?stocktakes:[]).some(count=>String(count.id||count.name||count.report?.name||'Stocktake')===key&&stocktakeReportingMonth(count)===month));
+  const scopeNote=(assignedPeriod?'Counts assigned to '+label+' use that reporting period; original submission, completion and panel snapshot dates remain in Count details. ':'')+'Manual counts recorded for '+label+' (Brisbane time), including ongoing stocktakes, use the latest submitted count per item without adding repeated balances. '+(latestPanelSnapshot?'Panels use the entire latest saved SOH snapshot at completion ('+date(latestPanelSnapshotAt)+', Brisbane time), including zero stock.':'No automatic panel SOH snapshot was recorded for this month; no current panel inventory is added.');
   const monthlyScope={month,label,timeZone:'Australia/Brisbane',submittedCounts,manualRows:manualChosen.length,workshopRows,panelRows:panelEntries.length,panelSnapshotCount:panelSnapshots.length,latestPanelSnapshotAt,uniqueItems:rows.length,duplicatesRemoved:submittedCounts-manualChosen.length,sourceStocktakes:sources.size,undatedCounts,latestSubmittedAt:manualChosen.length?new Date(Math.max(...manualChosen.map(entry=>entry.at))).toISOString():null,note:scopeNote};
   const priceNote='Automatic panel SOH snapshot quantities and prices stay frozen. Saved manual completion prices are retained where available. '+(options.allowCurrentPricing===true?'Other manual rows use current system prices at export when safely matched; ':'Current-price fallback is disabled; ')+'pricing sources are recorded in Count details.';
-  return {...normalized,month,rows,...(latestPanelSnapshot?{panelSnapshot:{capturedAt:latestPanelSnapshotAt,itemIds:panelEntries.map(entry=>entry.row.itemId),sourceStocktakeId:latestPanelSnapshot.count.id||'',sourceStocktakeName:latestPanelSnapshot.count.name||latestPanelSnapshot.count.report?.name||''}}:{}),monthlyScope,sources:[...sources.values()].sort((a,b)=>a.id<b.id?-1:a.id>b.id?1:0),groupSettingsProvenance,valuation:{...normalized.valuation,message:scopeNote+' '+priceNote,issues:[...normalized.valuation.issues,...[...blocked.values()]]}};
+  return {...normalized,month,...(assignedPeriod?{reportDate:stocktakeMonthEnd(month)}:{}),rows,...(latestPanelSnapshot?{panelSnapshot:{capturedAt:latestPanelSnapshotAt,itemIds:panelEntries.map(entry=>entry.row.itemId),sourceStocktakeId:latestPanelSnapshot.count.id||'',sourceStocktakeName:latestPanelSnapshot.count.name||latestPanelSnapshot.count.report?.name||''}}:{}),monthlyScope,sources:[...sources.values()].sort((a,b)=>a.id<b.id?-1:a.id>b.id?1:0),groupSettingsProvenance,valuation:{...normalized.valuation,message:scopeNote+' '+priceNote,issues:[...normalized.valuation.issues,...[...blocked.values()]]}};
+ }
+
+ function prepareYearStocktakeReport(stocktakes,options={}){
+  const year=String(options.year??options.selectedMonth?.slice(0,4)??'');
+  if(!/^\d{4}$/.test(year)||Number(year)===0)throw Error('Choose a valid stocktake year.');
+  const selectedMonth=typeof options.selectedMonth==='string'&&options.selectedMonth.startsWith(year+'-')&&/^\d{4}-(0[1-9]|1[0-2])$/.test(options.selectedMonth)?options.selectedMonth:year+'-01';
+  const generatedAt=options.generatedAt||new Date().toISOString(),months=[];
+  for(let n=1;n<=12;n++){const month=year+'-'+String(n).padStart(2,'0'),prepared=prepareMonthlyStocktakeReport(stocktakes,{...options,month,generatedAt});if(prepared.rows.length||prepared.monthlyScope.panelSnapshotCount)months.push(prepared);}
+  return {kind:'stocktake-year',year,selectedMonth,generatedAt,name:'Lennox Facades stocktake - '+year,months};
  }
 
  const xeroJournalGroups=Object.freeze([
@@ -1281,7 +1298,7 @@ License: GPL-2+
 
  const preciseCurrency=value=>Number(value).toLocaleString('en-AU',{style:'currency',currency:'AUD',minimumFractionDigits:2,maximumFractionDigits:12});
  const currency=value=>Number(value).toLocaleString('en-AU',{style:'currency',currency:'AUD',minimumFractionDigits:2,maximumFractionDigits:2});
- function stocktakeTemplateXlsx(report){
+ function stocktakeTemplateXlsx(report,options={}){
   const own=(object,key)=>object!=null&&Object.prototype.hasOwnProperty.call(object,key),text=value=>String(value??''),finite=value=>value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value))?Number(value):null;
   const cents=value=>{const match=String(value??'').match(/^([+-]?)(\d+)(?:\.(\d{1,2}))?$/);return match?(BigInt(match[2])*100n+BigInt((match[3]||'').padEnd(2,'0')))*(match[1]==='-'?-1n:1n):null;};
   const money=value=>{const absolute=value<0n?-value:value;return (value<0n?'-':'')+String(absolute/100n)+'.'+String(absolute%100n).padStart(2,'0');};
@@ -1301,7 +1318,8 @@ License: GPL-2+
   const accountName=group=>group?(/^COS\s*-/i.test(group.label)?group.label:'COS - '+group.label):'Unassigned';
   const category=row=>text(row.categoryLabel||row.category||row.categoryKey),pricingMessage=text(report.valuation?.message||report.pricing?.label||'Pricing basis unavailable'),valuedAt=report.valuation?.valuedAt||report.pricing?.valuedAt||report.pricing?.capturedAt||report.pricingCapturedAt||'';
   const stamp=value=>{if(!value)return '';const parsed=new Date(value);return Number.isNaN(parsed.getTime())?'':parsed.toLocaleString('en-AU',{timeZone:'Australia/Brisbane'});};
-  const completed=new Date(report.completedAt),validDate=!Number.isNaN(completed.getTime()),dateParts=validDate?new Intl.DateTimeFormat('en-AU',{timeZone:'Australia/Brisbane',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(completed):[],part=type=>dateParts.find(entry=>entry.type===type)?.value||'',dateText=validDate?part('day')+'/'+part('month')+'/'+part('year'):'',excelDate=validDate?Date.UTC(Number(part('year')),Number(part('month'))-1,Number(part('day')))/86400000+25569:null,monthText=validDate?completed.toLocaleDateString('en-AU',{timeZone:'Australia/Brisbane',month:'short',year:'numeric'}):'';
+  const assignedMonth=stocktakeReportingMonth(report),effectiveDate=report.reportDate||(assignedMonth?stocktakeMonthEnd(assignedMonth):'');
+  const completed=new Date(effectiveDate?effectiveDate+'T12:00:00+10:00':report.completedAt),validDate=!Number.isNaN(completed.getTime()),dateParts=validDate?new Intl.DateTimeFormat('en-AU',{timeZone:'Australia/Brisbane',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(completed):[],part=type=>dateParts.find(entry=>entry.type===type)?.value||'',dateText=validDate?part('day')+'/'+part('month')+'/'+part('year'):'',excelDate=validDate?Date.UTC(Number(part('year')),Number(part('month'))-1,Number(part('day')))/86400000+25569:null,monthText=validDate?completed.toLocaleDateString('en-AU',{timeZone:'Australia/Brisbane',month:'short',year:'numeric'}):'';
   const size=row=>[text(row.dimensions).trim(),finite(row.lengthMm)>0?text(row.lengthMm)+' mm':'',finite(row.width)>0&&finite(row.height)>0?text(row.width)+' x '+text(row.height)+' mm':''].filter((entry,index,all)=>entry&&all.indexOf(entry)===index).join(' / ');
   const sourceRows=Array.isArray(report.rows)?report.rows:[],ordered=sourceRows.map((row,index)=>({row,index})).sort((left,right)=>{
    const a=left.row,b=right.row,groupA=groupMap.get(a.xeroGroup)?.order??groupMap.size,groupB=groupMap.get(b.xeroGroup)?.order??groupMap.size;
@@ -1433,10 +1451,95 @@ License: GPL-2+
    files['xl/drawings/_rels/drawing1.xml.rels']='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="'+packageNs+'"><Relationship Id="rId1" Type="'+relNs+'/image" Target="../media/lennox-logo.png"/></Relationships>';
    files['xl/drawings/drawing1.xml']='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><xdr:oneCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>19050</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>19050</xdr:rowOff></xdr:from><xdr:ext cx="'+cx+'" cy="'+cy+'"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="1" name="Lennox Facades"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr><xdr:blipFill><a:blip xmlns:r="'+relNs+'" r:embed="rId1"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="'+cx+'" cy="'+cy+'"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor></xdr:wsDr>';
   }
+  return options.files===true?files:zip(files);
+ }
+
+ function stocktakeYearXlsx(report){
+  const ns='http://schemas.openxmlformats.org/spreadsheetml/2006/main',relNs='http://schemas.openxmlformats.org/officeDocument/2006/relationships',packageNs='http://schemas.openxmlformats.org/package/2006/relationships',monthNames=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const year=String(report?.year??'');
+  if(!/^\d{4}$/.test(year)||Number(year)<1)throw Error('Choose a valid year for the stocktake workbook.');
+  if(!Array.isArray(report?.months)||!report.months.length)throw Error('There are no stocktake months to export for this year.');
+  const seen=new Set(),months=report.months.map(month=>{
+   const period=typeof month?.month==='string'&&month.month.match(/^(\d{4})-(0[1-9]|1[0-2])$/);
+   if(!period||period[1]!==year)throw Error('Each stocktake month must belong to the exported year.');
+   if(seen.has(month.month))throw Error('Each month can appear only once in the annual stocktake workbook.');
+   seen.add(month.month);
+   const parts=stocktakeTemplateXlsx(month,{files:true});
+   if(!parts||typeof parts!=='object'||typeof parts['xl/worksheets/sheet1.xml']!=='string')throw Error('Monthly workbook files are unavailable.');
+   return {report:month,month:month.month,name:monthNames[Number(period[2])-1]+' '+year,parts};
+  }).sort((a,b)=>a.month.localeCompare(b.month));
+  const first=months[0].parts,styles=first['xl/styles.xml'];
+  if(typeof styles!=='string'||months.some(month=>month.parts['xl/styles.xml']!==styles))throw Error('Monthly workbook styles must match.');
+  const columnIndex=letters=>[...letters].reduce((value,character)=>value*26+character.charCodeAt(0)-64,0),columnName=index=>{let result='';for(let value=index;value;value=Math.floor((value-1)/26))result=String.fromCharCode(65+(value-1)%26)+result;return result;};
+  const bounds=sheet=>{
+   const dimension=sheet.match(/<dimension\b[^>]*\bref="([^"]+)"/),end=dimension&&dimension[1].split(':').pop(),match=end&&end.match(/^\$?([A-Z]+)\$?(\d+)$/);
+   if(!match)throw Error('A monthly stocktake sheet has invalid dimensions.');
+   return {column:match[1],columns:columnIndex(match[1]),row:Number(match[2])};
+  };
+  const rowCells=(sheet,offset)=>{
+   const data=sheet.match(/<sheetData\b[^>]*>([\s\S]*?)<\/sheetData>/);
+   if(!data)throw Error('A monthly stocktake sheet has no row data.');
+   return data[1].replace(/<f\b[^>]*\/>|<f\b[^>]*>[\s\S]*?<\/f\s*>/g,'').replace(/(<row\b[^>]*\br=")(\d+)(")/g,(_,before,row,after)=>before+(Number(row)+offset)+after).replace(/(<c\b[^>]*\br=")([A-Z]+)(\d+)(")/g,(_,before,column,row,after)=>before+column+(Number(row)+offset)+after);
+  };
+  const moveReference=(reference,offset)=>reference.replace(/(\$?[A-Z]+\$?)(\d+)/g,(_,column,row)=>column+(Number(row)+offset));
+  const mergeReferences=(sheet,offset)=>[...sheet.matchAll(/<mergeCell\b[^>]*\bref="([^"]+)"[^>]*\/>/g)].map(match=>moveReference(match[1],offset));
+  const attributes=tag=>Object.fromEntries([...tag.matchAll(/([A-Za-z][\w:]*)="([^"]*)"/g)].map(match=>[match[1],match[2]]));
+  const supportNames=['COS Summary','Journal','Count details'],supportSheets=[],supportBounds=[];
+  const files={};
+  for(const [path,value]of Object.entries(first))if(!path.startsWith('xl/worksheets/')&&!['[Content_Types].xml','xl/workbook.xml','xl/_rels/workbook.xml.rels'].includes(path))files[path]=value;
+  const names=months.map(month=>month.name).concat(supportNames),selected=months.findIndex(month=>month.month===report.selectedMonth),activeTab=selected>=0?selected:0,printRows=[];
+  months.forEach((month,index)=>{
+   const original=month.parts['xl/worksheets/sheet1.xml'],selectedSheet=original.replace(/\s+tabSelected="[^"]*"/g,'').replace(/<sheetView\b/,match=>match+(index===activeTab?' tabSelected="1"':''));
+   files['xl/worksheets/sheet'+(index+1)+'.xml']=selectedSheet;
+   const relationships=month.parts['xl/worksheets/_rels/sheet1.xml.rels'];
+   if(relationships)files['xl/worksheets/_rels/sheet'+(index+1)+'.xml.rels']=relationships;
+   const title=(month.parts['xl/workbook.xml']||'').match(/<definedName\b[^>]*name="_xlnm.Print_Titles"[^>]*localSheetId="0"[^>]*>[^<]*!(\$\d+:\$\d+)<\/definedName>/);
+   printRows.push(title?title[1]:'$4:$4');
+  });
+  for(let support=0;support<supportNames.length;support++){
+   const original=first['xl/worksheets/sheet'+(support+2)+'.xml'];
+   if(typeof original!=='string')throw Error('A monthly stocktake support sheet is unavailable.');
+   let cursor=2,maximumColumn=1;
+   const blocks=[],merges=[],widths=[];
+   for(const month of months){
+    const source=month.parts['xl/worksheets/sheet'+(support+2)+'.xml'];
+    if(typeof source!=='string')throw Error('A monthly stocktake support sheet is unavailable.');
+    const size=bounds(source),heading=cursor+1,offset=heading;
+    maximumColumn=Math.max(maximumColumn,size.columns);
+    blocks.push({heading,label:month.name,rows:rowCells(source,offset)});
+    merges.push(...mergeReferences(source,offset));
+    const columns=source.match(/<cols\b[^>]*>([\s\S]*?)<\/cols>/);
+    if(columns)for(const match of columns[1].matchAll(/<col\b[^>]*\/>/g)){
+     const entry=attributes(match[0]),min=Number(entry.min),max=Number(entry.max),width=Number(entry.width);
+     if(!Number.isInteger(min)||!Number.isInteger(max)||min<1||max<min||max>16384||!Number.isFinite(width))throw Error('A monthly stocktake column has invalid dimensions.');
+     for(let column=min;column<=max;column++)widths[column-1]={width:Math.max(widths[column-1]?.width||0,width),hidden:widths[column-1]?.hidden||entry.hidden==='1'};
+    }
+    cursor=offset+size.row+2;
+   }
+   const lastColumn=columnName(maximumColumn),lastRow=cursor-2,title='LENNOX FACADES / '+year+' / '+supportNames[support].toUpperCase();
+   let data='<row r="1" ht="30" customHeight="1"><c r="A1" s="20" t="inlineStr"><is><t xml:space="preserve">'+xml(title)+'</t></is></c></row><row r="2" ht="8" customHeight="1"/>';
+   merges.unshift('A1:'+lastColumn+'1');
+   for(const block of blocks){
+    data+='<row r="'+block.heading+'" ht="26" customHeight="1"><c r="A'+block.heading+'" s="30" t="inlineStr"><is><t xml:space="preserve">'+xml(block.label)+'</t></is></c></row>'+block.rows;
+    merges.push('A'+block.heading+':'+lastColumn+block.heading);
+   }
+   const cols='<cols>'+Array.from({length:maximumColumn},(_,index)=>{const entry=widths[index]||{width:8,hidden:false};return '<col min="'+(index+1)+'" max="'+(index+1)+'" width="'+entry.width+'" customWidth="1" bestFit="1"'+(entry.hidden?' hidden="1"':'')+'/>';}).join('')+'</cols>';
+   const views='<sheetViews><sheetView showGridLines="0" workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A2" sqref="A2"/></sheetView></sheetViews>';
+   const mergeXml='<mergeCells count="'+merges.length+'">'+merges.map(ref=>'<mergeCell ref="'+ref+'"/>').join('')+'</mergeCells>';
+   const combined=original.replace(/<dimension\b[^>]*\/>/,'<dimension ref="A1:'+lastColumn+lastRow+'"/>').replace(/<sheetViews\b[^>]*>[\s\S]*?<\/sheetViews>/,views).replace(/<cols\b[^>]*>[\s\S]*?<\/cols>/,cols).replace(/<autoFilter\b[^>]*\/>|<autoFilter\b[^>]*>[\s\S]*?<\/autoFilter>/g,'').replace(/<mergeCells\b[^>]*>[\s\S]*?<\/mergeCells>/g,'').replace(/<sheetData\b[^>]*>[\s\S]*?<\/sheetData>/,'<sheetData>'+data+'</sheetData>'+mergeXml);
+   supportSheets.push(combined);supportBounds.push({column:lastColumn,row:lastRow});
+   files['xl/worksheets/sheet'+(months.length+support+1)+'.xml']=combined;
+   printRows.push('$1:$1');
+  }
+  const allBounds=months.map(month=>bounds(month.parts['xl/worksheets/sheet1.xml'])).concat(supportBounds);
+  files['[Content_Types].xml']=first['[Content_Types].xml'].replace(/<Override\b[^>]*\bPartName="\/xl\/worksheets\/[^\"]+"[^>]*\/>/g,'').replace('</Types>',names.map((name,index)=>'<Override PartName="/xl/worksheets/sheet'+(index+1)+'.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>').join('')+'</Types>');
+  files['xl/workbook.xml']='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="'+ns+'" xmlns:r="'+relNs+'"><bookViews><workbookView activeTab="'+activeTab+'"/></bookViews><sheets>'+names.map((name,index)=>'<sheet name="'+xml(name)+'" sheetId="'+(index+1)+'" r:id="rId'+(index+1)+'"/>').join('')+'</sheets><definedNames>'+names.map((name,index)=>'<definedName name="_xlnm.Print_Area" localSheetId="'+index+'">\''+xml(name)+'\'!$A$1:$'+allBounds[index].column+'$'+allBounds[index].row+'</definedName><definedName name="_xlnm.Print_Titles" localSheetId="'+index+'">\''+xml(name)+'\'!'+printRows[index]+'</definedName>').join('')+'</definedNames><calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>';
+  files['xl/_rels/workbook.xml.rels']='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="'+packageNs+'">'+names.map((name,index)=>'<Relationship Id="rId'+(index+1)+'" Type="'+relNs+'/worksheet" Target="worksheets/sheet'+(index+1)+'.xml"/>').join('')+'<Relationship Id="rId'+(names.length+1)+'" Type="'+relNs+'/styles" Target="styles.xml"/></Relationships>';
   return zip(files);
  }
 
  function xlsx(report){
+  if(report.kind==='stocktake-year')return stocktakeYearXlsx(report);
   if(report.kind!=='soh')return stocktakeTemplateXlsx(report.valuation?report:prepareStocktakeReport(report));
   const soh=report.kind==='soh',costed=soh&&report.includeCostings===true,packPricing=costed&&report.rows.some(r=>r.costBasis==='pack'),cataloguePricing=costed&&report.rows.some(r=>r.costBasis==='catalogue-area'),areaPricing=cataloguePricing||costed&&report.rows.some(r=>r.costBasis==='area'),precisionPricing=packPricing||areaPricing,areaStart=packPricing?18:15,lastColumn=soh?(costed?(areaPricing?(packPricing?'W':'T'):(packPricing?'R':'O')):'M'):'K',sheetName=soh?'Stock on hand':'Stocktake report',sheetRef="'"+sheetName+"'";
   const headings=soh?['Stock code','Item','Category','Colour / size','Location','Supplier','Unit','On hand','Reserved','Available','On order','Reorder level','Status',...(costed?['Unit cost (AUD ex GST)','On-hand value (AUD ex GST)',...(packPricing?['Units per pack','Pack cost (AUD ex GST)','Price basis']:[]),...(areaPricing?(cataloguePricing?['Source panel / catalogue','Source size (mm)','Source cost (AUD ex GST)','Rate (AUD ex GST / m²)','Area per item (m²)']:['Source full sheet / price basis','Full sheet size (mm)','Full sheet cost (AUD ex GST)','Rate (AUD ex GST / m²)','Area per offcut (m²)']):[])]:[])]:columns;
@@ -1594,7 +1697,7 @@ License: GPL-2+
    const rightIn=(x,y,width,size,v,b=false,color)=>right(x,y,Math.min(size,width*size/Math.max(1,measure(v,size,b))),v,b,color);
    rect(32,579,778,3,'0 0.682 0.937');
    stream+='q 152 0 0 '+(152*brand.height/brand.width).toFixed(2)+' 32 492 cm /Logo Do Q\n';
-   right(810,555,8,'LENNOX FACADES / INVENTORY',true,'0.35 0.43 0.49');right(810,529,22,soh?'STOCK ON HAND':'STOCKTAKE REPORT',true,'0.08 0.37 0.46');right(810,510,9,(soh?'Exported ':'Completed ')+date(soh?report.generatedAt:report.completedAt)+' (Brisbane)'+(soh&&report.revision!==undefined?' / Revision '+report.revision:''),false,'0.35 0.43 0.49');
+   right(810,555,8,'LENNOX FACADES / INVENTORY',true,'0.35 0.43 0.49');right(810,529,22,soh?'STOCK ON HAND':'STOCKTAKE REPORT',true,'0.08 0.37 0.46');right(810,510,9,(soh?'Exported ':'Completed ')+date(soh?report.generatedAt:report.completedAt)+' (Brisbane)'+(soh&&report.revision!==undefined?' / Revision '+report.revision:'')+(!soh&&stocktakeReportingMonth(report)?' / Reporting month '+stocktakeReportingMonth(report):''),false,'0.35 0.43 0.49');
    titleLines.forEach((line,i)=>text(32,478-i*19,16,line,true));
    scope.forEach((line,i)=>text(32,443-titleExtra-i*10,8,line,false,'0.35 0.43 0.49'));
    rect(32,389-titleExtra-scopeExtra-metaExtra-costExtra,778,35+metaExtra+costExtra,'0.95 0.97 0.98');
@@ -1624,5 +1727,5 @@ License: GPL-2+
   });
   objects[pages]='<< /Type /Pages /Kids ['+ids.map(id=>id+' 0 R').join(' ')+'] /Count '+ids.length+' >>';const catalog=add('<< /Type /Catalog /Pages '+pages+' 0 R >>');let result='%PDF-1.4\n',offsets=[0];for(let i=1;i<objects.length;i++){offsets[i]=enc.encode(result).length;result+=i+' 0 obj\n'+objects[i]+'\nendobj\n';}const xref=enc.encode(result).length;result+='xref\n0 '+objects.length+'\n0000000000 65535 f \n'+offsets.slice(1).map(n=>String(n).padStart(10,'0')+' 00000 n \n').join('')+'trailer\n<< /Size '+objects.length+' /Root '+catalog+' 0 R >>\nstartxref\n'+xref+'\n%%EOF';return new Blob([result],{type:'application/pdf'});
  }
- return {pdf,xlsx,prepareWorkbook:prepareStocktakeReport,prepareMonthly:prepareMonthlyStocktakeReport,soh:{prepare:prepareSOHReport,pdf:report=>pdf(prepareSOHReport(report)),xlsx:report=>xlsx(prepareSOHReport(report)),xero:{prepare:xeroJournalPrepare,csv:xeroJournalCsv,groups:xeroJournalGroups}},logo:'data:image/png;base64,'+brand.pngBase64};
+ return {pdf,xlsx,prepareWorkbook:prepareStocktakeReport,prepareMonthly:prepareMonthlyStocktakeReport,prepareYear:prepareYearStocktakeReport,soh:{prepare:prepareSOHReport,pdf:report=>pdf(prepareSOHReport(report)),xlsx:report=>xlsx(prepareSOHReport(report)),xero:{prepare:xeroJournalPrepare,csv:xeroJournalCsv,groups:xeroJournalGroups}},logo:'data:image/png;base64,'+brand.pngBase64};
 })();
