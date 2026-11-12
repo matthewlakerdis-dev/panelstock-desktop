@@ -83,7 +83,7 @@ test('updated report and queue retain the original results and all photos despit
 });
 
 test('completed dispatched Gate reports remain open after photo success even when a later queue response omits the record',async()=>{
- const item=record({kind:'metalwork',gateOrderId:'dispatched-gate',reference:'Gate ENTRY'}),response=reply(item,{attemptId:item.latest.id,photos:[encoded('site-photo')],mutationId:'mutation'}),view=fixture({kind:'qa',item,fetcher:async()=>Response.json({items:[],checklists})});let tree=expand(view);button(tree,'View report').props.onClick();tree=view.render();button(tree,'Add photos').props.onClick();view.render().props.onSaved(response);await settle();tree=view.render();assert.match(text(tree),/Gate ENTRY/);assert.deepEqual(nodes(tree).filter(node=>node.tag==='img').map(node=>node.props.src),[encoded('original'),encoded('site-photo')]);
+ const item=record({kind:'metalwork',gateOrderId:'dispatched-gate',reference:'Gate ENTRY'}),response=reply(item,{attemptId:item.latest.id,photos:[encoded('site-photo')],mutationId:'mutation'}),view=fixture({kind:'qa',item,fetcher:async()=>Response.json({items:[],checklists})});let tree=expand(view);button(tree,'Inspection details').props.onClick();tree=view.render();button(tree,'Add photos').props.onClick();view.render().props.onSaved(response);await settle();tree=view.render();assert.match(text(tree),/Gate ENTRY/);assert.deepEqual(nodes(tree).filter(node=>node.tag==='img').map(node=>node.props.src),[encoded('original'),encoded('site-photo')]);
 });
 
 test('order preview includes supplemental photos with provenance and keeps the original inspection snapshot',()=>{

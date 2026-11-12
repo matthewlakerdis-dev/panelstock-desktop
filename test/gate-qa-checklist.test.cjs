@@ -65,13 +65,13 @@ test('a missing Gate checklist does not fall back to metalwork or allow approval
 
 test('Gate history uses each saved checklist and keeps old Gate attempts on their metalwork wording',()=>{
  const history=[{id:'legacy',status:'approved',checkedBy:'old inspector',results:{dimensions:'pass',welds:'pass'}},{id:'gate-check',status:'approved',checkedBy:'new inspector',checklistKind:'gate',checklist:[['dimensions','Original saved Gate dimensions'],['latch','Original saved Gate latch']],results:{dimensions:'pass',latch:'pass'}}];
- const view=fixture({items:[gate({status:'approved',history,latest:history[1],checklistKind:'gate'})]});view.states[8]='approved';let tree=view.render();nodes(tree).find(node=>node.tag==='button'&&node.props['aria-expanded']===false).props.onClick();tree=view.render();button(tree,'View report').props.onClick();tree=view.render();
+ const view=fixture({items:[gate({status:'approved',history,latest:history[1],checklistKind:'gate'})]});view.states[8]='approved';let tree=view.render();nodes(tree).find(node=>node.tag==='button'&&node.props['aria-expanded']===false).props.onClick();tree=view.render();button(tree,'Inspection details').props.onClick();tree=view.render();
  const attempts=nodes(tree).filter(node=>node.tag==='article');assert.equal(attempts.length,2);assert.match(text(attempts[0]),/Original saved Gate dimensions/);assert.match(text(attempts[0]),/Original saved Gate latch/);assert.doesNotMatch(text(attempts[0]),/Gate opening dimensions|Metalwork dimensions/);assert.match(text(attempts[1]),/Metalwork dimensions/);assert.match(text(attempts[1]),/Metalwork welds/);assert.doesNotMatch(text(attempts[1]),/Gate opening dimensions/);
 });
 
 test('Gate and ordinary metalwork filters remain separate',()=>{
  const view=fixture({items:[gate(),metal()]});view.states[9]='gate';let tree=view.render();nodes(tree).find(node=>node.tag==='button'&&node.props['aria-expanded']===false).props.onClick();tree=view.render();assert.match(text(tree),/Gate: ENTRY/);assert.doesNotMatch(text(tree),/METALWORK/);
- view.states[9]='metalwork';tree=view.render();assert.match(text(tree),/METALWORK/);assert.doesNotMatch(text(tree),/Gate: ENTRY/);
+ view.states[9]='metalwork';tree=view.render();nodes(tree).find(node=>node.tag==='button'&&node.props['aria-expanded']===false).props.onClick();tree=view.render();assert.match(text(tree),/METALWORK/);assert.doesNotMatch(text(tree),/Gate: ENTRY/);
 });
 
 test('Dispatch Settings owns driver defaults and removes them from QA Settings',async()=>{
