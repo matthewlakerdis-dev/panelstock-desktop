@@ -2,6 +2,15 @@
 
 Desktop browser interface for the same inventory used by `matthewlakerdis-dev/panelstock`.
 
+**Work → Purchase Requests** is the native Lennox request form, request history,
+verified Nexvia PO status and confirmation-email status. It uses existing
+PanelStock sessions and dedicated default-off purchase-request permissions.
+Deploy the companion Worker request API before publishing this frontend. The
+Synology adapter and setup instructions are in the backend repository's
+[`integrations/nexvia/WEB-REQUESTS.md`](https://github.com/matthewlakerdis-dev/panelstock/blob/main/integrations/nexvia/WEB-REQUESTS.md).
+The browser never connects directly to the NAS. PDFs are saved for review; the
+existing automatic creator remains limited to Miscellaneous EOW without a PDF.
+
 This release must ship together with the mobile app and the new Cloudflare Worker. It replaces the shared backend credential with individual sessions, persists immutable stock/activity batches before sending, rejects conflicting edits without dropping pending work, excludes voided dispatches from jobs, and removes the 800-entry history cap.
 
 The authoritative Worker implementation, full integration tests, and deployment/rollback checklist are in the mobile repository under `worker/` and `RELEASE.md`. Do not merge this frontend into a live deployment independently of that release.

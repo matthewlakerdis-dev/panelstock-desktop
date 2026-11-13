@@ -211,6 +211,7 @@
 @media(max-width:540px){.ps-measure{grid-template-columns:1fr;gap:10px}.ps-measure svg{max-height:none}.ps-measure h3{font-size:13px}.ps-measure p{font-size:12px}}
 </style>
 <link rel="stylesheet" href="workshop-stock.css?v=3">
+<link rel="stylesheet" href="purchase-requests.css?v=1">
 </head>
 <body>
 <div id="root">
@@ -238,6 +239,7 @@
 <script src="order-dispatch-reversal.js?v=1"></script>
 <script src="tracker-tab-handoff.js?v=1"></script>
 <script src="workshop-stock.js?v=4"></script>
+<script src="purchase-requests.js?v=1"></script>
 <script src="pull-refresh.js?v=20261029"></script>
 <script src="tab-workspace.js?v=20261102"></script>
 <script src="offcut-labels.js?v=3"></script>
@@ -13767,6 +13769,7 @@ ${xrefStart}
   const PurchaseOrderReceiving = window.createPurchaseOrderReceiving(import_react.default);
   const ExcelOrderAction = window.PanelStockExcelActions.createComponent(import_react.default,PanelStock,BAKED_WORKER_URL,window.PanelStockExcelActions.link);
   const ReverseDispatchModal = window.PanelStockOrderDispatchReversal.createComponent(import_react.default,PanelStock,BAKED_WORKER_URL);
+  const canReadStockSession=(user={})=>user.isAdmin===true||["factory.stock","factory.receive","factory.dispatch","factory.transfer","factory.damage","factory.cnc","factory.cad","factory.jobs","factory.qa","factory.settings"].some(task=>user.taskAccess?.[task]===true);
   function App() {
     const [tab, setTab] = useState("workshop");
     const [navSelection, setNavSelection] = useState("workshop");
@@ -13809,6 +13812,9 @@ ${xrefStart}
           saveKey(STORAGE_KEYS.isAdmin, false, false);
           saveKey(STORAGE_KEYS.emailConfig, { workerUrl: BAKED_WORKER_URL });
           if (user) {
+            // A verified session may use Purchase Requests without stock permissions.
+            setUsername(user.username); setIsAdmin(user.isAdmin); setTaskAccess(user.taskAccess || {});
+            const canReadSharedStock=canReadStockSession(user);
             PanelStock.apiFetch(BAKED_WORKER_URL + "/profile").then(async response=>{if(response.ok&&active)setOwnProfile((await response.json()).profile);}).catch(()=>{});
             // Optional metadata must not delay or prevent restoring the saved stock view.
             PanelStock.apiFetch(BAKED_WORKER_URL + "/cnc-share").then(async response => {
@@ -13816,11 +13822,11 @@ ${xrefStart}
               const share = await response.json();
               if (active && PanelStock.username === user.username) { CNC_PUBLIC_TOKEN = share.token; setProductionTrackerShare({username:user.username,token:share.token}); }
             }).catch(() => {});
-            const data = await PanelStock.snapshot();
+            const data = canReadSharedStock ? await PanelStock.snapshot() : null;
             if (!active) return;
             if (data) { setVariants(data.variants || []); setOffcuts(data.offcuts || []);
           setTransactions(data.transactions || []); setReasons(ensureMissingPanelReason(data.reasons));
-          setCatalog(data.catalog || []); setPhotos(data.photos || {}); setCncPanels(data.cncPanels || []); setUsername(user.username); setIsAdmin(user.isAdmin); setTaskAccess(user.taskAccess || {}); }
+          setCatalog(data.catalog || []); setPhotos(data.photos || {}); setCncPanels(data.cncPanels || []); }
             if (user.isAdmin) {
               PanelStock.apiFetch(BAKED_WORKER_URL + "/cnc-settings").then(async response => {
                 if (!response.ok) return;
@@ -13842,9 +13848,11 @@ ${xrefStart}
     useEffect(() => {
       if (!username) return;
       let active = true, refreshTask = null;
+      const canReadSharedStock=canReadStockSession({isAdmin,taskAccess});
       const onSync = event => setSyncStatus(event.detail.status);
       const onExpired = () => { setUsername(null); setIsAdmin(false); setProductionTrackerShare(null); CNC_PUBLIC_TOKEN = null; };
       function refresh() {
+        if (!canReadSharedStock) return Promise.resolve(true);
         if (refreshTask) return refreshTask;
         if (document.visibilityState === "hidden") return Promise.resolve(false);
         refreshTask = (async () => {
@@ -13867,7 +13875,7 @@ ${xrefStart}
       document.addEventListener("visibilitychange", refresh);
       setSyncStatus(PanelStock.status);
       return () => { active = false; stopPullRefresh?.(); clearInterval(timer); window.removeEventListener("panelstock-sync", onSync); window.removeEventListener("panelstock-session-expired", onExpired); window.removeEventListener("online", refresh); window.removeEventListener("panelstock-remote-change", refresh); document.removeEventListener("visibilitychange", refresh); };
-    }, [username]);
+    }, [username,isAdmin,taskAccess]);
     function showToast(msg, kind = "ok") {
       setToast({ msg, kind });
       setTimeout(() => setToast(null), 2600);
@@ -14632,7 +14640,7 @@ ${xrefStart}
       [variants, offcuts]
     );
     useEffect(()=>{if(!username){setNotificationCount(0);return;}let active=true;const load=async()=>{try{const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/notifications"),result=await response.json().catch(()=>({}));if(active&&response.ok)setNotificationCount((result.notifications||[]).filter(item=>!item.read).length);}catch{}};void load();const stop=window.PanelStockPullRefresh?.subscribe(load);const timer=setInterval(load,30000);return()=>{active=false;stop?.();clearInterval(timer);};},[username]);
-    useEffect(()=>{if(!username)return;const params=new URLSearchParams(location.search),requestedRaw=params.get('page')||params.get('open'),requested=requestedRaw==='stock'?'workshop':requestedRaw,initial=permittedPages.includes(requested)?requested:permittedPages.includes(tab)?tab:permittedPages[0]||"profile";setTab(initial);setNavSelection(initial);if(initial==="cad")setOpenNavGroup("cncGroup");if(initial==="gate-progress")setOpenNavGroup("workGroup");history.replaceState({panelstock:true,key:initial,target:initial,section:null},"",`${location.pathname}?page=${encodeURIComponent(initial)}${initial==="gate-progress"&&params.get("gateOrder")?"&gateOrder="+encodeURIComponent(params.get("gateOrder")):""}`);const onBack=event=>{const state=event.state;if(state?.panelstock===true&&permittedPages.includes(state.target)){const group=navGroups.find(value=>value.items.some(item=>item.target===state.target));setOpenNavGroup(group?.key||null);setPreviewNavGroup(null);setNavSelection(state.key||state.target);if(state.section)setSettingsSection(state.section);setTab(state.target);}};addEventListener("popstate",onBack);return()=>removeEventListener("popstate",onBack);},[username,isAdmin,taskAccess]);
+    useEffect(()=>{if(!username)return;const params=new URLSearchParams(location.search),requestedRaw=params.get('page')||params.get('open'),requested=requestedRaw==='stock'?'workshop':requestedRaw,initial=permittedPages.includes(requested)?requested:permittedPages.includes(tab)?tab:permittedPages[0]||"profile";setTab(initial);setNavSelection(initial);if(initial==="cad")setOpenNavGroup("cncGroup");if(initial==="gate-progress"||initial==="purchase-requests")setOpenNavGroup("workGroup");history.replaceState({panelstock:true,key:initial,target:initial,section:null},"",`${location.pathname}?page=${encodeURIComponent(initial)}${initial==="gate-progress"&&params.get("gateOrder")?"&gateOrder="+encodeURIComponent(params.get("gateOrder")):""}`);const onBack=event=>{const state=event.state;if(state?.panelstock===true&&permittedPages.includes(state.target)){const group=navGroups.find(value=>value.items.some(item=>item.target===state.target));setOpenNavGroup(group?.key||null);setPreviewNavGroup(null);setNavSelection(state.key||state.target);if(state.section)setSettingsSection(state.section);setTab(state.target);}};addEventListener("popstate",onBack);return()=>removeEventListener("popstate",onBack);},[username,isAdmin,taskAccess]);
     function lookupSku(code) {
       const v = variants.find((x) => x.sku === code);
       if (v) return { ...v, itemType: "variant" };
@@ -14641,7 +14649,9 @@ ${xrefStart}
       return null;
     }
     const can = (task) => isAdmin || taskAccess[task] !== false;
+    const canUsePurchaseRequests=isAdmin||taskAccess["purchase-requests.create"]===true||taskAccess["purchase-requests.manage"]===true;
     const permittedPages = [
+      ...(canUsePurchaseRequests?[["purchase-requests",null]]:[]),
       ['workshop','factory.stock'],['receive','factory.receive'],['dispatch','factory.dispatch'],['transfer','factory.transfer'],['damage','factory.damage'],['cnc','factory.cnc'],...(isAdmin?[['cnc-settings',null],['qa-settings',null],['dispatch-settings',null]]:[]),
       ...(isAdmin||can('site.orders.manage')?[['projects',null]]:[]),['orders','site.orders.view'],...(globalThis.PANELSTOCK_GATE_PROGRESS_ENABLED?[['gate-progress','site.orders.view']]:[]),['schedule',can('schedule.view')?'schedule.view':'schedule.cnc.view'],['jobs','factory.jobs'],['qa','factory.qa'],
       ...(isAdmin?[['access',null],['audit',null]]:[]),['notifications',null],['support',null],['profile',null],['settings','factory.settings']
@@ -14667,11 +14677,11 @@ ${xrefStart}
     const navGroups = [
       {key:"stockGroup",label:"Stock",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Layers,{size:16}),items:[...(can("factory.stock")?[{key:"workshop",label:"SOH",target:"workshop",icon:(0,import_jsx_runtime.jsx)(Layers,{size:16})}]:[]),...(can("factory.receive")?[{key:"receive",label:"Receive",target:"receive",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Package,{size:16})}]:[]),...(can("factory.dispatch")?[{key:"dispatch",label:"Dispatch",target:"dispatch",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Truck,{size:16})}]:[]),...(can("factory.damage")?[{key:"damage",label:"Damage",target:"damage",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(AlertTriangle,{size:16})}]:[]),...(can("factory.transfer")?[{key:"transfer",label:"Convert",target:"transfer",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Scissors,{size:16})}]:[])]},
       {key:"cncGroup",label:"CNC",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(CncRouterIcon,{size:16}),items:[...(can("factory.cnc")?[{key:"cnc",label:"CNC Tracker",target:"cnc",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(CncRouterIcon,{size:16})}]:[]),...(isAdmin?[{key:"cnc-settings",label:"CNC Settings",target:"cnc-settings",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Settings2,{size:16})}]:[])]},
-      {key:"workGroup",label:"Work",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Briefcase,{size:16}),items:[...(can("schedule.view")||can("schedule.cnc.view")?[{key:"schedule",label:"Schedule",target:"schedule",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(ScheduleCalendarIcon,{size:16})}]:[]),...(isAdmin||can("site.orders.manage")?[{key:"projects",label:"Projects",target:"projects",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Briefcase,{size:16})}]:[]),...(can("factory.jobs")?[{key:"jobs",label:"Jobs",target:"jobs",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Briefcase,{size:16})}]:[]),...(can("site.orders.view")?[{key:"orders",label:"Site Orders",target:"orders",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(ClipboardList,{size:16})}]:[]),...(globalThis.PANELSTOCK_GATE_PROGRESS_ENABLED&&can("site.orders.view")?[{key:"gate-progress",label:"Gate Progress",target:"gate-progress",icon:(0,import_jsx_runtime.jsx)(ClipboardList,{size:16})}]:[])]},
+      {key:"workGroup",label:"Work",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Briefcase,{size:16}),items:[...(canUsePurchaseRequests?[{key:"purchase-requests",label:"Purchase Requests",target:"purchase-requests",icon:(0,import_jsx_runtime.jsx)(ClipboardList,{size:16})}]:[]),...(can("schedule.view")||can("schedule.cnc.view")?[{key:"schedule",label:"Schedule",target:"schedule",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(ScheduleCalendarIcon,{size:16})}]:[]),...(isAdmin||can("site.orders.manage")?[{key:"projects",label:"Projects",target:"projects",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Briefcase,{size:16})}]:[]),...(can("factory.jobs")?[{key:"jobs",label:"Jobs",target:"jobs",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Briefcase,{size:16})}]:[]),...(can("site.orders.view")?[{key:"orders",label:"Site Orders",target:"orders",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(ClipboardList,{size:16})}]:[]),...(globalThis.PANELSTOCK_GATE_PROGRESS_ENABLED&&can("site.orders.view")?[{key:"gate-progress",label:"Gate Progress",target:"gate-progress",icon:(0,import_jsx_runtime.jsx)(ClipboardList,{size:16})}]:[])]},
       {key:"qaGroup",label:"QA",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(ClipboardList,{size:16}),items:[...(can("factory.qa")?[{key:"qa",label:"QA Check",target:"qa",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(ClipboardList,{size:16})}]:[]),...(isAdmin?[{key:"qa-settings",label:"QA Settings",target:"qa-settings",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Settings2,{size:16})}]:[])]},
       {key:"adminGroup",label:"Administration",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Settings2,{size:16}),items:[...(isAdmin?[{key:"access",label:"User Access",target:"access",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(User,{size:16})},{key:"audit",label:"Audit Centre",target:"audit",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(ClipboardList,{size:16})}]:[]),...(can("factory.settings")?[{key:"settings",label:"Settings",target:"settings",section:"general",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Settings2,{size:16})}]:[])]}
     ].filter(group=>group.items.length);
-    const pageLabels = { cad: "Panel CAD", workshop: "SOH", stock: "Stock", receive: "Receive", dispatch: "Dispatch", transfer:"Convert", damage: "Damage", cnc: "CNC", "cnc-settings":"CNC Settings", qa:"QA Check", "qa-settings":"QA Settings", "dispatch-settings":"Dispatch Settings", projects:"Projects", orders: "Orders", "gate-progress":"Gate Progress", schedule: "Schedule", jobs: "Jobs", access: "User Access", audit:"Audit Centre", notifications:"Notifications", support:"Support", profile:"My Profile", settings: "Settings" };
+    const pageLabels = { cad: "Panel CAD", workshop: "SOH", stock: "Stock", receive: "Receive", dispatch: "Dispatch", transfer:"Convert", damage: "Damage", cnc: "CNC", "cnc-settings":"CNC Settings", qa:"QA Check", "qa-settings":"QA Settings", "dispatch-settings":"Dispatch Settings", projects:"Projects", "purchase-requests":"Purchase Requests", orders: "Orders", "gate-progress":"Gate Progress", schedule: "Schedule", jobs: "Jobs", access: "User Access", audit:"Audit Centre", notifications:"Notifications", support:"Support", profile:"My Profile", settings: "Settings" };
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex h-screen bg-slate-50 text-slate-900 font-sans", children: [
       (0,import_jsx_runtime.jsx)(ExcelOrderAction,{username}),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("aside", { className: "w-60 bg-slate-900 flex flex-col shrink-0", children: [
@@ -14712,7 +14722,7 @@ ${xrefStart}
             "Warehouse / ",
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "text-slate-700 font-medium", children: pageLabels[tab] })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "flex items-center gap-4", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "text-xs text-slate-400 font-mono", children: [
+          canReadStockSession({isAdmin,taskAccess}) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "flex items-center gap-4", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "text-xs text-slate-400 font-mono", children: [
             totalSOH,
             " panels on hand"
           ] }) })
@@ -14745,6 +14755,7 @@ ${xrefStart}
           ),
           tab === "cnc-settings" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncSettingsPage, { settings:cncSettings, onSaved:setCncSettings }),
           tab === "gate-progress" && globalThis.PANELSTOCK_GATE_PROGRESS_ENABLED && can("site.orders.view") && (0, import_jsx_runtime.jsx)(GateProgressPage, {username}),
+          tab === "purchase-requests" && canUsePurchaseRequests && (0,import_jsx_runtime.jsx)(PurchaseRequestsPage,{username}),
           tab === "orders" && can("site.orders.view") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(OrdersPage, { canCreate: can("site.orders.create"), canManage: can("site.orders.manage"), isAdmin }),
           tab === "projects" && (isAdmin || can("site.orders.manage")) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(OrdersPage, { canCreate: false, canManage: can("site.orders.manage"), isAdmin, projectsOnly: true }),
           tab === "schedule" && (can("schedule.view")||can("schedule.cnc.view")) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchedulePage, { canManage: can("schedule.manage"), canManageCnc:can("schedule.cnc.manage") }),
@@ -16871,6 +16882,15 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
     return h("section",{className:"ps-order-form-section","aria-label":"Admin notes"},h("div",{className:"flex items-center justify-between gap-3"},h("h3",null,"Admin notes"),h("button",{type:"button",disabled:loading||saving,onClick:load,className:"rounded-lg border px-3 py-2 text-sm"},loading?"Loading…":"Refresh notes")),h("p",{className:"text-sm text-slate-500"},"Notes from the office, visible to the order requester."),error&&h("p",{role:"alert",className:"text-sm text-red-700"},error),notice&&h("p",{role:"status"},notice),notes?notes.length?notes.map(note=>h("article",{key:note.id,className:"mt-3 rounded-lg border border-slate-200 p-3"},h("strong",null,note.author),h("small",{className:"ml-2 text-slate-500"},new Date(note.createdAt).toLocaleString("en-AU",{timeZone:"Australia/Brisbane"})+" (Brisbane)"),h("p",{className:"mt-2 whitespace-pre-wrap break-words text-sm"},note.text))):h("p",{className:"text-sm text-slate-500"},"No admin notes yet."):h("p",{role:"status"},"Loading admin notes…"),isAdmin&&h("div",{className:"mt-4"},h("label",{className:"block text-sm font-semibold"},"New admin note ",h("span",{style:{color:"#dc2626"},"aria-hidden":true},"*"),h("textarea",{"aria-label":"New admin note","aria-required":true,maxLength:2000,rows:3,disabled:saving,value:draft.text,onChange:event=>edit(event.target.value),className:"mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"})),h("button",{type:"button",disabled:saving||!draft.text.trim(),onClick:save,className:"mt-3 rounded-lg bg-cyan-800 px-4 py-2 text-sm font-semibold text-white"},saving?"Saving…":"Add admin note")));
   }
 
+  function PurchaseRequestsPage({username}) {
+    const root=useRef(null);
+    useEffect(()=>{
+      if(!root.current||PanelStock.username!==username)return;
+      const view=window.PanelStockPurchaseRequests.mount(root.current,{username,workerUrl:BAKED_WORKER_URL,currentUsername:()=>PanelStock.username,apiFetch:(url,options)=>PanelStock.apiFetch(url,options),confirm:options=>PanelStock.confirm(options)});
+      return()=>view.destroy();
+    },[username]);
+    return (0,import_jsx_runtime.jsxs)("section",{children:[(0,import_jsx_runtime.jsx)(PageHeading,{icon:(0,import_jsx_runtime.jsx)(ClipboardList,{size:18}),title:"Purchase Requests",subtitle:"Lennox purchase requests, Nexvia POs and confirmation emails."}),(0,import_jsx_runtime.jsx)("div",{ref:root,children:"Loading purchase requests…"})]});
+  }
   function GateProgressPage({username}) {
     const root=useRef(null),[error,setError]=useState("");
     useEffect(()=>{
@@ -18098,6 +18118,7 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
       {name:"Jobs",codes:["factory.jobs"]},
       {name:"QA",codes:["factory.qa","factory.qa.manage","factory.qa.dispatch"]},
       {name:"Schedule",codes:["schedule.view","schedule.manage"]},
+      {name:"Purchase requests",codes:["purchase-requests.create","purchase-requests.manage"]},
       {name:"Site orders",codes:["site.orders.view","site.orders.create","site.orders.manage"]},
       {name:"Settings",codes:["factory.settings"]}
     ].map(group=>({...group,tasks:group.codes.map(code=>tasks.find(task=>task.code===code)).filter(Boolean)})).filter(group=>group.tasks.length);

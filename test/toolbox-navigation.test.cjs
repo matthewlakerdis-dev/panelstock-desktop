@@ -8,7 +8,7 @@ const safetyStart=source.indexOf('    const safetyNavItem='),safety=source.slice
 const jsx=(type,props)=>({type,props}),worker='https://panelstock-reports.matthewlakerdis.workers.dev';
 function context(isAdmin,taskAccess){
  const icons=Object.fromEntries([...groups.matchAll(/\(\w+,\{size:16\}\)/g)].map(m=>[m[0].slice(1,m[0].indexOf(',')),()=>{}]));
- return {...icons,isAdmin,taskAccess,can:task=>isAdmin||taskAccess[task]!==false,BAKED_WORKER_URL:worker,import_jsx_runtime:{jsx,jsxs:jsx}};
+ return {...icons,isAdmin,taskAccess,canUsePurchaseRequests:isAdmin||taskAccess['purchase-requests.create']===true||taskAccess['purchase-requests.manage']===true,can:task=>isAdmin||taskAccess[task]!==false,BAKED_WORKER_URL:worker,import_jsx_runtime:{jsx,jsxs:jsx}};
 }
 function safetyItem(admin,tasks){const c=context(admin,tasks);vm.runInNewContext(safety+'globalThis.item=safetyNavItem;',c);return c.item;}
 function signInRegisterItem(admin,tasks){const c=context(admin,tasks);vm.runInNewContext(safety+'globalThis.item=signInRegisterNavItem;',c);return c.item;}
