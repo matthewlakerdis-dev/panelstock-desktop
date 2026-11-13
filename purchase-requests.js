@@ -1,6 +1,7 @@
 (function(root){
   'use strict';
   const MAX_PDF=10*1024*1024;
+  const CHOICE_REFRESH_MS=5*60*1000;
   const STATES={queued:'Queued',processing:'Processing in Nexvia',created_verified:'PO verified',needs_review:'Needs review',cancelled:'Cancelled'};
   const clone=value=>JSON.parse(JSON.stringify(value));
   const money=cents=>new Intl.NumberFormat('en-AU',{style:'currency',currency:'AUD'}).format(cents/100);
@@ -106,7 +107,7 @@
   }
   function mount(host,options){
     const doc=host.ownerDocument||root.document,owner=options.username;
-    let alive=true,catalog=null,lookupVersion=0,busy=false,locked=false,quote=null;
+    let alive=true,catalog=null,catalogRefreshing=false,catalogBlocked=false,lookupVersion=0,busy=false,locked=false,quote=null;
     let requests=[],projects=[],projectSignature='',permissions={create:false,manage:false},timers=new Set();
     const controller=new AbortController();
     const current=()=>alive&&(!options.currentUsername||options.currentUsername()===owner);
@@ -161,17 +162,18 @@
     const details=el('section',null,'pr-details');details.hidden=true;
     append(historyCard,el('h2','Purchase requests'),historyInfo,historyList,details);append(shell,top,status,formCard,historyCard);host.replaceChildren(shell);
     function notice(message,error=false){if(!current())return;status.textContent=message;status.classList.toggle('pr-error',error);}
-    function lock(value){locked=value;formFields.disabled=value||!permissions.create;send.disabled=value||!permissions.create||!catalog;retry.hidden=!submitter.pending;retry.disabled=busy;}
+    function lock(value){locked=value;formFields.disabled=value||!permissions.create;send.disabled=value||!permissions.create||!catalog||catalogRefreshing||catalogBlocked;retry.hidden=!submitter.pending;retry.disabled=busy;}
     function lineValues(){return [...lineBox.children].map(row=>({description:row.querySelector('[name=description]').value.trim(),quantity:row.querySelector('[name=quantity]').value,unitPriceExGst:row.querySelector('[name=price]').value,chartOfAccountId:row.querySelector('[name=account]').value,taxRateId:row.querySelector('[name=tax]').value,breakdownType:breakdown.value}));}
     function updateTotals(){
       totalBox.replaceChildren();if(!catalog)return;
       try{const amounts=calculateTotals(lineValues(),catalog.taxes);for(const [label,key] of [['Subtotal ex GST','subtotalCents'],['GST','taxCents'],['Total including GST','totalCents']])append(totalBox,append(el('div'),el('span',label),el('strong',money(amounts[key]))));}
       catch{totalBox.appendChild(el('span','Complete quantities, prices and tax rates to calculate the total.'));}
     }
-    function populateLine(row){
+    function populateLine(row,defaultTax=false){
       choices(row.querySelector('[name=account]'),catalog?.accounts||[],value=>value.name);
       choices(row.querySelector('[name=tax]'),catalog?.taxes||[],value=>value.name+' ('+value.rate+'%)');
-      const standard=catalog?.taxes?.find(value=>Number(value.rate)===10);if(standard)row.querySelector('[name=tax]').value=String(standard.id);
+      const tax=row.querySelector('[name=tax]'),standard=catalog?.taxes?.find(value=>Number(value.rate)===10);
+      if(defaultTax&&!tax.value&&standard)tax.value=String(standard.id);
     }
     function addLine(){
       if(locked||lineBox.children.length>=200)return;
@@ -180,28 +182,35 @@
       const price=input('number','price');price.min='0';price.max='1000000000';price.step='any';
       const account=select('account'),tax=select('tax');
       append(row,field('Description *',description,true),field('Quantity *',quantity),field('Unit price ex GST *',price),field('Cost of sales *',account),field('Tax *',tax),button('Remove line',()=>{if(lineBox.children.length>1){row.remove();updateTotals();}},'pr-remove'));
-      row.addEventListener('input',updateTotals);row.addEventListener('change',updateTotals);populateLine(row);lineBox.appendChild(row);updateTotals();
+      row.addEventListener('input',updateTotals);row.addEventListener('change',updateTotals);populateLine(row,true);lineBox.appendChild(row);updateTotals();
     }
-    function setCatalog(value){
+    function setCatalog(value,defaultTax=false){
       catalog=value;choices(supplier,value?.suppliers||[],row=>row.text||row.name);choices(service,value?.services||[],row=>row.name);choices(breakdown,value?.breakdowns||[],row=>row.name);
-      for(const row of lineBox.children)populateLine(row);lock(locked);updateTotals();
+      for(const row of lineBox.children)populateLine(row,defaultTax);lock(locked);updateTotals();
     }
-    async function lookup(){
-      const version=++lookupVersion,projectId=Number(project.value);setCatalog(null);
-      if(!projectId){lookupStatus.textContent='Select a project to load its current suppliers and account choices.';return;}
-      lookupStatus.textContent='Loading current project choices…';
+    async function lookup({background=false}={}){
+      if(!current()||locked||busy||submitter.pending||!permissions.create)return;
+      const projectId=Number(project.value),preserve=catalog?.projectPageId===projectId;
+      if(background&&(!projectId||catalogRefreshing))return;
+      const version=++lookupVersion;catalogRefreshing=false;catalogBlocked=true;
+      if(!preserve)setCatalog(null);
+      if(!projectId){lookupStatus.textContent='Select a project to load its current suppliers and account choices.';lock(locked);return;}
+      catalogRefreshing=true;lock(locked);
+      lookupStatus.textContent=preserve?'Refreshing project choices. Your entries are retained…':'Loading current project choices…';
+      const fail=error=>{if(version===lookupVersion&&current()){catalogRefreshing=false;catalogBlocked=true;lock(locked);lookupStatus.textContent=error.message+' Refresh project choices before submitting.';}};
       const take=async response=>{
         if(!current()||version!==lookupVersion)return;
+        if(locked||submitter.pending){catalogRefreshing=false;lock(locked);return;}
         requireValue(response.ok,response.data.error||'Project choices could not be loaded.');
         const result=response.data;
-        if(result.lookup?.state==='ready'&&result.catalog){requireValue(result.catalog.projectPageId===projectId,'Project choices did not match. Select the project again.');setCatalog(result.catalog);lookupStatus.textContent='Project choices are ready.';return;}
-        if(result.lookup?.state==='needs_review'){lookupStatus.textContent=result.lookup.message||'Project choices need office review.';return;}
+        if(result.lookup?.state==='ready'&&result.catalog){requireValue(result.catalog.projectPageId===projectId&&Number(project.value)===projectId,'Project choices did not match. Select the project again.');catalogRefreshing=false;catalogBlocked=false;setCatalog(result.catalog,!preserve);lookupStatus.textContent='Project choices are ready. They refresh automatically every five minutes.';return;}
+        if(result.lookup?.state==='needs_review'){catalogRefreshing=false;catalogBlocked=true;lock(locked);lookupStatus.textContent=result.lookup.message||'Project choices need office review.';return;}
         requireValue(result.lookup?.id,'Project choices could not be queued.');
         lookupStatus.textContent='Waiting for Nexvia project choices. You can keep this page open.';
-        later(()=>void api('/purchase-requests/lookups/'+encodeURIComponent(result.lookup.id)).then(take).catch(error=>{if(version===lookupVersion&&current())lookupStatus.textContent=error.message;}),3000);
+        later(()=>void api('/purchase-requests/lookups/'+encodeURIComponent(result.lookup.id)).then(take).catch(fail),3000);
       };
       try{await take(await api('/purchase-requests/lookups',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({projectPageId:projectId})}));}
-      catch(error){if(version===lookupVersion&&current())lookupStatus.textContent=error.message;}
+      catch(error){fail(error);}
     }
     project.addEventListener('change',()=>void lookup());
     file.addEventListener('change',()=>{
@@ -209,7 +218,7 @@
       if(quote&&(quote.size>MAX_PDF||!quote.name.toLowerCase().endsWith('.pdf'))){notice('Choose a PDF no larger than 10 MB.',true);file.value='';quote=null;}
     });
     async function payload(){
-      requireValue(catalog&&catalog.projectPageId===Number(project.value),'Load the selected project choices before submitting.');
+      requireValue(catalog&&!catalogRefreshing&&!catalogBlocked&&catalog.projectPageId===Number(project.value),'Load the selected project choices before submitting.');
       const lines=lineValues();calculateTotals(lines,catalog.taxes);
       const body={requestId:root.crypto.randomUUID(),projectPageId:catalog.projectPageId,catalogRevision:catalog.revision,requestor:{name:name.value.trim(),email:email.value.trim()},date:date.value,supplierId:supplier.value,supplierReference:reference.value.trim(),serviceId:service.value,breakdownType:breakdown.value,quote:null,quoteBase64:'',lines};
       if(quote){
@@ -222,6 +231,7 @@
     }
     async function submit(isRetry){
       if(busy||!current())return;
+      if(!isRetry&&(catalogRefreshing||catalogBlocked)){notice('Wait for current project choices or refresh them before submitting.',true);return;}
       if(!isRetry&&!form.reportValidity())return;
       busy=true;lock(true);send.textContent='Submitting…';notice('Saving your request…');
       try{
@@ -236,7 +246,7 @@
       }finally{busy=false;if(current()){send.textContent='Submit purchase request';retry.hidden=!submitter.pending;retry.disabled=false;}}
     }
     form.addEventListener('submit',event=>{event.preventDefault();void submit(false);});
-    function newRequest(){if(submitter.pending||busy)return;form.reset();name.value=options.profile?.name||name.value;email.value=options.profile?.email||email.value;date.value=new Intl.DateTimeFormat('en-CA',{timeZone:'Australia/Brisbane',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());quote=null;lineBox.replaceChildren();setCatalog(null);locked=false;addLine();lock(false);send.hidden=false;fresh.hidden=true;notice('');}
+    function newRequest(){if(submitter.pending||busy)return;++lookupVersion;catalogRefreshing=false;catalogBlocked=false;form.reset();name.value=options.profile?.name||name.value;email.value=options.profile?.email||email.value;date.value=new Intl.DateTimeFormat('en-CA',{timeZone:'Australia/Brisbane',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());quote=null;lineBox.replaceChildren();setCatalog(null);locked=false;addLine();lock(false);send.hidden=false;fresh.hidden=true;notice('');}
     function upsert(request){requests=[request,...requests.filter(value=>value.id!==request.id)].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));}
     function renderHistory(){
       historyList.replaceChildren();if(!requests.length){historyList.appendChild(el('p','No purchase requests yet.','pr-help'));return;}
@@ -281,10 +291,10 @@
         const selectedSummary=requests.find(value=>value.id===detailLoader.id);detailLoader.summary(selectedSummary);
         connection.textContent=response.data.connection?.connected?'Nexvia connection is online.':'Nexvia connection is offline. Saved requests remain queued until the connection is ready.';
         const signature=JSON.stringify(projects);
-        if(initial||signature!==projectSignature){
+        if((initial||signature!==projectSignature)&&!locked&&!busy&&!submitter.pending){
           const previous=project.value;projectSignature=signature;
           choices(project,projects.map(value=>({...value,id:value.projectPageId})),value=>value.name,'Select a project');
-          if(previous&&!project.value){++lookupVersion;setCatalog(null);lookupStatus.textContent='The selected project is no longer available. Select a current project before submitting.';}
+          if(previous&&!project.value){++lookupVersion;catalogRefreshing=false;catalogBlocked=true;setCatalog(null);lookupStatus.textContent='The selected project is no longer available. Select a current project before submitting.';}
         }
         if(initial){options.profile=response.data.profile||{};name.value=options.profile.name||'';email.value=options.profile.email||'';addLine();}
         formCard.hidden=!permissions.create;lock(locked);renderHistory();renderDetails();if(!initial&&detailLoader.id)void detailLoader.refresh();
@@ -295,6 +305,7 @@
       try{const found=await submitter.restore();if(!current())return;if(found){upsert(found);detailLoader.show(found);renderHistory();lock(true);send.hidden=true;fresh.hidden=false;notice('Your previously submitted request was found.');}else if(submitter.pending){lock(true);notice('A saved request is waiting for its outcome. Check status and retry it before starting another request.');}}
       catch(error){if(current()){lock(!!submitter.pending);notice(error.message,true);}}
       const poll=()=>{void refresh();later(poll,10000);};later(poll,10000);
+      const refreshChoices=()=>{void lookup({background:true});later(refreshChoices,CHOICE_REFRESH_MS);};later(refreshChoices,CHOICE_REFRESH_MS);
     }
     void start();
     return {destroy(){alive=false;++lookupVersion;controller.abort();for(const timer of timers)root.clearTimeout(timer);timers.clear();host.replaceChildren();},refresh};
