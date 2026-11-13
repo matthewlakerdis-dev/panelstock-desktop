@@ -72,7 +72,7 @@
         // this UUID was not saved. Other conflicts remain ambiguous.
         const existing=await resolve();if(existing)return existing;
         await storage.clear();pending=null;
-        const error=Error(response.data.error||'Project choices changed. Refresh them before submitting.');error.choicesChanged=true;throw error;
+        const error=Error('Project choices changed. Retry project choices before submitting.');error.choicesChanged=true;throw error;
       }
       if([400,422].includes(response.status)){await storage.clear();pending=null;}
       throw Error(response.data?.error||'The result is uncertain. Check status or retry this saved request.');
@@ -148,11 +148,12 @@
     const grid=el('div',null,'pr-grid');
     append(grid,field('Requestor name *',name),field('Work email *',email),field('Project / building *',project),field('Order date *',date),field('Supplier *',supplier),field('Supplier / quote reference',reference),field('Service *',service),field('Element of work *',breakdown));
     const lookupStatus=el('p',null,'pr-help');lookupStatus.setAttribute('role','status');
+    const retryChoices=button('Retry project choices',()=>void lookup());retryChoices.hidden=true;
     const file=input('file','quote',false);file.accept='application/pdf,.pdf';
     const fileStatus=el('p','Optional PDF, up to 10 MB. Requests with a PDF are saved for office review; they are not automatically created in Nexvia.','pr-help');
     const lineBox=el('div',null,'pr-lines');const totalBox=el('div',null,'pr-totals');
     const addLineButton=button('Add line',()=>addLine());
-    append(formFields,grid,lookupStatus,button('Refresh project choices',()=>void lookup()),el('h3','Items'),el('p','Enter unit prices excluding GST. The total below includes the selected tax.','pr-help'),lineBox,addLineButton,totalBox,field('Quote PDF (optional)',file,true),fileStatus);
+    append(formFields,grid,lookupStatus,retryChoices,el('h3','Items'),el('p','Enter unit prices excluding GST. The total below includes the selected tax.','pr-help'),lineBox,addLineButton,totalBox,field('Quote PDF (optional)',file,true),fileStatus);
     const send=el('button','Submit purchase request','pr-primary');send.type='submit';
     const retry=button('Check status and retry saved request',()=>void submit(true),'pr-primary');retry.hidden=true;
     const fresh=button('New purchase request',()=>newRequest());fresh.hidden=true;
@@ -191,20 +192,21 @@
     async function lookup({background=false}={}){
       if(!current()||locked||busy||submitter.pending||!permissions.create)return;
       const projectId=Number(project.value),preserve=catalog?.projectPageId===projectId;
-      if(background&&(!projectId||catalogRefreshing))return;
+      if(background&&(!projectId||catalogRefreshing||doc.hidden))return;
       const version=++lookupVersion;catalogRefreshing=false;catalogBlocked=true;
+      retryChoices.hidden=true;
       if(!preserve)setCatalog(null);
       if(!projectId){lookupStatus.textContent='Select a project to load its current suppliers and account choices.';lock(locked);return;}
       catalogRefreshing=true;lock(locked);
       lookupStatus.textContent=preserve?'Refreshing project choices. Your entries are retained…':'Loading current project choices…';
-      const fail=error=>{if(version===lookupVersion&&current()){catalogRefreshing=false;catalogBlocked=true;lock(locked);lookupStatus.textContent=error.message+' Refresh project choices before submitting.';}};
+      const fail=error=>{if(version===lookupVersion&&current()){catalogRefreshing=false;catalogBlocked=true;lock(locked);retryChoices.hidden=false;lookupStatus.textContent=error.message+' Retry project choices before submitting.';}};
       const take=async response=>{
         if(!current()||version!==lookupVersion)return;
         if(locked||submitter.pending){catalogRefreshing=false;lock(locked);return;}
         requireValue(response.ok,response.data.error||'Project choices could not be loaded.');
         const result=response.data;
-        if(result.lookup?.state==='ready'&&result.catalog){requireValue(result.catalog.projectPageId===projectId&&Number(project.value)===projectId,'Project choices did not match. Select the project again.');catalogRefreshing=false;catalogBlocked=false;setCatalog(result.catalog,!preserve);lookupStatus.textContent='Project choices are ready. They refresh automatically every five minutes.';return;}
-        if(result.lookup?.state==='needs_review'){catalogRefreshing=false;catalogBlocked=true;lock(locked);lookupStatus.textContent=result.lookup.message||'Project choices need office review.';return;}
+        if(result.lookup?.state==='ready'&&result.catalog){requireValue(result.catalog.projectPageId===projectId&&Number(project.value)===projectId,'Project choices did not match. Select the project again.');catalogRefreshing=false;catalogBlocked=false;setCatalog(result.catalog,!preserve);lookupStatus.textContent='Project choices are ready.';return;}
+        if(result.lookup?.state==='needs_review'){catalogRefreshing=false;catalogBlocked=true;lock(locked);retryChoices.hidden=false;lookupStatus.textContent=(result.lookup.message||'Project choices need office review.')+' Retry project choices when the connection is ready.';return;}
         requireValue(result.lookup?.id,'Project choices could not be queued.');
         lookupStatus.textContent='Waiting for Nexvia project choices. You can keep this page open.';
         later(()=>void api('/purchase-requests/lookups/'+encodeURIComponent(result.lookup.id)).then(take).catch(fail),3000);
@@ -240,13 +242,13 @@
         notice('Request '+request.reference+' saved. '+(request.state==='needs_review'?'It is waiting for office review.':'Follow its PO status below.'));
       }catch(error){
         if(!current())return;
-        if(error.choicesChanged){++lookupVersion;setCatalog(null);lookupStatus.textContent='Refresh project choices and check the supplier, service and account selections. Your line descriptions and prices are retained.';}
+        if(error.choicesChanged){++lookupVersion;catalogRefreshing=false;catalogBlocked=true;retryChoices.hidden=false;lookupStatus.textContent='Retry project choices and check the supplier, service and account selections. Your entries are retained.';}
         const retained=submitter.pending;notice(retained?'The outcome is not yet confirmed. Your saved request is locked to avoid a duplicate. Check status and retry the same request. '+error.message:error.message,true);
         lock(!!retained);
       }finally{busy=false;if(current()){send.textContent='Submit purchase request';retry.hidden=!submitter.pending;retry.disabled=false;}}
     }
     form.addEventListener('submit',event=>{event.preventDefault();void submit(false);});
-    function newRequest(){if(submitter.pending||busy)return;++lookupVersion;catalogRefreshing=false;catalogBlocked=false;form.reset();name.value=options.profile?.name||name.value;email.value=options.profile?.email||email.value;date.value=new Intl.DateTimeFormat('en-CA',{timeZone:'Australia/Brisbane',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());quote=null;lineBox.replaceChildren();setCatalog(null);locked=false;addLine();lock(false);send.hidden=false;fresh.hidden=true;notice('');}
+    function newRequest(){if(submitter.pending||busy)return;++lookupVersion;catalogRefreshing=false;catalogBlocked=false;retryChoices.hidden=true;form.reset();name.value=options.profile?.name||name.value;email.value=options.profile?.email||email.value;date.value=new Intl.DateTimeFormat('en-CA',{timeZone:'Australia/Brisbane',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());quote=null;lineBox.replaceChildren();setCatalog(null);locked=false;addLine();lock(false);send.hidden=false;fresh.hidden=true;notice('');}
     function upsert(request){requests=[request,...requests.filter(value=>value.id!==request.id)].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));}
     function renderHistory(){
       historyList.replaceChildren();if(!requests.length){historyList.appendChild(el('p','No purchase requests yet.','pr-help'));return;}
@@ -294,7 +296,7 @@
         if((initial||signature!==projectSignature)&&!locked&&!busy&&!submitter.pending){
           const previous=project.value;projectSignature=signature;
           choices(project,projects.map(value=>({...value,id:value.projectPageId})),value=>value.name,'Select a project');
-          if(previous&&!project.value){++lookupVersion;catalogRefreshing=false;catalogBlocked=true;setCatalog(null);lookupStatus.textContent='The selected project is no longer available. Select a current project before submitting.';}
+          if(previous&&!project.value){++lookupVersion;catalogRefreshing=false;catalogBlocked=true;retryChoices.hidden=true;setCatalog(null);lookupStatus.textContent='The selected project is no longer available. Select a current project before submitting.';}
         }
         if(initial){options.profile=response.data.profile||{};name.value=options.profile.name||'';email.value=options.profile.email||'';addLine();}
         formCard.hidden=!permissions.create;lock(locked);renderHistory();renderDetails();if(!initial&&detailLoader.id)void detailLoader.refresh();
