@@ -185,6 +185,7 @@ const html=fs.readFileSync(require.resolve('../index.html'),'utf8').replace(/\r\
 const effectStart=html.indexOf('    useEffect(() => {\n      let active = true;\n      (async () => {');
 assert.ok(effectStart>=0);
 const startupEffect=html.slice(effectStart,html.indexOf('\n    useEffect(',effectStart+20));
+const stockSessionHelper=html.slice(html.indexOf('  const canReadStockSession='),html.indexOf('  function App() {'));
 async function runStartup(metadata){
   const finished=deferred(),state={},cache={revision:1,variants:[{id:'cached-stock',qty:9}]};
   const optionalCalls=[];
@@ -193,7 +194,7 @@ async function runStartup(metadata){
     ensureMissingPanelReason:value=>value||[],useEffect:callback=>callback(),TABS:[{id:'soh',tasks:[]}],setTab(){}};
   for(const name of ['RememberedUsername','EmailConfig','OwnProfile','Variants','Offcuts','Transactions','Reasons','Catalog','Photos','CncPanels','Username','IsAdmin','TaskAccess','ProductionTrackerShare'])context['set'+name]=value=>state[name]=value;
   context.setLoading=value=>{state.Loading=value;if(value===false)finished.resolve();};
-  vm.runInNewContext(startupEffect,context);
+  vm.runInNewContext(stockSessionHelper+startupEffect,context);
   await finished.promise;
   return {state,optionalCalls};
 }
