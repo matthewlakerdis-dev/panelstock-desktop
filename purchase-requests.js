@@ -105,23 +105,126 @@
       refresh(){return selectedId?load(selectedId):Promise.resolve();},
     };
   }
+  let searchChoiceSequence=0;
+  function searchableSelect(native,{current=()=>true,onDestroy=()=>{}}={}){
+    const doc=native.ownerDocument;
+    // Minimal DOM clients retain the ordinary native control.
+    if(!doc||typeof doc.addEventListener!=='function'||typeof doc.removeEventListener!=='function'||typeof native.setCustomValidity!=='function')return null;
+    const make=(tag,className)=>{const node=doc.createElement(tag);if(className)node.className=className;return node;};
+    const element=make('div','pr-search-select'),input=make('input','pr-search-input'),popup=make('div','pr-search-popup');
+    const id='pr-choice-'+(++searchChoiceSequence),required=native.required;
+    input.id=id;input.type='text';input.autocomplete='off';input.spellcheck=false;input.required=required;
+    input.setAttribute('role','combobox');input.setAttribute('aria-autocomplete','list');input.setAttribute('aria-haspopup','listbox');input.setAttribute('aria-expanded','false');input.setAttribute('aria-controls',id+'-list');
+    popup.id=id+'-list';popup.setAttribute('role','listbox');popup.hidden=true;
+    native.required=false;native.hidden=true;native.tabIndex=-1;native.setAttribute('aria-hidden','true');
+    element.appendChild(native);element.appendChild(input);element.appendChild(popup);
+    let open=false,editing=false,query='',prior='',active=-1,shown=[],optionNodes=[],destroyed=false;
+    const enabled=()=>!destroyed&&current()&&!native.disabled&&!(typeof native.matches==='function'&&native.matches(':disabled'));
+    function allChoices(){
+      const rows=Array.from(native.options).filter(option=>option.value!=='').map(option=>({value:option.value,text:option.textContent.trim(),disabled:option.disabled}));
+      const counts=new Map();for(const row of rows){const name=row.text.toLocaleLowerCase();counts.set(name,(counts.get(name)||0)+1);}
+      return rows.map(row=>({...row,label:counts.get(row.text.toLocaleLowerCase())>1?row.text+' · '+row.value:row.text}));
+    }
+    function selected(){return allChoices().find(row=>row.value===native.value&&!row.disabled);}
+    function validity(){const message=enabled()&&(editing||required&&!selected())?'Choose an option from the list.':'';input.setCustomValidity(message);if(!message)input.removeAttribute('aria-invalid');}
+    function highlight(index){
+      active=index;
+      for(let i=0;i<optionNodes.length;i++)optionNodes[i].classList.toggle('is-active',i===active);
+      if(active>=0&&optionNodes[active]){input.setAttribute('aria-activedescendant',optionNodes[active].id);optionNodes[active].scrollIntoView?.({block:'nearest'});}
+      else input.removeAttribute('aria-activedescendant');
+    }
+    function position(){
+      if(typeof element.getBoundingClientRect!=='function')return;
+      const bounds=element.getBoundingClientRect(),height=root.innerHeight||doc.documentElement?.clientHeight;
+      if(!height)return;
+      const below=height-bounds.bottom,above=bounds.top,up=below<Math.min(popup.scrollHeight||260,260)&&above>below;
+      element.classList.toggle('is-above',up);popup.style.maxHeight=Math.max(80,Math.min(300,(up?above:below)-12))+'px';
+    }
+    function close(restore=false){
+      if(restore&&editing){const choice=allChoices().find(row=>row.value===prior&&!row.disabled);native.value=choice?.value||'';native.dispatchEvent(new root.Event('input',{bubbles:true}));}
+      open=false;editing=false;query='';popup.hidden=true;element.classList.remove('is-open');input.setAttribute('aria-expanded','false');input.removeAttribute('aria-activedescendant');doc.removeEventListener('pointerdown',outside,true);
+      input.value=selected()?.label||'';validity();
+    }
+    function choose(value){
+      if(!enabled())return;
+      const choice=allChoices().find(row=>row.value===value&&!row.disabled);if(!choice)return;
+      native.value=choice.value;close();native.dispatchEvent(new root.Event('change',{bubbles:true}));input.focus();
+    }
+    function render(){
+      const activeValue=shown[active]?.value,needle=query.trim().toLocaleLowerCase();
+      shown=allChoices().filter(row=>(row.label+' '+row.value).toLocaleLowerCase().includes(needle));optionNodes=[];popup.replaceChildren();
+      for(let index=0;index<shown.length;index++){
+        const row=shown[index],option=make('div','pr-search-option');option.id=id+'-option-'+index;option.textContent=row.label;option.setAttribute('role','option');option.setAttribute('aria-selected',String(row.value===native.value));option.setAttribute('aria-disabled',String(row.disabled));option.classList.toggle('is-selected',row.value===native.value);option.classList.toggle('is-disabled',row.disabled);
+        option.addEventListener('pointerdown',event=>event.preventDefault());option.addEventListener('click',()=>choose(row.value));option.addEventListener('pointermove',()=>{if(enabled()&&!row.disabled)highlight(index);});
+        popup.appendChild(option);optionNodes.push(option);
+      }
+      if(!shown.length){const empty=make('div','pr-search-empty');empty.textContent='No matching options.';empty.setAttribute('role','status');popup.appendChild(empty);}
+      highlight(shown.findIndex(row=>row.value===activeValue&&!row.disabled));position();
+    }
+    function expand(){
+      if(!enabled())return;
+      if(!open){prior=native.value;query='';editing=false;active=-1;open=true;popup.hidden=false;element.classList.add('is-open');input.setAttribute('aria-expanded','true');doc.addEventListener('pointerdown',outside,true);}
+      render();
+    }
+    function outside(event){if(open&&!element.contains(event.target))close();}
+    function change(){editing=false;close();sync();}
+    function sync(){
+      if(destroyed)return;
+      input.disabled=native.disabled;
+      if(!enabled()){close();return;}
+      if(open&&editing){render();validity();return;}
+      input.value=selected()?.label||'';input.placeholder=Array.from(native.options).find(option=>option.value==='')?.textContent||'Select…';
+      if(open)render();validity();
+    }
+    function type(){
+      if(!enabled()){sync();return;}
+      const typed=input.value;if(!open)expand();editing=true;query=typed;input.value=typed;native.value='';native.dispatchEvent(new root.Event('input',{bubbles:true}));render();validity();
+    }
+    function key(event){
+      if(!enabled())return;
+      if(event.key==='Escape'&&open){event.preventDefault();event.stopPropagation();close(true);return;}
+      if(event.key==='Tab'){close();return;}
+      if(editing&&['Home','End'].includes(event.key))return;
+      if(['ArrowDown','ArrowUp','Home','End'].includes(event.key)){
+        event.preventDefault();expand();const direction=event.key==='ArrowUp'||event.key==='End'?-1:1;
+        let index=event.key==='Home'?0:event.key==='End'?shown.length-1:active<0?(direction>0?0:shown.length-1):active+direction;
+        while(index>=0&&index<shown.length&&shown[index].disabled)index+=direction;
+        if(index>=0&&index<shown.length)highlight(index);return;
+      }
+      if(event.key==='Enter'&&open){event.preventDefault();if(active>=0)choose(shown[active].value);}
+    }
+    const focus=()=>{expand();input.select?.();},blur=()=>close(),invalid=()=>{if(enabled()){input.setAttribute('aria-invalid','true');input.focus();expand();}};
+    input.addEventListener('focus',focus);input.addEventListener('click',expand);input.addEventListener('input',type);input.addEventListener('keydown',key);input.addEventListener('blur',blur);input.addEventListener('invalid',invalid);native.addEventListener('change',change);
+    const observer=typeof root.MutationObserver==='function'?new root.MutationObserver(()=>{if(enabled())sync();else close();}):null;
+    observer?.observe(native,{attributes:true,attributeFilter:['disabled']});
+    const control={element,input,setLabel(label){input.setAttribute('aria-label',label);popup.setAttribute('aria-label',label+' choices');},sync,refresh:sync,syncDisabled:sync,
+      destroy(){if(destroyed)return;close();destroyed=true;observer?.disconnect();input.removeEventListener('focus',focus);input.removeEventListener('click',expand);input.removeEventListener('input',type);input.removeEventListener('keydown',key);input.removeEventListener('blur',blur);input.removeEventListener('invalid',invalid);native.removeEventListener('change',change);onDestroy();}};
+    control.setLabel(native.name||'Choose an option');sync();return control;
+  }
   function mount(host,options){
     const doc=host.ownerDocument||root.document,owner=options.username;
     let alive=true,catalog=null,catalogRefreshing=false,catalogBlocked=false,lookupVersion=0,busy=false,locked=false,quote=null;
     let requests=[],projects=[],projectSignature='',permissions={create:false,manage:false},timers=new Set();
+    const searchControls=new Set();
     const controller=new AbortController();
     const current=()=>alive&&(!options.currentUsername||options.currentUsername()===owner);
     const later=(fn,delay)=>{const id=root.setTimeout(()=>{timers.delete(id);if(current())fn();},delay);timers.add(id);return id;};
     function el(tag,text,className){const node=doc.createElement(tag);if(text!==undefined&&text!==null)node.textContent=text;if(className)node.className=className;return node;}
     function append(parent,...children){for(const child of children)if(child)parent.appendChild(child);return parent;}
     function button(text,action,className='pr-button'){const node=el('button',text,className);node.type='button';node.addEventListener('click',action);return node;}
-    function field(label,node,wide=false){const wrapper=el('label',null,'pr-field'+(wide?' pr-wide':''));append(wrapper,el('span',label),node);return wrapper;}
+    function field(label,node,wide=false,className=''){
+      const search=node.searchControl,wrapper=el(search?'div':'label',null,'pr-field'+(wide?' pr-wide':'')+(className?' '+className:''));
+      const caption=el(search?'label':'span',label);
+      if(search){caption.htmlFor=search.input.id;search.setLabel(label);}
+      append(wrapper,caption,search?.element||node);return wrapper;
+    }
     function input(type,name,required=true){const node=el('input');node.type=type;node.name=name;node.required=required;return node;}
-    function select(name){const node=el('select');node.name=name;node.required=true;return node;}
+    function select(name){const node=el('select');node.name=name;node.required=true;const control=searchableSelect(node,{current,onDestroy:()=>searchControls.delete(control)});if(control){node.searchControl=control;searchControls.add(control);}return node;}
     function choices(node,rows,label,placeholder='Select…'){
       const previous=node.value;node.replaceChildren();const blank=el('option',placeholder);blank.value='';node.appendChild(blank);
       for(const row of rows){const option=el('option',label(row));option.value=String(row.id);option.disabled=row.disabled===true;node.appendChild(option);}
       if([...node.options].some(option=>option.value===previous&&!option.disabled))node.value=previous;
+      node.searchControl?.refresh();
     }
     async function api(path,init={}){
       requireValue(current(),'Your account changed. Reopen Purchase Requests.');
@@ -136,7 +239,7 @@
     const status=el('p',null,'pr-notice');status.setAttribute('role','status');
     const connection=el('p',null,'pr-connection');
     const top=el('div',null,'pr-top');append(top,connection,button('Refresh requests',()=>void refresh()));
-    const formCard=el('section',null,'pr-card');
+    const formCard=el('section',null,'pr-card pr-create-card');
     const form=el('form');form.setAttribute('aria-label','Lennox purchase request');
     const formFields=el('fieldset');formFields.className='pr-form-fields';
     const name=input('text','requestorName');name.maxLength=100;
@@ -145,29 +248,43 @@
     const date=input('date','date');date.value=new Intl.DateTimeFormat('en-CA',{timeZone:'Australia/Brisbane',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
     const reference=input('text','supplierReference',false);reference.maxLength=200;
     const service=select('service'),breakdown=select('breakdown');
-    const grid=el('div',null,'pr-grid');
-    append(grid,field('Requestor name *',name),field('Work email *',email),field('Project / building *',project),field('Order date *',date),field('Supplier *',supplier),field('Supplier / quote reference',reference),field('Service *',service),field('Element of work *',breakdown));
+    const requestSection=el('section',null,'pr-form-section');
+    const requestGrid=el('div',null,'pr-grid');
+    append(requestGrid,field('Requestor name *',name),field('Work email *',email),field('Project / building *',project),field('Order date *',date));
+    append(requestSection,el('h3','Request details'),requestGrid);
+    const purchaseSection=el('section',null,'pr-form-section');
+    const purchaseGrid=el('div',null,'pr-grid');
+    append(purchaseGrid,field('Supplier *',supplier),field('Supplier / quote reference',reference),field('Service *',service),field('Element of work *',breakdown));
     const lookupStatus=el('p',null,'pr-help');lookupStatus.setAttribute('role','status');
     const retryChoices=button('Retry project choices',()=>void lookup());retryChoices.hidden=true;
     const file=input('file','quote',false);file.accept='application/pdf,.pdf';
     const fileStatus=el('p','Optional PDF, up to 10 MB. Requests with a PDF are saved for office review; they are not automatically created in Nexvia.','pr-help');
-    const lineBox=el('div',null,'pr-lines');const totalBox=el('div',null,'pr-totals');
-    const addLineButton=button('Add line',()=>addLine());
-    append(formFields,grid,lookupStatus,retryChoices,el('h3','Items'),el('p','Enter unit prices excluding GST. The total below includes the selected tax.','pr-help'),lineBox,addLineButton,totalBox,field('Quote PDF (optional)',file,true),fileStatus);
+    const lineBox=el('div',null,'pr-lines');const totalBox=el('div',null,'pr-totals');totalBox.setAttribute('aria-label','Request total');totalBox.setAttribute('aria-live','polite');
+    const addLineButton=button('Add line',()=>addLine(),'pr-button pr-add-line');addLineButton.setAttribute('aria-label','Add line');
+    const lookupInfo=el('div',null,'pr-lookup-info');append(lookupInfo,lookupStatus,retryChoices);
+    append(purchaseSection,el('h3','Purchase details'),el('p','Type in a dropdown to search the current Nexvia choices.','pr-help'),purchaseGrid,lookupInfo);
+    const itemsSection=el('section',null,'pr-form-section pr-items-section');
+    const itemsHeading=el('div',null,'pr-section-heading');append(itemsHeading,el('h3','Items'),el('span','Prices exclude GST','pr-section-hint'));
+    append(itemsSection,itemsHeading,lineBox,addLineButton);
+    const attachment=el('div',null,'pr-attachment');append(attachment,field('Quote PDF (optional)',file),fileStatus);
+    const formBottom=el('div',null,'pr-form-bottom');append(formBottom,attachment,totalBox);
+    append(formFields,requestSection,purchaseSection,itemsSection,formBottom);
     const send=el('button','Submit purchase request','pr-primary');send.type='submit';
     const retry=button('Check status and retry saved request',()=>void submit(true),'pr-primary');retry.hidden=true;
     const fresh=button('New purchase request',()=>newRequest());fresh.hidden=true;
     const actions=el('div',null,'pr-actions');append(actions,send,retry,fresh);
-    append(form,formFields,actions);append(formCard,el('h2','New purchase request'),el('p','Submit a Lennox purchase request and follow its Nexvia PO and confirmation status.','pr-help'),form);
-    const historyCard=el('section',null,'pr-card');const historyList=el('div',null,'pr-history'),historyInfo=el('p',null,'pr-help');
+    append(form,formFields,actions);
+    const formHeading=el('header',null,'pr-card-heading');append(formHeading,el('h2','New purchase request'),el('p','Request a purchase order and track its progress below.','pr-help'));
+    append(formCard,formHeading,form);
+    const historyCard=el('section',null,'pr-card pr-history-card');const historyList=el('div',null,'pr-history'),historyInfo=el('p',null,'pr-help');
     const details=el('section',null,'pr-details');details.hidden=true;
     append(historyCard,el('h2','Purchase requests'),historyInfo,historyList,details);append(shell,top,status,formCard,historyCard);host.replaceChildren(shell);
     function notice(message,error=false){if(!current())return;status.textContent=message;status.classList.toggle('pr-error',error);}
-    function lock(value){locked=value;formFields.disabled=value||!permissions.create;send.disabled=value||!permissions.create||!catalog||catalogRefreshing||catalogBlocked;retry.hidden=!submitter.pending;retry.disabled=busy;}
+    function lock(value){locked=value;formFields.disabled=value||!permissions.create;for(const control of searchControls)control.syncDisabled();send.disabled=value||!permissions.create||!catalog||catalogRefreshing||catalogBlocked;retry.hidden=!submitter.pending;retry.disabled=busy;}
     function lineValues(){return [...lineBox.children].map(row=>({description:row.querySelector('[name=description]').value.trim(),quantity:row.querySelector('[name=quantity]').value,unitPriceExGst:row.querySelector('[name=price]').value,chartOfAccountId:row.querySelector('[name=account]').value,taxRateId:row.querySelector('[name=tax]').value,breakdownType:breakdown.value}));}
     function updateTotals(){
       totalBox.replaceChildren();if(!catalog)return;
-      try{const amounts=calculateTotals(lineValues(),catalog.taxes);for(const [label,key] of [['Subtotal ex GST','subtotalCents'],['GST','taxCents'],['Total including GST','totalCents']])append(totalBox,append(el('div'),el('span',label),el('strong',money(amounts[key]))));}
+      try{const amounts=calculateTotals(lineValues(),catalog.taxes);for(const [label,key] of [['Subtotal ex GST','subtotalCents'],['GST','taxCents'],['Total including GST','totalCents']])append(totalBox,append(el('div',null,key==='totalCents'?'pr-grand-total':null),el('span',label),el('strong',money(amounts[key]))));}
       catch{totalBox.appendChild(el('span','Complete quantities, prices and tax rates to calculate the total.'));}
     }
     function populateLine(row,defaultTax=false){
@@ -175,6 +292,7 @@
       choices(row.querySelector('[name=tax]'),catalog?.taxes||[],value=>value.name+' ('+value.rate+'%)');
       const tax=row.querySelector('[name=tax]'),standard=catalog?.taxes?.find(value=>Number(value.rate)===10);
       if(defaultTax&&!tax.value&&standard)tax.value=String(standard.id);
+      tax.searchControl?.sync();
     }
     function addLine(){
       if(locked||lineBox.children.length>=200)return;
@@ -182,7 +300,7 @@
       const quantity=input('number','quantity');quantity.min='0.000001';quantity.max='1000000000';quantity.step='any';quantity.value='1';
       const price=input('number','price');price.min='0';price.max='1000000000';price.step='any';
       const account=select('account'),tax=select('tax');
-      append(row,field('Description *',description,true),field('Quantity *',quantity),field('Unit price ex GST *',price),field('Cost of sales *',account),field('Tax *',tax),button('Remove line',()=>{if(lineBox.children.length>1){row.remove();updateTotals();}},'pr-remove'));
+      append(row,field('Description *',description,false,'pr-item-description'),field('Quantity *',quantity,false,'pr-item-quantity'),field('Unit price ex GST *',price,false,'pr-item-price'),field('Cost of sales *',account,false,'pr-item-account'),field('Tax *',tax,false,'pr-item-tax'),button('Remove line',()=>{if(lineBox.children.length>1){account.searchControl?.destroy();tax.searchControl?.destroy();row.remove();updateTotals();}},'pr-remove'));
       row.addEventListener('input',updateTotals);row.addEventListener('change',updateTotals);populateLine(row,true);lineBox.appendChild(row);updateTotals();
     }
     function setCatalog(value,defaultTax=false){
@@ -248,10 +366,10 @@
       }finally{busy=false;if(current()){send.textContent='Submit purchase request';retry.hidden=!submitter.pending;retry.disabled=false;}}
     }
     form.addEventListener('submit',event=>{event.preventDefault();void submit(false);});
-    function newRequest(){if(submitter.pending||busy)return;++lookupVersion;catalogRefreshing=false;catalogBlocked=false;retryChoices.hidden=true;form.reset();name.value=options.profile?.name||name.value;email.value=options.profile?.email||email.value;date.value=new Intl.DateTimeFormat('en-CA',{timeZone:'Australia/Brisbane',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());quote=null;lineBox.replaceChildren();setCatalog(null);locked=false;addLine();lock(false);send.hidden=false;fresh.hidden=true;notice('');}
+    function newRequest(){if(submitter.pending||busy)return;++lookupVersion;catalogRefreshing=false;catalogBlocked=false;retryChoices.hidden=true;form.reset();name.value=options.profile?.name||name.value;email.value=options.profile?.email||email.value;date.value=new Intl.DateTimeFormat('en-CA',{timeZone:'Australia/Brisbane',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());quote=null;for(const row of lineBox.children){row.querySelector("[name=account]")?.searchControl?.destroy();row.querySelector("[name=tax]")?.searchControl?.destroy();}lineBox.replaceChildren();setCatalog(null);locked=false;addLine();lock(false);send.hidden=false;fresh.hidden=true;notice('');}
     function upsert(request){requests=[request,...requests.filter(value=>value.id!==request.id)].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));}
     function renderHistory(){
-      historyList.replaceChildren();if(!requests.length){historyList.appendChild(el('p','No purchase requests yet.','pr-help'));return;}
+      historyList.replaceChildren();if(!requests.length){const empty=el('div',null,'pr-empty');append(empty,el('span','No purchase requests yet.','pr-empty-title'),el('p','Your requests and PO updates will appear here.','pr-help'));historyList.appendChild(empty);return;}
       const table=el('table');const head=el('tr');for(const label of ['Request','Project','Total incl GST','Status','PO'])head.appendChild(el('th',label));append(table,append(el('thead'),head));const body=el('tbody');
       for(const request of requests){const row=el('tr');const open=button(request.reference,()=>void detailLoader.select(request.id),'pr-link');append(row,append(el('td'),open),el('td',request.project),el('td',money(request.totalCents)),el('td',STATES[request.state]||'Status pending'),el('td',request.result?.purchaseOrderNumber||'—'));body.appendChild(row);}
       append(table,body);historyList.appendChild(table);
@@ -292,6 +410,7 @@
         historyInfo.textContent=response.data.historyTruncated?'Showing the 200 most recent purchase requests.':'';
         const selectedSummary=requests.find(value=>value.id===detailLoader.id);detailLoader.summary(selectedSummary);
         connection.textContent=response.data.connection?.connected?'Nexvia connection is online.':'Nexvia connection is offline. Saved requests remain queued until the connection is ready.';
+        connection.classList.toggle('pr-online',!!response.data.connection?.connected);
         const signature=JSON.stringify(projects);
         if((initial||signature!==projectSignature)&&!locked&&!busy&&!submitter.pending){
           const previous=project.value;projectSignature=signature;
@@ -310,7 +429,7 @@
       const refreshChoices=()=>{void lookup({background:true});later(refreshChoices,CHOICE_REFRESH_MS);};later(refreshChoices,CHOICE_REFRESH_MS);
     }
     void start();
-    return {destroy(){alive=false;++lookupVersion;controller.abort();for(const timer of timers)root.clearTimeout(timer);timers.clear();host.replaceChildren();},refresh};
+    return {destroy(){alive=false;++lookupVersion;controller.abort();for(const timer of timers)root.clearTimeout(timer);timers.clear();for(const control of searchControls)control.destroy();host.replaceChildren();},refresh};
   }
-  root.PanelStockPurchaseRequests={mount,calculateTotals,createSubmission,createDetailLoader,MAX_PDF};
+  root.PanelStockPurchaseRequests={mount,calculateTotals,createSubmission,createDetailLoader,searchableSelect,MAX_PDF};
 })(typeof window!=='undefined'?window:globalThis);
