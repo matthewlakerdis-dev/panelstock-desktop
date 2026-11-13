@@ -22,14 +22,14 @@ function harness(rows=[['a','Panel Supplier'],['b','Panel Supplier'],['paused','
   emit(type,properties={}){const event={type,...properties,defaultPrevented:false,preventDefault(){this.defaultPrevented=true;},stopPropagation(){}};this.dispatchEvent(event);return event;}
   focus(){if(doc.activeElement!==this){doc.activeElement=this;this.emit('focus');}}
   select(){this.textSelected=true;}
-  getBoundingClientRect(){return{top:600,bottom:640};}
+  getBoundingClientRect(){return this.bounds||{top:600,bottom:640};}
  }
  const context={Intl,JSON,Event,innerHeight:700,console};vm.runInNewContext(source,context);
  const native=new Node('select');native.name='supplier';native.required=true;
  const setRows=next=>{native.replaceChildren();for(const [value,text,disabled=false]of [['','Select…'],...next]){const option=new Node('option');option.value=value;option.textContent=text;option.disabled=disabled;native.appendChild(option);}};setRows(rows);
  const control=context.PanelStockPurchaseRequests.searchableSelect(native,{current:()=>current,onDestroy:()=>destroyed++}),fieldset=new Node('fieldset');fieldset.appendChild(control.element);control.setLabel('Supplier');
  const input=control.input,popup=control.element.children.find(node=>node.getAttribute('role')==='listbox'),options=()=>popup.children.filter(node=>node.getAttribute('role')==='option');
- return{doc,native,control,input,popup,fieldset,options,listeners,setRows,setCurrent:value=>{current=value;},get destroyed(){return destroyed;}};
+ return{doc,native,control,input,popup,fieldset,options,listeners,setRows,context,createNode:tag=>new Node(tag),setCurrent:value=>{current=value;},get destroyed(){return destroyed;}};
 }
 
 test('search filters partial labels without choosing, disambiguates names and commits an exact native ID',()=>{
@@ -74,4 +74,22 @@ test('frozen fieldsets, changed accounts and destroyed controls cannot alter the
  h.fieldset.disabled=false;h.setCurrent(false);h.input.emit('click');first.emit('click');assert.equal(h.native.value,'0');
  h.setCurrent(true);h.control.sync();h.input.emit('click');assert.equal(h.control.element.classList.contains('is-above'),true,'popup flips when there is more room above');assert.ok(h.listeners.get('pointerdown').size);
  h.control.destroy();assert.equal(h.listeners.get('pointerdown').size,0);assert.equal(h.native.listeners.get('change').size,0);assert.equal(h.input.listeners.get('keydown').size,0);assert.equal(h.destroyed,1);h.control.destroy();assert.equal(h.destroyed,1);
+});
+
+test('popup position respects the app scroll area beneath the fixed header',()=>{
+ const h=harness(),main=h.createNode('main');h.context.innerHeight=500;h.context.getComputedStyle=node=>({overflowY:node===main?'auto':'visible'});
+ main.bounds={top:56,bottom:500};main.appendChild(h.fieldset);h.control.element.bounds={top:260,bottom:302};h.input.focus();
+ assert.equal(h.control.element.classList.contains('is-above'),true);assert.ok(parseFloat(h.popup.style.maxHeight)<=192,'height leaves room for header clipping and popup gap');
+ h.control.element.bounds={top:80,bottom:122};h.doc.emit('scroll',{type:'scroll',target:main});
+ assert.equal(h.control.element.classList.contains('is-above'),false,'scrolling recalculates the best side');
+ h.control.destroy();assert.equal(h.listeners.get('scroll').size,0);
+});
+
+test('nested overflow-hidden and visual viewport bounds limit short popup space without an 80px minimum',()=>{
+ const h=harness(),main=h.createNode('main'),clipped=h.createNode('div');h.context.innerHeight=500;h.context.visualViewport={offsetTop:70,height:300};
+ h.context.getComputedStyle=node=>({overflowY:node===main?'auto':node===clipped?'hidden':'visible'});
+ main.bounds={top:56,bottom:500};clipped.bounds={top:90,bottom:190};main.appendChild(clipped);clipped.appendChild(h.fieldset);h.control.element.bounds={top:130,bottom:170};h.input.focus();
+ assert.equal(h.control.element.classList.contains('is-above'),true);assert.equal(h.popup.style.maxHeight,'28px','the inner clipping box has only40px above, less the12px gap');
+ clipped.bounds={top:10,bottom:500};h.control.refresh();assert.equal(h.popup.style.maxHeight,'188px','the visual viewport limits space below the input');
+ h.control.destroy();
 });
