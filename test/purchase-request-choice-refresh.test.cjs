@@ -6,7 +6,7 @@ function directory(revision='v1'){
  return{projectPageId:60,revision,suppliers:[{id:'225',text:'Supplier'}],services:[{id:'8',name:'Supply'}],breakdowns:[{id:'b_20',name:'Cladding'},{id:'b_70',name:'Miscellaneous'}],accounts:[{id:'51097',name:'Materials'}],taxes:[{id:'1',name:'GST',rate:10},{id:'0',name:'No GST',rate:0}]};
 }
 async function harness({saved=null}={}){
- const calls=[],timers=new Map();let timerId=0,owner='requestor',lookup=()=>({lookup:{id:'lookup',projectPageId:60,state:'ready'},catalog:directory()});
+ const calls=[],timers=new Map();let timerId=0,owner='requestor',lookup=()=>({lookup:{id:'lookup',projectPageId:60,state:'ready'},catalog:directory()}),submission=()=>{throw Error('Synthetic ambiguous submit');};
  class Node{
   constructor(tag){this.tagName=tag;this.children=[];this.events={};this._value='';this.textContent='';this.classList={toggle(){}};this.ownerDocument=doc;}
   appendChild(node){this.children.push(node);node.parentNode=this;return node;}
@@ -21,7 +21,7 @@ async function harness({saved=null}={}){
   querySelector(selector){const name=selector.match(/^\[name=([^\]]+)\]$/)?.[1];return walk(this).find(node=>node.name===name)||null;}
   reportValidity(){return true;}
  }
- const doc={createElement:tag=>new Node(tag)};doc.body=new Node('body');
+ const doc={hidden:false,createElement:tag=>new Node(tag)};doc.body=new Node('body');
  const walk=node=>[node,...node.children.flatMap(walk)],host=new Node('div');
  const context={Intl,JSON,TextDecoder,Uint8Array,URL,Blob,AbortController,crypto,console,
   setTimeout(callback,delay){const id=++timerId;timers.set(id,{callback,delay});return id;},clearTimeout:id=>timers.delete(id)};
@@ -31,7 +31,7 @@ async function harness({saved=null}={}){
   if(path==='/purchase-requests'&&options.method!=='POST')data={ok:true,requests:[],projects:[{projectPageId:60,name:'Jardin building'}],profile:{name:'Requestor',email:'requestor@example.test'},permissions:{create:true,manage:false},connection:{connected:true}};
   else if(path==='/purchase-requests/lookups')data={ok:true,...await lookup()};
   else if(path.startsWith('/purchase-requests/lookups/'))data={ok:true,...await lookup()};
-  else if(path==='/purchase-requests'&&options.method==='POST')throw Error('Synthetic ambiguous submit');
+  else if(path==='/purchase-requests'&&options.method==='POST')return await submission();
   else return{ok:false,status:404,json:async()=>({})};
   return{ok:true,status:200,json:async()=>data};
  };
@@ -39,8 +39,15 @@ async function harness({saved=null}={}){
  await wait();
  const byName=name=>walk(host).find(node=>node.name===name),byText=text=>walk(host).find(node=>node.textContent===text);
  const timer=async delay=>{const entry=[...timers].find(([,item])=>item.delay===delay);assert.ok(entry,'timer '+delay+' exists');timers.delete(entry[0]);entry[1].callback();await wait();};
- return{host,view,calls,timers,byName,byText,walk:()=>walk(host),timer,setLookup:callback=>{lookup=callback;},changeOwner:value=>{owner=value;},async selectProject(){byName('project').value='60';byName('project').emit('change');await wait();}};
+ return{host,view,calls,timers,byName,byText,walk:()=>walk(host),timer,setLookup:callback=>{lookup=callback;},setSubmission:callback=>{submission=callback;},setHidden:value=>{doc.hidden=value;},changeOwner:value=>{owner=value;},async selectProject(){byName('project').value='60';byName('project').emit('change');await wait();}};
 }
+
+test('project choices have no normal refresh control and the recovery control stays hidden while loading or ready',async()=>{
+ const h=await harness(),retry=h.byText('Retry project choices');assert.equal(retry.hidden,true);assert.equal(h.byText('Refresh project choices'),undefined);
+ const pending=deferred();h.setLookup(()=>pending.promise);await h.selectProject();assert.equal(retry.hidden,true);
+ pending.resolve({lookup:{id:'lookup',projectPageId:60,state:'ready'},catalog:directory()});await wait();
+ assert.equal(retry.hidden,true);assert.ok(h.byText('Project choices are ready.'));h.view.destroy();
+});
 
 test('five-minute refresh keeps entered fields and zero GST while disabling submit until current choices return',async()=>{
  const h=await harness();await h.selectProject();
@@ -71,8 +78,35 @@ test('a failed automatic refresh retains the draft and blocks submission until a
  const h=await harness();await h.selectProject();h.byName('tax').value='0';h.byName('description').value='Retained after timeout';
  h.setLookup(()=>{throw Error('Synthetic timeout');});await h.timer(300000);
  assert.equal(h.byName('tax').value,'0');assert.equal(h.byName('description').value,'Retained after timeout');assert.equal(h.byText('Submit purchase request').disabled,true);
- h.setLookup(()=>({lookup:{id:'retry',projectPageId:60,state:'ready'},catalog:directory('v2')}));h.byText('Refresh project choices').emit('click');await wait();
- assert.equal(h.byName('tax').value,'0');assert.equal(h.byText('Submit purchase request').disabled,false);h.view.destroy();
+ assert.equal(h.byText('Retry project choices').hidden,false);
+ const pending=deferred();h.setLookup(()=>pending.promise);h.byText('Retry project choices').emit('click');await wait();assert.equal(h.byText('Retry project choices').hidden,true);
+ pending.resolve({lookup:{id:'retry',projectPageId:60,state:'ready'},catalog:directory('v2')});await wait();
+ assert.equal(h.byName('tax').value,'0');assert.equal(h.byName('description').value,'Retained after timeout');assert.equal(h.byText('Submit purchase request').disabled,false);assert.equal(h.byText('Retry project choices').hidden,true);h.view.destroy();
+});
+
+test('review recovery offers Retry and clears unavailable selections while preserving zero GST and entered text',async()=>{
+ const h=await harness();await h.selectProject();h.byName('supplier').value='225';h.byName('account').value='51097';h.byName('tax').value='0';h.byName('description').value='Keep this item';
+ h.setLookup(()=>({lookup:{id:'review',projectPageId:60,state:'needs_review',message:'Connection needs attention'}}));await h.timer(300000);
+ assert.equal(h.byText('Retry project choices').hidden,false);
+ const catalog=directory('current');catalog.accounts=[];catalog.suppliers=[];
+ h.setLookup(()=>({lookup:{id:'retry',projectPageId:60,state:'ready'},catalog}));h.byText('Retry project choices').emit('click');await wait();
+ assert.equal(h.byName('account').value,'');assert.equal(h.byName('supplier').value,'');assert.equal(h.byName('tax').value,'0');assert.equal(h.byName('description').value,'Keep this item');assert.equal(h.byText('Retry project choices').hidden,true);h.view.destroy();
+});
+
+test('a proven unsaved stale-choice rejection offers recovery without discarding valid draft selections',async()=>{
+ const h=await harness();await h.selectProject();
+ for(const[name,value]of Object.entries({supplier:'225',service:'8',breakdown:'b_20',account:'51097',tax:'0',description:'Retained after stale rejection',price:'10'}))h.byName(name).value=value;
+ h.setSubmission(()=>({ok:false,status:409,json:async()=>({code:'PURCHASE_REQUEST_CHOICES_CHANGED',error:'Project choices changed'})}));
+ h.walk().find(node=>node.tagName==='form').emit('submit');await wait();
+ assert.equal(h.byText('Retry project choices').hidden,false);assert.equal(h.byName('tax').value,'0');assert.equal(h.byName('supplier').value,'225');assert.equal(h.byText('Submit purchase request').disabled,true);
+ h.setLookup(()=>({lookup:{id:'retry',projectPageId:60,state:'ready'},catalog:directory('current')}));h.byText('Retry project choices').emit('click');await wait();
+ assert.equal(h.byName('tax').value,'0');assert.equal(h.byName('description').value,'Retained after stale rejection');assert.equal(h.byText('Retry project choices').hidden,true);assert.equal(h.calls.filter(call=>call.path==='/purchase-requests'&&call.options.method==='POST').length,1);h.view.destroy();
+});
+
+test('hidden pages skip automatic project refresh and resume on the unchanged five-minute cadence',async()=>{
+ const h=await harness();await h.selectProject();h.byName('tax').value='0';const before=h.calls.filter(call=>call.path==='/purchase-requests/lookups').length;
+ h.setHidden(true);await h.timer(300000);assert.equal(h.calls.filter(call=>call.path==='/purchase-requests/lookups').length,before);assert.equal(h.byText('Retry project choices').hidden,true);
+ h.setHidden(false);await h.timer(300000);assert.equal(h.calls.filter(call=>call.path==='/purchase-requests/lookups').length,before+1);assert.equal(h.byName('tax').value,'0');h.view.destroy();
 });
 
 test('lookup completion cannot replace a changed account and destroy clears all refresh timers',async()=>{
@@ -96,5 +130,5 @@ test('frozen ambiguous submissions skip automatic project lookups and preserve t
  const submitted=h.calls.find(call=>call.path==='/purchase-requests'&&call.options.method==='POST');assert.ok(submitted);
  const before=h.calls.filter(call=>call.path==='/purchase-requests/lookups').length;await h.timer(300000);
  assert.equal(h.calls.filter(call=>call.path==='/purchase-requests/lookups').length,before);assert.equal(h.calls.filter(call=>call.path==='/purchase-requests'&&call.options.method==='POST').length,1);
- assert.equal(JSON.parse(submitted.options.body).lines[0].description,'Submitted once');h.view.destroy();
+ assert.equal(JSON.parse(submitted.options.body).lines[0].description,'Submitted once');assert.equal(h.byText('Retry project choices').hidden,true);h.view.destroy();
 });
