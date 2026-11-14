@@ -37,11 +37,37 @@ function harness(rows=[['a','Panel Supplier'],['b','Panel Supplier'],['paused','
 
 test('search filters partial labels without choosing, disambiguates names and commits an exact native ID',()=>{
  const h=harness();let changes=0;h.native.addEventListener('change',()=>changes++);h.input.focus();assert.equal(h.input.textSelected,true);
+ h.input.emit('keydown',{key:'Enter'});assert.equal(h.native.value,'','opening without typing or navigating does not choose an option');
  h.input.value='pAnEl sUp';h.input.emit('input');assert.equal(h.native.value,'');assert.equal(changes,0);assert.deepEqual(h.options().map(node=>node.textContent),['Panel Supplier · a','Panel Supplier · b']);
- h.input.emit('keydown',{key:'Enter'});assert.equal(h.native.value,'','Enter without an active option does not guess');
- h.input.emit('keydown',{key:'ArrowDown'});h.input.emit('keydown',{key:'ArrowDown'});h.input.emit('keydown',{key:'Enter'});
+ assert.equal(h.input.getAttribute('aria-activedescendant'),h.options()[0].id);assert.equal(h.options()[0].classList.contains('is-active'),true);
+ h.input.emit('keydown',{key:'ArrowDown'});h.input.emit('keydown',{key:'Enter'});
  assert.equal(h.native.value,'b');assert.equal(changes,1);assert.equal(h.input.value,'Panel Supplier · b');assert.equal(h.input.getAttribute('aria-expanded'),'false');
  assert.equal(h.native.hidden,true);assert.equal(h.native.required,false);assert.equal(h.input.required,true);assert.equal(h.input.validationMessage,'');h.control.destroy();
+});
+
+test('typing highlights the first available match and Enter commits it without requiring an arrow key',()=>{
+ const h=harness([['paused','Panel Alpha',true],['a','Panel Bravo'],['b','Panel Charlie']]);let changes=0;h.native.addEventListener('change',()=>changes++);
+ h.input.focus();h.input.value='panel';h.input.emit('input');
+ assert.equal(h.options()[0].classList.contains('is-active'),false);assert.equal(h.options()[1].classList.contains('is-active'),true);
+ assert.equal(h.input.getAttribute('aria-activedescendant'),h.options()[1].id);assert.equal(h.native.value,'');assert.equal(changes,0);
+ assert.equal(h.input.emit('keydown',{key:'Enter'}).defaultPrevented,true);assert.equal(h.native.value,'a');assert.equal(changes,1);assert.equal(h.input.value,'Panel Bravo');h.control.destroy();
+});
+
+test('each edited query resets the highlight to the top match and empty or disabled results cannot be selected',()=>{
+ const h=harness([['a','Panel Alpha'],['b','Panel Bravo'],['paused','Paused only',true]]);h.input.focus();h.input.value='Panel';h.input.emit('input');
+ h.input.emit('keydown',{key:'ArrowDown'});assert.equal(h.input.getAttribute('aria-activedescendant'),h.options()[1].id);
+ h.input.value='Pan';h.input.emit('input');assert.equal(h.input.getAttribute('aria-activedescendant'),h.options()[0].id);
+ h.input.value='no match';h.input.emit('input');assert.equal(h.input.getAttribute('aria-activedescendant'),null);assert.equal(h.input.emit('keydown',{key:'Enter'}).defaultPrevented,true);assert.equal(h.native.value,'');
+ h.input.value='Paused';h.input.emit('input');assert.equal(h.input.getAttribute('aria-activedescendant'),null);h.input.emit('keydown',{key:'Enter'});assert.equal(h.native.value,'');h.control.destroy();
+});
+
+test('highlight survives a refresh, falls back after removal and Enter waits for text composition to finish',()=>{
+ const h=harness([['a','Panel Alpha'],['b','Panel Bravo']]);h.input.focus();h.input.value='Panel';h.input.emit('input');
+ h.input.emit('keydown',{key:'ArrowDown'});h.control.refresh();assert.equal(h.input.getAttribute('aria-activedescendant'),h.options()[1].id);
+ h.setRows([['a','Panel Alpha']]);h.control.refresh();assert.equal(h.input.getAttribute('aria-activedescendant'),h.options()[0].id);
+ h.input.emit('keydown',{key:'Enter',isComposing:true});assert.equal(h.native.value,'');h.input.emit('keydown',{key:'Enter',keyCode:229});assert.equal(h.native.value,'');
+ h.input.emit('keydown',{key:'Enter'});assert.equal(h.native.value,'a');
+ h.setRows([['0','Zero GST']]);h.control.refresh();h.input.emit('click');h.input.value='zero';h.input.emit('input');h.input.emit('keydown',{key:'Enter'});assert.equal(h.native.value,'0');h.control.destroy();
 });
 
 test('mouse selection supports numeric zero IDs and disabled options cannot be chosen',()=>{

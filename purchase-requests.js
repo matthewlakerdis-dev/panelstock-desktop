@@ -168,8 +168,8 @@
       const choice=allChoices().find(row=>row.value===value&&!row.disabled);if(!choice)return;
       native.value=choice.value;close();native.dispatchEvent(new root.Event('change',{bubbles:true}));input.focus();
     }
-    function render(){
-      const activeValue=shown[active]?.value,needle=query.trim().toLocaleLowerCase();
+    function render(first=false){
+      const activeValue=first?undefined:shown[active]?.value,needle=query.trim().toLocaleLowerCase();
       shown=allChoices().filter(row=>(row.label+' '+row.value).toLocaleLowerCase().includes(needle));optionNodes=[];popup.replaceChildren();
       for(let index=0;index<shown.length;index++){
         const row=shown[index],option=make('div','pr-search-option');option.id=id+'-option-'+index;option.textContent=row.label;option.setAttribute('role','option');option.setAttribute('aria-selected',String(row.value===native.value));option.setAttribute('aria-disabled',String(row.disabled));option.classList.toggle('is-selected',row.value===native.value);option.classList.toggle('is-disabled',row.disabled);
@@ -177,7 +177,8 @@
         popup.appendChild(option);optionNodes.push(option);
       }
       if(!shown.length){const empty=make('div','pr-search-empty');empty.textContent='No matching options.';empty.setAttribute('role','status');popup.appendChild(empty);}
-      highlight(shown.findIndex(row=>row.value===activeValue&&!row.disabled));position();
+      const retained=shown.findIndex(row=>row.value===activeValue&&!row.disabled);
+      highlight(retained>=0?retained:editing?shown.findIndex(row=>!row.disabled):-1);position();
     }
     function expand(){
       if(!enabled())return;
@@ -197,10 +198,11 @@
     }
     function type(){
       if(!enabled()){sync();return;}
-      const typed=input.value;if(!open)expand();editing=true;query=typed;input.value=typed;native.value='';native.dispatchEvent(new root.Event('input',{bubbles:true}));render();validity();
+      const typed=input.value;if(!open)expand();editing=true;query=typed;input.value=typed;native.value='';native.dispatchEvent(new root.Event('input',{bubbles:true}));render(true);validity();
     }
     function key(event){
       if(!enabled())return;
+      if(event.isComposing||event.keyCode===229)return;
       if(event.key==='Escape'&&open){event.preventDefault();event.stopPropagation();close(true);return;}
       if(event.key==='Tab'){close();return;}
       if(editing&&['Home','End'].includes(event.key))return;
