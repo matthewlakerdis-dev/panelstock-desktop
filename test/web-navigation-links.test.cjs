@@ -134,3 +134,44 @@ test('Support, My Profile and the notification bell use the same native-link beh
  const modified=click({metaKey:true});bell.props.onClick(modified.event);assert.equal(modified.prevented,0);assert.equal(selected.length,2);
  const normal=click();bell.props.onClick(normal.event);assert.equal(normal.prevented,1);assert.equal(selected.at(-1),'notifications');
 });
+
+// Run the real navigation setup and early returns together so effects retain
+// the same render scope that React gives them while stock data is loading.
+function loadingNavigation(){
+ const start=html.indexOf('    useEffect(()=>{if(!username)return;const params=new URLSearchParams(location.search)');
+ const end=html.indexOf('    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex h-screen',start);
+ assert.ok(start>=0&&end>start);
+ const source=html.slice(start,end),observed={listeners:new Map(),tab:'workshop',selection:'workshop',group:'stockGroup',preview:'stockGroup',section:'general',replacements:0},hooks=[];let cursor=0,pending=[];
+ const jsx=(type,props)=>({type,props}),icons=Object.fromEntries([...source.matchAll(/\(\w+,\{size:16\}\)/g)].map(match=>[match[0].slice(1,match[0].indexOf(',')),'icon']));
+ const context={...icons,URLSearchParams,location:{pathname:'/',search:'?page=purchase-requests'},import_jsx_runtime:{jsx,jsxs:jsx},LoginScreen:'login',BAKED_WORKER_URL:'https://worker.example',emailConfig:{},rememberedUsername:'',navSelection:'workshop',settingsSection:'general',
+  setTab:value=>observed.tab=value,setNavSelection:value=>observed.selection=value,setOpenNavGroup:value=>observed.group=value,setPreviewNavGroup:value=>observed.preview=value,setSettingsSection:value=>observed.section=value,
+  history:{replaceState(){observed.replacements++;},pushState(){}},
+  addEventListener:(type,callback)=>observed.listeners.set(type,callback),removeEventListener:(type,callback)=>{if(observed.listeners.get(type)===callback)observed.listeners.delete(type);},
+  useEffect(callback,deps){const index=cursor++,previous=hooks[index];if(!previous||deps.some((value,i)=>!Object.is(value,previous.deps[i])))pending.push(()=>{previous?.cleanup?.();hooks[index]={deps,cleanup:callback()};});}
+ };
+ vm.runInNewContext('globalThis.renderNavigation=function({loading,username,isAdmin,taskAccess,tab}){'+source+'\nreturn {navigate};\n};',context);
+ return {observed,render(options){cursor=0;pending=[];context.navSelection=observed.selection;context.settingsSection=observed.section;const result=context.renderNavigation({tab:observed.tab,...options});for(const effect of pending)effect();return result;},back(state){observed.listeners.get('popstate')({state});}};
+}
+
+test('history registered while loading still restores Purchase Requests and sidebar groups after loading completes',()=>{
+ const h=loadingNavigation(),session={username:'Coordinator',isAdmin:true,taskAccess:{}};
+ h.render({...session,loading:true});assert.equal(h.observed.tab,'purchase-requests');const onBack=h.observed.listeners.get('popstate');assert.equal(typeof onBack,'function');
+ const ready=h.render({...session,loading:false});assert.equal(h.observed.listeners.get('popstate'),onBack,'the initial effect remains registered when only loading changes');assert.equal(h.observed.replacements,1);
+ ready.navigate('profile');assert.equal(h.observed.tab,'profile');
+ assert.doesNotThrow(()=>h.back({panelstock:true,key:'purchase-requests',target:'purchase-requests'}));
+ assert.equal(h.observed.tab,'purchase-requests');assert.equal(h.observed.selection,'purchase-requests');assert.equal(h.observed.group,'workGroup');assert.equal(h.observed.preview,null);
+ h.back({panelstock:true,key:'workshop',target:'workshop'});assert.equal(h.observed.group,'stockGroup');
+ h.back({panelstock:true,key:'settings',target:'settings',section:'catalog'});assert.equal(h.observed.group,'adminGroup');assert.equal(h.observed.section,'catalog');
+ h.back({panelstock:true,key:'profile',target:'profile'});assert.equal(h.observed.tab,'profile');assert.equal(h.observed.group,null);
+});
+
+test('requestor history respects changed permissions and removes the listener on sign-out',()=>{
+ const h=loadingNavigation(),taskAccess={'purchase-requests.create':true,'factory.stock':false},session={username:'Requestor',isAdmin:false,taskAccess};
+ h.render({...session,loading:true});h.render({...session,loading:false});
+ assert.doesNotThrow(()=>h.back({panelstock:true,key:'purchase-requests',target:'purchase-requests'}));assert.equal(h.observed.group,'workGroup');
+ const original=h.observed.listeners.get('popstate');h.render({...session,loading:false,taskAccess:{...taskAccess,'purchase-requests.create':false}});assert.notEqual(h.observed.listeners.get('popstate'),original);
+ const before={...h.observed};
+ for(const target of ['purchase-requests','workshop','access'])h.back({panelstock:true,key:target,target});
+ assert.equal(h.observed.tab,before.tab);assert.equal(h.observed.selection,before.selection);assert.equal(h.observed.group,before.group);
+ h.render({...session,loading:false,username:null});assert.equal(h.observed.listeners.has('popstate'),false);
+});
