@@ -220,6 +220,8 @@
     const doc=host.ownerDocument||root.document,owner=options.username;
     let alive=true,catalog=null,catalogRefreshing=false,catalogBlocked=false,lookupVersion=0,busy=false,locked=false,quote=null;
     let requests=[],projects=[],projectSignature='',permissions={create:false,manage:false},timers=new Set();
+    let shared=null,sharedBlocked=false,sharedLoading=true,sharedVersion=0,sharedSupported=true;
+    const sharedFields=['suppliers','services','accounts','taxes'];
     const searchControls=new Set();
     const controller=new AbortController();
     const current=()=>alive&&(!options.currentUsername||options.currentUsername()===owner);
@@ -271,13 +273,14 @@
     const purchaseGrid=el('div',null,'pr-grid');
     append(purchaseGrid,field('Supplier *',supplier),field('Supplier / quote reference',reference),field('Service *',service),field('Element of work *',breakdown));
     const lookupStatus=el('p',null,'pr-help');lookupStatus.setAttribute('role','status');
-    const retryChoices=button('Retry project choices',()=>void lookup({force:true}));retryChoices.hidden=true;
+    const retryChoices=button('Retry project choices',()=>{void refreshShared();void lookup({force:true});});retryChoices.hidden=true;
+    const sharedStatus=el('p',null,'pr-help');sharedStatus.setAttribute('role','status');
     const file=input('file','quote',false);file.accept='application/pdf,.pdf';
     const fileStatus=el('p','Optional PDF, up to 10 MB. Requests with a PDF are saved for office review; they are not automatically created in Nexvia.','pr-help');
     const lineBox=el('div',null,'pr-lines');const totalBox=el('div',null,'pr-totals');totalBox.setAttribute('aria-label','Request total');totalBox.setAttribute('aria-live','polite');
     const addLineButton=button('Add line',()=>addLine(),'pr-button pr-add-line');addLineButton.setAttribute('aria-label','Add line');
-    const lookupInfo=el('div',null,'pr-lookup-info');append(lookupInfo,lookupStatus,retryChoices);
-    append(purchaseSection,el('h3','Purchase details'),el('p','Type in a dropdown to search the current Nexvia choices.','pr-help'),purchaseGrid,lookupInfo);
+    const lookupInfo=el('div',null,'pr-lookup-info');append(lookupInfo,lookupStatus,sharedStatus,retryChoices);
+    append(purchaseSection,el('h3','Purchase details'),el('p','Suppliers and services are shared across jobs. Element of work depends on the project. Type in a dropdown to search.','pr-help'),purchaseGrid,lookupInfo);
     const itemsSection=el('section',null,'pr-form-section pr-items-section');
     const itemsHeading=el('div',null,'pr-section-heading');append(itemsHeading,el('h3','Items'),el('span','Prices exclude GST','pr-section-hint'));
     append(itemsSection,itemsHeading,lineBox,addLineButton);
@@ -296,67 +299,131 @@
     append(historyCard,el('h2','Purchase requests'),historyInfo,historyList,details);append(shell,top,status,formCard,historyCard);host.replaceChildren(shell);
     function notice(message,error=false){if(!current())return;status.textContent=message;status.classList.toggle('pr-error',error);}
     function matchingCatalog(){return !!project.value&&catalog?.projectPageId===Number(project.value);}
+    function sharedSnapshot(value){
+      if(!value||typeof value.updatedAt!=='string'||!Number.isFinite(Date.parse(value.updatedAt)))return null;
+      const snapshot={updatedAt:value.updatedAt},content=[];
+      for(const field of sharedFields){
+        const rows=value[field];if(!Array.isArray(rows)||rows.length>10000||(field!=='suppliers'&&!rows.length))return null;
+        const ids=new Set(),normalized=[];
+        for(const row of rows){
+          const id=String(row?.id??''),label=field==='suppliers'?(row?.text||row?.name):row?.name;
+          if(!/^[a-zA-Z0-9_-]{1,80}$/.test(id)||ids.has(id)||typeof label!=='string'||!label.trim())return null;
+          ids.add(id);const clean={id,label,disabled:row.disabled===true};
+          if(field==='taxes'){clean.rate=Number(row.rate);if(!Number.isFinite(clean.rate)||clean.rate<0||clean.rate>100)return null;}
+          normalized.push(clean);
+        }
+        snapshot[field]=rows;content.push(normalized.sort((a,b)=>a.id.localeCompare(b.id)));
+      }
+      snapshot.signature=JSON.stringify(content);return snapshot;
+    }
+    function freshShared(value=shared){const age=Date.now()-Date.parse(value?.updatedAt);return !!value&&Number.isFinite(age)&&age>=0&&age<CHOICE_REFRESH_MS;}
+    function commonReady(){return freshShared()&&!sharedBlocked;}
+    function acceptShared(value){
+      const candidate=sharedSnapshot(value);
+      if(!candidate||!freshShared(candidate))return false;
+      if(shared&&Date.parse(candidate.updatedAt)<Date.parse(shared.updatedAt))return false;
+      shared=candidate;sharedBlocked=false;sharedLoading=false;++sharedVersion;
+      populateCommon();return true;
+    }
+    function commonMatchesCatalog(){const full=sharedSnapshot(catalog);return commonReady()&&freshShared(full)&&full.signature===shared.signature;}
     function choiceAvailability(node){
-      const ready=matchingCatalog()&&!catalogRefreshing&&!catalogBlocked;
+      const eow=node===breakdown,ready=eow?matchingCatalog()&&!catalogRefreshing&&!catalogBlocked:commonReady();
       node.disabled=!ready;
       let blank=[...node.options].find(option=>option.value==='');
       if(!blank){blank=el('option');blank.value='';node.appendChild(blank);}
-      blank.textContent=!project.value?'Select a project first':catalogRefreshing?'Loading choices…':!ready?'Choices unavailable':'Select…';
+      blank.textContent=eow?(!project.value?'Select a project first':catalogRefreshing?'Loading choices…':!ready?'Choices unavailable':'Select…'):(ready?'Select…':sharedLoading||catalogRefreshing?'Loading choices…':!shared&&!project.value?'Select a project first':'Choices unavailable');
     }
     function lock(value){
       locked=value;formFields.disabled=value||!permissions.create;
       for(const node of [supplier,service,breakdown])choiceAvailability(node);
       for(const row of lineBox.children)for(const fieldName of ['account','tax'])choiceAvailability(row.querySelector('[name='+fieldName+']'));
       for(const control of searchControls)control.syncDisabled();
-      send.disabled=value||!permissions.create||!matchingCatalog()||catalogRefreshing||catalogBlocked;retry.hidden=!submitter.pending;retry.disabled=busy;
+      send.disabled=value||!permissions.create||!matchingCatalog()||catalogRefreshing||catalogBlocked||!commonMatchesCatalog();retry.hidden=!submitter.pending;retry.disabled=busy;
+      sharedStatus.textContent=commonReady()?'':sharedLoading||catalogRefreshing?'Loading common Nexvia choices…':!shared&&!project.value?'Select a project to load shared choices.':'Common choices are unavailable. Retry project choices to reload them.';
+      const recoverProject=!!project.value&&catalogBlocked,recoverCommon=!commonReady()&&!sharedLoading&&sharedSupported&&(!!shared||!!project.value);
+      const mismatch=matchingCatalog()&&!catalogBlocked&&!commonMatchesCatalog();
+      retryChoices.hidden=locked||catalogRefreshing||!(recoverProject||recoverCommon||mismatch);
+      if(!locked&&!busy&&mismatch&&!catalogRefreshing){
+        lookupStatus.textContent='Common choices changed. Retry project choices before submitting.';
+      }
     }
     function lineValues(){return [...lineBox.children].map(row=>({description:row.querySelector('[name=description]').value.trim(),quantity:row.querySelector('[name=quantity]').value,unitPriceExGst:row.querySelector('[name=price]').value,chartOfAccountId:row.querySelector('[name=account]').value,taxRateId:row.querySelector('[name=tax]').value,breakdownType:breakdown.value}));}
     function updateTotals(){
-      totalBox.replaceChildren();if(!catalog)return;
-      try{const amounts=calculateTotals(lineValues(),catalog.taxes);for(const [label,key] of [['Subtotal ex GST','subtotalCents'],['GST','taxCents'],['Total including GST','totalCents']])append(totalBox,append(el('div',null,key==='totalCents'?'pr-grand-total':null),el('span',label),el('strong',money(amounts[key]))));}
+      totalBox.replaceChildren();if(!shared)return;
+      try{const amounts=calculateTotals(lineValues(),shared.taxes);for(const [label,key] of [['Subtotal ex GST','subtotalCents'],['GST','taxCents'],['Total including GST','totalCents']])append(totalBox,append(el('div',null,key==='totalCents'?'pr-grand-total':null),el('span',label),el('strong',money(amounts[key]))));}
       catch{totalBox.appendChild(el('span','Complete quantities, prices and tax rates to calculate the total.'));}
     }
-    function populateLine(row,defaultTax=false){
-      choices(row.querySelector('[name=account]'),catalog?.accounts||[],value=>value.name);
-      choices(row.querySelector('[name=tax]'),catalog?.taxes||[],value=>value.name+' ('+value.rate+'%)');
-      const tax=row.querySelector('[name=tax]'),standard=catalog?.taxes?.find(value=>Number(value.rate)===10);
-      if(defaultTax&&!tax.value&&standard)tax.value=String(standard.id);
+    function populateLine(row){
+      choices(row.querySelector('[name=account]'),shared?.accounts||[],value=>value.name);
+      choices(row.querySelector('[name=tax]'),shared?.taxes||[],value=>value.name+' ('+value.rate+'%)');
+      const tax=row.querySelector('[name=tax]'),standard=shared?.taxes?.find(value=>Number(value.rate)===10&&!value.disabled);
+      if(row.defaultTaxPending&&commonReady()){
+        if(!tax.value&&standard)tax.value=String(standard.id);
+        row.defaultTaxPending=false;
+      }
       for(const node of [row.querySelector('[name=account]'),tax]){choiceAvailability(node);node.searchControl?.syncDisabled();}
       tax.searchControl?.sync();
     }
     function addLine(){
       if(locked||lineBox.children.length>=200)return;
-      const row=el('div',null,'pr-line'),description=input('text','description');description.maxLength=2000;
+      const row=el('div',null,'pr-line'),description=input('text','description');description.maxLength=2000;row.defaultTaxPending=true;
       const quantity=input('number','quantity');quantity.min='0.000001';quantity.max='1000000000';quantity.step='any';quantity.value='1';
       const price=input('number','price');price.min='0';price.max='1000000000';price.step='any';
       const account=select('account'),tax=select('tax');
       append(row,field('Description *',description,false,'pr-item-description'),field('Quantity *',quantity,false,'pr-item-quantity'),field('Unit price ex GST *',price,false,'pr-item-price'),field('Cost of sales *',account,false,'pr-item-account'),field('Tax *',tax,false,'pr-item-tax'),button('Remove line',()=>{if(lineBox.children.length>1){account.searchControl?.destroy();tax.searchControl?.destroy();row.remove();updateTotals();}},'pr-remove'));
-      row.addEventListener('input',updateTotals);row.addEventListener('change',updateTotals);populateLine(row,true);lineBox.appendChild(row);updateTotals();
+      row.addEventListener('input',updateTotals);row.addEventListener('change',updateTotals);populateLine(row);lineBox.appendChild(row);updateTotals();
     }
-    function setCatalog(value,defaultTax=false){
-      catalog=value;choices(supplier,value?.suppliers||[],row=>row.text||row.name);choices(service,value?.services||[],row=>row.name);choices(breakdown,value?.breakdowns||[],row=>row.name);
-      for(const row of lineBox.children)populateLine(row,defaultTax);lock(locked);updateTotals();
+    function populateCommon(){
+      choices(supplier,shared?.suppliers||[],row=>row.text||row.name);choices(service,shared?.services||[],row=>row.name);
+      for(const row of lineBox.children)populateLine(row);lock(locked);updateTotals();
     }
-    async function lookup({background=false,force=false}={}){
+    function setCatalog(value){
+      catalog=value;choices(breakdown,value?.breakdowns||[],row=>row.name);
+      lock(locked);updateTotals();
+    }
+    async function refreshShared(){
+      if(!current()||locked||busy||submitter.pending||!permissions.create||doc.hidden)return;
+      if(!sharedSupported){if(!commonReady()&&catalog)acceptShared(catalog);lock(locked);return;}
+      const version=++sharedVersion;sharedLoading=!shared;lock(locked);
+      try{
+        const response=await api('/purchase-requests/shared-choices');
+        if(!current()||version!==sharedVersion||locked||busy||submitter.pending)return;
+        if(response.status===404){sharedSupported=false;sharedLoading=false;if(catalog)acceptShared(catalog);lock(locked);return;}
+        requireValue(response.ok,'Common Nexvia choices could not be loaded.');
+        const candidate=sharedSnapshot(response.data.sharedChoices);
+        if(candidate&&shared&&Date.parse(candidate.updatedAt)<Date.parse(shared.updatedAt)){sharedLoading=false;lock(locked);return;}
+        if(!acceptShared(candidate)){sharedLoading=false;sharedBlocked=true;lock(locked);}
+      }catch{if(current()&&version===sharedVersion&&!locked&&!busy&&!submitter.pending){sharedLoading=false;sharedBlocked=true;lock(locked);}}
+    }
+    async function lookup({background=false,force=false,reconcile=false}={}){
       if(!current()||locked||busy||submitter.pending||!permissions.create)return;
       const projectId=Number(project.value),preserve=catalog?.projectPageId===projectId;
       if(background&&(!projectId||catalogRefreshing||doc.hidden))return;
       const version=++lookupVersion;catalogRefreshing=false;catalogBlocked=true;
       retryChoices.hidden=true;
-      if(!preserve)setCatalog(null);
-      if(!projectId){lookupStatus.textContent='Select a project to load its current suppliers and account choices.';lock(locked);return;}
+      if(!preserve){breakdown.value='';setCatalog(null);}
+      if(!projectId){lookupStatus.textContent='Select a project to load its element of work choices.';lock(locked);return;}
       catalogRefreshing=true;lock(locked);
-      lookupStatus.textContent=preserve?'Refreshing project choices. Your entries are retained…':'Loading current project choices…';
+      lookupStatus.textContent=preserve?'Refreshing project choices. Your entries are retained…':commonReady()?'Loading this project’s elements of work…':'Loading current project choices…';
       const fail=error=>{if(version===lookupVersion&&current()){catalogRefreshing=false;catalogBlocked=true;lock(locked);retryChoices.hidden=false;lookupStatus.textContent=error.message+' Retry project choices before submitting.';}};
       const take=async response=>{
         if(!current()||version!==lookupVersion)return;
-        if(locked||submitter.pending){catalogRefreshing=false;lock(locked);return;}
+        if(locked||busy||submitter.pending){catalogRefreshing=false;lock(locked);return;}
         requireValue(response.ok,response.data.error||'Project choices could not be loaded.');
         const result=response.data;
-        if(result.lookup?.state==='ready'&&result.catalog){requireValue(result.catalog.projectPageId===projectId&&Number(project.value)===projectId,'Project choices did not match. Select the project again.');catalogRefreshing=false;catalogBlocked=false;setCatalog(result.catalog,!preserve);lookupStatus.textContent='Project choices are ready.';return;}
+        if(result.lookup?.state==='ready'&&result.catalog){
+          requireValue(result.catalog.projectPageId===projectId&&Number(project.value)===projectId,'Project choices did not match. Select the project again.');
+          const full=sharedSnapshot(result.catalog);requireValue(full&&freshShared(full),'Current common Nexvia choices are unavailable.');
+          const older=shared&&Date.parse(full.updatedAt)<=Date.parse(shared.updatedAt);
+          if(older&&freshShared()&&full.signature!==shared.signature){
+            if(!reconcile){await lookup({force:true,reconcile:true});return;}
+            throw Error('Common choices changed. Retry project choices before submitting.');
+          }
+          acceptShared(full);catalogRefreshing=false;catalogBlocked=false;setCatalog(result.catalog);lookupStatus.textContent='Project choices are ready.';return;
+        }
         if(result.lookup?.state==='needs_review'){catalogRefreshing=false;catalogBlocked=true;lock(locked);retryChoices.hidden=false;lookupStatus.textContent=(result.lookup.message||'Project choices need office review.')+' Retry project choices when the connection is ready.';return;}
         requireValue(result.lookup?.id,'Project choices could not be queued.');
-        lookupStatus.textContent='Loading Nexvia choices. This can take a short moment.';
+        lookupStatus.textContent=commonReady()?'Loading this project’s elements of work…':'Loading Nexvia choices. This can take a short moment.';
         later(()=>void api('/purchase-requests/lookups/'+encodeURIComponent(result.lookup.id)).then(take).catch(fail),1000);
       };
       try{await take(await api('/purchase-requests/lookups',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({projectPageId:projectId,...(background||force?{refresh:true}:{})})}));}
@@ -370,7 +437,11 @@
     });
     async function payload(){
       requireValue(catalog&&!catalogRefreshing&&!catalogBlocked&&catalog.projectPageId===Number(project.value),'Load the selected project choices before submitting.');
+      requireValue(commonMatchesCatalog(),'Common choices changed. Retry project choices before submitting.');
+      const valid=(field,id)=>!!id&&catalog[field].some(row=>String(row.id)===String(id)&&!row.disabled);
+      requireValue(valid('suppliers',supplier.value)&&valid('services',service.value)&&valid('breakdowns',breakdown.value),'Select current supplier, service and element of work choices.');
       const lines=lineValues();calculateTotals(lines,catalog.taxes);
+      requireValue(lines.every(line=>valid('accounts',line.chartOfAccountId)&&valid('taxes',line.taxRateId)),'Select current cost of sales and tax choices for every line.');
       const body={requestId:root.crypto.randomUUID(),projectPageId:catalog.projectPageId,catalogRevision:catalog.revision,requestor:{name:name.value.trim(),email:email.value.trim()},date:date.value,supplierId:supplier.value,supplierReference:reference.value.trim(),serviceId:service.value,breakdownType:breakdown.value,quote:null,quoteBase64:'',lines};
       if(quote){
         requireValue(quote.size<=MAX_PDF,'The PDF must be no larger than 10 MB.');
@@ -397,7 +468,7 @@
       }finally{busy=false;if(current()){send.textContent='Submit purchase request';retry.hidden=!submitter.pending;retry.disabled=false;}}
     }
     form.addEventListener('submit',event=>{event.preventDefault();void submit(false);});
-    function newRequest(){if(submitter.pending||busy)return;++lookupVersion;catalogRefreshing=false;catalogBlocked=false;retryChoices.hidden=true;form.reset();name.value=options.profile?.name||name.value;email.value=options.profile?.email||email.value;date.value=new Intl.DateTimeFormat('en-CA',{timeZone:'Australia/Brisbane',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());quote=null;for(const row of lineBox.children){row.querySelector("[name=account]")?.searchControl?.destroy();row.querySelector("[name=tax]")?.searchControl?.destroy();}lineBox.replaceChildren();setCatalog(null);locked=false;addLine();lock(false);send.hidden=false;fresh.hidden=true;notice('');}
+    function newRequest(){if(submitter.pending||busy)return;++lookupVersion;++sharedVersion;catalogRefreshing=false;catalogBlocked=false;retryChoices.hidden=true;form.reset();project.value='';supplier.value='';service.value='';breakdown.value='';name.value=options.profile?.name||name.value;email.value=options.profile?.email||email.value;date.value=new Intl.DateTimeFormat('en-CA',{timeZone:'Australia/Brisbane',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());quote=null;for(const row of lineBox.children){row.querySelector("[name=account]")?.searchControl?.destroy();row.querySelector("[name=tax]")?.searchControl?.destroy();}lineBox.replaceChildren();setCatalog(null);locked=false;addLine();populateCommon();lock(false);send.hidden=false;fresh.hidden=true;notice('');if(!commonReady())void refreshShared();}
     function upsert(request){requests=[request,...requests.filter(value=>value.id!==request.id)].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));}
     function renderHistory(){
       historyList.replaceChildren();if(!requests.length){const empty=el('div',null,'pr-empty');append(empty,el('span','No purchase requests yet.','pr-empty-title'),el('p','Your requests and PO updates will appear here.','pr-help'));historyList.appendChild(empty);return;}
@@ -456,11 +527,12 @@
       await refresh(true);if(!current())return;
       try{const found=await submitter.restore();if(!current())return;if(found){upsert(found);detailLoader.show(found);renderHistory();lock(true);send.hidden=true;fresh.hidden=false;notice('Your previously submitted request was found.');}else if(submitter.pending){lock(true);notice('A saved request is waiting for its outcome. Check status and retry it before starting another request.');}}
       catch(error){if(current()){lock(!!submitter.pending);notice(error.message,true);}}
+      void refreshShared();
       const poll=()=>{void refresh();later(poll,10000);};later(poll,10000);
-      const refreshChoices=()=>{void lookup({background:true});later(refreshChoices,CHOICE_REFRESH_MS);};later(refreshChoices,CHOICE_REFRESH_MS);
+      const refreshChoices=()=>{void refreshShared();void lookup({background:true});later(refreshChoices,CHOICE_REFRESH_MS);};later(refreshChoices,CHOICE_REFRESH_MS);
     }
     void start();
-    return {destroy(){alive=false;++lookupVersion;controller.abort();for(const timer of timers)root.clearTimeout(timer);timers.clear();for(const control of searchControls)control.destroy();host.replaceChildren();},refresh};
+    return {destroy(){alive=false;++lookupVersion;++sharedVersion;controller.abort();for(const timer of timers)root.clearTimeout(timer);timers.clear();for(const control of searchControls)control.destroy();host.replaceChildren();},refresh};
   }
   root.PanelStockPurchaseRequests={mount,calculateTotals,createSubmission,createDetailLoader,searchableSelect,MAX_PDF};
 })(typeof window!=='undefined'?window:globalThis);
