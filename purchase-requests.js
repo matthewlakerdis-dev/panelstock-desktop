@@ -5,6 +5,7 @@
   const STATES={queued:'Queued',processing:'Processing in Nexvia',created_verified:'PO verified',needs_review:'Needs review',cancelled:'Cancelled'};
   const clone=value=>JSON.parse(JSON.stringify(value));
   const money=cents=>new Intl.NumberFormat('en-AU',{style:'currency',currency:'AUD'}).format(cents/100);
+  const requestReference=request=>request.displayReference||request.reference;
   const requireValue=(ok,message)=>{if(!ok)throw Error(message);};
   function decimal(value){
     const text=String(value).trim();
@@ -553,7 +554,7 @@
       try{
         const request=isRetry?await submitter.retry():await submitter.submit(await payload());
         if(!current())return;quote=null;file.value='';upsert(request);detailLoader.show(request);renderHistory();fresh.hidden=false;send.hidden=true;
-        notice('Request '+request.reference+' saved. '+(request.state==='needs_review'?'It is waiting for office review.':'Follow its PO status below.'));
+        notice('Request '+requestReference(request)+' saved. '+(request.state==='needs_review'?'It is waiting for office review.':'Follow its PO status below.'));
       }catch(error){
         if(!current())return;
         if(error.choicesChanged){++lookupVersion;catalogRefreshing=false;catalogBlocked=true;retryChoices.hidden=false;lookupStatus.textContent='Retry project choices and check the supplier, service and account selections. Your entries are retained.';}
@@ -567,7 +568,7 @@
     function renderHistory(){
       historyList.replaceChildren();if(!requests.length){const empty=el('div',null,'pr-empty');append(empty,el('span','No purchase requests yet.','pr-empty-title'),el('p','Your requests and PO updates will appear here.','pr-help'));historyList.appendChild(empty);return;}
       const table=el('table');const head=el('tr');for(const label of ['Request','Project','Total incl GST','Status','PO'])head.appendChild(el('th',label));append(table,append(el('thead'),head));const body=el('tbody');
-      for(const request of requests){const row=el('tr');const open=button(request.reference,()=>void detailLoader.select(request.id),'pr-link');append(row,append(el('td'),open),el('td',request.project),el('td',money(request.totalCents)),el('td',STATES[request.state]||'Status pending'),el('td',request.result?.purchaseOrderNumber||'—'));body.appendChild(row);}
+      for(const request of requests){const row=el('tr');const open=button(requestReference(request),()=>void detailLoader.select(request.id),'pr-link');append(row,append(el('td'),open),el('td',request.project),el('td',money(request.totalCents)),el('td',STATES[request.state]||'Status pending'),el('td',request.result?.purchaseOrderNumber||'—'));body.appendChild(row);}
       append(table,body);historyList.appendChild(table);
     }
     function renderDetails(){
@@ -575,7 +576,7 @@
       if(detailLoader.busy)details.appendChild(el('p','Loading request details…','pr-help'));
       if(detailLoader.error)details.appendChild(el('p',detailLoader.error,'pr-error'));
       if(!request)return;
-      append(details,el('h3',request.reference),el('p',(STATES[request.state]||'Status pending')+' · '+request.project),el('p',request.message||'', 'pr-help'));
+      append(details,el('h3',requestReference(request)),el('p',(STATES[request.state]||'Status pending')+' · '+request.project),el('p',request.message||'', 'pr-help'));
       const pairs=[['Requested by',request.requestor.name+' · '+request.requestor.email],['Supplier',request.supplierName],['Service',request.serviceName],['Extent of work',extentWorkName(request.breakdownName,request.breakdownType)],['Order date',request.date],['Supplier reference',request.supplierReference||'—'],['Total including GST',money(request.totalCents)]];
       if(request.quote){
         const transfer=request.quoteTransfer;
@@ -599,7 +600,7 @@
       }));
       if(request.result?.url){try{const target=new URL(request.result.url);if(target.protocol==='https:'&&target.hostname==='lennox.nexvia.com.au'){const link=el('a','Open verified PO in Nexvia','pr-button');link.href=target.href;link.target='_blank';link.rel='noopener noreferrer';details.appendChild(link);}}catch{}}
       if(request.state==='queued')details.appendChild(button('Cancel queued request',async()=>{
-        if(busy)return;if(options.confirm&&!await options.confirm({title:'Cancel purchase request?',message:'Cancel '+request.reference+' before it is processed?',confirmLabel:'Cancel request'}))return;
+        if(busy)return;if(options.confirm&&!await options.confirm({title:'Cancel purchase request?',message:'Cancel '+requestReference(request)+' before it is processed?',confirmLabel:'Cancel request'}))return;
         busy=true;try{const response=await api('/purchase-requests/'+encodeURIComponent(request.id)+'/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});requireValue(response.ok,response.data.error||'The request could not be cancelled.');upsert(response.data.request);if(detailLoader.id===request.id)detailLoader.show(response.data.request);renderHistory();notice('Request cancelled.');}catch(error){notice(error.message,true);}finally{busy=false;}
       }));
     }
