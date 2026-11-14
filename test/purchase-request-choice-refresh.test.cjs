@@ -5,9 +5,9 @@ function deferred(){let resolve;const promise=new Promise(done=>resolve=done);re
 function directory(revision='v1',updatedAt=new Date(Date.now()-1000).toISOString()){
  return{projectPageId:60,revision,updatedAt,suppliers:[{id:'225',text:'Supplier'}],services:[{id:'8',name:'Supply'}],breakdowns:[{id:'b_20',name:'Cladding'},{id:'b_70',name:'Miscellaneous'}],accounts:[{id:'51097',name:'Materials'}],taxes:[{id:'1',name:'GST',rate:10},{id:'0',name:'No GST',rate:0}]};
 }
-async function harness({saved=null,shared=()=>({sharedChoices:directory()})}={}){
+async function harness({saved=null,shared=()=>({sharedChoices:directory()}),bootstrap=null,requests=[]}={}){
  const calls=[],timers=new Map();let timerId=0,owner='requestor',lookup=()=>({lookup:{id:'lookup',projectPageId:60,state:'ready'},catalog:directory()}),submission=()=>{throw Error('Synthetic ambiguous submit');};
- let instant=Date.now(),sharedLookup=shared;
+ let instant=Date.now(),sharedLookup=shared,sharedBootstrap=bootstrap,cancellation=()=>({ok:true,request:requests[0]});
  class ClockDate extends Date{constructor(...args){super(...(args.length?args:[instant]));}static now(){return instant;}}
  class Node{
   constructor(tag){this.tagName=tag;this.children=[];this.events={};this._value='';this.textContent='';this.classList={toggle(){}};this.ownerDocument=doc;}
@@ -31,19 +31,21 @@ async function harness({saved=null,shared=()=>({sharedChoices:directory()})}={})
  vm.runInNewContext(source,context);
  const apiFetch=async(url,options={})=>{
   const path=new URL(url).pathname;calls.push({path,options});let data;
-  if(path==='/purchase-requests'&&options.method!=='POST')data={ok:true,requests:[],projects:[{projectPageId:60,name:'Jardin building'},{projectPageId:59,name:'Salacia building'}],profile:{name:'Requestor',email:'requestor@example.test'},permissions:{create:true,manage:false},connection:{connected:true}};
-  else if(path==='/purchase-requests/shared-choices'){data=await sharedLookup();if(data.status)return{ok:false,status:data.status,json:async()=>({})};}
+  if(path==='/purchase-requests'&&options.method!=='POST')data={ok:true,requests,projects:[{projectPageId:60,name:'Jardin building'},{projectPageId:59,name:'Salacia building'}],profile:{name:'Requestor',email:'requestor@example.test'},permissions:{create:true,manage:false},connection:{connected:true}};
+  else if(path==='/purchase-requests/shared-choices'){data=await(options.method==='POST'&&sharedBootstrap?sharedBootstrap():sharedLookup());if(data.status)return{ok:false,status:data.status,json:async()=>({error:data.error})};}
   else if(path==='/purchase-requests/lookups')data={ok:true,...await lookup()};
   else if(path.startsWith('/purchase-requests/lookups/'))data={ok:true,...await lookup()};
+  else if(path.endsWith('/cancel'))data=await cancellation();
   else if(path==='/purchase-requests'&&options.method==='POST')return await submission(options);
   else return{ok:false,status:404,json:async()=>({})};
+  if(data.status)return{ok:false,status:data.status,json:async()=>({error:data.error})};
   return{ok:true,status:200,json:async()=>data};
  };
  const view=context.PanelStockPurchaseRequests.mount(host,{username:'requestor',workerUrl:'https://api.example.test',currentUsername:()=>owner,apiFetch,storage:{read:async()=>saved,write:async body=>{saved=JSON.parse(JSON.stringify(body));},clear:async()=>{saved=null;}}});
  await wait();
  const byName=name=>walk(host).find(node=>node.name===name),byText=text=>walk(host).find(node=>node.textContent===text);
  const timer=async delay=>{const entry=[...timers].find(([,item])=>item.delay===delay);assert.ok(entry,'timer '+delay+' exists');timers.delete(entry[0]);entry[1].callback();await wait();};
- return{host,view,calls,timers,byName,byText,walk:()=>walk(host),timer,setLookup:callback=>{lookup=callback;},setShared:callback=>{sharedLookup=callback;},now:()=>instant,advance:ms=>{instant+=ms;},setSubmission:callback=>{submission=callback;},setHidden:value=>{doc.hidden=value;},changeOwner:value=>{owner=value;},async selectProject(id='60'){byName('project').value=id;byName('project').emit('change');await wait();}};
+ return{host,view,calls,timers,byName,byText,walk:()=>walk(host),timer,setLookup:callback=>{lookup=callback;},setShared:callback=>{sharedLookup=callback;},setBootstrap:callback=>{sharedBootstrap=callback;},setCancellation:callback=>{cancellation=callback;},now:()=>instant,advance:ms=>{instant+=ms;},setSubmission:callback=>{submission=callback;},setHidden:value=>{doc.hidden=value;},changeOwner:value=>{owner=value;},async selectProject(id='60'){byName('project').value=id;byName('project').emit('change');await wait();}};
 }
 
 function choiceState(h,disabled,placeholder,names=['supplier','service','account','tax']){
@@ -147,7 +149,7 @@ test('review recovery offers Retry and clears unavailable selections while prese
  const h=await harness();await h.selectProject();h.byName('supplier').value='225';h.byName('account').value='51097';h.byName('tax').value='0';h.byName('description').value='Keep this item';
  h.setLookup(()=>({lookup:{id:'review',projectPageId:60,state:'needs_review',message:'Connection needs attention'}}));await h.timer(300000);
  assert.equal(h.byText('Retry project choices').hidden,false);
- const catalog=directory('current');catalog.accounts=[{id:'51098',name:'Replacement account'}];catalog.suppliers=[];
+ const catalog=directory('current',new Date(h.now()-100).toISOString());catalog.accounts=[{id:'51098',name:'Replacement account'}];catalog.suppliers=[];
  h.setShared(()=>({sharedChoices:catalog}));h.setLookup(()=>({lookup:{id:'retry',projectPageId:60,state:'ready'},catalog}));h.byText('Retry project choices').emit('click');await wait();
  assert.equal(h.byName('account').value,'');assert.equal(h.byName('supplier').value,'');assert.equal(h.byName('tax').value,'0');assert.equal(h.byName('description').value,'Keep this item');assert.equal(h.byText('Retry project choices').hidden,true);h.view.destroy();
 });
@@ -250,9 +252,9 @@ test('shared HTTP failures and future timestamps cannot authorize common choices
  }
 });
 
-test('a null initial shared snapshot waits normally for project selection, with a fallback for older deployments',async()=>{
- for(const shared of [()=>({sharedChoices:null}),()=>({status:404})]){
-  const h=await harness({shared});choiceState(h,true,'Select a project first');assert.ok(h.byText('Select a project to load shared choices.'));assert.equal(h.byText('Retry project choices').hidden,true);
+test('older shared endpoints fall back to a selected project when GET or bootstrap POST is unavailable',async()=>{
+ for(const options of [{shared:()=>({status:404})},{shared:()=>({sharedChoices:null}),bootstrap:()=>({status:404})},{shared:()=>({sharedChoices:null}),bootstrap:()=>({status:405})}]){
+  const h=await harness(options);choiceState(h,true,'Select a project first');assert.ok(h.byText('Select a project to load shared choices.'));assert.equal(h.byText('Retry project choices').hidden,true);
   const pending=deferred();h.setLookup(()=>pending.promise);await h.selectProject();choiceState(h,true,'Loading choices…');assert.equal(h.byText('Retry project choices').hidden,true);
   pending.resolve({lookup:{id:'a',projectPageId:60,state:'ready'},catalog:directory()});await wait();choiceState(h,false,'Select…');assert.ok(h.byText('Project choices are ready.'));h.view.destroy();
  }
@@ -285,4 +287,74 @@ test('late shared data never mutates a frozen submitted draft and a new request 
  const changed=directory('changed',new Date(h.now()-20).toISOString());changed.suppliers=[];changed.taxes=[{id:'1',name:'GST',rate:10}];pending.resolve({sharedChoices:changed});await wait();
  assert.equal(h.byName('supplier').value,'225');assert.equal(h.byName('tax').value,'0');assert.equal(h.byName('description').value,'Submitted item');
  h.walk().find(node=>node.tagName==='button'&&node.textContent==='New purchase request').emit('click');assert.equal(h.byName('supplier').value,'');assert.equal(h.byName('service').value,'');assert.equal(h.byName('project').value,'');assert.equal(h.byName('breakdown').value,'');assert.equal(h.byName('description').value,'');assert.equal(h.byName('tax').value,'1');choiceState(h,false,'Select…');assert.equal(h.walk().filter(node=>node.name==='tax').length,1);h.view.destroy();
+});
+
+test('a cold shared cache preloads through one read-only lookup without selecting its source project or EOW',async()=>{
+ const source={id:'shared-source',projectPageId:60,state:'queued'};
+ const h=await harness({shared:()=>({sharedChoices:null}),bootstrap:()=>({sharedChoices:null,lookup:source,catalog:null})});
+ choiceState(h,true,'Loading choices…');choiceState(h,true,'Select a project first',['breakdown']);assert.equal(h.byName('project').value,'');assert.equal(h.byText('Retry project choices').hidden,true);
+ h.byName('description').value='Draft while menus load';h.byText('Add line').emit('click');
+ h.setLookup(()=>({lookup:{...source,state:'processing'},catalog:null}));await h.timer(1000);choiceState(h,true,'Loading choices…');
+ h.setLookup(()=>({lookup:{...source,state:'ready'},catalog:directory()}));await h.timer(1000);
+ choiceState(h,false,'Select…');assert.equal(h.byName('project').value,'');assert.equal(h.byName('breakdown').value,'');assert.equal(h.byName('breakdown').options.length,1,'source EOW choices are not populated');assert.equal(h.byText('Submit purchase request').disabled,true);assert.equal(h.byName('description').value,'Draft while menus load');
+ assert.ok(h.walk().filter(node=>node.name==='tax').every(node=>node.value==='1'));
+ const posts=h.calls.filter(call=>call.path==='/purchase-requests/shared-choices'&&call.options.method==='POST');assert.equal(posts.length,1);assert.deepEqual(JSON.parse(posts[0].options.body),{});
+ assert.equal(h.calls.some(call=>call.path==='/purchase-requests'&&call.options.method==='POST'),false);h.view.destroy();
+});
+
+test('fresh shared startup performs no bootstrap POST, while an expired snapshot bootstraps automatically',async()=>{
+ const warm=await harness();assert.equal(warm.calls.filter(call=>call.path==='/purchase-requests/shared-choices'&&call.options.method==='POST').length,0);warm.view.destroy();
+ const h=await harness({shared:()=>({sharedChoices:directory('expired',new Date(Date.now()-310000).toISOString())}),bootstrap:()=>({sharedChoices:directory()})});
+ choiceState(h,false,'Select…');assert.equal(h.byName('project').value,'');assert.equal(h.calls.filter(call=>call.options.method==='POST'&&call.path==='/purchase-requests/shared-choices').length,1);h.view.destroy();
+});
+
+test('offline or paused bootstrap errors offer a real retry with no project selected',async()=>{
+ for(const error of ['Nexvia connection is offline.','Purchase requests are paused for maintenance.','No Nexvia projects are available.']){
+  const h=await harness({shared:()=>({sharedChoices:null}),bootstrap:()=>({status:503,error})});
+  choiceState(h,true,'Choices unavailable');assert.ok(h.byText(error+' Retry project choices to reload them.'));assert.equal(h.byText('Retry project choices').hidden,false);assert.equal(h.byName('project').value,'');
+  h.setBootstrap(()=>({sharedChoices:directory()}));h.byText('Retry project choices').emit('click');await wait();choiceState(h,false,'Select…');assert.equal(h.byName('project').value,'');assert.equal(h.byName('breakdown').disabled,true);assert.equal(h.byText('Retry project choices').hidden,true);
+  assert.equal(h.calls.filter(call=>call.path==='/purchase-requests/shared-choices'&&call.options.method==='POST').length,2);h.view.destroy();
+ }
+});
+
+test('a missing shared status lookup fails with Retry rather than falling back to a legacy endpoint',async()=>{
+ const source={id:'shared-missing',projectPageId:60,state:'queued'};
+ const h=await harness({shared:()=>({sharedChoices:null}),bootstrap:()=>({sharedChoices:null,lookup:source})});
+ h.setLookup(()=>({status:404,error:'Synthetic status lookup disappeared'}));await h.timer(1000);choiceState(h,true,'Choices unavailable');assert.equal(h.byText('Retry project choices').hidden,false);
+ h.setBootstrap(()=>({sharedChoices:directory()}));h.byText('Retry project choices').emit('click');await wait();choiceState(h,false,'Select…');h.view.destroy();
+});
+
+test('shared bootstrap status and source project mismatches cannot populate common or EOW menus',async()=>{
+ for(const mismatch of ['identity','catalog']){
+  const source={id:'shared-source',projectPageId:60,state:'queued'};
+  const h=await harness({shared:()=>({sharedChoices:null}),bootstrap:()=>({sharedChoices:null,lookup:source})});
+  h.setLookup(()=>({lookup:{...source,id:mismatch==='identity'?'other-lookup':source.id,state:'ready'},catalog:{...directory(),projectPageId:mismatch==='catalog'?59:60}}));await h.timer(1000);
+  choiceState(h,true,'Choices unavailable');assert.equal(h.byName('project').value,'');assert.equal(h.byName('breakdown').options.length,1);assert.equal(h.byText('Retry project choices').hidden,false);h.view.destroy();
+ }
+});
+
+test('shared bootstrap polling is bounded and never queues another lookup automatically within the attempt',async()=>{
+ const source={id:'shared-slow',projectPageId:60,state:'processing'};
+ const h=await harness({shared:()=>({sharedChoices:null}),bootstrap:()=>({sharedChoices:null,lookup:{...source,state:'queued'}})});h.setLookup(()=>({lookup:source}));
+ for(let count=0;count<120;count++)await h.timer(1000);
+ choiceState(h,true,'Choices unavailable');assert.equal(h.byText('Retry project choices').hidden,false);assert.ok(h.byText('Nexvia is taking longer to load common choices. Check the connection and retry. Retry project choices to reload them.'));
+ assert.equal([...h.timers.values()].some(timer=>timer.delay===1000),false);assert.equal(h.calls.filter(call=>call.path==='/purchase-requests/shared-choices'&&call.options.method==='POST').length,1);h.view.destroy();
+});
+
+test('a newer full catalog, account change or destroy cancels queued shared status polls before network work',async()=>{
+ for(const mode of ['full','account','destroy']){
+  const source={id:'shared-source',projectPageId:60,state:'queued'};
+  const h=await harness({shared:()=>({sharedChoices:null}),bootstrap:()=>({sharedChoices:null,lookup:source})});
+  if(mode==='full'){await h.selectProject();choiceState(h,false,'Select…');}else if(mode==='account')h.changeOwner('another-account');else h.view.destroy();
+  const before=h.calls.length;if(mode!=='destroy')await h.timer(1000);else assert.equal(h.timers.size,0);assert.equal(h.calls.length,before);
+  if(mode!=='destroy')h.view.destroy();
+ }
+});
+
+test('a shared preload result can complete while a separate queued-history cancellation is busy',async()=>{
+ const source={id:'shared-source',projectPageId:60,state:'queued'},record={id:'35fc4244-267c-42c6-885c-6ab93a55b899',reference:'REQ-HISTORY',state:'queued',project:'Jardin',totalCents:1000,requestor:{name:'Requestor',email:'requestor@example.test'},supplierName:'Supplier',serviceName:'Supply',breakdownName:'Miscellaneous',date:'2026-11-14',lines:[]};
+ const h=await harness({shared:()=>({sharedChoices:null}),bootstrap:()=>({sharedChoices:null,lookup:source}),requests:[record]});
+ h.byText('REQ-HISTORY').emit('click');await wait();const pending=deferred();h.setCancellation(()=>pending.promise);h.byText('Cancel queued request').emit('click');await wait();
+ h.setLookup(()=>({lookup:{...source,state:'ready'},catalog:directory()}));await h.timer(1000);choiceState(h,false,'Select…');assert.equal(h.byName('project').value,'');
+ pending.resolve({ok:true,request:{...record,state:'cancelled'}});await wait();h.view.destroy();
 });

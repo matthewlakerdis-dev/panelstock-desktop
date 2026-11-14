@@ -8,8 +8,11 @@ PanelStock sessions and dedicated default-off purchase-request permissions.
 Deploy the companion Worker request API before publishing this frontend. The
 Synology adapter and setup instructions are in the backend repository's
 [`integrations/nexvia/WEB-REQUESTS.md`](https://github.com/matthewlakerdis-dev/panelstock/blob/main/integrations/nexvia/WEB-REQUESTS.md).
-The browser never connects directly to the NAS. PDFs are saved for review; the
-existing automatic creator remains limited to Miscellaneous EOW without a PDF.
+The browser never connects directly to the NAS. Suppliers, services, COS and tax
+choices load automatically before project selection, including when their saved
+snapshot has expired. Only Extent of Work depends on the selected project.
+PDFs are saved for review; no-PDF creation checks the selected EOW's native
+allocation before submitting to Nexvia.
 
 This release must ship together with the mobile app and the new Cloudflare Worker. It replaces the shared backend credential with individual sessions, persists immutable stock/activity batches before sending, rejects conflicting edits without dropping pending work, excludes voided dispatches from jobs, and removes the 800-entry history cap.
 

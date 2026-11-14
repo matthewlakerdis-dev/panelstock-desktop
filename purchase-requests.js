@@ -226,7 +226,7 @@
     const doc=host.ownerDocument||root.document,owner=options.username;
     let alive=true,catalog=null,catalogRefreshing=false,catalogBlocked=false,lookupVersion=0,busy=false,locked=false,quote=null;
     let requests=[],projects=[],projectSignature='',permissions={create:false,manage:false},timers=new Set();
-    let shared=null,sharedBlocked=false,sharedLoading=true,sharedVersion=0,sharedSupported=true;
+    let shared=null,sharedBlocked=false,sharedLoading=true,sharedVersion=0,sharedSupported=true,sharedFailure='';
     const sharedFields=['suppliers','services','accounts','taxes'];
     const searchControls=new Set();
     const controller=new AbortController();
@@ -279,7 +279,7 @@
     const purchaseGrid=el('div',null,'pr-grid');
     append(purchaseGrid,field('Supplier *',supplier),field('Supplier / quote reference',reference),field('Service *',service),field('Extent of work *',breakdown));
     const lookupStatus=el('p',null,'pr-help');lookupStatus.setAttribute('role','status');
-    const retryChoices=button('Retry project choices',()=>{void refreshShared();void lookup({force:true});});retryChoices.hidden=true;
+    const retryChoices=button('Retry project choices',()=>{if(project.value)void lookup({force:true});else void refreshShared({force:true});});retryChoices.hidden=true;
     const sharedStatus=el('p',null,'pr-help');sharedStatus.setAttribute('role','status');
     const file=input('file','quote',false);file.accept='application/pdf,.pdf';
     const fileStatus=el('p','Optional PDF, up to 10 MB. Requests with a PDF are saved for office review; they are not automatically created in Nexvia.','pr-help');
@@ -328,7 +328,7 @@
       const candidate=sharedSnapshot(value);
       if(!candidate||!freshShared(candidate))return false;
       if(shared&&Date.parse(candidate.updatedAt)<Date.parse(shared.updatedAt))return false;
-      shared=candidate;sharedBlocked=false;sharedLoading=false;++sharedVersion;
+      shared=candidate;sharedBlocked=false;sharedLoading=false;sharedFailure='';++sharedVersion;
       populateCommon();return true;
     }
     function commonMatchesCatalog(){const full=sharedSnapshot(catalog);return commonReady()&&freshShared(full)&&full.signature===shared.signature;}
@@ -337,7 +337,7 @@
       node.disabled=!ready;
       let blank=[...node.options].find(option=>option.value==='');
       if(!blank){blank=el('option');blank.value='';node.appendChild(blank);}
-      blank.textContent=eow?(!project.value?'Select a project first':catalogRefreshing?'Loading choices…':!ready?'Choices unavailable':'Select…'):(ready?'Select…':sharedLoading||catalogRefreshing?'Loading choices…':!shared&&!project.value?'Select a project first':'Choices unavailable');
+      blank.textContent=eow?(!project.value?'Select a project first':catalogRefreshing?'Loading choices…':!ready?'Choices unavailable':'Select…'):(ready?'Select…':sharedLoading||catalogRefreshing?'Loading choices…':!sharedSupported&&!shared&&!project.value?'Select a project first':'Choices unavailable');
     }
     function lock(value){
       locked=value;formFields.disabled=value||!permissions.create;
@@ -345,8 +345,8 @@
       for(const row of lineBox.children)for(const fieldName of ['account','tax'])choiceAvailability(row.querySelector('[name='+fieldName+']'));
       for(const control of searchControls)control.syncDisabled();
       send.disabled=value||!permissions.create||!matchingCatalog()||catalogRefreshing||catalogBlocked||!commonMatchesCatalog();retry.hidden=!submitter.pending;retry.disabled=busy;
-      sharedStatus.textContent=commonReady()?'':sharedLoading||catalogRefreshing?'Loading common Nexvia choices…':!shared&&!project.value?'Select a project to load shared choices.':'Common choices are unavailable. Retry project choices to reload them.';
-      const recoverProject=!!project.value&&catalogBlocked,recoverCommon=!commonReady()&&!sharedLoading&&sharedSupported&&(!!shared||!!project.value);
+      sharedStatus.textContent=commonReady()?'':sharedLoading||catalogRefreshing?'Loading common Nexvia choices…':!sharedSupported&&!shared&&!project.value?'Select a project to load shared choices.':(sharedFailure||'Common choices are unavailable.')+' Retry project choices to reload them.';
+      const recoverProject=!!project.value&&catalogBlocked,recoverCommon=!commonReady()&&!sharedLoading&&sharedSupported;
       const mismatch=matchingCatalog()&&!catalogBlocked&&!commonMatchesCatalog();
       retryChoices.hidden=locked||catalogRefreshing||!(recoverProject||recoverCommon||mismatch);
       if(!locked&&!busy&&mismatch&&!catalogRefreshing){
@@ -387,19 +387,42 @@
       catalog=value;choices(breakdown,value?.breakdowns||[],row=>extentWorkName(row.name,row.id));
       lock(locked);updateTotals();
     }
-    async function refreshShared(){
+    async function refreshShared({force=false}={}){
       if(!current()||locked||busy||submitter.pending||!permissions.create||doc.hidden)return;
       if(!sharedSupported){if(!commonReady()&&catalog)acceptShared(catalog);lock(locked);return;}
-      const version=++sharedVersion;sharedLoading=!shared;lock(locked);
+      const version=++sharedVersion;sharedLoading=!shared;sharedFailure='';lock(locked);
+      const active=()=>current()&&version===sharedVersion&&!locked&&!submitter.pending;
+      const fail=error=>{if(active()){sharedLoading=false;sharedBlocked=true;sharedFailure=String(error.message||'Common Nexvia choices could not be loaded.').slice(0,500);lock(locked);}};
+      const legacy=()=>{if(active()){sharedSupported=false;sharedLoading=false;sharedFailure='';if(catalog)acceptShared(catalog);lock(locked);}};
+      const take=(response,expected=null,polls=0)=>{
+        if(!active())return;
+        if((response.status===404||response.status===405)&&!expected){legacy();return;}
+        requireValue(response.ok,response.data.error||'Common Nexvia choices could not be loaded.');
+        const state=response.data.lookup;
+        if(expected)requireValue(state?.id===expected.id&&state.projectPageId===expected.projectPageId,'Shared choices did not match the requested lookup.');
+        if(state?.state==='ready'&&response.data.catalog)requireValue(response.data.catalog.projectPageId===state.projectPageId,'Shared choices came from a different lookup project.');
+        const candidate=response.data.sharedChoices||(state?.state==='ready'?response.data.catalog:null);
+        if(acceptShared(candidate))return;
+        if(state?.state==='needs_review')throw Error(state.message||'Common Nexvia choices need review. Check the Nexvia connection.');
+        requireValue(state&&['queued','processing'].includes(state.state)&&typeof state.id==='string'&&state.id.length>0&&state.id.length<=128&&Number.isSafeInteger(state.projectPageId)&&state.projectPageId>0,'Current common Nexvia choices are unavailable.');
+        requireValue(polls<120,'Nexvia is taking longer to load common choices. Check the connection and retry.');
+        later(()=>{if(active())void api('/purchase-requests/lookups/'+encodeURIComponent(state.id)).then(reply=>take(reply,state,polls+1)).catch(fail);},1000);
+      };
+      const bootstrap=async()=>{
+        if(!active())return;
+        sharedLoading=true;sharedBlocked=true;lock(locked);
+        take(await api('/purchase-requests/shared-choices',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}));
+      };
       try{
+        if(force){await bootstrap();return;}
         const response=await api('/purchase-requests/shared-choices');
-        if(!current()||version!==sharedVersion||locked||busy||submitter.pending)return;
-        if(response.status===404){sharedSupported=false;sharedLoading=false;if(catalog)acceptShared(catalog);lock(locked);return;}
-        requireValue(response.ok,'Common Nexvia choices could not be loaded.');
+        if(!active())return;
+        if(response.status===404){legacy();return;}
+        requireValue(response.ok,response.data.error||'Common Nexvia choices could not be loaded.');
         const candidate=sharedSnapshot(response.data.sharedChoices);
         if(candidate&&shared&&Date.parse(candidate.updatedAt)<Date.parse(shared.updatedAt)){sharedLoading=false;lock(locked);return;}
-        if(!acceptShared(candidate)){sharedLoading=false;sharedBlocked=true;lock(locked);}
-      }catch{if(current()&&version===sharedVersion&&!locked&&!busy&&!submitter.pending){sharedLoading=false;sharedBlocked=true;lock(locked);}}
+        if(!acceptShared(candidate))await bootstrap();
+      }catch(error){fail(error);}
     }
     async function lookup({background=false,force=false,reconcile=false}={}){
       if(!current()||locked||busy||submitter.pending||!permissions.create)return;
