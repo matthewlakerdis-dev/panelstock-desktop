@@ -230,6 +230,20 @@
     const sharedFields=['suppliers','services','accounts','taxes'];
     const searchControls=new Set();
     const controller=new AbortController();
+    const readTick=typeof root.performance?.now==='function'?()=>root.performance.now():()=>Date.now();
+    let lastTick=null,serverClock=null;
+    function monotonicTime(){const value=Number(readTick());lastTick=Number.isFinite(value)?Math.max(lastTick??value,value):(lastTick??0);return lastTick;}
+    function estimatedServerTime(tick=monotonicTime()){return serverClock?serverClock.epoch+Math.max(0,tick-serverClock.tick):Date.now();}
+    function parseServerTime(value){
+      if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value))return null;
+      const epoch=Date.parse(value);return Number.isFinite(epoch)&&new Date(epoch).toISOString()===value?epoch:null;
+    }
+    function observeServerTime(epoch,started,received){
+      if(epoch===null)return;
+      if(serverClock&&epoch<=serverClock.sample)return;
+      const conservative=epoch+Math.max(0,received-started);
+      serverClock={epoch:conservative,tick:received,sample:epoch};
+    }
     const current=()=>alive&&(!options.currentUsername||options.currentUsername()===owner);
     const later=(fn,delay)=>{const id=root.setTimeout(()=>{timers.delete(id);if(current())fn();},delay);timers.add(id);return id;};
     function el(tag,text,className){const node=doc.createElement(tag);if(text!==undefined&&text!==null)node.textContent=text;if(className)node.className=className;return node;}
@@ -251,9 +265,13 @@
     }
     async function api(path,init={}){
       requireValue(current(),'Your account changed. Reopen Purchase Requests.');
+      const started=monotonicTime();
       const response=await options.apiFetch(options.workerUrl+path,{...init,signal:controller.signal});
       const data=await response.json().catch(()=>({}));
       requireValue(current(),'Your account changed. Reopen Purchase Requests.');
+      const received=monotonicTime(),serverEpoch=parseServerTime(data.serverTime);
+      if(serverEpoch!==null)for(const snapshot of [data.sharedChoices,data.catalog])requireValue(!(Date.parse(snapshot?.updatedAt)>serverEpoch),'Nexvia choices have an invalid verification time.');
+      observeServerTime(serverEpoch,started,received);
       return {ok:response.ok,status:response.status,data};
     }
     const submitter=createSubmission(api,options.storage||pendingStorage(owner));
@@ -322,7 +340,8 @@
       }
       snapshot.signature=JSON.stringify(content);return snapshot;
     }
-    function freshShared(value=shared){const age=Date.now()-Date.parse(value?.updatedAt);return !!value&&Number.isFinite(age)&&age>=0&&age<CHOICE_REFRESH_MS;}
+    function sharedAge(value){return estimatedServerTime()-Date.parse(value?.updatedAt);}
+    function freshShared(value=shared){const age=sharedAge(value);return !!value&&Number.isFinite(age)&&age>=0&&age<CHOICE_REFRESH_MS;}
     function commonReady(){return freshShared()&&!sharedBlocked;}
     function acceptShared(value){
       const candidate=sharedSnapshot(value);
@@ -394,7 +413,7 @@
       const active=()=>current()&&version===sharedVersion&&!locked&&!submitter.pending;
       const fail=error=>{if(active()){sharedLoading=false;sharedBlocked=true;sharedFailure=String(error.message||'Common Nexvia choices could not be loaded.').slice(0,500);lock(locked);}};
       const legacy=()=>{if(active()){sharedSupported=false;sharedLoading=false;sharedFailure='';if(catalog)acceptShared(catalog);lock(locked);}};
-      const take=(response,expected=null,polls=0)=>{
+      const take=(response,expected=null,polls=0,forced=false)=>{
         if(!active())return;
         if((response.status===404||response.status===405)&&!expected){legacy();return;}
         requireValue(response.ok,response.data.error||'Common Nexvia choices could not be loaded.');
@@ -403,15 +422,16 @@
         if(state?.state==='ready'&&response.data.catalog)requireValue(response.data.catalog.projectPageId===state.projectPageId,'Shared choices came from a different lookup project.');
         const candidate=response.data.sharedChoices||(state?.state==='ready'?response.data.catalog:null);
         if(acceptShared(candidate))return;
+        if(!forced&&sharedSnapshot(candidate)&&sharedAge(candidate)>=CHOICE_REFRESH_MS)return bootstrap(true);
         if(state?.state==='needs_review')throw Error(state.message||'Common Nexvia choices need review. Check the Nexvia connection.');
         requireValue(state&&['queued','processing'].includes(state.state)&&typeof state.id==='string'&&state.id.length>0&&state.id.length<=128&&Number.isSafeInteger(state.projectPageId)&&state.projectPageId>0,'Current common Nexvia choices are unavailable.');
         requireValue(polls<120,'Nexvia is taking longer to load common choices. Check the connection and retry.');
-        later(()=>{if(active())void api('/purchase-requests/lookups/'+encodeURIComponent(state.id)).then(reply=>take(reply,state,polls+1)).catch(fail);},1000);
+        later(()=>{if(active())void api('/purchase-requests/lookups/'+encodeURIComponent(state.id)).then(reply=>take(reply,state,polls+1,forced)).catch(fail);},1000);
       };
-      const bootstrap=async()=>{
+      const bootstrap=async(forceRefresh=false)=>{
         if(!active())return;
         sharedLoading=true;sharedBlocked=true;lock(locked);
-        take(await api('/purchase-requests/shared-choices',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}));
+        return take(await api('/purchase-requests/shared-choices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(forceRefresh?{refresh:true}:{})}),null,0,forceRefresh);
       };
       try{
         if(force){await bootstrap();return;}
@@ -420,8 +440,8 @@
         if(response.status===404){legacy();return;}
         requireValue(response.ok,response.data.error||'Common Nexvia choices could not be loaded.');
         const candidate=sharedSnapshot(response.data.sharedChoices);
-        if(candidate&&shared&&Date.parse(candidate.updatedAt)<Date.parse(shared.updatedAt)){sharedLoading=false;lock(locked);return;}
-        if(!acceptShared(candidate))await bootstrap();
+        if(candidate&&shared&&commonReady()&&Date.parse(candidate.updatedAt)<Date.parse(shared.updatedAt)){sharedLoading=false;lock(locked);return;}
+        if(!acceptShared(candidate))await bootstrap(!!candidate&&sharedAge(candidate)>=CHOICE_REFRESH_MS);
       }catch(error){fail(error);}
     }
     async function lookup({background=false,force=false,reconcile=false}={}){

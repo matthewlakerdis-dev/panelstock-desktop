@@ -5,10 +5,10 @@ function deferred(){let resolve;const promise=new Promise(done=>resolve=done);re
 function directory(revision='v1',updatedAt=new Date(Date.now()-1000).toISOString()){
  return{projectPageId:60,revision,updatedAt,suppliers:[{id:'225',text:'Supplier'}],services:[{id:'8',name:'Supply'}],breakdowns:[{id:'b_20',name:'Cladding'},{id:'b_70',name:'Miscellaneous'}],accounts:[{id:'51097',name:'Materials'}],taxes:[{id:'1',name:'GST',rate:10},{id:'0',name:'No GST',rate:0}]};
 }
-async function harness({saved=null,shared=()=>({sharedChoices:directory()}),bootstrap=null,requests=[]}={}){
+async function harness({saved=null,shared=()=>({sharedChoices:directory()}),bootstrap=null,requests=[],skew=0,serverClock=false,latency=0}={}){
  const calls=[],timers=new Map();let timerId=0,owner='requestor',lookup=()=>({lookup:{id:'lookup',projectPageId:60,state:'ready'},catalog:directory()}),submission=()=>{throw Error('Synthetic ambiguous submit');};
- let instant=Date.now(),sharedLookup=shared,sharedBootstrap=bootstrap,cancellation=()=>({ok:true,request:requests[0]});
- class ClockDate extends Date{constructor(...args){super(...(args.length?args:[instant]));}static now(){return instant;}}
+ let instant=Date.now(),ticks=0,wallOffset=skew,requestLatency=latency,sharedLookup=shared,sharedBootstrap=bootstrap,cancellation=()=>({ok:true,request:requests[0]});
+ class ClockDate extends Date{constructor(...args){super(...(args.length?args:[instant+wallOffset]));}static now(){return instant+wallOffset;}}
  class Node{
   constructor(tag){this.tagName=tag;this.children=[];this.events={};this._value='';this.textContent='';this.classList={toggle(){}};this.ownerDocument=doc;}
   appendChild(node){this.children.push(node);node.parentNode=this;return node;}
@@ -26,26 +26,26 @@ async function harness({saved=null,shared=()=>({sharedChoices:directory()}),boot
  }
  const doc={hidden:false,createElement:tag=>new Node(tag)};doc.body=new Node('body');
  const walk=node=>[node,...node.children.flatMap(walk)],host=new Node('div');
- const context={Date:ClockDate,Intl,JSON,TextDecoder,Uint8Array,URL,Blob,AbortController,crypto,console,
+ const context={Date:ClockDate,performance:{now:()=>ticks},Intl,JSON,TextDecoder,Uint8Array,URL,Blob,AbortController,crypto,console,
   setTimeout(callback,delay){const id=++timerId;timers.set(id,{callback,delay});return id;},clearTimeout:id=>timers.delete(id)};
  vm.runInNewContext(source,context);
  const apiFetch=async(url,options={})=>{
-  const path=new URL(url).pathname;calls.push({path,options});let data;
+  const path=new URL(url).pathname;calls.push({path,options});const serverAt=instant;let data;
   if(path==='/purchase-requests'&&options.method!=='POST')data={ok:true,requests,projects:[{projectPageId:60,name:'Jardin building'},{projectPageId:59,name:'Salacia building'}],profile:{name:'Requestor',email:'requestor@example.test'},permissions:{create:true,manage:false},connection:{connected:true}};
-  else if(path==='/purchase-requests/shared-choices'){data=await(options.method==='POST'&&sharedBootstrap?sharedBootstrap():sharedLookup());if(data.status)return{ok:false,status:data.status,json:async()=>({error:data.error})};}
+  else if(path==='/purchase-requests/shared-choices'){data=await(options.method==='POST'&&sharedBootstrap?sharedBootstrap({serverAt,options}):sharedLookup({serverAt,options}));if(data.status)return{ok:false,status:data.status,json:async()=>({error:data.error})};}
   else if(path==='/purchase-requests/lookups')data={ok:true,...await lookup()};
   else if(path.startsWith('/purchase-requests/lookups/'))data={ok:true,...await lookup()};
   else if(path.endsWith('/cancel'))data=await cancellation();
   else if(path==='/purchase-requests'&&options.method==='POST')return await submission(options);
   else return{ok:false,status:404,json:async()=>({})};
   if(data.status)return{ok:false,status:data.status,json:async()=>({error:data.error})};
-  return{ok:true,status:200,json:async()=>data};
+  return{ok:true,status:200,json:async()=>{const delay=typeof requestLatency==='function'?requestLatency({path,options}):requestLatency;instant+=delay;ticks+=delay;return{...(serverClock&&(path==='/purchase-requests/shared-choices'||path.startsWith('/purchase-requests/lookups'))?{serverTime:new Date(serverAt).toISOString()}:{}),...data};}};
  };
  const view=context.PanelStockPurchaseRequests.mount(host,{username:'requestor',workerUrl:'https://api.example.test',currentUsername:()=>owner,apiFetch,storage:{read:async()=>saved,write:async body=>{saved=JSON.parse(JSON.stringify(body));},clear:async()=>{saved=null;}}});
  await wait();
  const byName=name=>walk(host).find(node=>node.name===name),byText=text=>walk(host).find(node=>node.textContent===text);
  const timer=async delay=>{const entry=[...timers].find(([,item])=>item.delay===delay);assert.ok(entry,'timer '+delay+' exists');timers.delete(entry[0]);entry[1].callback();await wait();};
- return{host,view,calls,timers,byName,byText,walk:()=>walk(host),timer,setLookup:callback=>{lookup=callback;},setShared:callback=>{sharedLookup=callback;},setBootstrap:callback=>{sharedBootstrap=callback;},setCancellation:callback=>{cancellation=callback;},now:()=>instant,advance:ms=>{instant+=ms;},setSubmission:callback=>{submission=callback;},setHidden:value=>{doc.hidden=value;},changeOwner:value=>{owner=value;},async selectProject(id='60'){byName('project').value=id;byName('project').emit('change');await wait();}};
+ return{host,view,calls,timers,byName,byText,walk:()=>walk(host),timer,setLookup:callback=>{lookup=callback;},setShared:callback=>{sharedLookup=callback;},setBootstrap:callback=>{sharedBootstrap=callback;},setCancellation:callback=>{cancellation=callback;},setLatency:ms=>{requestLatency=ms;},now:()=>instant,advance:ms=>{instant+=ms;ticks+=ms;},jumpClock:ms=>{wallOffset+=ms;},setSubmission:callback=>{submission=callback;},setHidden:value=>{doc.hidden=value;},changeOwner:value=>{owner=value;},async selectProject(id='60'){byName('project').value=id;byName('project').emit('change');await wait();}};
 }
 
 function choiceState(h,disabled,placeholder,names=['supplier','service','account','tax']){
@@ -357,4 +357,56 @@ test('a shared preload result can complete while a separate queued-history cance
  h.byText('REQ-HISTORY').emit('click');await wait();const pending=deferred();h.setCancellation(()=>pending.promise);h.byText('Cancel queued request').emit('click');await wait();
  h.setLookup(()=>({lookup:{...source,state:'ready'},catalog:directory()}));await h.timer(1000);choiceState(h,false,'Select…');assert.equal(h.byName('project').value,'');
  pending.resolve({ok:true,request:{...record,state:'cancelled'}});await wait();h.view.destroy();
+});
+
+test('trusted server time loads fresh GET, POST and polled choices despite device clock offsets',async()=>{
+ for(const skew of [-600000,-2000,2000,600000]){
+  const h=await harness({skew,serverClock:true,latency:5});choiceState(h,false,'Select…');assert.equal(h.calls.filter(call=>call.options.method==='POST').length,0);
+  await h.selectProject();assert.equal(h.byText('Submit purchase request').disabled,false);h.view.destroy();
+  const source={id:'server-clock-source',projectPageId:60,state:'queued'};
+  const cold=await harness({skew,serverClock:true,shared:()=>({sharedChoices:null}),bootstrap:()=>({lookup:source})});
+  cold.setLookup(()=>({lookup:{...source,state:'ready'},catalog:directory('fresh',new Date(cold.now()-1000).toISOString())}));await cold.timer(1000);choiceState(cold,false,'Select…');assert.equal(cold.byName('project').value,'');cold.view.destroy();
+  const fast=await harness({skew,serverClock:true,shared:()=>({sharedChoices:null}),bootstrap:({serverAt})=>({sharedChoices:directory('fast',new Date(serverAt-1000).toISOString())})});choiceState(fast,false,'Select…');fast.view.destroy();
+ }
+});
+
+test('monotonic server age expires at exactly five minutes despite a backward device-clock change',async()=>{
+ const initial=directory('fixed',new Date(Date.now()-1000).toISOString()),h=await harness({serverClock:true,shared:()=>({sharedChoices:initial})});
+ const remaining=300000-(h.now()-Date.parse(initial.updatedAt));h.jumpClock(-86400000);h.advance(remaining-1);await h.view.refresh();choiceState(h,false,'Select…');
+ h.advance(1);await h.view.refresh();choiceState(h,true,'Choices unavailable');assert.equal(h.byText('Submit purchase request').disabled,true);h.view.destroy();
+});
+
+test('older, equal or malformed server samples cannot renew the age of a saved shared snapshot',async()=>{
+ for(const mode of ['older','equal','malformed']){
+  const initial=directory('fixed',new Date(Date.now()-1000).toISOString()),h=await harness({serverClock:true,shared:()=>({sharedChoices:initial})}),firstServer=h.now();
+  h.advance(300001);h.jumpClock(-86400000);
+  const serverTime=mode==='equal'?new Date(firstServer).toISOString():mode==='older'?initial.updatedAt:'not-a-time';
+  h.setShared(()=>({sharedChoices:initial,serverTime}));h.setBootstrap(()=>({sharedChoices:initial,serverTime}));await h.timer(300000);
+  choiceState(h,true,'Choices unavailable');assert.equal(h.byText('Retry project choices').hidden,false);assert.equal(h.calls.filter(call=>call.path==='/purchase-requests/shared-choices'&&call.options.method==='POST').length,1);h.view.destroy();
+ }
+});
+
+test('a snapshot future-dated relative to raw server time stays rejected even when request RTT crosses that date',async()=>{
+ const epoch=Date.now(),h=await harness({serverClock:true,latency:2000,shared:()=>({serverTime:new Date(epoch).toISOString(),sharedChoices:directory('future',new Date(epoch+1000).toISOString())})});
+ choiceState(h,true,'Choices unavailable');assert.ok(h.byText('Nexvia choices have an invalid verification time. Retry project choices to reload them.'));assert.equal(h.calls.filter(call=>call.options.method==='POST').length,0);h.view.destroy();
+});
+
+test('expiry during transit forces one read-only refresh and accepts only its fresh verified result',async()=>{
+ const source={id:'expired-in-transit',projectPageId:60,state:'queued'};
+ const h=await harness({serverClock:true,latency:20,shared:({serverAt})=>({sharedChoices:directory('boundary',new Date(serverAt-299999).toISOString())}),bootstrap:()=>({lookup:source})});
+ const posts=h.calls.filter(call=>call.path==='/purchase-requests/shared-choices'&&call.options.method==='POST');assert.equal(posts.length,1);assert.deepEqual(JSON.parse(posts[0].options.body),{refresh:true});
+ h.setLookup(()=>({lookup:{...source,state:'ready'},catalog:directory('renewed',new Date(h.now()-1000).toISOString())}));await h.timer(1000);choiceState(h,false,'Select…');assert.equal(h.byName('project').value,'');h.view.destroy();
+});
+
+test('an expired normal POST reply escalates once and a forced expired reply cannot requeue itself',async()=>{
+ let postCount=0;
+ const h=await harness({serverClock:true,shared:()=>({sharedChoices:null}),bootstrap:({serverAt})=>{postCount++;return{sharedChoices:directory('expired',new Date(serverAt-310000).toISOString())};}});
+ choiceState(h,true,'Choices unavailable');const posts=h.calls.filter(call=>call.path==='/purchase-requests/shared-choices'&&call.options.method==='POST');assert.equal(postCount,2);assert.deepEqual(posts.map(call=>JSON.parse(call.options.body)),[{}, {refresh:true}]);assert.equal(h.byText('Retry project choices').hidden,false);h.view.destroy();
+});
+
+test('a newer quick server sample recovers from the conservative bias of an earlier long request',async()=>{
+ const h=await harness({serverClock:true,latency:({path,options})=>path==='/purchase-requests/shared-choices'&&options.method!=='POST'?310000:0,
+  shared:({serverAt})=>({serverTime:new Date(serverAt+310000).toISOString(),sharedChoices:directory('late',new Date(serverAt+309000).toISOString())}),
+  bootstrap:({serverAt})=>({serverTime:new Date(serverAt+1).toISOString(),sharedChoices:directory('recovered',new Date(serverAt-1000).toISOString())})});
+ choiceState(h,false,'Select…');assert.equal(h.byName('project').value,'');assert.equal(h.calls.filter(call=>call.path==='/purchase-requests/shared-choices'&&call.options.method==='POST').length,1);h.view.destroy();
 });

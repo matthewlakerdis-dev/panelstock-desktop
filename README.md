@@ -11,6 +11,8 @@ Synology adapter and setup instructions are in the backend repository's
 The browser never connects directly to the NAS. Suppliers, services, COS and tax
 choices load automatically before project selection, including when their saved
 snapshot has expired. Only Extent of Work depends on the selected project.
+Choice freshness uses server time and elapsed browser time, so an inaccurate
+device clock does not block newly verified menus or extend their expiry.
 PDFs are saved for review; no-PDF creation checks the selected EOW's native
 allocation before submitting to Nexvia.
 
