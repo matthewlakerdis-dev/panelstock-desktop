@@ -271,7 +271,7 @@
     const purchaseGrid=el('div',null,'pr-grid');
     append(purchaseGrid,field('Supplier *',supplier),field('Supplier / quote reference',reference),field('Service *',service),field('Element of work *',breakdown));
     const lookupStatus=el('p',null,'pr-help');lookupStatus.setAttribute('role','status');
-    const retryChoices=button('Retry project choices',()=>void lookup());retryChoices.hidden=true;
+    const retryChoices=button('Retry project choices',()=>void lookup({force:true}));retryChoices.hidden=true;
     const file=input('file','quote',false);file.accept='application/pdf,.pdf';
     const fileStatus=el('p','Optional PDF, up to 10 MB. Requests with a PDF are saved for office review; they are not automatically created in Nexvia.','pr-help');
     const lineBox=el('div',null,'pr-lines');const totalBox=el('div',null,'pr-totals');totalBox.setAttribute('aria-label','Request total');totalBox.setAttribute('aria-live','polite');
@@ -337,7 +337,7 @@
       catalog=value;choices(supplier,value?.suppliers||[],row=>row.text||row.name);choices(service,value?.services||[],row=>row.name);choices(breakdown,value?.breakdowns||[],row=>row.name);
       for(const row of lineBox.children)populateLine(row,defaultTax);lock(locked);updateTotals();
     }
-    async function lookup({background=false}={}){
+    async function lookup({background=false,force=false}={}){
       if(!current()||locked||busy||submitter.pending||!permissions.create)return;
       const projectId=Number(project.value),preserve=catalog?.projectPageId===projectId;
       if(background&&(!projectId||catalogRefreshing||doc.hidden))return;
@@ -357,9 +357,9 @@
         if(result.lookup?.state==='needs_review'){catalogRefreshing=false;catalogBlocked=true;lock(locked);retryChoices.hidden=false;lookupStatus.textContent=(result.lookup.message||'Project choices need office review.')+' Retry project choices when the connection is ready.';return;}
         requireValue(result.lookup?.id,'Project choices could not be queued.');
         lookupStatus.textContent='Loading Nexvia choices. This can take a short moment.';
-        later(()=>void api('/purchase-requests/lookups/'+encodeURIComponent(result.lookup.id)).then(take).catch(fail),3000);
+        later(()=>void api('/purchase-requests/lookups/'+encodeURIComponent(result.lookup.id)).then(take).catch(fail),1000);
       };
-      try{await take(await api('/purchase-requests/lookups',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({projectPageId:projectId})}));}
+      try{await take(await api('/purchase-requests/lookups',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({projectPageId:projectId,...(background||force?{refresh:true}:{})})}));}
       catch(error){fail(error);}
     }
     project.addEventListener('input',()=>lock(locked));

@@ -56,7 +56,7 @@ test('dependent choices explain the project and loading states, including lines 
  h.byText('Add line').emit('click');choiceState(h,true,'Loading choices…');
  assert.equal(h.walk().filter(node=>node.name==='account').length,2);assert.notEqual(h.byName('description').disabled,true);
  h.byName('description').value='Entered while loading';
- h.setLookup(()=>({lookup:{id:'queued',projectPageId:60,state:'ready'},catalog:directory()}));await h.timer(3000);
+ h.setLookup(()=>({lookup:{id:'queued',projectPageId:60,state:'ready'},catalog:directory()}));await h.timer(1000);
  choiceState(h,false,'Select…');assert.equal(h.byName('description').value,'Entered while loading');assert.equal(h.byName('tax').value,'1');
  assert.equal(h.byText('Submit purchase request').disabled,false);h.view.destroy();
 });
@@ -76,6 +76,17 @@ test('project choices have no normal refresh control and the recovery control st
  const pending=deferred();h.setLookup(()=>pending.promise);await h.selectProject();assert.equal(retry.hidden,true);
  pending.resolve({lookup:{id:'lookup',projectPageId:60,state:'ready'},catalog:directory()});await wait();
  assert.equal(retry.hidden,true);assert.ok(h.byText('Project choices are ready.'));h.view.destroy();
+});
+
+test('project selection accepts fresh cached choices while automatic refresh and explicit retry request current Nexvia data',async()=>{
+ const h=await harness();await h.selectProject();
+ const payloads=()=>h.calls.filter(call=>call.path==='/purchase-requests/lookups').map(call=>JSON.parse(call.options.body));
+ assert.deepEqual(payloads(),[{projectPageId:60}]);
+ await h.timer(300000);assert.deepEqual(payloads().at(-1),{projectPageId:60,refresh:true});
+ h.setLookup(()=>{throw Error('Synthetic refresh failure');});await h.timer(300000);
+ h.setLookup(()=>({lookup:{id:'retry',projectPageId:60,state:'ready'},catalog:directory('new')}));
+ h.byText('Retry project choices').emit('click');await wait();assert.deepEqual(payloads().at(-1),{projectPageId:60,refresh:true});
+ assert.ok(h.byText('Project choices are ready.'));h.view.destroy();
 });
 
 test('five-minute refresh keeps entered fields and zero GST while disabling submit until current choices return',async()=>{
