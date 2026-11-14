@@ -1,7 +1,7 @@
 (function(root){
   'use strict';
   const MAX_PDF=10*1024*1024;
-  const CHOICE_REFRESH_MS=5*60*1000;
+  const CHOICE_REFRESH_MS=24*60*60*1000,CHOICE_MAX_AGE_MS=30*CHOICE_REFRESH_MS;
   const STATES={queued:'Queued',processing:'Processing in Nexvia',created_verified:'PO verified',needs_review:'Needs review',cancelled:'Cancelled'};
   const clone=value=>JSON.parse(JSON.stringify(value));
   const money=cents=>new Intl.NumberFormat('en-AU',{style:'currency',currency:'AUD'}).format(cents/100);
@@ -228,6 +228,7 @@
     let alive=true,catalog=null,catalogRefreshing=false,catalogBlocked=false,lookupVersion=0,busy=false,locked=false,quote=null;
     let requests=[],projects=[],projectSignature='',permissions={create:false,manage:false},timers=new Set();
     let shared=null,sharedBlocked=false,sharedLoading=true,sharedVersion=0,sharedSupported=true,sharedFailure='';
+    let referenceSync=null,syncBusy=false,syncVersion=0,syncTimer=null;
     const sharedFields=['suppliers','services','accounts','taxes'];
     const eowPreviews=new Map(),EOW_PREVIEW_MS=30*24*3600000;
     let eowVersion=0,eowSelectionRemoved=false;
@@ -277,7 +278,7 @@
       const data=await response.json().catch(()=>({}));
       requireValue(current(),'Your account changed. Reopen Purchase Requests.');
       const received=monotonicTime(),serverEpoch=parseServerTime(data.serverTime);
-      if(serverEpoch!==null)for(const snapshot of [data.sharedChoices,data.catalog,data.eowPreview,...(Array.isArray(data.eowPreviews)?data.eowPreviews:[])])requireValue(!(Date.parse(snapshot?.updatedAt)>serverEpoch),'Nexvia choices have an invalid verification time.');
+      if(serverEpoch!==null)for(const snapshot of [data.sharedChoices,data.catalog,data.eowPreview,...(Array.isArray(data.eowPreviews)?data.eowPreviews:[])])for(const field of ['updatedAt','commonUpdatedAt','eowUpdatedAt'])requireValue(!(Date.parse(snapshot?.[field])>serverEpoch),'Nexvia choices have an invalid verification time.');
       observeServerTime(serverEpoch,started,received);
       return {ok:response.ok,status:response.status,data};
     }
@@ -287,6 +288,9 @@
     const status=el('p',null,'pr-notice');status.setAttribute('role','status');
     const connection=el('p',null,'pr-connection');
     const top=el('div',null,'pr-top');append(top,connection,button('Refresh requests',()=>void refresh()));
+    const syncPanel=el('div');syncPanel.hidden=true;
+    const syncStatus=el('p',null,'pr-help');syncStatus.setAttribute('role','status');
+    const syncButton=button('Sync Nexvia data',()=>void syncReferences());append(syncPanel,append(el('div',null,'pr-top'),syncStatus,syncButton));
     const formCard=el('section',null,'pr-card pr-create-card');
     const form=el('form');form.setAttribute('aria-label','Lennox purchase request');
     const formFields=el('fieldset');formFields.className='pr-form-fields';
@@ -327,11 +331,57 @@
     append(formCard,formHeading,form);
     const historyCard=el('section',null,'pr-card pr-history-card');const historyList=el('div',null,'pr-history'),historyInfo=el('p',null,'pr-help');
     const details=el('section',null,'pr-details');details.hidden=true;
-    append(historyCard,el('h2','Purchase requests'),historyInfo,historyList,details);append(shell,top,status,formCard,historyCard);host.replaceChildren(shell);
+    append(historyCard,el('h2','Purchase requests'),historyInfo,historyList,details);append(shell,top,syncPanel,status,formCard,historyCard);host.replaceChildren(shell);
     function notice(message,error=false){if(!current())return;status.textContent=message;status.classList.toggle('pr-error',error);}
+    function referenceDate(value){const date=new Date(value);return Number.isFinite(date.getTime())?new Intl.DateTimeFormat('en-AU',{timeZone:'Australia/Brisbane',day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'}).format(date):'time unavailable';}
+    function syncActive(value=referenceSync){return ['queued','refreshing'].includes(value?.state);}
+    function renderReferenceSync(){
+      syncPanel.hidden=referenceSync?.canSync!==true;syncButton.disabled=syncBusy||syncActive();
+      if(!referenceSync)return;
+      const {state,completedProjects,totalProjects,lastSuccessfulAt}=referenceSync;
+      const progress=Number.isSafeInteger(completedProjects)&&Number.isSafeInteger(totalProjects)&&totalProjects>0?' '+completedProjects+' of '+totalProjects+' projects.':'';
+      syncStatus.textContent=syncBusy?'Requesting a Nexvia update…':state==='queued'?'Nexvia data update queued. Saved choices remain available.':state==='refreshing'?'Updating Nexvia data.'+progress+' Saved choices remain available.':state==='failed'?'Nexvia data could not be fully updated. Saved choices remain available.':state==='completed'?'Nexvia data updated'+(lastSuccessfulAt?' '+referenceDate(lastSuccessfulAt):'')+'.':'Nexvia data syncs daily'+(lastSuccessfulAt?'. Last updated '+referenceDate(lastSuccessfulAt):'')+'.';
+    }
+    function acceptReferenceSync(value,expected=null,source='history'){
+      if(!value||typeof value.canSync!=='boolean'||!['idle','queued','refreshing','completed','failed'].includes(value.state))return false;
+      const changedId=!!referenceSync?.id&&referenceSync.id!==value.id;
+      const stamp=Date.parse(value.requestedAt),previousStamp=Date.parse(referenceSync?.requestedAt);
+      const newerGeneration=changedId&&!!value.id&&Number.isFinite(stamp)&&(!Number.isFinite(previousStamp)||stamp>previousStamp);
+      if(expected&&value.id!==expected&&!newerGeneration)return false;
+      if(changedId&&!newerGeneration)return false;
+      if(referenceSync?.id&&referenceSync.id===value.id&&['completed','failed'].includes(referenceSync.state)&&syncActive(value))return false;
+      if(referenceSync?.id===value.id&&referenceSync?.state==='refreshing'&&value.state==='queued')return false;
+      const completed=value.state==='completed'&&!!referenceSync&&(referenceSync.id!==value.id||referenceSync.state!=='completed');
+      if(changedId){if(syncTimer){root.clearTimeout(syncTimer);timers.delete(syncTimer);syncTimer=null;}if(source!=='post')++syncVersion;}
+      referenceSync=value;renderReferenceSync();
+      if(syncActive()&&value.canSync&&!syncTimer)watchReferenceSync(value.id,syncVersion);
+      if(completed&&!locked&&!busy&&!submitter.pending&&permissions.create){void refreshShared();void preloadEow();void lookup({background:true});}
+      return true;
+    }
+    function watchReferenceSync(id,version){
+      if(syncTimer)return;
+      syncTimer=later(async()=>{
+        syncTimer=null;if(!current()||version!==syncVersion||referenceSync?.id!==id||!syncActive())return;
+        try{const response=await api('/purchase-requests/reference-sync');if(current()&&version===syncVersion&&referenceSync?.id===id){requireValue(response.ok,response.data.error||'Nexvia update status could not be loaded.');acceptReferenceSync(response.data.referenceSync,id,'poll');}}
+        catch{if(current()&&version===syncVersion&&referenceSync?.id===id)syncStatus.textContent='Waiting for the Nexvia update status. Saved choices remain available.';}
+        if(current()&&version===syncVersion&&referenceSync?.id===id&&referenceSync.canSync&&syncActive())watchReferenceSync(id,version);
+      },2000);
+    }
+    async function syncReferences(){
+      if(!current()||syncBusy||syncActive()||referenceSync?.canSync!==true)return;
+      if(syncTimer){root.clearTimeout(syncTimer);timers.delete(syncTimer);syncTimer=null;}
+      const version=++syncVersion;syncBusy=true;renderReferenceSync();
+      try{
+        const response=await api('/purchase-requests/reference-sync',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+        if(!current()||version!==syncVersion)return;requireValue(response.ok,response.data.error||'Nexvia data sync could not be queued.');
+        requireValue(acceptReferenceSync(response.data.referenceSync,null,'post'),'Nexvia update status was unavailable.');
+      }catch(error){if(current()&&version===syncVersion)notice(error.message,true);}
+      finally{if(current()&&version===syncVersion){syncBusy=false;renderReferenceSync();}}
+    }
     function matchingCatalog(){return !!project.value&&catalog?.projectPageId===Number(project.value);}
     function previewCurrent(value){const age=estimatedServerTime()-Date.parse(value?.updatedAt);return !!value&&Number.isFinite(age)&&age>=0&&age<=EOW_PREVIEW_MS&&projects.some(row=>row.projectPageId===value.projectPageId);}
     function cacheEow(value,verified=false){
+      if(value?.eowUpdatedAt)value={...value,updatedAt:value.eowUpdatedAt};
       if(!value||!Number.isSafeInteger(value.projectPageId)||value.projectPageId<=0||typeof value.updatedAt!=='string'||!previewCurrent(value)||!Array.isArray(value.breakdowns)||!value.breakdowns.length||value.breakdowns.length>10000)return false;
       const seen=new Set(),rows=[];
       for(const row of value.breakdowns){
@@ -345,7 +395,7 @@
       return true;
     }
     function selectedEowPreview(){const preview=eowPreviews.get(Number(project.value));return project.value&&previewCurrent(preview)?preview:null;}
-    function verifiedEow(){return matchingCatalog()&&freshShared(catalog)&&!catalogRefreshing&&!catalogBlocked;}
+    function verifiedEow(){const age=estimatedServerTime()-Date.parse(catalog?.eowUpdatedAt||catalog?.updatedAt);return matchingCatalog()&&Number.isFinite(age)&&age>=0&&age<=EOW_PREVIEW_MS&&!catalogRefreshing&&!catalogBlocked;}
     function eowRows(){return verifiedEow()?catalog.breakdowns:(selectedEowPreview()?.breakdowns||[]);}
     function eowLoadingText(){return selectedEowPreview()?'Showing saved extents of work while Nexvia checks for updates.':commonReady()?'Loading this project’s extents of work…':'Loading Nexvia choices. This can take a short moment.';}
     function populateEow(){
@@ -366,6 +416,7 @@
       }catch{/* Cached EOW is optional; a normal project lookup still verifies it. */}
     }
     function sharedSnapshot(value){
+      if(value?.commonUpdatedAt)value={...value,updatedAt:value.commonUpdatedAt};
       if(!value||typeof value.updatedAt!=='string'||!Number.isFinite(Date.parse(value.updatedAt)))return null;
       const snapshot={updatedAt:value.updatedAt},content=[];
       for(const field of sharedFields){
@@ -383,7 +434,7 @@
       snapshot.signature=JSON.stringify(content);return snapshot;
     }
     function sharedAge(value){return estimatedServerTime()-Date.parse(value?.updatedAt);}
-    function freshShared(value=shared){const age=sharedAge(value);return !!value&&Number.isFinite(age)&&age>=0&&age<CHOICE_REFRESH_MS;}
+    function freshShared(value=shared){const age=sharedAge(value);return !!value&&Number.isFinite(age)&&age>=0&&age<=CHOICE_MAX_AGE_MS;}
     function commonReady(){return freshShared()&&!sharedBlocked;}
     function acceptShared(value){
       const candidate=sharedSnapshot(value);
@@ -405,8 +456,8 @@
       for(const node of [supplier,service,breakdown])choiceAvailability(node);
       for(const row of lineBox.children)for(const fieldName of ['account','tax'])choiceAvailability(row.querySelector('[name='+fieldName+']'));
       for(const control of searchControls)control.syncDisabled();
-      send.disabled=value||!permissions.create||!matchingCatalog()||catalogRefreshing||catalogBlocked||!commonMatchesCatalog();retry.hidden=!submitter.pending;retry.disabled=busy;
-      sharedStatus.textContent=commonReady()?'':sharedLoading||catalogRefreshing?'Loading common Nexvia choices…':!sharedSupported&&!shared&&!project.value?'Select a project to load shared choices.':(sharedFailure||'Common choices are unavailable.')+' Retry project choices to reload them.';
+      send.disabled=value||!permissions.create||!verifiedEow()||!commonMatchesCatalog();retry.hidden=!submitter.pending;retry.disabled=busy;
+      sharedStatus.textContent=commonReady()?(sharedFailure?'Using saved Nexvia choices while updates are unavailable. ':'')+'Nexvia choices updated '+referenceDate(shared.updatedAt)+'. Updates sync daily.':sharedLoading||catalogRefreshing?'Loading common Nexvia choices…':!sharedSupported&&!shared&&!project.value?'Select a project to load shared choices.':(sharedFailure||'Common choices are unavailable.')+' Retry project choices to reload them.';
       const recoverProject=!!project.value&&catalogBlocked,recoverCommon=!commonReady()&&!sharedLoading&&sharedSupported;
       const mismatch=matchingCatalog()&&!catalogBlocked&&!commonMatchesCatalog();
       retryChoices.hidden=locked||catalogRefreshing||!(recoverProject||recoverCommon||mismatch);
@@ -455,7 +506,7 @@
       if(!sharedSupported){if(!commonReady()&&catalog)acceptShared(catalog);lock(locked);return;}
       const version=++sharedVersion;sharedLoading=!shared;sharedFailure='';lock(locked);
       const active=()=>current()&&version===sharedVersion&&!locked&&!submitter.pending;
-      const fail=error=>{if(active()){sharedLoading=false;sharedBlocked=true;sharedFailure=String(error.message||'Common Nexvia choices could not be loaded.').slice(0,500);lock(locked);}};
+      const fail=error=>{if(active()){sharedLoading=false;sharedBlocked=!freshShared();sharedFailure=String(error.message||'Common Nexvia choices could not be loaded.').slice(0,500);lock(locked);}};
       const legacy=()=>{if(active()){sharedSupported=false;sharedLoading=false;sharedFailure='';if(catalog)acceptShared(catalog);lock(locked);}};
       const take=(response,expected=null,polls=0,forced=false)=>{
         if(!active())return;
@@ -466,7 +517,7 @@
         if(state?.state==='ready'&&response.data.catalog)requireValue(response.data.catalog.projectPageId===state.projectPageId,'Shared choices came from a different lookup project.');
         const candidate=response.data.sharedChoices||(state?.state==='ready'?response.data.catalog:null);
         if(acceptShared(candidate))return;
-        if(!forced&&sharedSnapshot(candidate)&&sharedAge(candidate)>=CHOICE_REFRESH_MS)return bootstrap(true);
+        if(!forced&&sharedSnapshot(candidate)&&sharedAge(candidate)>CHOICE_MAX_AGE_MS)return bootstrap(true);
         if(state?.state==='needs_review')throw Error(state.message||'Common Nexvia choices need review. Check the Nexvia connection.');
         requireValue(state&&['queued','processing'].includes(state.state)&&typeof state.id==='string'&&state.id.length>0&&state.id.length<=128&&Number.isSafeInteger(state.projectPageId)&&state.projectPageId>0,'Current common Nexvia choices are unavailable.');
         requireValue(polls<120,'Nexvia is taking longer to load common choices. Check the connection and retry.');
@@ -478,14 +529,17 @@
         return take(await api('/purchase-requests/shared-choices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(forceRefresh?{refresh:true}:{})}),null,0,forceRefresh);
       };
       try{
-        if(force){await bootstrap();return;}
+        if(force){await bootstrap(true);return;}
         const response=await api('/purchase-requests/shared-choices');
         if(!active())return;
         if(response.status===404){legacy();return;}
         requireValue(response.ok,response.data.error||'Common Nexvia choices could not be loaded.');
         const candidate=sharedSnapshot(response.data.sharedChoices);
         if(candidate&&shared&&commonReady()&&Date.parse(candidate.updatedAt)<Date.parse(shared.updatedAt)){sharedLoading=false;lock(locked);return;}
-        if(!acceptShared(candidate))await bootstrap(!!candidate&&sharedAge(candidate)>=CHOICE_REFRESH_MS);
+        if(!acceptShared(candidate)){
+          if(freshShared())throw Error('Saved Nexvia choices are available while the latest update is unavailable.');
+          await bootstrap(!!candidate&&sharedAge(candidate)>CHOICE_MAX_AGE_MS);
+        }
       }catch(error){fail(error);}
     }
     async function lookup({background=false,force=false,reconcile=false}={}){
@@ -498,7 +552,7 @@
       if(!projectId){lookupStatus.textContent='Select a project to load its extent of work choices.';lock(locked);return;}
       catalogRefreshing=true;lock(locked);
       lookupStatus.textContent=selectedEowPreview()?eowLoadingText():preserve?'Refreshing project choices. Your entries are retained…':commonReady()?'Loading this project’s extents of work…':'Loading current project choices…';
-      const fail=error=>{if(version===lookupVersion&&current()){catalogRefreshing=false;catalogBlocked=true;lock(locked);retryChoices.hidden=false;lookupStatus.textContent=error.message+' Retry project choices before submitting.';}};
+      const fail=error=>{if(version===lookupVersion&&current()){catalogRefreshing=false;const retained=background&&preserve&&freshShared(catalog);catalogBlocked=!retained;lock(locked);retryChoices.hidden=retained;lookupStatus.textContent=retained?'Using saved project choices while updates are unavailable.':error.message+' Retry project choices before submitting.';}};
       const take=async response=>{
         if(!current()||version!==lookupVersion)return;
         if(locked||busy||submitter.pending){catalogRefreshing=false;lock(locked);return;}
@@ -510,17 +564,17 @@
           const full=sharedSnapshot(result.catalog);requireValue(full&&freshShared(full),'Current common Nexvia choices are unavailable.');
           const older=shared&&Date.parse(full.updatedAt)<=Date.parse(shared.updatedAt);
           if(older&&freshShared()&&full.signature!==shared.signature){
-            if(!reconcile){await lookup({force:true,reconcile:true});return;}
+            if(!reconcile){await lookup({reconcile:true});return;}
             throw Error('Common choices changed. Retry project choices before submitting.');
           }
           acceptShared(full);catalogRefreshing=false;catalogBlocked=false;const removed=setCatalog(result.catalog)||eowSelectionRemoved;eowSelectionRemoved=false;lookupStatus.textContent=removed?'The selected extent of work is no longer available. Choose a current extent of work.':'Project choices are ready.';return;
         }
-        if(result.lookup?.state==='needs_review'){catalogRefreshing=false;catalogBlocked=true;lock(locked);retryChoices.hidden=false;lookupStatus.textContent=(result.lookup.message||'Project choices need office review.')+' Retry project choices when the connection is ready.';return;}
+        if(result.lookup?.state==='needs_review'){fail(Error(result.lookup.message||'Project choices need office review.'));return;}
         requireValue(result.lookup?.id,'Project choices could not be queued.');
         lookupStatus.textContent=eowLoadingText();
         later(()=>void api('/purchase-requests/lookups/'+encodeURIComponent(result.lookup.id)).then(take).catch(fail),1000);
       };
-      try{await take(await api('/purchase-requests/lookups',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({projectPageId:projectId,...(background||force?{refresh:true}:{})})}));}
+      try{await take(await api('/purchase-requests/lookups',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({projectPageId:projectId,...(force?{refresh:true}:{})})}));}
       catch(error){fail(error);}
     }
     project.addEventListener('input',()=>lock(locked));
@@ -531,7 +585,7 @@
       if(quote&&(quote.size>MAX_PDF||!quote.name.toLowerCase().endsWith('.pdf'))){notice('Choose a PDF no larger than 10 MB.',true);file.value='';quote=null;}
     });
     async function payload(){
-      requireValue(catalog&&!catalogRefreshing&&!catalogBlocked&&catalog.projectPageId===Number(project.value),'Load the selected project choices before submitting.');
+      requireValue(verifiedEow(),'Load the selected project choices before submitting.');
       requireValue(commonMatchesCatalog(),'Common choices changed. Retry project choices before submitting.');
       const valid=(field,id)=>!!id&&catalog[field].some(row=>String(row.id)===String(id)&&!row.disabled);
       requireValue(valid('suppliers',supplier.value)&&valid('services',service.value)&&valid('breakdowns',breakdown.value),'Select current supplier, service and extent of work choices.');
@@ -606,8 +660,10 @@
     }
     async function refresh(initial=false){
       try{
+        const syncBefore=referenceSync;
         const response=await api('/purchase-requests');requireValue(response.ok,response.data.error||'Purchase requests could not be loaded.');if(!current())return;
         requests=response.data.requests||[];permissions=response.data.permissions||permissions;projects=response.data.projects||[];
+        if(!syncBusy&&referenceSync===syncBefore)acceptReferenceSync(response.data.referenceSync);
         historyInfo.textContent=response.data.historyTruncated?'Showing the 200 most recent purchase requests.':'';
         const selectedSummary=requests.find(value=>value.id===detailLoader.id);detailLoader.summary(selectedSummary);
         connection.textContent=response.data.connection?.connected?'Nexvia connection is online.':'Nexvia connection is offline. Saved requests remain queued until the connection is ready.';
