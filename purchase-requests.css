@@ -24,7 +24,6 @@
 .pr-wide{grid-column:1/-1}
 .pr-lookup-info{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px}
 .pr-lookup-info .pr-help{margin:0;font-size:11px}
-.pr-lookup-info:has(.pr-help:empty){display:none}
 .pr-lookup-info .pr-button{padding:5px 9px;font-size:11px}
 .pr-section-heading{margin-bottom:12px}
 .pr-section-hint{font-size:11px;color:var(--pr-muted)}
