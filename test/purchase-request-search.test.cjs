@@ -10,6 +10,8 @@ function harness(rows=[['a','Panel Supplier'],['b','Panel Supplier'],['paused','
   get options(){return this.children.filter(node=>node.tagName==='option');}
   get value(){return this.tagName==='select'&&!this.options.some(option=>option.value===this._value)?'':this._value;}
   set value(value){this._value=String(value);}
+  get disabled(){return this._disabled||false;}
+  set disabled(value){const changed=this._disabled!==value;this._disabled=value;if(changed&&value&&this.blurWhenDisabled&&doc.activeElement===this)this.emit('blur');}
   setAttribute(name,value){this.attributes[name]=String(value);}
   getAttribute(name){return this.attributes[name]??null;}
   removeAttribute(name){delete this.attributes[name];}
@@ -24,12 +26,13 @@ function harness(rows=[['a','Panel Supplier'],['b','Panel Supplier'],['paused','
   select(){this.textSelected=true;}
   getBoundingClientRect(){return this.bounds||{top:600,bottom:640};}
  }
- const context={Intl,JSON,Event,innerHeight:700,console};vm.runInNewContext(source,context);
+ const observers=[];
+ const context={Intl,JSON,Event,innerHeight:700,console,MutationObserver:class{constructor(callback){this.callback=callback;observers.push(this);}observe(){}disconnect(){this.disconnected=true;}}};vm.runInNewContext(source,context);
  const native=new Node('select');native.name='supplier';native.required=true;
  const setRows=next=>{native.replaceChildren();for(const [value,text,disabled=false]of [['','Select…'],...next]){const option=new Node('option');option.value=value;option.textContent=text;option.disabled=disabled;native.appendChild(option);}};setRows(rows);
  const control=context.PanelStockPurchaseRequests.searchableSelect(native,{current:()=>current,onDestroy:()=>destroyed++}),fieldset=new Node('fieldset');fieldset.appendChild(control.element);control.setLabel('Supplier');
  const input=control.input,popup=control.element.children.find(node=>node.getAttribute('role')==='listbox'),options=()=>popup.children.filter(node=>node.getAttribute('role')==='option');
- return{doc,native,control,input,popup,fieldset,options,listeners,setRows,context,createNode:tag=>new Node(tag),setCurrent:value=>{current=value;},get destroyed(){return destroyed;}};
+ return{doc,native,control,input,popup,fieldset,options,listeners,setRows,context,notifyMutation:()=>observers[0].callback(),createNode:tag=>new Node(tag),setCurrent:value=>{current=value;},get destroyed(){return destroyed;}};
 }
 
 test('search filters partial labels without choosing, disambiguates names and commits an exact native ID',()=>{
@@ -74,6 +77,35 @@ test('frozen fieldsets, changed accounts and destroyed controls cannot alter the
  h.fieldset.disabled=false;h.setCurrent(false);h.input.emit('click');first.emit('click');assert.equal(h.native.value,'0');
  h.setCurrent(true);h.control.sync();h.input.emit('click');assert.equal(h.control.element.classList.contains('is-above'),true,'popup flips when there is more room above');assert.ok(h.listeners.get('pointerdown').size);
  h.control.destroy();assert.equal(h.listeners.get('pointerdown').size,0);assert.equal(h.native.listeners.get('change').size,0);assert.equal(h.input.listeners.get('keydown').size,0);assert.equal(h.destroyed,1);h.control.destroy();assert.equal(h.destroyed,1);
+});
+
+test('disabled search controls display updated loading placeholders and stay closed',()=>{
+ const h=harness();h.setRows([]);h.native.options[0].textContent='Loading suppliers…';h.native.disabled=true;h.control.syncDisabled();
+ assert.equal(h.input.placeholder,'Loading suppliers…');assert.equal(h.input.disabled,true);assert.equal(h.popup.hidden,true);assert.equal(h.input.getAttribute('aria-expanded'),'false');
+ h.native.options[0].textContent='Choose a project first';h.notifyMutation();assert.equal(h.input.placeholder,'Choose a project first');
+ h.input.emit('click');h.input.emit('keydown',{key:'ArrowDown'});assert.equal(h.popup.hidden,true);assert.equal(h.native.value,'');h.control.destroy();
+});
+
+test('temporary disabling cancels an unfinished search, restores exact zero and handles synchronous sync listeners safely',()=>{
+ const h=harness();h.native.value='0';h.control.sync();h.input.focus();h.input.value='Panel';h.input.emit('input');assert.equal(h.native.value,'');
+ const staleOption=h.options()[0];let restored=0;
+ h.native.addEventListener('input',()=>{restored++;assert.ok(restored<3,'restoration must not recurse');h.control.syncDisabled();});
+ h.input.blurWhenDisabled=true;h.native.disabled=true;h.control.syncDisabled();
+ assert.equal(restored,1);assert.equal(h.native.value,'0');assert.equal(h.input.value,'Zero GST');assert.equal(h.popup.hidden,true);assert.equal(h.input.disabled,true);
+ staleOption.emit('click');assert.equal(h.native.value,'0','stale popup choices cannot alter a disabled input');
+ h.native.disabled=false;h.notifyMutation();assert.equal(h.native.value,'0');assert.equal(h.input.value,'Zero GST');assert.equal(h.input.validationMessage,'');h.control.destroy();
+});
+
+test('disabled mutation cleanup does not restore a removed prior choice or select a replacement',()=>{
+ const h=harness();h.native.value='0';h.control.sync();h.input.focus();h.input.value='Panel';h.input.emit('input');
+ h.setRows([['1','Standard GST']]);h.native.disabled=true;h.notifyMutation();assert.equal(h.native.value,'');assert.equal(h.input.value,'');assert.equal(h.popup.hidden,true);
+ h.native.disabled=false;h.notifyMutation();assert.equal(h.native.value,'');assert.ok(h.input.validationMessage,'the visible required control needs an explicit current selection');h.control.destroy();
+});
+
+test('fieldset-induced blur restores the prior committed choice before disabled synchronization',()=>{
+ const h=harness();h.native.value='0';h.control.sync();h.input.focus();h.input.value='Panel';h.input.emit('input');
+ h.fieldset.disabled=true;h.input.emit('blur');assert.equal(h.native.value,'0');assert.equal(h.input.value,'Zero GST');assert.equal(h.popup.hidden,true);
+ h.control.syncDisabled();h.fieldset.disabled=false;h.control.syncDisabled();assert.equal(h.native.value,'0');assert.equal(h.input.validationMessage,'');h.control.destroy();
 });
 
 test('popup position respects the app scroll area beneath the fixed header',()=>{

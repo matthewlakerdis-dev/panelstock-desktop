@@ -151,9 +151,13 @@
     }
     function reposition(event){if(open&&enabled()&&!(event?.type==='scroll'&&popup.contains(event.target)))position();}
     function close(restore=false){
-      if(restore&&editing){const choice=allChoices().find(row=>row.value===prior&&!row.disabled);native.value=choice?.value||'';native.dispatchEvent(new root.Event('input',{bubbles:true}));}
+      const restoreSelection=restore&&editing,choice=restoreSelection?allChoices().find(row=>row.value===prior&&!row.disabled):null;
       open=false;editing=false;query='';popup.hidden=true;element.classList.remove('is-open');input.setAttribute('aria-expanded','false');input.removeAttribute('aria-activedescendant');doc.removeEventListener('pointerdown',outside,true);doc.removeEventListener('scroll',reposition,true);root.removeEventListener?.('resize',reposition);root.visualViewport?.removeEventListener?.('resize',reposition);root.visualViewport?.removeEventListener?.('scroll',reposition);
+      if(restoreSelection)native.value=choice?.value||'';
       input.value=selected()?.label||'';validity();
+      // Input listeners may synchronously disable/sync this control again.
+      // Clear the editing state before announcing the restored selection.
+      if(restoreSelection)native.dispatchEvent(new root.Event('input',{bubbles:true}));
     }
     function choose(value){
       if(!enabled())return;
@@ -180,10 +184,11 @@
     function change(){editing=false;close();sync();}
     function sync(){
       if(destroyed)return;
+      input.placeholder=Array.from(native.options).find(option=>option.value==='')?.textContent||'Select…';
+      if(!enabled()){close(true);input.disabled=native.disabled;return;}
       input.disabled=native.disabled;
-      if(!enabled()){close();return;}
       if(open&&editing){render();validity();return;}
-      input.value=selected()?.label||'';input.placeholder=Array.from(native.options).find(option=>option.value==='')?.textContent||'Select…';
+      input.value=selected()?.label||'';
       if(open)render();validity();
     }
     function type(){
@@ -203,9 +208,9 @@
       }
       if(event.key==='Enter'&&open){event.preventDefault();if(active>=0)choose(shown[active].value);}
     }
-    const focus=()=>{expand();input.select?.();},blur=()=>close(),invalid=()=>{if(enabled()){input.setAttribute('aria-invalid','true');input.focus();expand();}};
+    const focus=()=>{expand();input.select?.();},blur=()=>close(!enabled()),invalid=()=>{if(enabled()){input.setAttribute('aria-invalid','true');input.focus();expand();}};
     input.addEventListener('focus',focus);input.addEventListener('click',expand);input.addEventListener('input',type);input.addEventListener('keydown',key);input.addEventListener('blur',blur);input.addEventListener('invalid',invalid);native.addEventListener('change',change);
-    const observer=typeof root.MutationObserver==='function'?new root.MutationObserver(()=>{if(enabled())sync();else close();}):null;
+    const observer=typeof root.MutationObserver==='function'?new root.MutationObserver(()=>sync()):null;
     observer?.observe(native,{attributes:true,attributeFilter:['disabled']});
     const control={element,input,setLabel(label){input.setAttribute('aria-label',label);popup.setAttribute('aria-label',label+' choices');},sync,refresh:sync,syncDisabled:sync,
       destroy(){if(destroyed)return;close();destroyed=true;observer?.disconnect();input.removeEventListener('focus',focus);input.removeEventListener('click',expand);input.removeEventListener('input',type);input.removeEventListener('keydown',key);input.removeEventListener('blur',blur);input.removeEventListener('invalid',invalid);native.removeEventListener('change',change);onDestroy();}};
@@ -290,7 +295,21 @@
     const details=el('section',null,'pr-details');details.hidden=true;
     append(historyCard,el('h2','Purchase requests'),historyInfo,historyList,details);append(shell,top,status,formCard,historyCard);host.replaceChildren(shell);
     function notice(message,error=false){if(!current())return;status.textContent=message;status.classList.toggle('pr-error',error);}
-    function lock(value){locked=value;formFields.disabled=value||!permissions.create;for(const control of searchControls)control.syncDisabled();send.disabled=value||!permissions.create||!catalog||catalogRefreshing||catalogBlocked;retry.hidden=!submitter.pending;retry.disabled=busy;}
+    function matchingCatalog(){return !!project.value&&catalog?.projectPageId===Number(project.value);}
+    function choiceAvailability(node){
+      const ready=matchingCatalog()&&!catalogRefreshing&&!catalogBlocked;
+      node.disabled=!ready;
+      let blank=[...node.options].find(option=>option.value==='');
+      if(!blank){blank=el('option');blank.value='';node.appendChild(blank);}
+      blank.textContent=!project.value?'Select a project first':catalogRefreshing?'Loading choices…':!ready?'Choices unavailable':'Select…';
+    }
+    function lock(value){
+      locked=value;formFields.disabled=value||!permissions.create;
+      for(const node of [supplier,service,breakdown])choiceAvailability(node);
+      for(const row of lineBox.children)for(const fieldName of ['account','tax'])choiceAvailability(row.querySelector('[name='+fieldName+']'));
+      for(const control of searchControls)control.syncDisabled();
+      send.disabled=value||!permissions.create||!matchingCatalog()||catalogRefreshing||catalogBlocked;retry.hidden=!submitter.pending;retry.disabled=busy;
+    }
     function lineValues(){return [...lineBox.children].map(row=>({description:row.querySelector('[name=description]').value.trim(),quantity:row.querySelector('[name=quantity]').value,unitPriceExGst:row.querySelector('[name=price]').value,chartOfAccountId:row.querySelector('[name=account]').value,taxRateId:row.querySelector('[name=tax]').value,breakdownType:breakdown.value}));}
     function updateTotals(){
       totalBox.replaceChildren();if(!catalog)return;
@@ -302,6 +321,7 @@
       choices(row.querySelector('[name=tax]'),catalog?.taxes||[],value=>value.name+' ('+value.rate+'%)');
       const tax=row.querySelector('[name=tax]'),standard=catalog?.taxes?.find(value=>Number(value.rate)===10);
       if(defaultTax&&!tax.value&&standard)tax.value=String(standard.id);
+      for(const node of [row.querySelector('[name=account]'),tax]){choiceAvailability(node);node.searchControl?.syncDisabled();}
       tax.searchControl?.sync();
     }
     function addLine(){
@@ -336,12 +356,13 @@
         if(result.lookup?.state==='ready'&&result.catalog){requireValue(result.catalog.projectPageId===projectId&&Number(project.value)===projectId,'Project choices did not match. Select the project again.');catalogRefreshing=false;catalogBlocked=false;setCatalog(result.catalog,!preserve);lookupStatus.textContent='Project choices are ready.';return;}
         if(result.lookup?.state==='needs_review'){catalogRefreshing=false;catalogBlocked=true;lock(locked);retryChoices.hidden=false;lookupStatus.textContent=(result.lookup.message||'Project choices need office review.')+' Retry project choices when the connection is ready.';return;}
         requireValue(result.lookup?.id,'Project choices could not be queued.');
-        lookupStatus.textContent='Waiting for Nexvia project choices. You can keep this page open.';
+        lookupStatus.textContent='Loading Nexvia choices. This can take a short moment.';
         later(()=>void api('/purchase-requests/lookups/'+encodeURIComponent(result.lookup.id)).then(take).catch(fail),3000);
       };
       try{await take(await api('/purchase-requests/lookups',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({projectPageId:projectId})}));}
       catch(error){fail(error);}
     }
+    project.addEventListener('input',()=>lock(locked));
     project.addEventListener('change',()=>void lookup());
     file.addEventListener('change',()=>{
       quote=file.files?.[0]||null;
