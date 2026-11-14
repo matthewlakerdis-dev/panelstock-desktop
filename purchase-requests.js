@@ -228,6 +228,8 @@
     let requests=[],projects=[],projectSignature='',permissions={create:false,manage:false},timers=new Set();
     let shared=null,sharedBlocked=false,sharedLoading=true,sharedVersion=0,sharedSupported=true,sharedFailure='';
     const sharedFields=['suppliers','services','accounts','taxes'];
+    const eowPreviews=new Map(),EOW_PREVIEW_MS=30*24*3600000;
+    let eowVersion=0,eowSelectionRemoved=false;
     const searchControls=new Set();
     const controller=new AbortController();
     const readTick=typeof root.performance?.now==='function'?()=>root.performance.now():()=>Date.now();
@@ -274,7 +276,7 @@
       const data=await response.json().catch(()=>({}));
       requireValue(current(),'Your account changed. Reopen Purchase Requests.');
       const received=monotonicTime(),serverEpoch=parseServerTime(data.serverTime);
-      if(serverEpoch!==null)for(const snapshot of [data.sharedChoices,data.catalog])requireValue(!(Date.parse(snapshot?.updatedAt)>serverEpoch),'Nexvia choices have an invalid verification time.');
+      if(serverEpoch!==null)for(const snapshot of [data.sharedChoices,data.catalog,data.eowPreview,...(Array.isArray(data.eowPreviews)?data.eowPreviews:[])])requireValue(!(Date.parse(snapshot?.updatedAt)>serverEpoch),'Nexvia choices have an invalid verification time.');
       observeServerTime(serverEpoch,started,received);
       return {ok:response.ok,status:response.status,data};
     }
@@ -327,6 +329,41 @@
     append(historyCard,el('h2','Purchase requests'),historyInfo,historyList,details);append(shell,top,status,formCard,historyCard);host.replaceChildren(shell);
     function notice(message,error=false){if(!current())return;status.textContent=message;status.classList.toggle('pr-error',error);}
     function matchingCatalog(){return !!project.value&&catalog?.projectPageId===Number(project.value);}
+    function previewCurrent(value){const age=estimatedServerTime()-Date.parse(value?.updatedAt);return !!value&&Number.isFinite(age)&&age>=0&&age<=EOW_PREVIEW_MS&&projects.some(row=>row.projectPageId===value.projectPageId);}
+    function cacheEow(value,verified=false){
+      if(!value||!Number.isSafeInteger(value.projectPageId)||value.projectPageId<=0||typeof value.updatedAt!=='string'||!previewCurrent(value)||!Array.isArray(value.breakdowns)||!value.breakdowns.length||value.breakdowns.length>10000)return false;
+      const seen=new Set(),rows=[];
+      for(const row of value.breakdowns){
+        const id=String(row?.id??'');if(!/^[a-zA-Z0-9_-]{1,80}$/.test(id)||seen.has(id)||typeof row?.name!=='string'||!row.name.trim()||row.name.length>500||/[\u0000-\u001f\u007f]/.test(row.name)||typeof row.disabled!=='boolean')return false;
+        seen.add(id);rows.push({id,name:row.name,disabled:row.disabled===true});
+      }
+      const previous=eowPreviews.get(value.projectPageId),stamp=Date.parse(value.updatedAt),previousStamp=Date.parse(previous?.updatedAt);
+      if(previous&&(previousStamp>stamp||previousStamp===stamp&&(previous.verified||!verified)))return false;
+      eowPreviews.delete(value.projectPageId);eowPreviews.set(value.projectPageId,{projectPageId:value.projectPageId,updatedAt:value.updatedAt,breakdowns:rows,verified});
+      while(eowPreviews.size>50||[...eowPreviews.values()].reduce((total,row)=>total+row.breakdowns.length,0)>10000){const key=[...eowPreviews.keys()].find(id=>id!==Number(project.value));if(key===undefined)break;eowPreviews.delete(key);}
+      return true;
+    }
+    function selectedEowPreview(){const preview=eowPreviews.get(Number(project.value));return project.value&&previewCurrent(preview)?preview:null;}
+    function verifiedEow(){return matchingCatalog()&&freshShared(catalog)&&!catalogRefreshing&&!catalogBlocked;}
+    function eowRows(){return verifiedEow()?catalog.breakdowns:(selectedEowPreview()?.breakdowns||[]);}
+    function eowLoadingText(){return selectedEowPreview()?'Showing saved extents of work while Nexvia checks for updates.':commonReady()?'Loading this project’s extents of work…':'Loading Nexvia choices. This can take a short moment.';}
+    function populateEow(){
+      const previous=breakdown.value;choices(breakdown,eowRows(),row=>extentWorkName(row.name,row.id));
+      lock(locked);if(catalogRefreshing&&selectedEowPreview())lookupStatus.textContent=eowLoadingText();
+      const removed=!!previous&&!breakdown.value;if(removed&&!verifiedEow())eowSelectionRemoved=true;return removed;
+    }
+    async function preloadEow(){
+      if(!current()||locked||busy||submitter.pending||!permissions.create)return;
+      const version=++eowVersion;
+      try{
+        const response=await api('/purchase-requests/eow-choices');
+        if(!current()||version!==eowVersion||locked||submitter.pending||!response.ok)return;
+        const rows=response.data.eowPreviews;
+        if(!Array.isArray(rows)||rows.length>50||rows.reduce((total,row)=>total+(Array.isArray(row?.breakdowns)?row.breakdowns.length:0),0)>10000)return;
+        let changed=false;for(const row of rows)changed=cacheEow(row)||changed;
+        if(changed){if(project.value)populateEow();else lock(locked);}
+      }catch{/* Cached EOW is optional; a normal project lookup still verifies it. */}
+    }
     function sharedSnapshot(value){
       if(!value||typeof value.updatedAt!=='string'||!Number.isFinite(Date.parse(value.updatedAt)))return null;
       const snapshot={updatedAt:value.updatedAt},content=[];
@@ -356,11 +393,11 @@
     }
     function commonMatchesCatalog(){const full=sharedSnapshot(catalog);return commonReady()&&freshShared(full)&&full.signature===shared.signature;}
     function choiceAvailability(node){
-      const eow=node===breakdown,ready=eow?matchingCatalog()&&!catalogRefreshing&&!catalogBlocked:commonReady();
+      const eow=node===breakdown,ready=eow?!!project.value&&(verifiedEow()||!!selectedEowPreview()):commonReady();
       node.disabled=!ready;
       let blank=[...node.options].find(option=>option.value==='');
       if(!blank){blank=el('option');blank.value='';node.appendChild(blank);}
-      blank.textContent=eow?(!project.value?'Select a project first':catalogRefreshing?'Loading choices…':!ready?'Choices unavailable':'Select…'):(ready?'Select…':sharedLoading||catalogRefreshing?'Loading choices…':!sharedSupported&&!shared&&!project.value?'Select a project first':'Choices unavailable');
+      blank.textContent=eow?(!project.value?'Select a project first':ready?'Select…':catalogRefreshing?'Loading choices…':'Choices unavailable'):(ready?'Select…':sharedLoading||catalogRefreshing?'Loading choices…':!sharedSupported&&!shared&&!project.value?'Select a project first':'Choices unavailable');
     }
     function lock(value){
       locked=value;formFields.disabled=value||!permissions.create;
@@ -409,8 +446,8 @@
       for(const row of lineBox.children)populateLine(row);lock(locked);updateTotals();
     }
     function setCatalog(value){
-      catalog=value;choices(breakdown,value?.breakdowns||[],row=>extentWorkName(row.name,row.id));
-      lock(locked);updateTotals();
+      catalog=value;if(value)cacheEow(value,true);
+      const removed=populateEow();updateTotals();return removed;
     }
     async function refreshShared({force=false}={}){
       if(!current()||locked||busy||submitter.pending||!permissions.create||doc.hidden)return;
@@ -456,16 +493,17 @@
       if(background&&(!projectId||catalogRefreshing||doc.hidden))return;
       const version=++lookupVersion;catalogRefreshing=false;catalogBlocked=true;
       retryChoices.hidden=true;
-      if(!preserve){breakdown.value='';setCatalog(null);}
+      if(!preserve){breakdown.value='';eowSelectionRemoved=false;setCatalog(null);}
       if(!projectId){lookupStatus.textContent='Select a project to load its extent of work choices.';lock(locked);return;}
       catalogRefreshing=true;lock(locked);
-      lookupStatus.textContent=preserve?'Refreshing project choices. Your entries are retained…':commonReady()?'Loading this project’s extents of work…':'Loading current project choices…';
+      lookupStatus.textContent=selectedEowPreview()?eowLoadingText():preserve?'Refreshing project choices. Your entries are retained…':commonReady()?'Loading this project’s extents of work…':'Loading current project choices…';
       const fail=error=>{if(version===lookupVersion&&current()){catalogRefreshing=false;catalogBlocked=true;lock(locked);retryChoices.hidden=false;lookupStatus.textContent=error.message+' Retry project choices before submitting.';}};
       const take=async response=>{
         if(!current()||version!==lookupVersion)return;
         if(locked||busy||submitter.pending){catalogRefreshing=false;lock(locked);return;}
         requireValue(response.ok,response.data.error||'Project choices could not be loaded.');
         const result=response.data;
+        if(result.eowPreview){requireValue(result.eowPreview.projectPageId===projectId,'Saved extents of work did not match the selected project.');if(cacheEow(result.eowPreview)){if(Number(project.value)===projectId)populateEow();else lock(locked);}}
         if(result.lookup?.state==='ready'&&result.catalog){
           requireValue(result.catalog.projectPageId===projectId&&Number(project.value)===projectId,'Project choices did not match. Select the project again.');
           const full=sharedSnapshot(result.catalog);requireValue(full&&freshShared(full),'Current common Nexvia choices are unavailable.');
@@ -474,11 +512,11 @@
             if(!reconcile){await lookup({force:true,reconcile:true});return;}
             throw Error('Common choices changed. Retry project choices before submitting.');
           }
-          acceptShared(full);catalogRefreshing=false;catalogBlocked=false;setCatalog(result.catalog);lookupStatus.textContent='Project choices are ready.';return;
+          acceptShared(full);catalogRefreshing=false;catalogBlocked=false;const removed=setCatalog(result.catalog)||eowSelectionRemoved;eowSelectionRemoved=false;lookupStatus.textContent=removed?'The selected extent of work is no longer available. Choose a current extent of work.':'Project choices are ready.';return;
         }
         if(result.lookup?.state==='needs_review'){catalogRefreshing=false;catalogBlocked=true;lock(locked);retryChoices.hidden=false;lookupStatus.textContent=(result.lookup.message||'Project choices need office review.')+' Retry project choices when the connection is ready.';return;}
         requireValue(result.lookup?.id,'Project choices could not be queued.');
-        lookupStatus.textContent=commonReady()?'Loading this project’s extents of work…':'Loading Nexvia choices. This can take a short moment.';
+        lookupStatus.textContent=eowLoadingText();
         later(()=>void api('/purchase-requests/lookups/'+encodeURIComponent(result.lookup.id)).then(take).catch(fail),1000);
       };
       try{await take(await api('/purchase-requests/lookups',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({projectPageId:projectId,...(background||force?{refresh:true}:{})})}));}
@@ -486,6 +524,7 @@
     }
     project.addEventListener('input',()=>lock(locked));
     project.addEventListener('change',()=>void lookup());
+    breakdown.addEventListener('change',()=>{eowSelectionRemoved=false;});
     file.addEventListener('change',()=>{
       quote=file.files?.[0]||null;
       if(quote&&(quote.size>MAX_PDF||!quote.name.toLowerCase().endsWith('.pdf'))){notice('Choose a PDF no larger than 10 MB.',true);file.value='';quote=null;}
@@ -523,7 +562,7 @@
       }finally{busy=false;if(current()){send.textContent='Submit purchase request';retry.hidden=!submitter.pending;retry.disabled=false;}}
     }
     form.addEventListener('submit',event=>{event.preventDefault();void submit(false);});
-    function newRequest(){if(submitter.pending||busy)return;++lookupVersion;++sharedVersion;catalogRefreshing=false;catalogBlocked=false;retryChoices.hidden=true;form.reset();project.value='';supplier.value='';service.value='';breakdown.value='';name.value=options.profile?.name||name.value;email.value=options.profile?.email||email.value;date.value=new Intl.DateTimeFormat('en-CA',{timeZone:'Australia/Brisbane',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());quote=null;for(const row of lineBox.children){row.querySelector("[name=account]")?.searchControl?.destroy();row.querySelector("[name=tax]")?.searchControl?.destroy();}lineBox.replaceChildren();setCatalog(null);locked=false;addLine();populateCommon();lock(false);send.hidden=false;fresh.hidden=true;notice('');if(!commonReady())void refreshShared();}
+    function newRequest(){if(submitter.pending||busy)return;++lookupVersion;++sharedVersion;++eowVersion;eowSelectionRemoved=false;catalogRefreshing=false;catalogBlocked=false;retryChoices.hidden=true;form.reset();project.value='';supplier.value='';service.value='';breakdown.value='';name.value=options.profile?.name||name.value;email.value=options.profile?.email||email.value;date.value=new Intl.DateTimeFormat('en-CA',{timeZone:'Australia/Brisbane',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());quote=null;for(const row of lineBox.children){row.querySelector("[name=account]")?.searchControl?.destroy();row.querySelector("[name=tax]")?.searchControl?.destroy();}lineBox.replaceChildren();setCatalog(null);locked=false;addLine();populateCommon();lock(false);send.hidden=false;fresh.hidden=true;notice('');if(!commonReady())void refreshShared();}
     function upsert(request){requests=[request,...requests.filter(value=>value.id!==request.id)].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));}
     function renderHistory(){
       historyList.replaceChildren();if(!requests.length){const empty=el('div',null,'pr-empty');append(empty,el('span','No purchase requests yet.','pr-empty-title'),el('p','Your requests and PO updates will appear here.','pr-help'));historyList.appendChild(empty);return;}
@@ -583,11 +622,12 @@
       try{const found=await submitter.restore();if(!current())return;if(found){upsert(found);detailLoader.show(found);renderHistory();lock(true);send.hidden=true;fresh.hidden=false;notice('Your previously submitted request was found.');}else if(submitter.pending){lock(true);notice('A saved request is waiting for its outcome. Check status and retry it before starting another request.');}}
       catch(error){if(current()){lock(!!submitter.pending);notice(error.message,true);}}
       void refreshShared();
+      void preloadEow();
       const poll=()=>{void refresh();later(poll,10000);};later(poll,10000);
       const refreshChoices=()=>{void refreshShared();void lookup({background:true});later(refreshChoices,CHOICE_REFRESH_MS);};later(refreshChoices,CHOICE_REFRESH_MS);
     }
     void start();
-    return {destroy(){alive=false;++lookupVersion;++sharedVersion;controller.abort();for(const timer of timers)root.clearTimeout(timer);timers.clear();for(const control of searchControls)control.destroy();host.replaceChildren();},refresh};
+    return {destroy(){alive=false;++lookupVersion;++sharedVersion;++eowVersion;controller.abort();for(const timer of timers)root.clearTimeout(timer);timers.clear();for(const control of searchControls)control.destroy();host.replaceChildren();},refresh};
   }
   root.PanelStockPurchaseRequests={mount,calculateTotals,createSubmission,createDetailLoader,searchableSelect,MAX_PDF};
 })(typeof window!=='undefined'?window:globalThis);

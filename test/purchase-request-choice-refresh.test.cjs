@@ -3,11 +3,11 @@ const source=fs.readFileSync(require.resolve('../purchase-requests.js'),'utf8');
 const wait=()=>new Promise(resolve=>setImmediate(resolve));
 function deferred(){let resolve;const promise=new Promise(done=>resolve=done);return{promise,resolve};}
 function directory(revision='v1',updatedAt=new Date(Date.now()-1000).toISOString()){
- return{projectPageId:60,revision,updatedAt,suppliers:[{id:'225',text:'Supplier'}],services:[{id:'8',name:'Supply'}],breakdowns:[{id:'b_20',name:'Cladding'},{id:'b_70',name:'Miscellaneous'}],accounts:[{id:'51097',name:'Materials'}],taxes:[{id:'1',name:'GST',rate:10},{id:'0',name:'No GST',rate:0}]};
+ return{projectPageId:60,revision,updatedAt,suppliers:[{id:'225',text:'Supplier'}],services:[{id:'8',name:'Supply'}],breakdowns:[{id:'b_20',name:'Cladding',disabled:false},{id:'b_70',name:'Miscellaneous',disabled:false}],accounts:[{id:'51097',name:'Materials'}],taxes:[{id:'1',name:'GST',rate:10},{id:'0',name:'No GST',rate:0}]};
 }
-async function harness({saved=null,shared=()=>({sharedChoices:directory()}),bootstrap=null,requests=[],skew=0,serverClock=false,latency=0}={}){
+async function harness({saved=null,shared=()=>({sharedChoices:directory()}),bootstrap=null,requests=[],skew=0,serverClock=false,latency=0,previews=()=>({eowPreviews:[]}),create=true}={}){
  const calls=[],timers=new Map();let timerId=0,owner='requestor',lookup=()=>({lookup:{id:'lookup',projectPageId:60,state:'ready'},catalog:directory()}),submission=()=>{throw Error('Synthetic ambiguous submit');};
- let instant=Date.now(),ticks=0,wallOffset=skew,requestLatency=latency,sharedLookup=shared,sharedBootstrap=bootstrap,cancellation=()=>({ok:true,request:requests[0]});
+ let instant=Date.now(),ticks=0,wallOffset=skew,requestLatency=latency,sharedLookup=shared,sharedBootstrap=bootstrap,eowLookup=previews,cancellation=()=>({ok:true,request:requests[0]});
  class ClockDate extends Date{constructor(...args){super(...(args.length?args:[instant+wallOffset]));}static now(){return instant+wallOffset;}}
  class Node{
   constructor(tag){this.tagName=tag;this.children=[];this.events={};this._value='';this.textContent='';this.classList={toggle(){}};this.ownerDocument=doc;}
@@ -33,21 +33,22 @@ async function harness({saved=null,shared=()=>({sharedChoices:directory()}),boot
  vm.runInNewContext(source,context);
  const apiFetch=async(url,options={})=>{
   const path=new URL(url).pathname;calls.push({path,options});const serverAt=instant;let data;
-  if(path==='/purchase-requests'&&options.method!=='POST')data={ok:true,requests,projects:[{projectPageId:60,name:'Jardin building'},{projectPageId:59,name:'Salacia building'}],profile:{name:'Requestor',email:'requestor@example.test'},permissions:{create:true,manage:false},connection:{connected:true}};
+  if(path==='/purchase-requests'&&options.method!=='POST')data={ok:true,requests,projects:[{projectPageId:60,name:'Jardin building'},{projectPageId:59,name:'Salacia building'}],profile:{name:'Requestor',email:'requestor@example.test'},permissions:{create,manage:!create},connection:{connected:true}};
   else if(path==='/purchase-requests/shared-choices'){data=await(options.method==='POST'&&sharedBootstrap?sharedBootstrap({serverAt,options}):sharedLookup({serverAt,options}));if(data.status)return{ok:false,status:data.status,json:async()=>({error:data.error})};}
+  else if(path==='/purchase-requests/eow-choices')data=await eowLookup({serverAt,options});
   else if(path==='/purchase-requests/lookups')data={ok:true,...await lookup()};
   else if(path.startsWith('/purchase-requests/lookups/'))data={ok:true,...await lookup()};
   else if(path.endsWith('/cancel'))data=await cancellation();
   else if(path==='/purchase-requests'&&options.method==='POST')return await submission(options);
   else return{ok:false,status:404,json:async()=>({})};
   if(data.status)return{ok:false,status:data.status,json:async()=>({error:data.error})};
-  return{ok:true,status:200,json:async()=>{const delay=typeof requestLatency==='function'?requestLatency({path,options}):requestLatency;instant+=delay;ticks+=delay;return{...(serverClock&&(path==='/purchase-requests/shared-choices'||path.startsWith('/purchase-requests/lookups'))?{serverTime:new Date(serverAt).toISOString()}:{}),...data};}};
+  return{ok:true,status:200,json:async()=>{const delay=typeof requestLatency==='function'?requestLatency({path,options}):requestLatency;instant+=delay;ticks+=delay;return{...(serverClock&&(path==='/purchase-requests/shared-choices'||path==='/purchase-requests/eow-choices'||path.startsWith('/purchase-requests/lookups'))?{serverTime:new Date(serverAt).toISOString()}:{}),...data};}};
  };
  const view=context.PanelStockPurchaseRequests.mount(host,{username:'requestor',workerUrl:'https://api.example.test',currentUsername:()=>owner,apiFetch,storage:{read:async()=>saved,write:async body=>{saved=JSON.parse(JSON.stringify(body));},clear:async()=>{saved=null;}}});
  await wait();
  const byName=name=>walk(host).find(node=>node.name===name),byText=text=>walk(host).find(node=>node.textContent===text&&!node.children.some(child=>child.textContent===text));
  const timer=async delay=>{const entry=[...timers].find(([,item])=>item.delay===delay);assert.ok(entry,'timer '+delay+' exists');timers.delete(entry[0]);entry[1].callback();await wait();};
- return{host,view,calls,timers,byName,byText,walk:()=>walk(host),timer,setLookup:callback=>{lookup=callback;},setShared:callback=>{sharedLookup=callback;},setBootstrap:callback=>{sharedBootstrap=callback;},setCancellation:callback=>{cancellation=callback;},setLatency:ms=>{requestLatency=ms;},now:()=>instant,advance:ms=>{instant+=ms;ticks+=ms;},jumpClock:ms=>{wallOffset+=ms;},setSubmission:callback=>{submission=callback;},setHidden:value=>{doc.hidden=value;},changeOwner:value=>{owner=value;},async selectProject(id='60'){byName('project').value=id;byName('project').emit('change');await wait();}};
+ return{host,view,calls,timers,byName,byText,walk:()=>walk(host),timer,setLookup:callback=>{lookup=callback;},setShared:callback=>{sharedLookup=callback;},setBootstrap:callback=>{sharedBootstrap=callback;},setPreviews:callback=>{eowLookup=callback;},setCancellation:callback=>{cancellation=callback;},setLatency:ms=>{requestLatency=ms;},now:()=>instant,advance:ms=>{instant+=ms;ticks+=ms;},jumpClock:ms=>{wallOffset+=ms;},setSubmission:callback=>{submission=callback;},setHidden:value=>{doc.hidden=value;},changeOwner:value=>{owner=value;},async selectProject(id='60'){byName('project').value=id;byName('project').emit('change');await wait();}};
 }
 
 function choiceState(h,disabled,placeholder,names=['supplier','service','account','tax']){
@@ -113,7 +114,7 @@ test('five-minute refresh keeps entered fields and zero GST while disabling subm
  h.byName('supplier').value='225';h.byName('service').value='8';h.byName('breakdown').value='b_20';h.byName('account').value='51097';h.byName('tax').value='0';
  h.byName('description').value='Keep my cladding description';h.byName('quantity').value='2.5';h.byName('price').value='19.95';h.byName('requestorName').value='Edited name';h.byName('supplierReference').value='QUOTE-123';
  const pending=deferred();h.setLookup(()=>pending.promise);await h.timer(300000);
- choiceState(h,false,'Select…');choiceState(h,true,'Loading choices…',['breakdown']);
+ choiceState(h,false,'Select…');choiceState(h,false,'Select…',['breakdown']);
  assert.equal(h.byText('Submit purchase request').disabled,true);assert.equal(h.byName('supplier').value,'225');assert.equal(h.byName('tax').value,'0');
  h.byName('description').value='Edited while refreshing';
  pending.resolve({lookup:{id:'refresh',projectPageId:60,state:'ready'},catalog:directory('v2')});await wait();
@@ -138,7 +139,7 @@ test('refresh removes unavailable IDs and never substitutes the default tax for 
 test('a failed automatic refresh retains the draft and blocks submission until a successful retry',async()=>{
  const h=await harness();await h.selectProject();h.byName('tax').value='0';h.byName('description').value='Retained after timeout';
  h.setLookup(()=>{throw Error('Synthetic timeout');});await h.timer(300000);
- choiceState(h,false,'Select…');choiceState(h,true,'Choices unavailable',['breakdown']);
+ choiceState(h,false,'Select…');choiceState(h,false,'Select…',['breakdown']);
  assert.equal(h.byName('tax').value,'0');assert.equal(h.byName('description').value,'Retained after timeout');assert.equal(h.byText('Submit purchase request').disabled,true);
  assert.equal(h.byText('Retry project choices').hidden,false);
  const pending=deferred();h.setLookup(()=>pending.promise);h.byText('Retry project choices').emit('click');await wait();assert.equal(h.byText('Retry project choices').hidden,true);
@@ -411,4 +412,102 @@ test('a newer quick server sample recovers from the conservative bias of an earl
   shared:({serverAt})=>({serverTime:new Date(serverAt+310000).toISOString(),sharedChoices:directory('late',new Date(serverAt+309000).toISOString())}),
   bootstrap:({serverAt})=>({serverTime:new Date(serverAt+1).toISOString(),sharedChoices:directory('recovered',new Date(serverAt-1000).toISOString())})});
  choiceState(h,false,'Select…');assert.equal(h.byName('project').value,'');assert.equal(h.calls.filter(call=>call.path==='/purchase-requests/shared-choices'&&call.options.method==='POST').length,1);h.view.destroy();
+});
+
+function savedEow(projectPageId,breakdowns=[{id:'b_70',name:'Saved miscellaneous',disabled:false}],updatedAt=new Date(Date.now()-60000).toISOString()){
+ return{projectPageId,breakdowns,updatedAt};
+}
+
+test('preloaded EOW opens immediately for the selected project while full verification is deferred',async()=>{
+ const a=savedEow(60),b=savedEow(59,[{id:'b_70',name:'Salacia miscellaneous',disabled:false},{id:'ew_729',name:'Salacia cladding',disabled:false}]);
+ const h=await harness({previews:()=>({eowPreviews:[a,b]})});assert.equal(h.calls.filter(call=>call.path==='/purchase-requests/eow-choices').length,1);assert.equal(h.calls.some(call=>call.path==='/purchase-requests/lookups'),false);
+ const pending=deferred();h.setLookup(()=>pending.promise);await h.selectProject();choiceState(h,false,'Select…',['breakdown']);assert.ok(h.byText('Showing saved extents of work while Nexvia checks for updates.'));assert.equal(h.byText('Submit purchase request').disabled,true);
+ for(const[name,value]of Object.entries({breakdown:'b_70',supplier:'225',service:'8',account:'51097',tax:'0',description:'Keep draft',price:'10'}))h.byName(name).value=value;
+ await h.selectProject('59');assert.equal(h.byName('breakdown').value,'','same opaque EOW ID does not cross projects');assert.equal(h.byName('breakdown').options.find(row=>row.value==='b_70').textContent,'Salacia miscellaneous');assert.equal(h.byName('tax').value,'0');assert.equal(h.byName('description').value,'Keep draft');
+ h.byName('breakdown').value='ew_729';h.walk().find(node=>node.tagName==='form').emit('submit');await wait();assert.equal(h.calls.some(call=>call.path==='/purchase-requests'&&call.options.method==='POST'),false);assert.equal(h.byText('Submit purchase request').disabled,true);
+ pending.resolve({lookup:{id:'b',projectPageId:59,state:'ready'},catalog:{...directory('B-full'),projectPageId:59,breakdowns:b.breakdowns}});await wait();assert.equal(h.byName('breakdown').value,'ew_729');assert.equal(h.byText('Submit purchase request').disabled,false);h.view.destroy();
+});
+
+test('a queued lookup preview populates only EOW and final verified rows preserve a valid selected ID',async()=>{
+ const preview=savedEow(60,[{id:'ew_234',name:'Permits · ew_234',disabled:false}]),h=await harness();
+ h.setLookup(()=>({lookup:{id:'queued',projectPageId:60,state:'queued'},eowPreview:preview}));await h.selectProject();choiceState(h,false,'Select…',['breakdown']);assert.equal(h.byName('breakdown').options[1].textContent,'Permits');assert.equal(h.byText('Submit purchase request').disabled,true);
+ h.byName('breakdown').value='ew_234';const full={...directory('verified-revision'),breakdowns:preview.breakdowns};h.setLookup(()=>({lookup:{id:'queued',projectPageId:60,state:'ready'},catalog:full}));await h.timer(1000);
+ assert.equal(h.byName('breakdown').value,'ew_234');assert.ok(h.byText('Project choices are ready.'));assert.equal(h.byText('Submit purchase request').disabled,false);h.view.destroy();
+});
+
+test('verification clears removed or disabled preview selections with an explicit reselection message',async()=>{
+ for(const disabled of [false,true]){
+  const h=await harness({previews:()=>({eowPreviews:[savedEow(60)]})});h.setLookup(()=>({lookup:{id:'a',projectPageId:60,state:'queued'}}));await h.selectProject();h.byName('breakdown').value='b_70';
+  const full=directory('verified');full.breakdowns=disabled?[{id:'b_70',name:'Miscellaneous',disabled:true},{id:'b_20',name:'Cladding',disabled:false}]:[{id:'b_20',name:'Cladding',disabled:false}];
+  h.setLookup(()=>({lookup:{id:'a',projectPageId:60,state:'ready'},catalog:full}));await h.timer(1000);
+  assert.equal(h.byName('breakdown').value,'');assert.ok(h.byText('The selected extent of work is no longer available. Choose a current extent of work.'));h.view.destroy();
+ }
+});
+
+test('a failed verification keeps cached EOW usable for drafting while blocking Submit and offering Retry',async()=>{
+ const h=await harness({previews:()=>({eowPreviews:[savedEow(60)]})});h.setLookup(()=>({lookup:{id:'a',projectPageId:60,state:'needs_review',message:'Nexvia browser is unavailable.'}}));await h.selectProject();choiceState(h,false,'Select…',['breakdown']);
+ h.byName('breakdown').value='b_70';assert.equal(h.byText('Submit purchase request').disabled,true);assert.equal(h.byText('Retry project choices').hidden,false);assert.ok(h.byText('Nexvia browser is unavailable. Retry project choices when the connection is ready.'));h.view.destroy();
+});
+
+test('a late preload cannot replace the EOW cached from a newer full verification',async()=>{
+ const pending=deferred(),h=await harness({previews:()=>pending.promise});const full=directory('newer',new Date(h.now()-100).toISOString());full.breakdowns=[{id:'ew_234',name:'Current permits',disabled:false}];
+ h.setLookup(()=>({lookup:{id:'a',projectPageId:60,state:'ready'},catalog:full}));await h.selectProject();h.byName('breakdown').value='ew_234';
+ pending.resolve({eowPreviews:[savedEow(60,[{id:'b_70',name:'Old miscellaneous',disabled:false}],new Date(h.now()-60000).toISOString())]});await wait();
+ h.setLookup(()=>({lookup:{id:'a',projectPageId:60,state:'queued'}}));await h.selectProject();assert.equal(h.byName('breakdown').value,'ew_234');assert.equal(h.byName('breakdown').options[1].textContent,'Current permits');choiceState(h,false,'Select…',['breakdown']);h.view.destroy();
+});
+
+test('late bulk and queued preview responses preserve EOW while the project search is being edited',async()=>{
+ for(const mode of ['bulk','queued']){
+  const bulk=deferred(),h=await harness({previews:()=>bulk.promise});await h.selectProject();h.byName('breakdown').value='b_70';
+  const queued=deferred();if(mode==='queued'){h.setLookup(()=>queued.promise);await h.selectProject();}
+  h.byName('project').value='';h.byName('project').emit('input');
+  const newer=savedEow(60,[{id:'b_20',name:'New cladding',disabled:false}],new Date(h.now()-100).toISOString());
+  if(mode==='bulk')bulk.resolve({eowPreviews:[newer]});else queued.resolve({lookup:{id:'a',projectPageId:60,state:'queued'},eowPreview:newer});await wait();
+  assert.equal(h.byName('breakdown').value,'b_70');choiceState(h,true,'Select a project first',['breakdown']);
+  h.byName('project').value='60';h.byName('project').emit('input');assert.equal(h.byName('breakdown').value,'b_70');choiceState(h,false,'Select…',['breakdown']);h.view.destroy();
+ }
+});
+
+test('late project A results and foreign-project previews cannot populate the selected project B',async()=>{
+ const h=await harness({previews:()=>({eowPreviews:[savedEow(59,[{id:'b_70',name:'B miscellaneous',disabled:false}])]})});const a=deferred();h.setLookup(()=>a.promise);await h.selectProject();
+ h.setLookup(()=>({lookup:{id:'b',projectPageId:59,state:'queued'}}));await h.selectProject('59');a.resolve({lookup:{id:'a',projectPageId:60,state:'ready'},catalog:directory('A-late')});await wait();
+ assert.equal(h.byName('breakdown').options[1].textContent,'B miscellaneous');assert.equal(h.byText('Submit purchase request').disabled,true);
+ h.setLookup(()=>({lookup:{id:'b',projectPageId:59,state:'processing'},eowPreview:savedEow(60)}));await h.timer(1000);assert.equal(h.byName('breakdown').options[1].textContent,'B miscellaneous');assert.equal(h.byText('Retry project choices').hidden,false);h.view.destroy();
+});
+
+test('invalid, too-old, future or foreign EOW preload data falls back to a normal project lookup',async()=>{
+ const entries=[savedEow(999),savedEow(60,[{id:'b_70',name:'Invalid disabled',disabled:'true'}]),savedEow(60,[{id:'b_70',name:'Bad\nname',disabled:false}]),savedEow(60,[{id:'b_70',name:'One',disabled:false},{id:'b_70',name:'Duplicate',disabled:false}]),savedEow(60,undefined,new Date(Date.now()-31*86400000).toISOString()),savedEow(60,undefined,new Date(Date.now()+60000).toISOString())];
+ for(const preview of entries){
+  const h=await harness({serverClock:true,previews:()=>({eowPreviews:[preview]})});h.setLookup(()=>({lookup:{id:'a',projectPageId:60,state:'queued'}}));await h.selectProject();choiceState(h,true,'Loading choices…',['breakdown']);assert.equal(h.byName('breakdown').options.length,1);assert.equal(h.byText('Submit purchase request').disabled,true);h.view.destroy();
+ }
+ const legacy=await harness({previews:()=>({status:404})});legacy.setLookup(()=>({lookup:{id:'a',projectPageId:60,state:'queued'}}));await legacy.selectProject();choiceState(legacy,true,'Loading choices…',['breakdown']);legacy.view.destroy();
+});
+
+test('EOW preload does not run for frozen submissions or users without create access and ignores late account or destroy responses',async()=>{
+ for(const options of [{saved:{requestId:'35fc4244-267c-42c6-885c-6ab93a55b899'}},{create:false}]){
+  const h=await harness(options);assert.equal(h.calls.some(call=>call.path==='/purchase-requests/eow-choices'),false);h.view.destroy();
+ }
+ for(const mode of ['account','destroy']){
+  const pending=deferred(),h=await harness({previews:()=>pending.promise});h.setLookup(()=>({lookup:{id:'a',projectPageId:60,state:'queued'}}));await h.selectProject();
+  if(mode==='account')h.changeOwner('another-account');else h.view.destroy();pending.resolve({eowPreviews:[savedEow(60)]});await wait();
+  if(mode==='account'){choiceState(h,true,'Loading choices…',['breakdown']);h.view.destroy();}else assert.equal(h.host.children.length,0);
+ }
+});
+
+test('a new request keeps verified EOW previews while clearing selection and ignoring a preload from the previous draft',async()=>{
+ const pending=deferred(),h=await harness({previews:()=>pending.promise});await h.selectProject();
+ for(const[name,value]of Object.entries({supplier:'225',service:'8',breakdown:'b_70',account:'51097',tax:'0',description:'Submitted item',price:'10'}))h.byName(name).value=value;
+ h.setSubmission(options=>{const body=JSON.parse(options.body);return{ok:true,status:201,json:async()=>({request:{id:body.requestId,reference:'SYNTHETIC-EOW',state:'queued',createdAt:'2026-11-14T00:00:00Z',project:'Jardin',requestor:body.requestor,supplierName:'Supplier',serviceName:'Supply',breakdownName:'Miscellaneous',date:body.date,totalCents:1000,lines:body.lines}})}});
+ h.walk().find(node=>node.tagName==='form').emit('submit');await wait();h.walk().find(node=>node.tagName==='button'&&node.textContent==='New purchase request').emit('click');
+ pending.resolve({eowPreviews:[savedEow(60,[{id:'ew_999',name:'Late previous-draft preview',disabled:false}],new Date(h.now()-10).toISOString())]});await wait();
+ const verify=deferred();h.setLookup(()=>verify.promise);await h.selectProject();choiceState(h,false,'Select…',['breakdown']);assert.equal(h.byName('breakdown').value,'');assert.ok(h.byName('breakdown').options.some(row=>row.value==='b_70'));assert.equal(h.byName('breakdown').options.some(row=>row.value==='ew_999'),false);
+ assert.equal(h.byName('supplier').value,'');assert.equal(h.byName('tax').value,'1');assert.equal(h.byName('description').value,'');h.view.destroy();
+});
+
+test('a late EOW preload cannot change a frozen ambiguous submission or its selected native identity',async()=>{
+ const pending=deferred(),h=await harness({previews:()=>pending.promise});await h.selectProject();
+ for(const[name,value]of Object.entries({supplier:'225',service:'8',breakdown:'b_70',account:'51097',tax:'0',description:'Frozen item',price:'10'}))h.byName(name).value=value;
+ h.walk().find(node=>node.tagName==='form').emit('submit');await wait();const sent=h.calls.find(call=>call.path==='/purchase-requests'&&call.options.method==='POST');assert.ok(sent);
+ pending.resolve({eowPreviews:[savedEow(60,[{id:'ew_999',name:'Late preview',disabled:false}],new Date(h.now()-10).toISOString())]});await wait();
+ assert.equal(h.byName('breakdown').value,'b_70');assert.equal(h.byName('tax').value,'0');assert.equal(h.byName('description').value,'Frozen item');assert.equal(JSON.parse(sent.options.body).breakdownType,'b_70');assert.equal(h.byText('Submit purchase request').disabled,true);h.view.destroy();
 });
