@@ -13,6 +13,9 @@ choices load automatically before project selection, including when their saved
 snapshot has expired. Only Extent of Work depends on the selected project.
 Choice freshness uses server time and elapsed browser time, so an inaccurate
 device clock does not block newly verified menus or extend their expiry.
+Saved Extent of Work lists preload for current projects and stay selectable
+while Nexvia verifies current choices. Submission still requires the fresh
+project catalog; a project with no saved list needs its first Nexvia read.
 PDFs are saved for review; no-PDF creation checks the selected EOW's native
 allocation before submitting to Nexvia.
 
