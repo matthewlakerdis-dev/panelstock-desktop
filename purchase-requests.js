@@ -106,6 +106,10 @@
     };
   }
   let searchChoiceSequence=0;
+  function extentWorkName(name,id){
+    const value=String(name??'').trim(),suffix=' · '+String(id??'');
+    return id!==undefined&&id!==null&&value.endsWith(suffix)&&value.length>suffix.length?value.slice(0,-suffix.length).trim():value;
+  }
   function searchableSelect(native,{current=()=>true,onDestroy=()=>{}}={}){
     const doc=native.ownerDocument;
     // Minimal DOM clients retain the ordinary native control.
@@ -121,9 +125,9 @@
     let open=false,editing=false,query='',prior='',active=-1,shown=[],optionNodes=[],destroyed=false;
     const enabled=()=>!destroyed&&current()&&!native.disabled&&!(typeof native.matches==='function'&&native.matches(':disabled'));
     function allChoices(){
-      const rows=Array.from(native.options).filter(option=>option.value!=='').map(option=>({value:option.value,text:option.textContent.trim(),disabled:option.disabled}));
+      const rows=Array.from(native.options).filter(option=>option.value!=='').map(option=>({value:option.value,text:native.name==='breakdown'?extentWorkName(option.textContent,option.value):option.textContent.trim(),disabled:option.disabled}));
       const counts=new Map();for(const row of rows){const name=row.text.toLocaleLowerCase();counts.set(name,(counts.get(name)||0)+1);}
-      return rows.map(row=>({...row,label:counts.get(row.text.toLocaleLowerCase())>1?row.text+' · '+row.value:row.text}));
+      return rows.map(row=>({...row,label:native.name!=='breakdown'&&counts.get(row.text.toLocaleLowerCase())>1?row.text+' · '+row.value:row.text}));
     }
     function selected(){return allChoices().find(row=>row.value===native.value&&!row.disabled);}
     function validity(){const message=enabled()&&(editing||required&&!selected())?'Choose an option from the list.':'';input.setCustomValidity(message);if(!message)input.removeAttribute('aria-invalid');}
@@ -271,7 +275,7 @@
     append(requestSection,el('h3','Request details'),requestGrid);
     const purchaseSection=el('section',null,'pr-form-section');
     const purchaseGrid=el('div',null,'pr-grid');
-    append(purchaseGrid,field('Supplier *',supplier),field('Supplier / quote reference',reference),field('Service *',service),field('Element of work *',breakdown));
+    append(purchaseGrid,field('Supplier *',supplier),field('Supplier / quote reference',reference),field('Service *',service),field('Extent of work *',breakdown));
     const lookupStatus=el('p',null,'pr-help');lookupStatus.setAttribute('role','status');
     const retryChoices=button('Retry project choices',()=>{void refreshShared();void lookup({force:true});});retryChoices.hidden=true;
     const sharedStatus=el('p',null,'pr-help');sharedStatus.setAttribute('role','status');
@@ -280,7 +284,7 @@
     const lineBox=el('div',null,'pr-lines');const totalBox=el('div',null,'pr-totals');totalBox.setAttribute('aria-label','Request total');totalBox.setAttribute('aria-live','polite');
     const addLineButton=button('Add line',()=>addLine(),'pr-button pr-add-line');addLineButton.setAttribute('aria-label','Add line');
     const lookupInfo=el('div',null,'pr-lookup-info');append(lookupInfo,lookupStatus,sharedStatus,retryChoices);
-    append(purchaseSection,el('h3','Purchase details'),el('p','Suppliers and services are shared across jobs. Element of work depends on the project. Type in a dropdown to search.','pr-help'),purchaseGrid,lookupInfo);
+    append(purchaseSection,el('h3','Purchase details'),el('p','Suppliers and services are shared across jobs. Extent of work depends on the project. Type in a dropdown to search.','pr-help'),purchaseGrid,lookupInfo);
     const itemsSection=el('section',null,'pr-form-section pr-items-section');
     const itemsHeading=el('div',null,'pr-section-heading');append(itemsHeading,el('h3','Items'),el('span','Prices exclude GST','pr-section-hint'));
     append(itemsSection,itemsHeading,lineBox,addLineButton);
@@ -378,7 +382,7 @@
       for(const row of lineBox.children)populateLine(row);lock(locked);updateTotals();
     }
     function setCatalog(value){
-      catalog=value;choices(breakdown,value?.breakdowns||[],row=>row.name);
+      catalog=value;choices(breakdown,value?.breakdowns||[],row=>extentWorkName(row.name,row.id));
       lock(locked);updateTotals();
     }
     async function refreshShared(){
@@ -402,9 +406,9 @@
       const version=++lookupVersion;catalogRefreshing=false;catalogBlocked=true;
       retryChoices.hidden=true;
       if(!preserve){breakdown.value='';setCatalog(null);}
-      if(!projectId){lookupStatus.textContent='Select a project to load its element of work choices.';lock(locked);return;}
+      if(!projectId){lookupStatus.textContent='Select a project to load its extent of work choices.';lock(locked);return;}
       catalogRefreshing=true;lock(locked);
-      lookupStatus.textContent=preserve?'Refreshing project choices. Your entries are retained…':commonReady()?'Loading this project’s elements of work…':'Loading current project choices…';
+      lookupStatus.textContent=preserve?'Refreshing project choices. Your entries are retained…':commonReady()?'Loading this project’s extents of work…':'Loading current project choices…';
       const fail=error=>{if(version===lookupVersion&&current()){catalogRefreshing=false;catalogBlocked=true;lock(locked);retryChoices.hidden=false;lookupStatus.textContent=error.message+' Retry project choices before submitting.';}};
       const take=async response=>{
         if(!current()||version!==lookupVersion)return;
@@ -423,7 +427,7 @@
         }
         if(result.lookup?.state==='needs_review'){catalogRefreshing=false;catalogBlocked=true;lock(locked);retryChoices.hidden=false;lookupStatus.textContent=(result.lookup.message||'Project choices need office review.')+' Retry project choices when the connection is ready.';return;}
         requireValue(result.lookup?.id,'Project choices could not be queued.');
-        lookupStatus.textContent=commonReady()?'Loading this project’s elements of work…':'Loading Nexvia choices. This can take a short moment.';
+        lookupStatus.textContent=commonReady()?'Loading this project’s extents of work…':'Loading Nexvia choices. This can take a short moment.';
         later(()=>void api('/purchase-requests/lookups/'+encodeURIComponent(result.lookup.id)).then(take).catch(fail),1000);
       };
       try{await take(await api('/purchase-requests/lookups',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({projectPageId:projectId,...(background||force?{refresh:true}:{})})}));}
@@ -439,7 +443,7 @@
       requireValue(catalog&&!catalogRefreshing&&!catalogBlocked&&catalog.projectPageId===Number(project.value),'Load the selected project choices before submitting.');
       requireValue(commonMatchesCatalog(),'Common choices changed. Retry project choices before submitting.');
       const valid=(field,id)=>!!id&&catalog[field].some(row=>String(row.id)===String(id)&&!row.disabled);
-      requireValue(valid('suppliers',supplier.value)&&valid('services',service.value)&&valid('breakdowns',breakdown.value),'Select current supplier, service and element of work choices.');
+      requireValue(valid('suppliers',supplier.value)&&valid('services',service.value)&&valid('breakdowns',breakdown.value),'Select current supplier, service and extent of work choices.');
       const lines=lineValues();calculateTotals(lines,catalog.taxes);
       requireValue(lines.every(line=>valid('accounts',line.chartOfAccountId)&&valid('taxes',line.taxRateId)),'Select current cost of sales and tax choices for every line.');
       const body={requestId:root.crypto.randomUUID(),projectPageId:catalog.projectPageId,catalogRevision:catalog.revision,requestor:{name:name.value.trim(),email:email.value.trim()},date:date.value,supplierId:supplier.value,supplierReference:reference.value.trim(),serviceId:service.value,breakdownType:breakdown.value,quote:null,quoteBase64:'',lines};
@@ -482,7 +486,7 @@
       if(detailLoader.error)details.appendChild(el('p',detailLoader.error,'pr-error'));
       if(!request)return;
       append(details,el('h3',request.reference),el('p',(STATES[request.state]||'Status pending')+' · '+request.project),el('p',request.message||'', 'pr-help'));
-      const pairs=[['Requested by',request.requestor.name+' · '+request.requestor.email],['Supplier',request.supplierName],['Service',request.serviceName],['Element of work',request.breakdownName],['Order date',request.date],['Supplier reference',request.supplierReference||'—'],['Total including GST',money(request.totalCents)]];
+      const pairs=[['Requested by',request.requestor.name+' · '+request.requestor.email],['Supplier',request.supplierName],['Service',request.serviceName],['Extent of work',extentWorkName(request.breakdownName,request.breakdownType)],['Order date',request.date],['Supplier reference',request.supplierReference||'—'],['Total including GST',money(request.totalCents)]];
       if(request.quote)pairs.push(['Quote PDF',request.quote.filename+' · saved for office review']);
       if(request.result)pairs.push(['Purchase order',request.result.purchaseOrderNumber]);
       const emailStatus=request.confirmation?.status;

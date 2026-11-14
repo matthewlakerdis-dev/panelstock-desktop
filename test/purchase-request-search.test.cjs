@@ -1,6 +1,6 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const source=fs.readFileSync(require.resolve('../purchase-requests.js'),'utf8');
-function harness(rows=[['a','Panel Supplier'],['b','Panel Supplier'],['paused','Panel Paused',true],['0','Zero GST']]){
+function harness(rows=[['a','Panel Supplier'],['b','Panel Supplier'],['paused','Panel Paused',true],['0','Zero GST']],name='supplier'){
  const listeners=new Map();let current=true,destroyed=0;
  const doc={activeElement:null,addEventListener(type,listener){if(!listeners.has(type))listeners.set(type,new Set());listeners.get(type).add(listener);},removeEventListener(type,listener){listeners.get(type)?.delete(listener);},emit(type,event){for(const listener of listeners.get(type)||[])listener(event);},createElement:tag=>new Node(tag)};
  class Node{
@@ -28,7 +28,7 @@ function harness(rows=[['a','Panel Supplier'],['b','Panel Supplier'],['paused','
  }
  const observers=[];
  const context={Intl,JSON,Event,innerHeight:700,console,MutationObserver:class{constructor(callback){this.callback=callback;observers.push(this);}observe(){}disconnect(){this.disconnected=true;}}};vm.runInNewContext(source,context);
- const native=new Node('select');native.name='supplier';native.required=true;
+ const native=new Node('select');native.name=name;native.required=true;
  const setRows=next=>{native.replaceChildren();for(const [value,text,disabled=false]of [['','Select…'],...next]){const option=new Node('option');option.value=value;option.textContent=text;option.disabled=disabled;native.appendChild(option);}};setRows(rows);
  const control=context.PanelStockPurchaseRequests.searchableSelect(native,{current:()=>current,onDestroy:()=>destroyed++}),fieldset=new Node('fieldset');fieldset.appendChild(control.element);control.setLabel('Supplier');
  const input=control.input,popup=control.element.children.find(node=>node.getAttribute('role')==='listbox'),options=()=>popup.children.filter(node=>node.getAttribute('role')==='option');
@@ -48,6 +48,20 @@ test('mouse selection supports numeric zero IDs and disabled options cannot be c
  const h=harness();h.input.focus();h.options().find(node=>node.textContent==='Panel Paused').emit('click');assert.equal(h.native.value,'');
  h.options().find(node=>node.textContent==='Zero GST').emit('click');assert.equal(h.native.value,'0');assert.equal(h.input.value,'Zero GST');assert.equal(h.input.validationMessage,'');
  h.control.destroy();
+});
+
+test('extent of work duplicate names hide internal IDs while retaining each exact selectable value',()=>{
+ const h=harness([['ew_234','Cladding'],['ew_235','Cladding']],'breakdown');h.input.focus();
+ assert.deepEqual(h.options().map(node=>node.textContent),['Cladding','Cladding']);
+ h.input.emit('keydown',{key:'ArrowDown'});h.input.emit('keydown',{key:'ArrowDown'});h.input.emit('keydown',{key:'Enter'});
+ assert.equal(h.native.value,'ew_235');assert.equal(h.input.value,'Cladding');assert.equal(h.input.validationMessage,'');h.control.destroy();
+});
+
+test('extent of work removes only a trailing code matching its own opaque identity',()=>{
+ const h=harness([['ew_234','Permits · ew_234'],['ew_235','Cladding · ew_999'],['other_scope','Custom scope · other_scope'],['b_70','Zone ew_234 works']],'breakdown');h.input.focus();
+ assert.deepEqual(h.options().map(node=>node.textContent),['Permits','Cladding · ew_999','Custom scope','Zone ew_234 works']);
+ h.options()[0].emit('click');assert.equal(h.native.value,'ew_234');assert.equal(h.input.value,'Permits');
+ assert.equal(h.native.options.find(option=>option.value==='ew_234').textContent,'Permits · ew_234','the source label is not changed by search rendering');h.control.destroy();
 });
 
 test('empty results announce no matches and Escape restores a valid prior choice without a change event',()=>{
