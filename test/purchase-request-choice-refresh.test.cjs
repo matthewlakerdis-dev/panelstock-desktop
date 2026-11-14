@@ -5,7 +5,7 @@ function deferred(){let resolve;const promise=new Promise(done=>resolve=done);re
 function directory(revision='v1',updatedAt=new Date(Date.now()-1000).toISOString()){
  return{projectPageId:60,revision,updatedAt,suppliers:[{id:'225',text:'Supplier'}],services:[{id:'8',name:'Supply'}],breakdowns:[{id:'b_20',name:'Cladding',disabled:false},{id:'b_70',name:'Miscellaneous',disabled:false}],accounts:[{id:'51097',name:'Materials'}],taxes:[{id:'1',name:'GST',rate:10},{id:'0',name:'No GST',rate:0}]};
 }
-async function harness({saved=null,shared=()=>({sharedChoices:directory()}),bootstrap=null,requests=[],skew=0,serverClock=false,latency=0,previews=()=>({eowPreviews:[]}),create=true}={}){
+async function harness({saved=null,shared=()=>({sharedChoices:directory()}),bootstrap=null,requests=[],skew=0,serverClock=false,latency=0,previews=()=>({eowPreviews:[]}),create=true,confirm}={}){
  const calls=[],timers=new Map();let timerId=0,owner='requestor',lookup=()=>({lookup:{id:'lookup',projectPageId:60,state:'ready'},catalog:directory()}),submission=()=>{throw Error('Synthetic ambiguous submit');};
  let instant=Date.now(),ticks=0,wallOffset=skew,requestLatency=latency,sharedLookup=shared,sharedBootstrap=bootstrap,eowLookup=previews,cancellation=()=>({ok:true,request:requests[0]});
  class ClockDate extends Date{constructor(...args){super(...(args.length?args:[instant+wallOffset]));}static now(){return instant+wallOffset;}}
@@ -44,7 +44,7 @@ async function harness({saved=null,shared=()=>({sharedChoices:directory()}),boot
   if(data.status)return{ok:false,status:data.status,json:async()=>({error:data.error})};
   return{ok:true,status:200,json:async()=>{const delay=typeof requestLatency==='function'?requestLatency({path,options}):requestLatency;instant+=delay;ticks+=delay;return{...(serverClock&&(path==='/purchase-requests/shared-choices'||path==='/purchase-requests/eow-choices'||path.startsWith('/purchase-requests/lookups'))?{serverTime:new Date(serverAt).toISOString()}:{}),...data};}};
  };
- const view=context.PanelStockPurchaseRequests.mount(host,{username:'requestor',workerUrl:'https://api.example.test',currentUsername:()=>owner,apiFetch,storage:{read:async()=>saved,write:async body=>{saved=JSON.parse(JSON.stringify(body));},clear:async()=>{saved=null;}}});
+ const view=context.PanelStockPurchaseRequests.mount(host,{username:'requestor',workerUrl:'https://api.example.test',currentUsername:()=>owner,confirm,apiFetch,storage:{read:async()=>saved,write:async body=>{saved=JSON.parse(JSON.stringify(body));},clear:async()=>{saved=null;}}});
  await wait();
  const byName=name=>walk(host).find(node=>node.name===name),byText=text=>walk(host).find(node=>node.textContent===text&&!node.children.some(child=>child.textContent===text));
  const timer=async delay=>{const entry=[...timers].find(([,item])=>item.delay===delay);assert.ok(entry,'timer '+delay+' exists');timers.delete(entry[0]);entry[1].callback();await wait();};
@@ -285,8 +285,9 @@ test('late shared data never mutates a frozen submitted draft and a new request 
  const pending=deferred();h.setShared(()=>pending.promise);
  h.byName('project').value='';h.byName('project').emit('input');await h.timer(300000);
  h.byName('project').value='60';h.byName('project').emit('input');assert.equal(h.byText('Submit purchase request').disabled,false);
- h.setSubmission(options=>{const body=JSON.parse(options.body);return{ok:true,status:201,json:async()=>({request:{id:body.requestId,reference:'SYNTHETIC-1',state:'queued',createdAt:'2026-11-14T00:00:00Z',project:'Jardin',requestor:body.requestor,supplierName:'Supplier',serviceName:'Supply',breakdownName:'Miscellaneous',date:body.date,totalCents:1000,lines:body.lines}})}});
+ h.setSubmission(options=>{const body=JSON.parse(options.body);return{ok:true,status:201,json:async()=>({request:{id:body.requestId,reference:'REQ-'+body.requestId,displayReference:'REQ-0008',state:'queued',createdAt:'2026-11-14T00:00:00Z',project:'Jardin',requestor:body.requestor,supplierName:'Supplier',serviceName:'Supply',breakdownName:'Miscellaneous',date:body.date,totalCents:1000,lines:body.lines}})}});
  h.walk().find(node=>node.tagName==='form').emit('submit');await wait();
+ assert.ok(h.byText('Request REQ-0008 saved. Follow its PO status below.'));
  const changed=directory('changed',new Date(h.now()-20).toISOString());changed.suppliers=[];changed.taxes=[{id:'1',name:'GST',rate:10}];pending.resolve({sharedChoices:changed});await wait();
  assert.equal(h.byName('supplier').value,'225');assert.equal(h.byName('tax').value,'0');assert.equal(h.byName('description').value,'Submitted item');
  h.walk().find(node=>node.tagName==='button'&&node.textContent==='New purchase request').emit('click');assert.equal(h.byName('supplier').value,'');assert.equal(h.byName('service').value,'');assert.equal(h.byName('project').value,'');assert.equal(h.byName('breakdown').value,'');assert.equal(h.byName('description').value,'');assert.equal(h.byName('tax').value,'1');choiceState(h,false,'Select…');assert.equal(h.walk().filter(node=>node.name==='tax').length,1);h.view.destroy();
@@ -354,10 +355,11 @@ test('a newer full catalog, account change or destroy cancels queued shared stat
  }
 });
 
-test('a shared preload result can complete while a separate queued-history cancellation is busy',async()=>{
- const source={id:'shared-source',projectPageId:60,state:'queued'},record={id:'35fc4244-267c-42c6-885c-6ab93a55b899',reference:'REQ-HISTORY',state:'queued',project:'Jardin',totalCents:1000,requestor:{name:'Requestor',email:'requestor@example.test'},supplierName:'Supplier',serviceName:'Supply',breakdownName:'Miscellaneous',date:'2026-11-14',lines:[]};
- const h=await harness({shared:()=>({sharedChoices:null}),bootstrap:()=>({sharedChoices:null,lookup:source}),requests:[record]});
- h.byText('REQ-HISTORY').emit('click');await wait();const pending=deferred();h.setCancellation(()=>pending.promise);h.byText('Cancel queued request').emit('click');await wait();
+test('a shared preload can complete during history cancellation while short references preserve UUID action routes',async()=>{
+ const prompts=[],source={id:'shared-source',projectPageId:60,state:'queued'},record={id:'35fc4244-267c-42c6-885c-6ab93a55b899',reference:'REQ-35fc4244-267c-42c6-885c-6ab93a55b899',displayReference:'REQ-0007',state:'queued',project:'Jardin',totalCents:1000,requestor:{name:'Requestor',email:'requestor@example.test'},supplierName:'Supplier',serviceName:'Supply',breakdownName:'Miscellaneous',date:'2026-11-14',lines:[]};
+ const h=await harness({shared:()=>({sharedChoices:null}),bootstrap:()=>({sharedChoices:null,lookup:source}),requests:[record],confirm:async prompt=>{prompts.push(prompt);return true;}});
+ h.byText(record.displayReference).emit('click');await wait();assert.ok(h.calls.some(call=>call.path==='/purchase-requests/'+record.id));assert.ok(h.walk().some(node=>node.tagName==='h3'&&node.textContent===record.displayReference));assert.equal(h.byText(record.reference),undefined);
+ const pending=deferred();h.setCancellation(()=>pending.promise);h.byText('Cancel queued request').emit('click');await wait();assert.equal(prompts[0].message,'Cancel REQ-0007 before it is processed?');assert.ok(h.calls.some(call=>call.path==='/purchase-requests/'+record.id+'/cancel'&&call.options.method==='POST'));
  h.setLookup(()=>({lookup:{...source,state:'ready'},catalog:directory()}));await h.timer(1000);choiceState(h,false,'Select…');assert.equal(h.byName('project').value,'');
  pending.resolve({ok:true,request:{...record,state:'cancelled'}});await wait();h.view.destroy();
 });
