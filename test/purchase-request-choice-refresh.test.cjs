@@ -11,8 +11,10 @@ async function harness({saved=null,shared=()=>({sharedChoices:directory()}),boot
  class ClockDate extends Date{constructor(...args){super(...(args.length?args:[instant+wallOffset]));}static now(){return instant+wallOffset;}}
  class Node{
   constructor(tag){this.tagName=tag;this.children=[];this.events={};this._value='';this.textContent='';this.classList={toggle(){}};this.ownerDocument=doc;}
+  get textContent(){return this._textContent+this.children.map(node=>node.textContent).join('');}
+  set textContent(value){this._textContent=String(value??'');this.children=[];}
   appendChild(node){this.children.push(node);node.parentNode=this;return node;}
-  replaceChildren(...nodes){this.children=[];if(this.tagName==='select')this._value='';for(const node of nodes)this.appendChild(node);}
+  replaceChildren(...nodes){this.textContent='';if(this.tagName==='select')this._value='';for(const node of nodes)this.appendChild(node);}
   remove(){if(this.parentNode)this.parentNode.children=this.parentNode.children.filter(node=>node!==this);}
   setAttribute(name,value){this[name]=value;}
   addEventListener(name,callback){(this.events[name]||=([])).push(callback);}
@@ -43,7 +45,7 @@ async function harness({saved=null,shared=()=>({sharedChoices:directory()}),boot
  };
  const view=context.PanelStockPurchaseRequests.mount(host,{username:'requestor',workerUrl:'https://api.example.test',currentUsername:()=>owner,apiFetch,storage:{read:async()=>saved,write:async body=>{saved=JSON.parse(JSON.stringify(body));},clear:async()=>{saved=null;}}});
  await wait();
- const byName=name=>walk(host).find(node=>node.name===name),byText=text=>walk(host).find(node=>node.textContent===text);
+ const byName=name=>walk(host).find(node=>node.name===name),byText=text=>walk(host).find(node=>node.textContent===text&&!node.children.some(child=>child.textContent===text));
  const timer=async delay=>{const entry=[...timers].find(([,item])=>item.delay===delay);assert.ok(entry,'timer '+delay+' exists');timers.delete(entry[0]);entry[1].callback();await wait();};
  return{host,view,calls,timers,byName,byText,walk:()=>walk(host),timer,setLookup:callback=>{lookup=callback;},setShared:callback=>{sharedLookup=callback;},setBootstrap:callback=>{sharedBootstrap=callback;},setCancellation:callback=>{cancellation=callback;},setLatency:ms=>{requestLatency=ms;},now:()=>instant,advance:ms=>{instant+=ms;ticks+=ms;},jumpClock:ms=>{wallOffset+=ms;},setSubmission:callback=>{submission=callback;},setHidden:value=>{doc.hidden=value;},changeOwner:value=>{owner=value;},async selectProject(id='60'){byName('project').value=id;byName('project').emit('change');await wait();}};
 }
