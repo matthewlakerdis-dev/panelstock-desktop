@@ -1,13 +1,15 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const source=fs.readFileSync(require.resolve('../purchase-requests.js'),'utf8');
+const DAY=24*60*60*1000,MAX_CACHE=30*DAY;
 const wait=()=>new Promise(resolve=>setImmediate(resolve));
 function deferred(){let resolve;const promise=new Promise(done=>resolve=done);return{promise,resolve};}
 function directory(revision='v1',updatedAt=new Date(Date.now()-1000).toISOString()){
  return{projectPageId:60,revision,updatedAt,suppliers:[{id:'225',text:'Supplier'}],services:[{id:'8',name:'Supply'}],breakdowns:[{id:'b_20',name:'Cladding',disabled:false},{id:'b_70',name:'Miscellaneous',disabled:false}],accounts:[{id:'51097',name:'Materials'}],taxes:[{id:'1',name:'GST',rate:10},{id:'0',name:'No GST',rate:0}]};
 }
-async function harness({saved=null,shared=()=>({sharedChoices:directory()}),bootstrap=null,requests=[],skew=0,serverClock=false,latency=0,previews=()=>({eowPreviews:[]}),create=true,confirm}={}){
+async function harness({saved=null,shared=()=>({sharedChoices:directory()}),bootstrap=null,requests=[],skew=0,serverClock=false,latency=0,previews=()=>({eowPreviews:[]}),create=true,confirm,referenceSync=null}={}){
  const calls=[],timers=new Map();let timerId=0,owner='requestor',lookup=()=>({lookup:{id:'lookup',projectPageId:60,state:'ready'},catalog:directory()}),submission=()=>{throw Error('Synthetic ambiguous submit');};
  let instant=Date.now(),ticks=0,wallOffset=skew,requestLatency=latency,sharedLookup=shared,sharedBootstrap=bootstrap,eowLookup=previews,cancellation=()=>({ok:true,request:requests[0]});
+ let syncState=referenceSync,syncResponse=()=>({referenceSync:syncState}),historyResponse=null;
  class ClockDate extends Date{constructor(...args){super(...(args.length?args:[instant+wallOffset]));}static now(){return instant+wallOffset;}}
  class Node{
   constructor(tag){this.tagName=tag;this.children=[];this.events={};this._value='';this.textContent='';this.classList={toggle(){}};this.ownerDocument=doc;}
@@ -33,7 +35,8 @@ async function harness({saved=null,shared=()=>({sharedChoices:directory()}),boot
  vm.runInNewContext(source,context);
  const apiFetch=async(url,options={})=>{
   const path=new URL(url).pathname;calls.push({path,options});const serverAt=instant;let data;
-  if(path==='/purchase-requests'&&options.method!=='POST')data={ok:true,requests,projects:[{projectPageId:60,name:'Jardin building'},{projectPageId:59,name:'Salacia building'}],profile:{name:'Requestor',email:'requestor@example.test'},permissions:{create,manage:!create},connection:{connected:true}};
+  if(path==='/purchase-requests'&&options.method!=='POST'){const snapshot={ok:true,requests,projects:[{projectPageId:60,name:'Jardin building'},{projectPageId:59,name:'Salacia building'}],profile:{name:'Requestor',email:'requestor@example.test'},permissions:{create,manage:!create},connection:{connected:true},referenceSync:syncState};data=historyResponse?await historyResponse(snapshot):snapshot;}
+  else if(path==='/purchase-requests/reference-sync')data=await syncResponse({serverAt,options});
   else if(path==='/purchase-requests/shared-choices'){data=await(options.method==='POST'&&sharedBootstrap?sharedBootstrap({serverAt,options}):sharedLookup({serverAt,options}));if(data.status)return{ok:false,status:data.status,json:async()=>({error:data.error})};}
   else if(path==='/purchase-requests/eow-choices')data=await eowLookup({serverAt,options});
   else if(path==='/purchase-requests/lookups')data={ok:true,...await lookup()};
@@ -48,7 +51,7 @@ async function harness({saved=null,shared=()=>({sharedChoices:directory()}),boot
  await wait();
  const byName=name=>walk(host).find(node=>node.name===name),byText=text=>walk(host).find(node=>node.textContent===text&&!node.children.some(child=>child.textContent===text));
  const timer=async delay=>{const entry=[...timers].find(([,item])=>item.delay===delay);assert.ok(entry,'timer '+delay+' exists');timers.delete(entry[0]);entry[1].callback();await wait();};
- return{host,view,calls,timers,byName,byText,walk:()=>walk(host),timer,setLookup:callback=>{lookup=callback;},setShared:callback=>{sharedLookup=callback;},setBootstrap:callback=>{sharedBootstrap=callback;},setPreviews:callback=>{eowLookup=callback;},setCancellation:callback=>{cancellation=callback;},setLatency:ms=>{requestLatency=ms;},now:()=>instant,advance:ms=>{instant+=ms;ticks+=ms;},jumpClock:ms=>{wallOffset+=ms;},setSubmission:callback=>{submission=callback;},setHidden:value=>{doc.hidden=value;},changeOwner:value=>{owner=value;},async selectProject(id='60'){byName('project').value=id;byName('project').emit('change');await wait();}};
+ return{host,view,calls,timers,byName,byText,walk:()=>walk(host),timer,setLookup:callback=>{lookup=callback;},setShared:callback=>{sharedLookup=callback;},setBootstrap:callback=>{sharedBootstrap=callback;},setPreviews:callback=>{eowLookup=callback;},setCancellation:callback=>{cancellation=callback;},setHistory:callback=>{historyResponse=callback;},setReferenceSync:state=>{syncState=state;},setSync:callback=>{syncResponse=callback;},setLatency:ms=>{requestLatency=ms;},now:()=>instant,advance:ms=>{instant+=ms;ticks+=ms;},jumpClock:ms=>{wallOffset+=ms;},setSubmission:callback=>{submission=callback;},setHidden:value=>{doc.hidden=value;},changeOwner:value=>{owner=value;},async selectProject(id='60'){byName('project').value=id;byName('project').emit('change');await wait();}};
 }
 
 function choiceState(h,disabled,placeholder,names=['supplier','service','account','tax']){
@@ -98,22 +101,19 @@ test('extent of work display cleanup preserves its catalog identity, revision an
  assert.equal(full.breakdowns[0].name,'Permits · ew_234');assert.equal(full.revision,'exact-source-revision');h.view.destroy();
 });
 
-test('project selection accepts fresh cached choices while automatic refresh and explicit retry request current Nexvia data',async()=>{
+test('project selection and daily rereads use saved choices without forcing a Nexvia lookup',async()=>{
  const h=await harness();await h.selectProject();
  const payloads=()=>h.calls.filter(call=>call.path==='/purchase-requests/lookups').map(call=>JSON.parse(call.options.body));
- assert.deepEqual(payloads(),[{projectPageId:60}]);
- await h.timer(300000);assert.deepEqual(payloads().at(-1),{projectPageId:60,refresh:true});
- h.setLookup(()=>{throw Error('Synthetic refresh failure');});await h.timer(300000);
- h.setLookup(()=>({lookup:{id:'retry',projectPageId:60,state:'ready'},catalog:directory('new')}));
- h.byText('Retry project choices').emit('click');await wait();assert.deepEqual(payloads().at(-1),{projectPageId:60,refresh:true});
+ assert.deepEqual(payloads(),[{projectPageId:60}]);assert.equal([...h.timers.values()].some(timer=>timer.delay===300000),false);
+ await h.timer(DAY);assert.deepEqual(payloads(),[{projectPageId:60},{projectPageId:60}]);
  assert.ok(h.byText('Project choices are ready.'));h.view.destroy();
 });
 
-test('five-minute refresh keeps entered fields and zero GST while disabling submit until current choices return',async()=>{
+test('daily refresh keeps entered fields and zero GST while disabling submit until current choices return',async()=>{
  const h=await harness();await h.selectProject();
  h.byName('supplier').value='225';h.byName('service').value='8';h.byName('breakdown').value='b_20';h.byName('account').value='51097';h.byName('tax').value='0';
  h.byName('description').value='Keep my cladding description';h.byName('quantity').value='2.5';h.byName('price').value='19.95';h.byName('requestorName').value='Edited name';h.byName('supplierReference').value='QUOTE-123';
- const pending=deferred();h.setLookup(()=>pending.promise);await h.timer(300000);
+ const pending=deferred();h.setLookup(()=>pending.promise);await h.timer(DAY);
  choiceState(h,false,'Select…');choiceState(h,false,'Select…',['breakdown']);
  assert.equal(h.byText('Submit purchase request').disabled,true);assert.equal(h.byName('supplier').value,'225');assert.equal(h.byName('tax').value,'0');
  h.byName('description').value='Edited while refreshing';
@@ -121,7 +121,7 @@ test('five-minute refresh keeps entered fields and zero GST while disabling subm
  choiceState(h,false,'Select…');
  for(const [name,value] of Object.entries({supplier:'225',service:'8',breakdown:'b_20',account:'51097',tax:'0',description:'Edited while refreshing',quantity:'2.5',price:'19.95',requestorName:'Edited name',supplierReference:'QUOTE-123'}))assert.equal(h.byName(name).value,value,name+' retained');
  assert.equal(h.byText('Submit purchase request').disabled,false);
- await h.timer(300000);assert.equal(h.byName('tax').value,'0','unchanged catalog revisions also preserve zero GST');assert.equal(h.byName('breakdown').value,'b_20');
+ await h.timer(DAY);assert.equal(h.byName('tax').value,'0','unchanged catalog revisions also preserve zero GST');assert.equal(h.byName('breakdown').value,'b_20');
  assert.equal(h.calls.filter(call=>call.path==='/purchase-requests'&&call.options.method==='POST').length,0);
  h.view.destroy();assert.equal(h.timers.size,0);
 });
@@ -131,26 +131,24 @@ test('refresh removes unavailable IDs and never substitutes the default tax for 
  for(const [name,value] of Object.entries({supplier:'225',service:'8',breakdown:'b_20',account:'51097',tax:'0'}))h.byName(name).value=value;
  h.byName('description').value='Retained item';
  const catalog=directory('v2');catalog.suppliers=[{id:'225',text:'Supplier paused',disabled:true}];catalog.services=[{id:'9',name:'Replacement service'}];catalog.breakdowns=[{id:'b_70',name:'Miscellaneous'}];catalog.accounts=[{id:'51098',name:'Replacement account'}];catalog.taxes=[{id:'1',name:'GST',rate:10}];
- h.setShared(()=>({sharedChoices:catalog}));h.setLookup(()=>({lookup:{id:'refresh',projectPageId:60,state:'ready'},catalog}));await h.timer(300000);
+ h.setShared(()=>({sharedChoices:catalog}));h.setLookup(()=>({lookup:{id:'refresh',projectPageId:60,state:'ready'},catalog}));await h.timer(DAY);
  for(const name of ['supplier','service','breakdown','account','tax'])assert.equal(h.byName(name).value,'',name+' requires a current selection');
  assert.equal(h.byName('description').value,'Retained item');h.view.destroy();
 });
 
-test('a failed automatic refresh retains the draft and blocks submission until a successful retry',async()=>{
+test('a failed daily cache reread keeps the last good choices and draft usable until a later successful read',async()=>{
  const h=await harness();await h.selectProject();h.byName('tax').value='0';h.byName('description').value='Retained after timeout';
- h.setLookup(()=>{throw Error('Synthetic timeout');});await h.timer(300000);
+ h.setLookup(()=>{throw Error('Synthetic timeout');});await h.timer(DAY);
  choiceState(h,false,'Select…');choiceState(h,false,'Select…',['breakdown']);
- assert.equal(h.byName('tax').value,'0');assert.equal(h.byName('description').value,'Retained after timeout');assert.equal(h.byText('Submit purchase request').disabled,true);
- assert.equal(h.byText('Retry project choices').hidden,false);
- const pending=deferred();h.setLookup(()=>pending.promise);h.byText('Retry project choices').emit('click');await wait();assert.equal(h.byText('Retry project choices').hidden,true);
- pending.resolve({lookup:{id:'retry',projectPageId:60,state:'ready'},catalog:directory('v2')});await wait();
- choiceState(h,false,'Select…');
- assert.equal(h.byName('tax').value,'0');assert.equal(h.byName('description').value,'Retained after timeout');assert.equal(h.byText('Submit purchase request').disabled,false);assert.equal(h.byText('Retry project choices').hidden,true);h.view.destroy();
+ assert.equal(h.byName('tax').value,'0');assert.equal(h.byName('description').value,'Retained after timeout');assert.equal(h.byText('Submit purchase request').disabled,false);
+ assert.equal(h.byText('Retry project choices').hidden,true);assert.ok(h.byText('Using saved project choices while updates are unavailable.'));
+ h.setLookup(()=>({lookup:{id:'retry',projectPageId:60,state:'ready'},catalog:directory('v2')}));await h.timer(DAY);
+ assert.equal(h.byName('tax').value,'0');assert.equal(h.byName('description').value,'Retained after timeout');assert.equal(h.byText('Submit purchase request').disabled,false);h.view.destroy();
 });
 
 test('review recovery offers Retry and clears unavailable selections while preserving zero GST and entered text',async()=>{
- const h=await harness();await h.selectProject();h.byName('supplier').value='225';h.byName('account').value='51097';h.byName('tax').value='0';h.byName('description').value='Keep this item';
- h.setLookup(()=>({lookup:{id:'review',projectPageId:60,state:'needs_review',message:'Connection needs attention'}}));await h.timer(300000);
+ const h=await harness();h.byName('supplier').value='225';h.byName('account').value='51097';h.byName('tax').value='0';h.byName('description').value='Keep this item';
+ h.setLookup(()=>({lookup:{id:'review',projectPageId:60,state:'needs_review',message:'Connection needs attention'}}));await h.selectProject();
  assert.equal(h.byText('Retry project choices').hidden,false);
  const catalog=directory('current',new Date(h.now()-100).toISOString());catalog.accounts=[{id:'51098',name:'Replacement account'}];catalog.suppliers=[];
  h.setShared(()=>({sharedChoices:catalog}));h.setLookup(()=>({lookup:{id:'retry',projectPageId:60,state:'ready'},catalog}));h.byText('Retry project choices').emit('click');await wait();
@@ -164,25 +162,25 @@ test('a proven unsaved stale-choice rejection offers recovery without discarding
  h.walk().find(node=>node.tagName==='form').emit('submit');await wait();
  assert.equal(h.byText('Retry project choices').hidden,false);assert.equal(h.byName('tax').value,'0');assert.equal(h.byName('supplier').value,'225');assert.equal(h.byText('Submit purchase request').disabled,true);
  h.setLookup(()=>({lookup:{id:'retry',projectPageId:60,state:'ready'},catalog:directory('current')}));h.byText('Retry project choices').emit('click');await wait();
- assert.equal(h.byName('tax').value,'0');assert.equal(h.byName('description').value,'Retained after stale rejection');assert.equal(h.byText('Retry project choices').hidden,true);assert.equal(h.calls.filter(call=>call.path==='/purchase-requests'&&call.options.method==='POST').length,1);h.view.destroy();
+ assert.equal(h.byName('tax').value,'0');assert.equal(h.byName('description').value,'Retained after stale rejection');assert.equal(h.byText('Retry project choices').hidden,true);assert.equal(h.calls.filter(call=>call.path==='/purchase-requests'&&call.options.method==='POST').length,1);assert.equal(JSON.parse(h.calls.filter(call=>call.path==='/purchase-requests/lookups').at(-1).options.body).refresh,true);h.view.destroy();
 });
 
-test('hidden pages skip automatic project refresh and resume on the unchanged five-minute cadence',async()=>{
+test('hidden pages skip automatic project refresh and resume on the unchanged daily cadence',async()=>{
  const h=await harness();await h.selectProject();h.byName('tax').value='0';const before=h.calls.filter(call=>call.path==='/purchase-requests/lookups').length;
- h.setHidden(true);await h.timer(300000);assert.equal(h.calls.filter(call=>call.path==='/purchase-requests/lookups').length,before);assert.equal(h.byText('Retry project choices').hidden,true);
- h.setHidden(false);await h.timer(300000);assert.equal(h.calls.filter(call=>call.path==='/purchase-requests/lookups').length,before+1);assert.equal(h.byName('tax').value,'0');h.view.destroy();
+ h.setHidden(true);await h.timer(DAY);assert.equal(h.calls.filter(call=>call.path==='/purchase-requests/lookups').length,before);assert.equal(h.byText('Retry project choices').hidden,true);
+ h.setHidden(false);await h.timer(DAY);assert.equal(h.calls.filter(call=>call.path==='/purchase-requests/lookups').length,before+1);assert.equal(h.byName('tax').value,'0');h.view.destroy();
 });
 
 test('lookup completion cannot replace a changed account and destroy clears all refresh timers',async()=>{
  const h=await harness();await h.selectProject();h.byName('tax').value='0';
- const pending=deferred();h.setLookup(()=>pending.promise);await h.timer(300000);h.changeOwner('another-account');
+ const pending=deferred();h.setLookup(()=>pending.promise);await h.timer(DAY);h.changeOwner('another-account');
  const changed=directory('v2');changed.taxes=[];pending.resolve({lookup:{id:'late',projectPageId:60,state:'ready'},catalog:changed});await wait();
  assert.equal(h.byName('tax').value,'0');const before=h.calls.length;
- await h.timer(300000);assert.equal(h.calls.length,before);h.view.destroy();assert.equal(h.timers.size,0);
+ await h.timer(DAY);assert.equal(h.calls.length,before);h.view.destroy();assert.equal(h.timers.size,0);
 });
 
 test('an old project lookup cannot restore stale choices after the selected project changes',async()=>{
- const h=await harness();await h.selectProject();const pending=deferred();h.setLookup(()=>pending.promise);await h.timer(300000);
+ const h=await harness();await h.selectProject();const pending=deferred();h.setLookup(()=>pending.promise);await h.timer(DAY);
  h.byName('project').value='';h.byName('project').emit('change');await wait();
  pending.resolve({lookup:{id:'late',projectPageId:60,state:'ready'},catalog:directory('late')});await wait();
  assert.equal(h.byName('project').value,'');assert.equal(h.byName('supplier').value,'');assert.equal(h.byText('Submit purchase request').disabled,true);h.view.destroy();
@@ -192,7 +190,7 @@ test('frozen ambiguous submissions skip automatic project lookups and preserve t
  const h=await harness();await h.selectProject();h.byName('supplier').value='225';h.byName('service').value='8';h.byName('breakdown').value='b_20';h.byName('account').value='51097';h.byName('description').value='Submitted once';h.byName('price').value='10';
  h.walk().find(node=>node.tagName==='form').emit('submit');await wait();
  const submitted=h.calls.find(call=>call.path==='/purchase-requests'&&call.options.method==='POST');assert.ok(submitted);
- const before=h.calls.filter(call=>call.path==='/purchase-requests/lookups').length;await h.timer(300000);
+ const before=h.calls.filter(call=>call.path==='/purchase-requests/lookups').length;await h.timer(DAY);
  assert.equal(h.calls.filter(call=>call.path==='/purchase-requests/lookups').length,before);assert.equal(h.calls.filter(call=>call.path==='/purchase-requests'&&call.options.method==='POST').length,1);
  assert.equal(JSON.parse(submitted.options.body).lines[0].description,'Submitted once');assert.equal(h.byText('Retry project choices').hidden,true);h.view.destroy();
 });
@@ -214,17 +212,17 @@ test('changing projects preserves shared selections and draft text while clearin
 test('newer shared choices never regress to an older GET and shared menus are not fetched with history polling',async()=>{
  const newer=directory('new',new Date(Date.now()-100).toISOString());newer.suppliers=[{id:'225',text:'New supplier name'}];
  const h=await harness({shared:()=>({sharedChoices:newer})});assert.equal(h.byName('supplier').options[1].textContent,'New supplier name');
- h.setShared(()=>({sharedChoices:directory('old',new Date(h.now()-2000).toISOString())}));await h.timer(300000);
+ h.setShared(()=>({sharedChoices:directory('old',new Date(h.now()-2000).toISOString())}));await h.timer(DAY);
  assert.equal(h.byName('supplier').options[1].textContent,'New supplier name');choiceState(h,false,'Select…');
  const before=h.calls.filter(call=>call.path==='/purchase-requests/shared-choices').length;await h.timer(10000);
  assert.equal(h.calls.filter(call=>call.path==='/purchase-requests/shared-choices').length,before);h.view.destroy();
 });
 
-test('older conflicting full catalogs trigger only one forced reconciliation and never replace newer shared menus',async()=>{
+test('older conflicting full catalogs trigger only one cached reconciliation and never replace newer shared menus',async()=>{
  const newer=directory('new',new Date(Date.now()-100).toISOString());newer.suppliers.push({id:'226',text:'New supplier'});
  const h=await harness({shared:()=>({sharedChoices:newer})});
  const old=directory('old',new Date(h.now()-2000).toISOString());h.setLookup(()=>({lookup:{id:'a',projectPageId:60,state:'ready'},catalog:old}));await h.selectProject();
- const posts=h.calls.filter(call=>call.path==='/purchase-requests/lookups');assert.equal(posts.length,2);assert.equal(JSON.parse(posts[1].options.body).refresh,true);
+ const posts=h.calls.filter(call=>call.path==='/purchase-requests/lookups');assert.equal(posts.length,2);assert.equal(JSON.parse(posts[1].options.body).refresh,undefined);
  assert.ok(h.byName('supplier').options.some(row=>row.value==='226'));choiceState(h,false,'Select…');assert.equal(h.byText('Submit purchase request').disabled,true);assert.equal(h.byText('Retry project choices').hidden,false);
  const current={...newer,updatedAt:new Date(h.now()-50).toISOString(),revision:'project-A-current'};
  h.setLookup(()=>({lookup:{id:'a',projectPageId:60,state:'ready'},catalog:current}));h.byText('Retry project choices').emit('click');await wait();
@@ -239,19 +237,19 @@ test('late shared null and error responses cannot invalidate a full catalog acce
  }
 });
 
-test('shared failures and expiry pause common choices without clearing selected IDs or draft entries',async()=>{
+test('shared update failures retain the last good menus until their thirty-day limit, without discarding the draft',async()=>{
  const h=await harness();h.byName('supplier').value='225';h.byName('service').value='8';h.byName('tax').value='0';h.byName('description').value='Keep my draft';
- h.setShared(()=>({sharedChoices:null}));await h.timer(300000);choiceState(h,true,'Choices unavailable');assert.equal(h.byName('tax').value,'0');assert.equal(h.byName('supplier').value,'225');
- assert.equal(h.byText('Submit purchase request').disabled,true);assert.equal(h.byText('Retry project choices').hidden,false);
- h.setShared(()=>({sharedChoices:directory('recovered',new Date(h.now()-500).toISOString())}));h.byText('Retry project choices').emit('click');await wait();choiceState(h,false,'Select…');assert.equal(h.byName('tax').value,'0');
- h.advance(300001);await h.view.refresh();choiceState(h,true,'Choices unavailable');assert.equal(h.byName('description').value,'Keep my draft');assert.equal(h.byName('tax').value,'0');h.view.destroy();
+ h.setShared(()=>({sharedChoices:null}));await h.timer(DAY);choiceState(h,false,'Select…');assert.equal(h.byName('tax').value,'0');assert.equal(h.byName('supplier').value,'225');
+ assert.equal(h.byText('Retry project choices').hidden,true);assert.equal(h.calls.filter(call=>call.path==='/purchase-requests/shared-choices'&&call.options.method==='POST').length,0);
+ h.advance(MAX_CACHE+1);await h.view.refresh();choiceState(h,true,'Choices unavailable');assert.equal(h.byName('description').value,'Keep my draft');assert.equal(h.byName('tax').value,'0');assert.equal(h.byText('Retry project choices').hidden,false);
+ h.setShared(()=>({sharedChoices:directory('recovered',new Date(h.now()-500).toISOString())}));h.byText('Retry project choices').emit('click');await wait();choiceState(h,false,'Select…');assert.equal(h.byName('tax').value,'0');h.view.destroy();
 });
 
-test('shared HTTP failures and future timestamps cannot authorize common choices or discard selected values',async()=>{
+test('HTTP failures and future replacements cannot discard an existing valid saved snapshot',async()=>{
  for(const mode of ['error','future']){
   const h=await harness();h.byName('supplier').value='225';h.byName('tax').value='0';
   h.setShared(()=>{if(mode==='error')throw Error('Synthetic shared lookup failure');return{sharedChoices:directory('future',new Date(h.now()+60000).toISOString())};});
-  await h.timer(300000);choiceState(h,true,'Choices unavailable');assert.equal(h.byName('supplier').value,'225');assert.equal(h.byName('tax').value,'0');assert.equal(h.byText('Submit purchase request').disabled,true);h.view.destroy();
+  await h.timer(DAY);choiceState(h,false,'Select…');assert.equal(h.byName('supplier').value,'225');assert.equal(h.byName('tax').value,'0');assert.equal(h.byName('supplier').options[1].textContent,'Supplier');assert.equal(h.calls.filter(call=>call.options.method==='POST').length,0);h.view.destroy();
  }
 });
 
@@ -276,14 +274,14 @@ test('submission uses the matching project revision and validates preserved shar
  for(const[name,value]of Object.entries({supplier:'225',service:'8',breakdown:'ew_729',account:'51097',tax:'0',description:'B item',price:'10'}))h.byName(name).value=value;
  h.walk().find(node=>node.tagName==='form').emit('submit');await wait();const call=h.calls.find(row=>row.path==='/purchase-requests'&&row.options.method==='POST');assert.ok(call);
  const saved=JSON.parse(call.options.body);assert.equal(saved.projectPageId,59);assert.equal(saved.catalogRevision,'B-revision');assert.equal(saved.lines[0].taxRateId,'0');assert.equal(saved.lines[0].breakdownType,'ew_729');
- const before=h.calls.length;await h.timer(300000);assert.equal(h.calls.length,before,'shared and EOW refresh both skip frozen ambiguous submissions');h.view.destroy();
+ const before=h.calls.length;await h.timer(DAY);assert.equal(h.calls.length,before,'shared and EOW refresh both skip frozen ambiguous submissions');h.view.destroy();
 });
 
 test('late shared data never mutates a frozen submitted draft and a new request reuses menus with cleared selections',async()=>{
  const h=await harness();await h.selectProject();
  for(const[name,value]of Object.entries({supplier:'225',service:'8',breakdown:'b_70',account:'51097',tax:'0',description:'Submitted item',price:'10'}))h.byName(name).value=value;
  const pending=deferred();h.setShared(()=>pending.promise);
- h.byName('project').value='';h.byName('project').emit('input');await h.timer(300000);
+ h.byName('project').value='';h.byName('project').emit('input');await h.timer(DAY);
  h.byName('project').value='60';h.byName('project').emit('input');assert.equal(h.byText('Submit purchase request').disabled,false);
  h.setSubmission(options=>{const body=JSON.parse(options.body);return{ok:true,status:201,json:async()=>({request:{id:body.requestId,reference:'REQ-'+body.requestId,displayReference:'REQ-0008',state:'queued',createdAt:'2026-11-14T00:00:00Z',project:'Jardin',requestor:body.requestor,supplierName:'Supplier',serviceName:'Supply',breakdownName:'Miscellaneous',date:body.date,totalCents:1000,lines:body.lines}})}});
  h.walk().find(node=>node.tagName==='form').emit('submit');await wait();
@@ -308,7 +306,7 @@ test('a cold shared cache preloads through one read-only lookup without selectin
 
 test('fresh shared startup performs no bootstrap POST, while an expired snapshot bootstraps automatically',async()=>{
  const warm=await harness();assert.equal(warm.calls.filter(call=>call.path==='/purchase-requests/shared-choices'&&call.options.method==='POST').length,0);warm.view.destroy();
- const h=await harness({shared:()=>({sharedChoices:directory('expired',new Date(Date.now()-310000).toISOString())}),bootstrap:()=>({sharedChoices:directory()})});
+ const h=await harness({shared:()=>({sharedChoices:directory('expired',new Date(Date.now()-MAX_CACHE-10000).toISOString())}),bootstrap:()=>({sharedChoices:directory()})});
  choiceState(h,false,'Select…');assert.equal(h.byName('project').value,'');assert.equal(h.calls.filter(call=>call.options.method==='POST'&&call.path==='/purchase-requests/shared-choices').length,1);h.view.destroy();
 });
 
@@ -375,18 +373,18 @@ test('trusted server time loads fresh GET, POST and polled choices despite devic
  }
 });
 
-test('monotonic server age expires at exactly five minutes despite a backward device-clock change',async()=>{
+test('monotonic server age expires only beyond thirty days despite a backward device-clock change',async()=>{
  const initial=directory('fixed',new Date(Date.now()-1000).toISOString()),h=await harness({serverClock:true,shared:()=>({sharedChoices:initial})});
- const remaining=300000-(h.now()-Date.parse(initial.updatedAt));h.jumpClock(-86400000);h.advance(remaining-1);await h.view.refresh();choiceState(h,false,'Select…');
- h.advance(1);await h.view.refresh();choiceState(h,true,'Choices unavailable');assert.equal(h.byText('Submit purchase request').disabled,true);h.view.destroy();
+ const remaining=MAX_CACHE-(h.now()-Date.parse(initial.updatedAt));h.jumpClock(-86400000);h.advance(remaining-1);await h.view.refresh();choiceState(h,false,'Select…');
+ h.advance(1);await h.view.refresh();choiceState(h,false,'Select…');h.advance(1);await h.view.refresh();choiceState(h,true,'Choices unavailable');assert.equal(h.byText('Submit purchase request').disabled,true);h.view.destroy();
 });
 
 test('older, equal or malformed server samples cannot renew the age of a saved shared snapshot',async()=>{
  for(const mode of ['older','equal','malformed']){
   const initial=directory('fixed',new Date(Date.now()-1000).toISOString()),h=await harness({serverClock:true,shared:()=>({sharedChoices:initial})}),firstServer=h.now();
-  h.advance(300001);h.jumpClock(-86400000);
+  h.advance(MAX_CACHE+1);h.jumpClock(-86400000);
   const serverTime=mode==='equal'?new Date(firstServer).toISOString():mode==='older'?initial.updatedAt:'not-a-time';
-  h.setShared(()=>({sharedChoices:initial,serverTime}));h.setBootstrap(()=>({sharedChoices:initial,serverTime}));await h.timer(300000);
+  h.setShared(()=>({sharedChoices:initial,serverTime}));h.setBootstrap(()=>({sharedChoices:initial,serverTime}));await h.timer(DAY);
   choiceState(h,true,'Choices unavailable');assert.equal(h.byText('Retry project choices').hidden,false);assert.equal(h.calls.filter(call=>call.path==='/purchase-requests/shared-choices'&&call.options.method==='POST').length,1);h.view.destroy();
  }
 });
@@ -398,20 +396,20 @@ test('a snapshot future-dated relative to raw server time stays rejected even wh
 
 test('expiry during transit forces one read-only refresh and accepts only its fresh verified result',async()=>{
  const source={id:'expired-in-transit',projectPageId:60,state:'queued'};
- const h=await harness({serverClock:true,latency:20,shared:({serverAt})=>({sharedChoices:directory('boundary',new Date(serverAt-299999).toISOString())}),bootstrap:()=>({lookup:source})});
+ const h=await harness({serverClock:true,latency:20,shared:({serverAt})=>({sharedChoices:directory('boundary',new Date(serverAt-MAX_CACHE+1).toISOString())}),bootstrap:()=>({lookup:source})});
  const posts=h.calls.filter(call=>call.path==='/purchase-requests/shared-choices'&&call.options.method==='POST');assert.equal(posts.length,1);assert.deepEqual(JSON.parse(posts[0].options.body),{refresh:true});
  h.setLookup(()=>({lookup:{...source,state:'ready'},catalog:directory('renewed',new Date(h.now()-1000).toISOString())}));await h.timer(1000);choiceState(h,false,'Select…');assert.equal(h.byName('project').value,'');h.view.destroy();
 });
 
 test('an expired normal POST reply escalates once and a forced expired reply cannot requeue itself',async()=>{
  let postCount=0;
- const h=await harness({serverClock:true,shared:()=>({sharedChoices:null}),bootstrap:({serverAt})=>{postCount++;return{sharedChoices:directory('expired',new Date(serverAt-310000).toISOString())};}});
+ const h=await harness({serverClock:true,shared:()=>({sharedChoices:null}),bootstrap:({serverAt})=>{postCount++;return{sharedChoices:directory('expired',new Date(serverAt-MAX_CACHE-10000).toISOString())};}});
  choiceState(h,true,'Choices unavailable');const posts=h.calls.filter(call=>call.path==='/purchase-requests/shared-choices'&&call.options.method==='POST');assert.equal(postCount,2);assert.deepEqual(posts.map(call=>JSON.parse(call.options.body)),[{}, {refresh:true}]);assert.equal(h.byText('Retry project choices').hidden,false);h.view.destroy();
 });
 
 test('a newer quick server sample recovers from the conservative bias of an earlier long request',async()=>{
- const h=await harness({serverClock:true,latency:({path,options})=>path==='/purchase-requests/shared-choices'&&options.method!=='POST'?310000:0,
-  shared:({serverAt})=>({serverTime:new Date(serverAt+310000).toISOString(),sharedChoices:directory('late',new Date(serverAt+309000).toISOString())}),
+ const h=await harness({serverClock:true,latency:({path,options})=>path==='/purchase-requests/shared-choices'&&options.method!=='POST'?MAX_CACHE+10000:0,
+  shared:({serverAt})=>({serverTime:new Date(serverAt+MAX_CACHE+10000).toISOString(),sharedChoices:directory('late',new Date(serverAt+MAX_CACHE+9000).toISOString())}),
   bootstrap:({serverAt})=>({serverTime:new Date(serverAt+1).toISOString(),sharedChoices:directory('recovered',new Date(serverAt-1000).toISOString())})});
  choiceState(h,false,'Select…');assert.equal(h.byName('project').value,'');assert.equal(h.calls.filter(call=>call.path==='/purchase-requests/shared-choices'&&call.options.method==='POST').length,1);h.view.destroy();
 });
@@ -448,7 +446,7 @@ test('verification clears removed or disabled preview selections with an explici
 
 test('a failed verification keeps cached EOW usable for drafting while blocking Submit and offering Retry',async()=>{
  const h=await harness({previews:()=>({eowPreviews:[savedEow(60)]})});h.setLookup(()=>({lookup:{id:'a',projectPageId:60,state:'needs_review',message:'Nexvia browser is unavailable.'}}));await h.selectProject();choiceState(h,false,'Select…',['breakdown']);
- h.byName('breakdown').value='b_70';assert.equal(h.byText('Submit purchase request').disabled,true);assert.equal(h.byText('Retry project choices').hidden,false);assert.ok(h.byText('Nexvia browser is unavailable. Retry project choices when the connection is ready.'));h.view.destroy();
+ h.byName('breakdown').value='b_70';assert.equal(h.byText('Submit purchase request').disabled,true);assert.equal(h.byText('Retry project choices').hidden,false);assert.ok(h.byText('Nexvia browser is unavailable. Retry project choices before submitting.'));h.view.destroy();
 });
 
 test('a late preload cannot replace the EOW cached from a newer full verification',async()=>{
@@ -542,4 +540,77 @@ test('quote upload explains temporary storage and clears the chosen file only af
  h.setSubmission(options=>{const body=JSON.parse(options.body);return{ok:true,status:201,json:async()=>({request:{id:body.requestId,reference:'REQ-QUOTE-ACCEPTED',state:'queued',createdAt:'2026-11-14T00:00:00Z',project:'Jardin',requestor:body.requestor,supplierName:'Supplier',serviceName:'Supply',breakdownName:'Miscellaneous',date:body.date,totalCents:1000,quote:{filename:body.quote.filename,bytes:bytes.length},quoteTransfer:{version:1,state:'pending',expiresAt:'2026-11-15T00:00:00Z'},lines:body.lines}})};});
  h.byText('Check status and retry saved request').emit('click');await wait();
  const attempts=h.calls.filter(call=>call.path==='/purchase-requests'&&call.options.method==='POST');assert.equal(attempts.length,2);assert.equal(attempts[0].options.body,attempts[1].options.body);assert.equal(file.value,'');assert.equal(h.byText('Download quote PDF'),undefined);assert.ok(h.byText('supplier-quote.pdf · Waiting to attach in Nexvia'));h.view.destroy();
+});
+
+const syncId='b116bf76-253d-44dc-88c8-38ef1948245b';
+const syncStatus=(state='idle',overrides={})=>({id:state==='idle'?null:syncId,state,requestedAt:state==='idle'?null:new Date(Date.now()-1000).toISOString(),completedProjects:0,totalProjects:2,lastSuccessfulAt:null,message:'',canSync:true,...overrides});
+
+test('saved choices older than a day load immediately without queuing a live refresh',async()=>{
+ const stamp=new Date(Date.now()-2*DAY).toISOString(),full=directory('saved-daily',stamp);
+ const h=await harness({shared:()=>({sharedChoices:full})});h.setLookup(()=>({lookup:{id:'saved',projectPageId:60,state:'ready'},catalog:full}));await h.selectProject();
+ choiceState(h,false,'Select…');assert.equal(h.byText('Submit purchase request').disabled,false);assert.equal(h.calls.filter(call=>call.path==='/purchase-requests/shared-choices'&&call.options.method==='POST').length,0);
+ assert.deepEqual(h.calls.filter(call=>call.path==='/purchase-requests/lookups').map(call=>JSON.parse(call.options.body)),[{projectPageId:60}]);h.view.destroy();
+});
+
+test('composed catalogs use current common data without renewing their older project EOW',async()=>{
+ const common=directory('common',new Date(Date.now()-100).toISOString());common.suppliers.push({id:'226',text:'Another supplier'});
+ const oldEow=new Date(Date.now()-2*DAY).toISOString(),h=await harness({shared:()=>({sharedChoices:common})});
+ const full={...common,revision:'composed',updatedAt:oldEow,eowUpdatedAt:oldEow,commonUpdatedAt:common.updatedAt};h.setLookup(()=>({lookup:{id:'cached',projectPageId:60,state:'ready'},catalog:full}));await h.selectProject();
+ assert.equal(h.byText('Submit purchase request').disabled,false);assert.equal(h.calls.filter(call=>call.path==='/purchase-requests/lookups').length,1);assert.ok(h.byName('supplier').options.some(row=>row.value==='226'));
+ h.advance(MAX_CACHE-2*DAY+1);await h.view.refresh();assert.equal(h.byName('breakdown').disabled,true);assert.equal(h.byText('Submit purchase request').disabled,true,'new common data must not renew EOW eligibility');h.view.destroy();
+});
+
+test('only an authorized admin receives the Sync Nexvia data control',async()=>{
+ for(const referenceSync of [null,syncStatus('idle',{canSync:false})]){
+  const h=await harness({referenceSync});assert.equal(h.byText('Sync Nexvia data').parentNode.parentNode.hidden,true);
+  h.byText('Sync Nexvia data').emit('click');await wait();assert.equal(h.calls.some(call=>call.path==='/purchase-requests/reference-sync'),false);h.view.destroy();
+ }
+});
+
+test('an admin without request creation can sync reference data and watch its progress',async()=>{
+ const h=await harness({create:false,referenceSync:syncStatus()});const pending=deferred();h.setSync(()=>pending.promise);
+ const button=h.byText('Sync Nexvia data');assert.equal(button.parentNode.parentNode.hidden,false);button.emit('click');button.emit('click');await wait();
+ assert.equal(button.disabled,true);assert.equal(h.calls.filter(call=>call.path==='/purchase-requests/reference-sync'&&call.options.method==='POST').length,1);
+ pending.resolve({referenceSync:syncStatus('queued')});await wait();assert.ok(h.byText('Nexvia data update queued. Saved choices remain available.'));
+ h.setSync(()=>({referenceSync:syncStatus('refreshing',{completedProjects:1})}));await h.timer(2000);assert.ok(h.byText('Updating Nexvia data. 1 of 2 projects. Saved choices remain available.'));
+ const finished=syncStatus('completed',{completedProjects:2,lastSuccessfulAt:new Date(h.now()).toISOString()});h.setSync(()=>({referenceSync:finished}));await h.timer(2000);
+ assert.equal(button.disabled,false);assert.equal(h.calls.filter(call=>call.path==='/purchase-requests/lookups'||call.path==='/purchase-requests/shared-choices').length,0);assert.ok(h.walk().some(node=>node.textContent.startsWith('Nexvia data updated ')));h.view.destroy();
+});
+
+test('successful admin sync reloads saved menus and EOW without forcing native reads or clearing valid entries',async()=>{
+ const h=await harness({referenceSync:syncStatus()});await h.selectProject();for(const[name,value]of Object.entries({supplier:'225',service:'8',breakdown:'b_70',account:'51097',tax:'0',description:'Keep while syncing',price:'10'}))h.byName(name).value=value;
+ h.setSync(()=>({referenceSync:syncStatus('queued')}));h.byText('Sync Nexvia data').emit('click');await wait();assert.equal(h.byText('Submit purchase request').disabled,false);
+ const before=h.calls.length,updated=directory('daily-updated',new Date(h.now()-100).toISOString());h.setShared(()=>({sharedChoices:updated}));h.setLookup(()=>({lookup:{id:'saved',projectPageId:60,state:'ready'},catalog:updated}));
+ h.setSync(()=>({referenceSync:syncStatus('completed',{completedProjects:2,lastSuccessfulAt:new Date(h.now()).toISOString()})}));await h.timer(2000);
+ for(const[name,value]of Object.entries({supplier:'225',service:'8',breakdown:'b_70',account:'51097',tax:'0',description:'Keep while syncing'}))assert.equal(h.byName(name).value,value);
+ const reads=h.calls.slice(before);assert.ok(reads.some(call=>call.path==='/purchase-requests/shared-choices'&&!call.options.method));assert.deepEqual(reads.filter(call=>call.path==='/purchase-requests/lookups').map(call=>JSON.parse(call.options.body)),[{projectPageId:60}]);assert.equal(h.byText('Submit purchase request').disabled,false);h.view.destroy();
+});
+
+test('sync status failure keeps saved choices usable and account changes stop subsequent sync polls',async()=>{
+ const h=await harness({referenceSync:syncStatus()});await h.selectProject();h.byName('tax').value='0';h.setSync(()=>({referenceSync:syncStatus('queued')}));h.byText('Sync Nexvia data').emit('click');await wait();
+ h.setSync(()=>{throw Error('Synthetic status timeout');});await h.timer(2000);assert.ok(h.byText('Waiting for the Nexvia update status. Saved choices remain available.'));assert.equal(h.byText('Submit purchase request').disabled,false);assert.equal(h.byName('tax').value,'0');
+ h.changeOwner('different-account');const before=h.calls.length;await h.timer(2000);assert.equal(h.calls.length,before);h.view.destroy();assert.equal(h.timers.size,0);
+});
+
+test('a completed sync cannot mutate a frozen ambiguous submitted request',async()=>{
+ const h=await harness({referenceSync:syncStatus('queued')});await h.selectProject();for(const[name,value]of Object.entries({supplier:'225',service:'8',breakdown:'b_70',account:'51097',tax:'0',description:'Submitted before sync',price:'10'}))h.byName(name).value=value;
+ h.walk().find(node=>node.tagName==='form').emit('submit');await wait();const submitted=h.calls.find(call=>call.path==='/purchase-requests'&&call.options.method==='POST'),before=h.calls.length;
+ const changed=directory('changed',new Date(h.now()-100).toISOString());changed.suppliers=[];h.setShared(()=>({sharedChoices:changed}));h.setSync(()=>({referenceSync:syncStatus('completed',{completedProjects:2,lastSuccessfulAt:new Date(h.now()).toISOString()})}));await h.timer(2000);
+ assert.equal(h.calls.slice(before).some(call=>call.path==='/purchase-requests/shared-choices'||call.path==='/purchase-requests/lookups'),false);assert.equal(h.byName('supplier').value,'225');assert.equal(h.byName('tax').value,'0');assert.equal(h.byName('description').value,'Submitted before sync');assert.equal(JSON.parse(submitted.options.body).lines[0].description,'Submitted before sync');h.view.destroy();
+});
+
+test('a newer sync generation replaces an unseen completed cycle and late older status cannot rewind it',async()=>{
+ const first=syncStatus('refreshing',{requestedAt:'2026-11-14T10:00:00.000Z'}),nextId='5dc63c81-82a7-42ea-947f-3b1a7f68be56';
+ const next=syncStatus('queued',{id:nextId,requestedAt:'2026-11-14T10:01:00.000Z'}),h=await harness({create:false,referenceSync:first});
+ h.setSync(()=>({referenceSync:next}));await h.timer(2000);assert.ok(h.byText('Nexvia data update queued. Saved choices remain available.'));
+ h.setSync(()=>({referenceSync:first}));await h.timer(2000);assert.ok(h.byText('Nexvia data update queued. Saved choices remain available.'));
+ h.setReferenceSync(first);await h.view.refresh();assert.ok(h.byText('Nexvia data update queued. Saved choices remain available.'));
+ h.setSync(()=>({referenceSync:{...next,state:'completed',completedProjects:2,lastSuccessfulAt:new Date(h.now()).toISOString()}}));await h.timer(2000);assert.equal(h.byText('Sync Nexvia data').disabled,false);assert.ok(h.walk().some(node=>node.textContent.startsWith('Nexvia data updated ')));h.view.destroy();
+});
+
+test('a history response started before sync completion cannot replace the completed banner with idle data',async()=>{
+ const h=await harness({create:false,referenceSync:syncStatus('queued')}),pending=deferred();let oldSnapshot;
+ h.setHistory(snapshot=>{oldSnapshot={...snapshot,referenceSync:syncStatus()};return pending.promise;});const history=h.view.refresh();await wait();
+ const finished=syncStatus('completed',{completedProjects:2,lastSuccessfulAt:new Date(h.now()).toISOString()});h.setSync(()=>({referenceSync:finished}));await h.timer(2000);
+ pending.resolve(oldSnapshot);await history;assert.ok(h.walk().some(node=>node.textContent.startsWith('Nexvia data updated ')));assert.equal(h.byText('Sync Nexvia data').disabled,false);h.view.destroy();
 });
