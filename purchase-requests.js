@@ -306,7 +306,7 @@
     const retryChoices=button('Retry project choices',()=>{if(project.value)void lookup({force:true});else void refreshShared({force:true});});retryChoices.hidden=true;
     const sharedStatus=el('p',null,'pr-help');sharedStatus.setAttribute('role','status');
     const file=input('file','quote',false);file.accept='application/pdf,.pdf';
-    const fileStatus=el('p','Optional PDF, up to 10 MB. Requests with a PDF are saved for office review; they are not automatically created in Nexvia.','pr-help');
+    const fileStatus=el('p','Optional PDF, up to 10 MB. It will be attached to the Nexvia PO. PanelStock removes its temporary copy after Nexvia confirms the attachment.','pr-help');
     const lineBox=el('div',null,'pr-lines');const totalBox=el('div',null,'pr-totals');totalBox.setAttribute('aria-label','Request total');totalBox.setAttribute('aria-live','polite');
     const addLineButton=button('Add line',()=>addLine(),'pr-button pr-add-line');addLineButton.setAttribute('aria-label','Add line');
     const lookupInfo=el('div',null,'pr-lookup-info');append(lookupInfo,lookupStatus,sharedStatus,retryChoices);
@@ -552,7 +552,7 @@
       busy=true;lock(true);send.textContent='Submitting…';notice('Saving your request…');
       try{
         const request=isRetry?await submitter.retry():await submitter.submit(await payload());
-        if(!current())return;upsert(request);detailLoader.show(request);renderHistory();fresh.hidden=false;send.hidden=true;
+        if(!current())return;quote=null;file.value='';upsert(request);detailLoader.show(request);renderHistory();fresh.hidden=false;send.hidden=true;
         notice('Request '+request.reference+' saved. '+(request.state==='needs_review'?'It is waiting for office review.':'Follow its PO status below.'));
       }catch(error){
         if(!current())return;
@@ -577,13 +577,17 @@
       if(!request)return;
       append(details,el('h3',request.reference),el('p',(STATES[request.state]||'Status pending')+' · '+request.project),el('p',request.message||'', 'pr-help'));
       const pairs=[['Requested by',request.requestor.name+' · '+request.requestor.email],['Supplier',request.supplierName],['Service',request.serviceName],['Extent of work',extentWorkName(request.breakdownName,request.breakdownType)],['Order date',request.date],['Supplier reference',request.supplierReference||'—'],['Total including GST',money(request.totalCents)]];
-      if(request.quote)pairs.push(['Quote PDF',request.quote.filename+' · saved for office review']);
+      if(request.quote){
+        const transfer=request.quoteTransfer;
+        const quoteStatus=transfer?.version===1?({pending:'Waiting to attach in Nexvia',attached:'Attached in Nexvia',expired:'Transfer expired',needs_review:'Attachment needs attention',cancelled:'Transfer cancelled'}[transfer.state]||'Attachment status unavailable'):transfer?'Attachment status unavailable':'Saved for office review';
+        pairs.push(['Quote PDF',request.quote.filename+' · '+quoteStatus]);
+      }
       if(request.result)pairs.push(['Purchase order',request.result.purchaseOrderNumber]);
       const emailStatus=request.confirmation?.status;
       pairs.push(['Confirmation email',emailStatus==='sent'?'Accepted by email provider':emailStatus==='failed'||emailStatus==='needs_review'?'Needs review':request.result?'Pending':'Available after PO verification']);
       const list=el('dl',null,'pr-summary');for(const [label,value] of pairs)append(list,el('dt',label),el('dd',value));details.appendChild(list);
       for(const line of request.lines||[])details.appendChild(el('p',line.quantity+' × '+line.description+' · '+money(Math.round(Number(line.unitPriceExGst)*100))+' ex GST','pr-detail-line'));
-      if(request.quote)details.appendChild(button('Download quote PDF',async()=>{
+      if(request.quote&&!request.quoteTransfer)details.appendChild(button('Download quote PDF',async()=>{
         if(busy)return;busy=true;
         try{
           const response=await api('/purchase-requests/'+encodeURIComponent(request.id)+'/quote');

@@ -28,7 +28,7 @@ async function harness({saved=null,shared=()=>({sharedChoices:directory()}),boot
  }
  const doc={hidden:false,createElement:tag=>new Node(tag)};doc.body=new Node('body');
  const walk=node=>[node,...node.children.flatMap(walk)],host=new Node('div');
- const context={Date:ClockDate,performance:{now:()=>ticks},Intl,JSON,TextDecoder,Uint8Array,URL,Blob,AbortController,crypto,console,
+ const context={Date:ClockDate,performance:{now:()=>ticks},Intl,JSON,TextDecoder,Uint8Array,URL,Blob,AbortController,crypto,btoa,console,
   setTimeout(callback,delay){const id=++timerId;timers.set(id,{callback,delay});return id;},clearTimeout:id=>timers.delete(id)};
  vm.runInNewContext(source,context);
  const apiFetch=async(url,options={})=>{
@@ -510,4 +510,34 @@ test('a late EOW preload cannot change a frozen ambiguous submission or its sele
  h.walk().find(node=>node.tagName==='form').emit('submit');await wait();const sent=h.calls.find(call=>call.path==='/purchase-requests'&&call.options.method==='POST');assert.ok(sent);
  pending.resolve({eowPreviews:[savedEow(60,[{id:'ew_999',name:'Late preview',disabled:false}],new Date(h.now()-10).toISOString())]});await wait();
  assert.equal(h.byName('breakdown').value,'b_70');assert.equal(h.byName('tax').value,'0');assert.equal(h.byName('description').value,'Frozen item');assert.equal(JSON.parse(sent.options.body).breakdownType,'b_70');assert.equal(h.byText('Submit purchase request').disabled,true);h.view.destroy();
+});
+
+test('new quote transfers show their own status and use the verified Nexvia PO instead of a PanelStock download',async()=>{
+ const labels={pending:'Waiting to attach in Nexvia',attached:'Attached in Nexvia',expired:'Transfer expired',needs_review:'Attachment needs attention',cancelled:'Transfer cancelled'};
+ for(const[state,label]of Object.entries(labels)){
+  const record={id:'35fc4244-267c-42c6-885c-6ab93a55b899',reference:'REQ-QUOTE',state:'created_verified',project:'Jardin',totalCents:1000,requestor:{name:'Requestor',email:'requestor@example.test'},supplierName:'Supplier',serviceName:'Supply',breakdownName:'Miscellaneous',date:'2026-11-14',quote:{filename:'supplier-quote.pdf',bytes:20},quoteTransfer:{version:1,state,expiresAt:'2026-11-15T00:00:00Z'},result:{purchaseOrderNumber:'PO7413',url:'https://lennox.nexvia.com.au/staff/purchase-order-modify/60/1421'},confirmation:{status:'sent'},lines:[]};
+  const h=await harness({requests:[record]});h.byText(record.reference).emit('click');await wait();
+  assert.ok(h.byText('supplier-quote.pdf · '+label));assert.equal(h.byText('Download quote PDF'),undefined);
+  assert.ok(h.byText('PO verified · Jardin'));assert.ok(h.byText('Accepted by email provider'));
+  const link=h.byText('Open verified PO in Nexvia');assert.equal(link.href,record.result.url);assert.equal(link.rel,'noopener noreferrer');
+  assert.equal(h.calls.some(call=>call.path.endsWith('/quote')||call.path==='/purchase-requests'&&call.options.method==='POST'),false);h.view.destroy();
+ }
+});
+
+test('legacy quote review records retain their download without queuing a purchase order',async()=>{
+ const record={id:'35fc4244-267c-42c6-885c-6ab93a55b899',reference:'REQ-LEGACY-QUOTE',state:'needs_review',project:'Jardin',totalCents:1000,requestor:{name:'Requestor',email:'requestor@example.test'},supplierName:'Supplier',serviceName:'Supply',breakdownName:'Miscellaneous',date:'2026-11-14',quote:{filename:'legacy-quote.pdf',bytes:20},lines:[]};
+ const h=await harness({requests:[record]});h.byText(record.reference).emit('click');await wait();
+ assert.ok(h.byText('legacy-quote.pdf · Saved for office review'));assert.ok(h.byText('Download quote PDF'));assert.ok(h.byText('Needs review · Jardin'));
+ assert.equal(h.calls.some(call=>call.path==='/purchase-requests'&&call.options.method==='POST'),false);h.view.destroy();
+});
+
+test('quote upload explains temporary storage and clears the chosen file only after its submission is accepted',async()=>{
+ const h=await harness();await h.selectProject();assert.ok(h.byText('Optional PDF, up to 10 MB. It will be attached to the Nexvia PO. PanelStock removes its temporary copy after Nexvia confirms the attachment.'));
+ for(const[name,value]of Object.entries({supplier:'225',service:'8',breakdown:'b_70',account:'51097',tax:'0',description:'Item with quote',price:'10'}))h.byName(name).value=value;
+ const bytes=new TextEncoder().encode('%PDF-1.4\nSupplier quote'),file=h.byName('quote');file.files=[{name:'supplier-quote.pdf',size:bytes.length,arrayBuffer:async()=>bytes.buffer}];file.value='C:\\fakepath\\supplier-quote.pdf';file.emit('change');
+ h.walk().find(node=>node.tagName==='form').emit('submit');await wait();assert.equal(file.value,'C:\\fakepath\\supplier-quote.pdf');
+ const first=h.calls.find(call=>call.path==='/purchase-requests'&&call.options.method==='POST'),submitted=JSON.parse(first.options.body);assert.equal(submitted.quote.filename,'supplier-quote.pdf');assert.equal(submitted.quoteBase64,btoa(String.fromCharCode(...bytes)));
+ h.setSubmission(options=>{const body=JSON.parse(options.body);return{ok:true,status:201,json:async()=>({request:{id:body.requestId,reference:'REQ-QUOTE-ACCEPTED',state:'queued',createdAt:'2026-11-14T00:00:00Z',project:'Jardin',requestor:body.requestor,supplierName:'Supplier',serviceName:'Supply',breakdownName:'Miscellaneous',date:body.date,totalCents:1000,quote:{filename:body.quote.filename,bytes:bytes.length},quoteTransfer:{version:1,state:'pending',expiresAt:'2026-11-15T00:00:00Z'},lines:body.lines}})};});
+ h.byText('Check status and retry saved request').emit('click');await wait();
+ const attempts=h.calls.filter(call=>call.path==='/purchase-requests'&&call.options.method==='POST');assert.equal(attempts.length,2);assert.equal(attempts[0].options.body,attempts[1].options.body);assert.equal(file.value,'');assert.equal(h.byText('Download quote PDF'),undefined);assert.ok(h.byText('supplier-quote.pdf · Waiting to attach in Nexvia'));h.view.destroy();
 });

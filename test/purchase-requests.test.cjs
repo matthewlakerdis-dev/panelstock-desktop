@@ -25,6 +25,15 @@ test('a timeout retains the exact body and UUID, resolves status, then retries u
  assert.equal(calls[0].options.body,calls[2].options.body);assert.equal(saved.value,null);assert.equal(submitter.pending,null);
 });
 
+test('quote retries keep the exact PDF only until the matching request is accepted',async()=>{
+ const input={...body(),quote:{filename:'supplier-quote.pdf'},quoteBase64:'JVBERi0xLjQKc3VwcGxpZXIgcXVvdGU='},saved=storage(),calls=[];let first=true;
+ const api=async(path,options)=>{calls.push({path,options});if(options){if(first){first=false;throw Error('timeout');}return found(input.requestId);}return{ok:false,status:404,data:{}};};
+ const submitter=createSubmission(api,saved);
+ await assert.rejects(()=>submitter.submit(input),/timeout/);input.quoteBase64='edited';input.quote.filename='changed.pdf';
+ assert.equal(saved.value.quoteBase64,'JVBERi0xLjQKc3VwcGxpZXIgcXVvdGU=');assert.equal(submitter.pending.quote.filename,'supplier-quote.pdf');
+ await submitter.retry();assert.equal(calls[0].options.body,calls[2].options.body);assert.equal(saved.value,null);assert.equal(submitter.pending,null);
+});
+
 test('reload reads saved status without posting and accepted status clears the retry record',async()=>{
  const saved=storage(body()),calls=[],submitter=createSubmission(async(path,options)=>{calls.push([path,options]);return found(body().requestId);},saved);
  assert.equal((await submitter.restore()).state,'queued');assert.equal(calls.length,1);assert.equal(calls[0][1],undefined);assert.equal(saved.value,null);
