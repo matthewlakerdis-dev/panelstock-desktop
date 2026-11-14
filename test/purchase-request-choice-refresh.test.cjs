@@ -56,7 +56,7 @@ function choiceState(h,disabled,placeholder,names=['supplier','service','account
 test('common choices are ready before project selection and remain usable while EOW loads, including added lines',async()=>{
  const h=await harness();choiceState(h,false,'Select…');choiceState(h,true,'Select a project first',['breakdown']);assert.notEqual(h.byName('project').disabled,true);
  h.setLookup(()=>({lookup:{id:'queued',projectPageId:60,state:'queued'}}));await h.selectProject();
- choiceState(h,false,'Select…');choiceState(h,true,'Loading choices…',['breakdown']);assert.ok(h.byText('Loading this project’s elements of work…'));
+ choiceState(h,false,'Select…');choiceState(h,true,'Loading choices…',['breakdown']);assert.ok(h.byText('Loading this project’s extents of work…'));
  h.byText('Add line').emit('click');choiceState(h,false,'Select…');
  assert.equal(h.walk().filter(node=>node.name==='account').length,2);assert.notEqual(h.byName('description').disabled,true);
  h.byName('description').value='Entered while loading';
@@ -80,6 +80,17 @@ test('project choices have no normal refresh control and the recovery control st
  const pending=deferred();h.setLookup(()=>pending.promise);await h.selectProject();assert.equal(retry.hidden,true);
  pending.resolve({lookup:{id:'lookup',projectPageId:60,state:'ready'},catalog:directory()});await wait();
  assert.equal(retry.hidden,true);assert.ok(h.byText('Project choices are ready.'));h.view.destroy();
+});
+
+test('extent of work display cleanup preserves its catalog identity, revision and submitted line values',async()=>{
+ const h=await harness(),full=directory('exact-source-revision');full.breakdowns=[{id:'ew_234',name:'Permits · ew_234'}];
+ h.setLookup(()=>({lookup:{id:'lookup',projectPageId:60,state:'ready'},catalog:full}));await h.selectProject();
+ assert.ok(h.byText('Extent of work *'));assert.equal(h.byName('breakdown').options.find(option=>option.value==='ew_234').textContent,'Permits');
+ for(const[name,value]of Object.entries({supplier:'225',service:'8',breakdown:'ew_234',account:'51097',tax:'0',description:'Existing source identity',price:'10'}))h.byName(name).value=value;
+ h.walk().find(node=>node.tagName==='form').emit('submit');await wait();
+ const saved=JSON.parse(h.calls.find(call=>call.path==='/purchase-requests'&&call.options.method==='POST').options.body);
+ assert.equal(saved.breakdownType,'ew_234');assert.equal(saved.lines[0].breakdownType,'ew_234');assert.equal(saved.catalogRevision,'exact-source-revision');
+ assert.equal(full.breakdowns[0].name,'Permits · ew_234');assert.equal(full.revision,'exact-source-revision');h.view.destroy();
 });
 
 test('project selection accepts fresh cached choices while automatic refresh and explicit retry request current Nexvia data',async()=>{
