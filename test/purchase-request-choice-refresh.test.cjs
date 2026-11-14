@@ -42,6 +42,35 @@ async function harness({saved=null}={}){
  return{host,view,calls,timers,byName,byText,walk:()=>walk(host),timer,setLookup:callback=>{lookup=callback;},setSubmission:callback=>{submission=callback;},setHidden:value=>{doc.hidden=value;},changeOwner:value=>{owner=value;},async selectProject(){byName('project').value='60';byName('project').emit('change');await wait();}};
 }
 
+function choiceState(h,disabled,placeholder){
+ for(const node of h.walk().filter(node=>node.tagName==='select'&&['supplier','service','breakdown','account','tax'].includes(node.name))){
+  assert.equal(node.disabled,disabled,node.name+' availability');
+  if(placeholder)assert.equal(node.options.find(option=>option.value==='').textContent,placeholder,node.name+' placeholder');
+ }
+}
+
+test('dependent choices explain the project and loading states, including lines added while a lookup is queued',async()=>{
+ const h=await harness();choiceState(h,true,'Select a project first');assert.notEqual(h.byName('project').disabled,true);
+ h.setLookup(()=>({lookup:{id:'queued',projectPageId:60,state:'queued'}}));await h.selectProject();
+ choiceState(h,true,'Loading choices…');assert.ok(h.byText('Loading Nexvia choices. This can take a short moment.'));
+ h.byText('Add line').emit('click');choiceState(h,true,'Loading choices…');
+ assert.equal(h.walk().filter(node=>node.name==='account').length,2);assert.notEqual(h.byName('description').disabled,true);
+ h.byName('description').value='Entered while loading';
+ h.setLookup(()=>({lookup:{id:'queued',projectPageId:60,state:'ready'},catalog:directory()}));await h.timer(3000);
+ choiceState(h,false,'Select…');assert.equal(h.byName('description').value,'Entered while loading');assert.equal(h.byName('tax').value,'1');
+ assert.equal(h.byText('Submit purchase request').disabled,false);h.view.destroy();
+});
+
+test('editing the project search pauses dependent choices without clearing the matching catalog or zero GST',async()=>{
+ const h=await harness();await h.selectProject();h.byName('supplier').value='225';h.byName('tax').value='0';
+ const before=h.calls.filter(call=>call.path==='/purchase-requests/lookups').length;
+ h.byName('project').value='';h.byName('project').emit('input');choiceState(h,true,'Select a project first');
+ assert.equal(h.byText('Submit purchase request').disabled,true);
+ h.byName('project').value='60';h.byName('project').emit('input');choiceState(h,false,'Select…');
+ assert.equal(h.byName('supplier').value,'225');assert.equal(h.byName('tax').value,'0');assert.equal(h.byText('Submit purchase request').disabled,false);
+ assert.equal(h.calls.filter(call=>call.path==='/purchase-requests/lookups').length,before,'search input does not queue lookups');h.view.destroy();
+});
+
 test('project choices have no normal refresh control and the recovery control stays hidden while loading or ready',async()=>{
  const h=await harness(),retry=h.byText('Retry project choices');assert.equal(retry.hidden,true);assert.equal(h.byText('Refresh project choices'),undefined);
  const pending=deferred();h.setLookup(()=>pending.promise);await h.selectProject();assert.equal(retry.hidden,true);
@@ -54,9 +83,11 @@ test('five-minute refresh keeps entered fields and zero GST while disabling subm
  h.byName('supplier').value='225';h.byName('service').value='8';h.byName('breakdown').value='b_20';h.byName('account').value='51097';h.byName('tax').value='0';
  h.byName('description').value='Keep my cladding description';h.byName('quantity').value='2.5';h.byName('price').value='19.95';h.byName('requestorName').value='Edited name';h.byName('supplierReference').value='QUOTE-123';
  const pending=deferred();h.setLookup(()=>pending.promise);await h.timer(300000);
+ choiceState(h,true,'Loading choices…');
  assert.equal(h.byText('Submit purchase request').disabled,true);assert.equal(h.byName('supplier').value,'225');assert.equal(h.byName('tax').value,'0');
  h.byName('description').value='Edited while refreshing';
  pending.resolve({lookup:{id:'refresh',projectPageId:60,state:'ready'},catalog:directory('v2')});await wait();
+ choiceState(h,false,'Select…');
  for(const [name,value] of Object.entries({supplier:'225',service:'8',breakdown:'b_20',account:'51097',tax:'0',description:'Edited while refreshing',quantity:'2.5',price:'19.95',requestorName:'Edited name',supplierReference:'QUOTE-123'}))assert.equal(h.byName(name).value,value,name+' retained');
  assert.equal(h.byText('Submit purchase request').disabled,false);
  await h.timer(300000);assert.equal(h.byName('tax').value,'0','unchanged catalog revisions also preserve zero GST');assert.equal(h.byName('breakdown').value,'b_20');
@@ -77,10 +108,12 @@ test('refresh removes unavailable IDs and never substitutes the default tax for 
 test('a failed automatic refresh retains the draft and blocks submission until a successful retry',async()=>{
  const h=await harness();await h.selectProject();h.byName('tax').value='0';h.byName('description').value='Retained after timeout';
  h.setLookup(()=>{throw Error('Synthetic timeout');});await h.timer(300000);
+ choiceState(h,true,'Choices unavailable');
  assert.equal(h.byName('tax').value,'0');assert.equal(h.byName('description').value,'Retained after timeout');assert.equal(h.byText('Submit purchase request').disabled,true);
  assert.equal(h.byText('Retry project choices').hidden,false);
  const pending=deferred();h.setLookup(()=>pending.promise);h.byText('Retry project choices').emit('click');await wait();assert.equal(h.byText('Retry project choices').hidden,true);
  pending.resolve({lookup:{id:'retry',projectPageId:60,state:'ready'},catalog:directory('v2')});await wait();
+ choiceState(h,false,'Select…');
  assert.equal(h.byName('tax').value,'0');assert.equal(h.byName('description').value,'Retained after timeout');assert.equal(h.byText('Submit purchase request').disabled,false);assert.equal(h.byText('Retry project choices').hidden,true);h.view.destroy();
 });
 
