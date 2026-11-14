@@ -251,7 +251,11 @@
     function button(text,action,className='pr-button'){const node=el('button',text,className);node.type='button';node.addEventListener('click',action);return node;}
     function field(label,node,wide=false,className=''){
       const search=node.searchControl,wrapper=el(search?'div':'label',null,'pr-field'+(wide?' pr-wide':'')+(className?' '+className:''));
-      const caption=el(search?'label':'span',label);
+      const caption=el(search?'label':'span');
+      if(label.endsWith(' *')){
+        const required=el('span','*','pr-required');required.setAttribute('aria-hidden','true');
+        append(caption,el('span',label.slice(0,-1)),required);
+      }else caption.textContent=label;
       if(search){caption.htmlFor=search.input.id;search.setLabel(label);}
       append(wrapper,caption,search?.element||node);return wrapper;
     }
@@ -395,7 +399,9 @@
       const quantity=input('number','quantity');quantity.min='0.000001';quantity.max='1000000000';quantity.step='any';quantity.value='1';
       const price=input('number','price');price.min='0';price.max='1000000000';price.step='any';
       const account=select('account'),tax=select('tax');
-      append(row,field('Description *',description,false,'pr-item-description'),field('Quantity *',quantity,false,'pr-item-quantity'),field('Unit price ex GST *',price,false,'pr-item-price'),field('Cost of sales *',account,false,'pr-item-account'),field('Tax *',tax,false,'pr-item-tax'),button('Remove line',()=>{if(lineBox.children.length>1){account.searchControl?.destroy();tax.searchControl?.destroy();row.remove();updateTotals();}},'pr-remove'));
+      const remove=button('Remove line',()=>{if(lineBox.children.length>1){account.searchControl?.destroy();tax.searchControl?.destroy();row.remove();updateTotals();}},'pr-remove');
+      remove.setAttribute('aria-label','Remove line');remove.title='Remove line';
+      append(row,field('Description *',description,false,'pr-item-description'),field('Quantity *',quantity,false,'pr-item-quantity'),field('Unit price ex GST *',price,false,'pr-item-price'),field('Cost of sales *',account,false,'pr-item-account'),field('Tax *',tax,false,'pr-item-tax'),remove);
       row.addEventListener('input',updateTotals);row.addEventListener('change',updateTotals);populateLine(row);lineBox.appendChild(row);updateTotals();
     }
     function populateCommon(){
