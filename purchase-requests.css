@@ -1,3 +1,4 @@
+.pr-page{width:100%;max-width:1160px;margin-inline:auto}
 .pr-workspace{--pr-ink:#193344;--pr-muted:#64748b;--pr-border:#dce5ec;--pr-teal:#155e75;container:purchase-request / inline-size;max-width:1160px;color:var(--pr-ink);font-size:14px;line-height:1.5}
 .pr-workspace *{box-sizing:border-box}
 .pr-top,.pr-actions,.pr-section-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
