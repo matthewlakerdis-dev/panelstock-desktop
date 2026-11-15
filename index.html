@@ -16891,7 +16891,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
       const view=window.PanelStockPurchaseRequests.mount(root.current,{username,workerUrl:BAKED_WORKER_URL,currentUsername:()=>PanelStock.username,apiFetch:(url,options)=>PanelStock.apiFetch(url,options),confirm:options=>PanelStock.confirm(options)});
       return()=>view.destroy();
     },[username]);
-    return (0,import_jsx_runtime.jsxs)("section",{children:[(0,import_jsx_runtime.jsx)(PageHeading,{icon:(0,import_jsx_runtime.jsx)(ClipboardList,{size:18}),title:"Purchase Requests",subtitle:"Lennox purchase requests, Nexvia POs and confirmation emails."}),(0,import_jsx_runtime.jsx)("div",{ref:root,children:"Loading purchase requests…"})]});
+    return (0,import_jsx_runtime.jsxs)("section",{className:"pr-page",children:[(0,import_jsx_runtime.jsx)(PageHeading,{icon:(0,import_jsx_runtime.jsx)(ClipboardList,{size:18}),title:"Purchase Requests",subtitle:"Lennox purchase requests, Nexvia POs and confirmation emails."}),(0,import_jsx_runtime.jsx)("div",{ref:root,children:"Loading purchase requests…"})]});
   }
   function GateProgressPage({username}) {
     const root=useRef(null),[error,setError]=useState("");
