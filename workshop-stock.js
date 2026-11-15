@@ -125,10 +125,115 @@ window.createStocktakeSettings=function(React){
 // Panel sheets and offcuts retain their existing catalogue and stock workflows.
 window.isMaterialCatalogueItem=item=>!!item&&!item.archivedAt&&!item.legacy&&!['panels','offcuts'].includes(item.category)&&! /^(variant|offcut):/.test(String(item.id||''));
 
+/* Review PDF catalogue rows before linking suppliers or creating zero-stock items. */
+window.createMaterialCatalogueImport=function(React){
+ const h=React.createElement,{useState,useEffect}=React;
+ const normal=value=>String(value??'').trim().toLowerCase().replace(/\s+/g,' ');
+ const units=['lengths','each','boxes','packs','rolls','tubes','litres','metres','kg'];
+ const identity=item=>[item.sku,item.name,item.colour||item.color,item.lengthMm?item.lengthMm+' mm':null,item.dimensions,item.supplier,item.unit].filter(Boolean).join(' · ');
+ return function MaterialCatalogueImport({workerUrl,isAdmin,data,onSaved,onClose}){
+  const [view,setView]=useState(data),[rows,setRows]=useState(null),[fileName,setFileName]=useState(''),[supplier,setSupplier]=useState(''),[warnings,setWarnings]=useState([]),[reviewed,setReviewed]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[pending,setPending]=useState(null),[ready,setReady]=useState(false),[stale,setStale]=useState(false);
+  const [storage]=useState(()=>workshopPendingStorage('panelstock:material-import-pending:'+workerUrl+':'+PanelStock.username));
+  const locked=busy||!!pending||!ready||storage.unreadable;
+  const items=(view?.items||[]).filter(window.isMaterialCatalogueItem),categories=view?.categories||{extrusions:'Extrusions',fixings:'Fixings',consumables:'Consumables',other:'Other'};
+  const categoryChoices=Object.entries(categories).filter(([key])=>!['all','panels','offcuts'].includes(key));
+  const effectiveSupplier=row=>String(row.supplier||supplier).trim();
+  const profile=sku=>normal(sku)&&items.find(item=>normal(item.sku)===normal(sku));
+  function newItem(row){const p=profile(row.source.sku);return {name:p?.name||row.source.description||'',sku:row.source.sku||'',category:p?.category||row.category||'',unit:p?.unit||(units.includes(window.purchaseOrderUnit(row.source.unit))?window.purchaseOrderUnit(row.source.unit):''),colour:row.source.colour||'',lengthMm:row.source.lengthMm??'',dimensions:p?.dimensions||row.source.dimensions||'',details:'',unitCost:''};}
+  async function request(path,body){const response=await PanelStock.apiFetch(workerUrl+path,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:undefined);let result;try{result=await response.json();}catch{throw Error('The service returned an unreadable response. Retry the same import if its save was not confirmed.');}if(!response.ok){const e=Error(result.error||'The material import could not be completed.');e.status=response.status;throw e;}return result;}
+  useEffect(()=>{setView(data);setReviewed(false);},[data]);
+  useEffect(()=>{let active=true;storage.read().then(value=>{if(active){if(value&&(!value||value.action!=='catalogue_import'||!Array.isArray(value.rows)||!value.rows.length||value.rows.length>200||typeof value.mutationId!=='string'||!Number.isInteger(value.expectedRevision)||value.expectedRevision<0||value.rows.some(row=>!row||!['create','match'].includes(row.mode)||!row.source||typeof row.source!=='object')))throw Error('Invalid saved import');setPending(value);if(value)setFileName(value.fileName||'Saved PDF import');setReady(true);}}).catch(()=>{if(active){storage.unreadable=true;setError('The saved import could not be recovered. Restore browser storage and reopen this screen before importing.');}});return()=>{active=false;};},[]);
+  function change(key,patch){if(locked)return;setReviewed(false);setNotice('');setRows(current=>current.map(row=>row.key===key?{...row,...patch}:row));}
+  function changeItem(row,key,value){const item={...row.item,[key]:value},p=key==='sku'?profile(value):null;if(p)Object.assign(item,{name:p.name,category:p.category,unit:p.unit,dimensions:p.dimensions||''});change(row.key,{item});}
+  function choose(row,mode){change(row.key,{mode,itemId:mode==='match'?row.itemId:'',...(mode==='create'?{item:newItem(row)}:{})});}
+  function changeSupplier(value){if(locked)return;setSupplier(value);setReviewed(false);setRows(current=>current?.map(row=>row.supplier?row:{...row,itemId:'',mode:row.mode==='match'?'review':row.mode,remember:!!value.trim()}));}
+  async function readPDF(event){
+   const file=event.target.files?.[0];event.target.value='';if(!file||locked||!isAdmin)return;
+   if(!/\.pdf$/i.test(file.name)||!file.size||file.size>5*1024*1024){setError('Choose a PDF up to 5 MB.');return;}
+   setBusy(true);setError('');setNotice('Reading the material list. This can take up to a minute.');setReviewed(false);
+   try{
+    const encoded=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=()=>reject(Error('The PDF could not be read.'));reader.readAsDataURL(file);});
+    const result=await request('/material-catalogue/analyse',{name:file.name,data:encoded});
+    if(!Array.isArray(result.lines)||result.lines.length>200)throw Error('The PDF reader returned an invalid material list.');
+    const vendor=String(result.supplier||'');setSupplier(vendor);setFileName(file.name);setWarnings(result.warnings||[]);setStale(false);
+    setRows(result.lines.map((line,index)=>{const source={sku:line.sku||'',description:line.description||'',colour:line.colour||'',dimensions:line.dimensions||'',lengthMm:line.lengthMm??null,unit:line.unit||''},rowSupplier=String(line.supplier||''),match=window.matchPurchaseOrderLine(source,items,rowSupplier||vendor,view?.stockReferences||[]);return {key:String(index),source,supplier:rowSupplier,category:line.category||'',mode:match.itemId?'match':'review',itemId:match.itemId||'',search:'',remember:!!(rowSupplier||vendor).trim(),item:null};}));
+    setNotice(result.lines.length?'Review each row: match current stock, create a missing material, or skip it.':'No materials were found. Try a clearer PDF.');
+   }catch(e){setError(e.message);setNotice('');}finally{setBusy(false);}
+  }
+  async function refresh(){
+   if(locked)return;setBusy(true);setError('');
+   try{const fresh=await request('/workshop-stock');if(!Array.isArray(fresh.items))throw Error('Stock could not be refreshed.');setView(fresh);setRows(current=>current?.map(row=>({...row,itemId:'',mode:row.mode==='match'?'review':row.mode})));setStale(false);setReviewed(false);setNotice('Current stock refreshed. Review the selected items and supplier matches again.');}catch(e){setError(e.message);}finally{setBusy(false);}
+  }
+  const selected=(rows||[]).filter(row=>row.mode!=='skip'),counts={create:selected.filter(r=>r.mode==='create').length,match:selected.filter(r=>r.mode==='match').length};
+  function rowProblem(row){
+   if(!['match','create','skip'].includes(row.mode))return 'Choose an action for this row.';
+   if(row.mode==='skip')return '';
+   if(!String(row.source.sku||'').trim()&&!String(row.source.description||'').trim())return 'No code or description was read. Skip this row and add it manually.';
+   if(String(row.source.sku||'').length>100||String(row.source.description||'').length>500||['colour','dimensions'].some(field=>String(row.source[field]||'').length>160)||String(row.source.unit||'').length>40||row.source.lengthMm!==null&&row.source.lengthMm!==undefined&&(!Number.isFinite(Number(row.source.lengthMm))||Number(row.source.lengthMm)<=0||Number(row.source.lengthMm)>1e6))return 'The source row has invalid or oversized details. Skip it and check the PDF reading.';
+   if(effectiveSupplier(row).length>160)return 'Enter a supplier up to 160 characters.';
+   const sourceKey=window.purchaseOrderStockKey(effectiveSupplier(row),row.source);
+   if((rows||[]).some(other=>other.key!==row.key&&other.mode!=='skip'&&window.purchaseOrderStockKey(effectiveSupplier(other),other.source)===sourceKey))return 'This supplier row is repeated in the PDF. Skip the duplicate row.';
+   if(row.remember&&!effectiveSupplier(row))return 'Enter the supplier to remember its code.';
+   if(row.mode==='match')return items.some(i=>i.id===row.itemId)?'':'Select the current stock item.';
+   const item=row.item;if(!item?.name.trim()||item.name.length>160)return 'Enter a material name up to 160 characters.';
+   if(['sku','colour','dimensions'].some(field=>String(item[field]||'').length>160))return 'Keep the stock code, colour and profile dimensions within 160 characters.';
+   if(!categoryChoices.some(([key])=>key===item.category)||!units.includes(item.unit))return 'Choose the category and stock unit.';
+   if(item.lengthMm!==''&&(!Number.isFinite(Number(item.lengthMm))||Number(item.lengthMm)<=0||Number(item.lengthMm)>1e6))return 'Enter a valid length up to 1,000,000 millimetres.';
+   if(item.unitCost!==''&&(!Number.isFinite(Number(item.unitCost))||Number(item.unitCost)<0||Number(item.unitCost)>1e9||Math.abs(Number(item.unitCost)*100-Math.round(Number(item.unitCost)*100))>0.0001))return 'Enter a valid unit cost with up to two decimal places.';
+   if(normal(item.sku)){
+    if((rows||[]).some(other=>other.key!==row.key&&other.mode==='create'&&other.item&&normal(other.item.sku)===normal(item.sku)&&['name','category','unit','dimensions'].some(field=>normal(other.item[field])!==normal(item[field]))))return 'New variants with this code must use the same material name, category, stock unit and profile dimensions.';
+    const sameVariant=other=>normal(other.sku)===normal(item.sku)&&normal(other.colour)===normal(item.colour)&&Number(other.lengthMm||0)===Number(item.lengthMm||0);
+    if(items.some(sameVariant))return 'This code, colour and length already exists. Match the current stock item.';
+    if((rows||[]).some(other=>other.key!==row.key&&other.mode==='create'&&other.item&&sameVariant(other.item)))return 'Duplicate code, colour and length in this list. Skip the duplicate row.';
+   }
+   return '';
+  }
+  const invalid=!rows?.length||!selected.length||!reviewed||stale||(rows||[]).some(row=>rowProblem(row));
+  function payload(){return {action:'catalogue_import',fileName,expectedRevision:view.revision,mutationId:crypto.randomUUID(),rows:selected.map(row=>{
+   const vendor=effectiveSupplier(row),source={...row.source},prior=(view.stockReferences||[]).find(ref=>ref.key===window.purchaseOrderStockKey(vendor,source)),item=items.find(i=>i.id===row.itemId);
+   return {key:row.key,mode:row.mode,supplier:vendor,source,remember:!!row.remember,expectedReferenceVersion:prior?.version||0,...(row.mode==='match'?{itemId:item.id,expectedItemIdentity:window.purchaseOrderItemIdentity(item)}:{item:{...row.item,supplier:vendor,lengthMm:row.item.lengthMm===''?null:Number(row.item.lengthMm),qty:0,...(row.item.unitCost===''?{unitCost:undefined}:{unitCost:Number(row.item.unitCost)})}})};
+  })};}
+  async function save(){
+   if(!isAdmin||busy||!ready||storage.unreadable||!pending&&invalid)return;
+   const input=pending||payload();setBusy(true);setError('');setNotice('');
+   try{
+    await storage.write(input);setPending(input);
+    const result=await request('/workshop-stock',input);if(!Array.isArray(result.items))throw Error('The import response was incomplete. Retry the same saved import.');
+    await storage.clear();setPending(null);setView(result);setRows(null);setReviewed(false);setStale(false);setNotice('Import complete: '+input.rows.filter(r=>r.mode==='create').length+' new materials and '+input.rows.filter(r=>r.mode==='match').length+' existing stock matches. New materials have zero stock.');onSaved?.(result);
+   }catch(e){
+    if(e.status&&e.status<500&&![408,429].includes(e.status)){try{await storage.clear();setPending(null);}catch{}setReviewed(false);if(e.status===409)setStale(true);}
+    setError(e.message+(e.status&&e.status<500&&![408,429].includes(e.status)?'':' The original import is saved on this device. Retry it to avoid duplicate items.'));
+   }finally{setBusy(false);}
+  }
+  const field=(label,value,onChange,options,readOnly=false)=>h('label',{className:'ws-field'},label,options?h('select',{value,disabled:locked||readOnly,onChange:e=>onChange(e.target.value)},h('option',{value:''},'Choose…'),options.map(([key,text])=>h('option',{key,value:key},text))):h('input',{value,disabled:locked||readOnly,maxLength:160,type:label==='Length (mm)'||label.startsWith('Unit cost')?'number':'text',min:label==='Length (mm)'?0.001:0,step:label==='Length (mm)'?0.001:0.01,onChange:e=>onChange(e.target.value)}));
+  const button=(text,action,disabled=locked,primary=false)=>h('button',{type:'button',onClick:action,disabled,className:primary?'ws-primary':''},text);
+  if(!isAdmin)return h('p',{role:'alert'},'Administrator access is required to import materials.');
+  return h('div',{className:'ws-overlay ws-material-import-overlay'},h('section',{className:'ws-dialog ws-count-dialog ws-material-import-dialog',role:'dialog','aria-modal':true,'aria-label':'Import material PDF'},
+   h('div',{className:'ws-count-header'},h('div',{className:'ws-heading'},h('div',null,h('div',{className:'ws-eyebrow'},'MATERIAL CATALOGUE / PDF IMPORT'),h('h3',null,'Import material list')),button('Close',onClose,busy)),h('p',null,'Match existing stock or create new materials from a PDF. Check every selected row. New items start at zero stock.')),
+   h('div',{className:'ws-count-body'},error&&h('div',{className:'ws-error',role:'alert'},error),notice&&h('div',{className:'ws-notice',role:'status'},notice),
+    pending?h('div',{className:'ws-po-warning'},h('strong',null,'Import awaiting confirmation'),h('p',null,(pending.fileName||'Saved PDF')+' · '+pending.rows.length+' selected rows. Retry this saved import to check or finish it safely.')):h(React.Fragment,null,
+     h('label',{className:'ws-po-import-upload'},h('strong',null,fileName?'Replace PDF':'Upload material PDF'),h('small',null,'PDF · up to 5 MB and 20 pages · up to 200 material rows'),h('input',{type:'file',accept:'.pdf,application/pdf',disabled:locked,onChange:readPDF})),fileName&&h('p',null,fileName),
+     rows&&h(React.Fragment,null,field('Default supplier',supplier,changeSupplier),h('p',{className:'ws-field-hint'},'Supplier names and codes are remembered only when you choose that option. Use a row supplier to override the default.'),warnings.length>0&&h('div',{className:'ws-po-warning'},h('strong',null,'Check the document'),warnings.map((warning,index)=>h('p',{key:index},warning))),
+      rows.map(row=>{const match=window.matchPurchaseOrderLine(row.source,items,effectiveSupplier(row),view.stockReferences||[]),current=items.find(i=>i.id===row.itemId),options=row.search?items.filter(i=>normal(row.search).split(/\s+/).filter(Boolean).every(term=>normal(identity(i)).includes(term))):match.candidates.map(id=>items.find(i=>i.id===id)).filter(Boolean),candidates=[...(current?[current]:[]),...options.filter(i=>i.id!==current?.id)].slice(0,100),problem=rowProblem(row),shared=row.mode==='create'?profile(row.item?.sku):null;
+       return h('article',{key:row.key,className:'ws-material-import-row','data-import-row':row.key},h('div',{className:'ws-material-import-source'},h('strong',null,'PDF row '+(Number(row.key)+1)+' · '+(row.source.sku||'No code')),h('p',null,row.source.description),h('small',null,[row.source.colour,row.source.dimensions,row.source.lengthMm?row.source.lengthMm+' mm':null,row.source.unit].filter(Boolean).join(' · '))),
+        h('div',{className:'ws-material-import-review'},field('Action',row.mode,value=>choose(row,value),[['review','Review this row'],['match','Match current stock'],['create','Create new material'],['skip','Skip this row']]),
+         row.mode!=='skip'&&h(React.Fragment,null,field('Row supplier',row.supplier,value=>change(row.key,{supplier:value,itemId:'',mode:row.mode==='match'?'review':row.mode,remember:!!String(value||supplier).trim()})),
+          row.mode==='match'&&h(React.Fragment,null,match.reviewReason&&h('p',{className:'ws-po-warning'},match.reviewReason),field('Find current stock',row.search,value=>change(row.key,{search:value})),field('Current stock item',row.itemId,value=>change(row.key,{itemId:value}),candidates.map(i=>[i.id,identity(i)])),current&&h('p',{className:'ws-po-selected-stock'},identity(current)),!candidates.length&&h('p',null,'Search your current stock by code, name, supplier or size.')),
+          row.mode==='review'&&match.candidates.length>0&&h('div',{className:'ws-po-suggestions'},h('strong',null,'Suggested current stock'),match.candidates.slice(0,3).map(id=>{const item=items.find(i=>i.id===id);return h('button',{type:'button',key:id,disabled:locked,className:'ws-po-suggestion',onClick:()=>change(row.key,{mode:'match',itemId:id})},h('strong',null,identity(item)),h('small',null,(match.details?.[id]?.reasons||['Saved supplier reference — review required']).join(' · ')));})),
+          row.mode==='create'&&h('div',{className:'ws-fields'},shared&&h('p',{className:'ws-field-hint'},'Uses the existing '+shared.sku+' profile name, category, unit and dimensions. Choose a new colour or length for a new variant.'),field('Stock code',row.item.sku,value=>changeItem(row,'sku',value)),field('Material name',row.item.name,value=>changeItem(row,'name',value),undefined,!!shared),field('Category',row.item.category,value=>changeItem(row,'category',value),categoryChoices,!!shared),field('Stock unit',row.item.unit,value=>changeItem(row,'unit',value),units.map(unit=>[unit,unit]),!!shared),field('Colour / finish',row.item.colour,value=>changeItem(row,'colour',value)),field('Length (mm)',row.item.lengthMm,value=>changeItem(row,'lengthMm',value)),field('Dimensions / profile',row.item.dimensions,value=>changeItem(row,'dimensions',value),undefined,!!shared),field('Unit cost (AUD ex GST, optional)',row.item.unitCost,value=>changeItem(row,'unitCost',value))),
+          h('label',{className:'ws-material-import-remember'},h('input',{type:'checkbox',checked:!!row.remember,disabled:locked||!effectiveSupplier(row),onChange:e=>change(row.key,{remember:e.target.checked})}),'Remember supplier details against this stock item'),!effectiveSupplier(row)&&h('small',null,'Enter a supplier to remember its code.'),problem&&h('p',{className:'ws-field-hint',role:'status'},problem))));
+      }),
+      h('label',{className:'ws-po-import-confirm'},h('input',{type:'checkbox',checked:reviewed,disabled:locked||stale,onChange:e=>setReviewed(e.target.checked)}),'I checked the selected stock matches, new item details, categories and units against the PDF.')))),
+   h('div',{className:'ws-count-footer'},stale&&button('Refresh stock matches',refresh),h('span',null,pending?'Saved import ready to retry':counts.create+' new · '+counts.match+' matched · '+(rows||[]).filter(r=>r.mode==='skip').length+' skipped'),button(pending?'Retry saved import':'Import reviewed materials',save,busy||!ready||storage.unreadable||!pending&&invalid,true))
+  ));
+ };
+};
+
 /* Shared desktop/mobile workshop inventory screen. */
 window.createWorkshopStock = function(React) {
  const h=React.createElement, {useState,useEffect}=React;
  const PurchaseOrderReceiving=window.createPurchaseOrderReceiving(React);
+ const MaterialCatalogueImport=window.createMaterialCatalogueImport(React);
  const XeroJournal=window.PanelStockStocktakeReport.soh.xero;
  const defaultCategories={all:'All Stock',panels:'Panels',extrusions:'Extrusions',fixings:'Fixings',consumables:'Consumables',offcuts:'Offcuts'};
  const actions={receive:'Receive delivery',reserve:'Reserve for job',use:'Record usage',return:'Return from job',release:'Release reservation',damage:'Record damage',stocktake:'Stocktake count',metadata:'Edit stock details',category_save:'Manage categories',stocktake_create:'Create stocktake',bulk_metadata:'Bulk edit stock',archive:'Remove stock item'};
@@ -175,6 +280,7 @@ window.createWorkshopStock = function(React) {
   const pendingKey='panelstock:workshop-pending:'+PanelStock.username;
   const [pendingStorage]=useState(()=>workshopPendingStorage(pendingKey));
   const [xeroExport,setXeroExport]=useState(null);
+  const [catalogueImportOpen,setCatalogueImportOpen]=useState(false);
   const can=task=>isAdmin||taskAccess[task]===true;
   const catalogueRequest=request=>['create','metadata','category_save','archive'].includes(request.action)&&(request.action!=='category_save'||!['panels','offcuts'].includes(request.categoryId))&&(request.action!=='create'||window.isMaterialCatalogueItem(request.item)&&Number(request.item.qty||0)===0)&&!/^(variant|offcut):/.test(String(request.itemId||''));
   const acceptView=incoming=>setData(current=>mergeWorkshopStockViews(current,incoming));
@@ -448,7 +554,7 @@ window.createWorkshopStock = function(React) {
    );
   }
   return h('section',{className:'ws ws-stock-screen'+(catalogueOnly?' ws-material-catalogue-screen':'')},
-   h('div',{className:'ws-heading ws-stock-heading'},h('div',null,h('div',{className:'ws-eyebrow'},catalogueOnly?'INVENTORY / MATERIAL CATALOGUE':'INVENTORY / STOCK ON HAND'),h('h2',null,catalogueOnly?'Material Catalogue':'Stock on hand'),h('p',null,catalogueOnly?'Extrusions, fixings, consumables and other stocked lines. These item records are shared with SOH and purchase orders.':'Know what’s available, what’s allocated and what needs restocking.')),h('div',{className:'ws-actions ws-stock-actions'},h('button',{type:'button',onClick:load,disabled:busy,className:'ws-refresh'},icon('refresh'),'Refresh'),isAdmin&&h('button',{type:'button',className:'ws-manage-categories',onClick:()=>open(null,'category_save'),disabled:busy||!!pending},'Manage categories'),!catalogueOnly&&can('factory.receive')&&h('button',{type:'button',className:'ws-receive-po',onClick:()=>setPoOpen(true)},'Receive against PO'),!catalogueOnly&&can('factory.stock')&&h('button',{type:'button',className:'ws-start-stocktake',onClick:()=>{setCountList(true);setError('');load();},disabled:busy||!!pending},'Stocktake'),isAdmin&&h('button',{type:'button',className:'ws-primary',onClick:()=>open(null,'create'),disabled:busy||!!pending},icon('plus'),catalogueOnly?'Add material':'Add stock item'))),
+   h('div',{className:'ws-heading ws-stock-heading'},h('div',null,h('div',{className:'ws-eyebrow'},catalogueOnly?'INVENTORY / MATERIAL CATALOGUE':'INVENTORY / STOCK ON HAND'),h('h2',null,catalogueOnly?'Material Catalogue':'Stock on hand'),h('p',null,catalogueOnly?'Extrusions, fixings, consumables and other stocked lines. These item records are shared with SOH and purchase orders.':'Know what’s available, what’s allocated and what needs restocking.')),h('div',{className:'ws-actions ws-stock-actions'},h('button',{type:'button',onClick:load,disabled:busy,className:'ws-refresh'},icon('refresh'),'Refresh'),isAdmin&&h('button',{type:'button',className:'ws-manage-categories',onClick:()=>open(null,'category_save'),disabled:busy||!!pending},'Manage categories'),!catalogueOnly&&can('factory.receive')&&h('button',{type:'button',className:'ws-receive-po',onClick:()=>setPoOpen(true)},'Receive against PO'),!catalogueOnly&&can('factory.stock')&&h('button',{type:'button',className:'ws-start-stocktake',onClick:()=>{setCountList(true);setError('');load();},disabled:busy||!!pending},'Stocktake'),catalogueOnly&&isAdmin&&h('button',{type:'button',onClick:()=>setCatalogueImportOpen(true),disabled:busy||!!pending||!data},'Import PDF'),isAdmin&&h('button',{type:'button',className:'ws-primary',onClick:()=>open(null,'create'),disabled:busy||!!pending},icon('plus'),catalogueOnly?'Add material':'Add stock item'))),
    error&&h('div',{className:'ws-error',role:'alert'},error),notice&&h('div',{className:'ws-notice',role:'status'},notice),
    catalogueOnly&&pending&&(!form||catalogueBlockedPending)&&h('p',{className:'ws-po-warning'},'A stock operation is awaiting confirmation in SOH. Open SOH to finish it before editing the Material Catalogue.'),
    !data?h('p',null,catalogueOnly?'Loading material catalogue…':'Loading workshop stock…'):h(React.Fragment,null,catalogueOnly?renderMaterialCatalogue():h(React.Fragment,null,
@@ -495,6 +601,7 @@ window.createWorkshopStock = function(React) {
     history&&h('div',{className:'ws-history'},h('div',{className:'ws-heading'},h('h3',null,'Movement history'),button('Close',()=>setHistory(null))),h('p',null,'Current reservations: '+Object.entries(data.items.find(i=>i.id===history)?.reservations||{}).filter(([,q])=>q>0).map(([job,q])=>job+': '+q).join(', ')),data.movements.filter(m=>m.itemId===history).map(m=>h('p',{key:m.id},new Date(m.at).toLocaleString('en-AU')+' · '+m.action+' · '+m.quantity+' · '+m.user+(m.job?' · '+m.job:'')+(m.reason?' · '+m.reason:''))))
    )),
    sohExport&&!xeroExport&&renderSOHExport(),xeroExport&&renderXeroExport(),
+   catalogueImportOpen&&h(MaterialCatalogueImport,{workerUrl,isAdmin,data,onSaved:result=>{acceptView(result);setNotice('Material list imported. Catalogue and SOH now use the reviewed stock records.');},onClose:()=>setCatalogueImportOpen(false)}),
    reportId&&renderReport(),
    countList&&renderStocktakeList(),
    counting&&h('div',{className:'ws-overlay'},h('div',{className:'ws-dialog ws-count-dialog',role:'dialog','aria-modal':true,'aria-label':'Workshop stocktake'},
