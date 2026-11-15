@@ -457,3 +457,85 @@ test('review includes issues for zero-accepted items in the outstanding balance 
  assert.equal(x.states[1].orders[0].lines[0].received,3);
  assert.equal(x.requests.length,0);
 });
+
+const nexviaStock={id:'mill-3',category:'panels',sku:'PS-AL-3',name:'Warehouse aluminium sheet',material:'Aluminium',colour:'Mill Finish',thickness:3,width:1200,height:2400,unit:'sheets'};
+const nexviaLine={sku:'100129',description:'3.00 1200 2400 MF 5005 H34 MILL FINISH',dimensions:'3.00 1200 2400',colour:'',unit:'',quantity:4};
+test('Nexvia source code suggests current sheet stock by specifications without choosing a new mapping',()=>{
+ const w=harness(true).context.window;
+ const items=[{...nexviaStock,id:'wrong-thickness',thickness:4},{...nexviaStock,id:'wrong-size',height:3000},{...nexviaStock,id:'wrong-finish',colour:'Anodised'},{...nexviaStock,id:'offcut:cut',category:'offcuts'},nexviaStock];
+ const result=w.matchPurchaseOrderLine(nexviaLine,items,'Aluminium supplier',[]);
+ assert.equal(result.itemId,'');assert.equal(result.candidates.length,1);assert.equal(result.candidates[0],nexviaStock.id);
+ assert.ok(result.details[nexviaStock.id].reasons.includes('Sheet dimensions match'));
+ assert.ok(result.details[nexviaStock.id].reasons.includes('Finish matches'));
+ assert.equal(nexviaLine.quantity,4);assert.equal(nexviaStock.sku,'PS-AL-3');
+});
+
+test('first-time suggestions preserve profile orientation and reject explicit material, thickness, alloy and unit conflicts',()=>{
+ const w=harness(true).context.window;
+ const item={id:'profile',sku:'OURS',name:'Steel angle',material:'Steel',dimensions:'30 x 50',unit:'lengths'};
+ assert.equal(w.matchPurchaseOrderLine({sku:'THEIRS',description:'Steel angle',dimensions:'50 x 30',unit:'lengths'},[item]).candidates.length,0);
+ const sheet={...nexviaStock,name:'Aluminium 5005 H34 sheet'};
+ for(const line of [
+  {...nexviaLine,description:'Steel sheet 3 x 1200 x 2400'},
+  {...nexviaLine,description:'Aluminium 5052 H34 sheet'},
+  {...nexviaLine,description:'Aluminium 5005 T34 sheet'},
+  {...nexviaLine,description:'Aluminium sheet 4 mm thick',dimensions:'1200 x 2400'},
+  {...nexviaLine,unit:'packs'}
+ ])assert.equal(w.matchPurchaseOrderLine(line,[sheet]).candidates.length,0);
+ assert.equal(w.matchPurchaseOrderLine({...nexviaLine,dimensions:'2400 × 1200 × 3'},[sheet]).candidates[0],sheet.id);
+ // Metres must not be read as a 1.2 by 2.4 millimetre panel.
+ const tiny={...nexviaStock,id:'tiny',width:1.2,height:2.4,thickness:0};
+ const detail=w.purchaseOrderStockSuggestion({description:'Aluminium 1.2 m x 2.4 m',unit:'sheets'},tiny);
+ assert.ok(!detail.reasons.includes('Sheet dimensions match'));
+});
+
+test('Nexvia suggestions show stock specifications and require review before using the original quantity',async()=>{
+ const x=harness(true),calls=[];x.states[1]={orders:[],items:[nexviaStock],restoreEpoch:0,stockLearning:true,stockReferences:[]};
+ x.context.FileReader=class{readAsDataURL(){this.result='data:application/pdf;base64,JVBERi0xLjc=';this.onload();}};
+ x.context.PanelStock.apiFetch=async(url,options)=>{calls.push(JSON.parse(options.body));return {ok:true,json:async()=>({reference:'PO7399',supplier:'Aluminium supplier',lines:[nexviaLine]})};};
+ let nodes=x.render();nodes.find(n=>n.children.includes('New purchase order')).props.onClick();nodes=x.render();
+ assert.ok(nodes.some(n=>n.children.some(c=>typeof c==='string'&&c.includes('Nexvia PO PDF'))));
+ await nodes.find(n=>n.type==='input'&&n.props.type==='file').props.onChange({target:{files:[{name:'Nexvia_PO7399.pdf',size:8}],value:''}});nodes=x.render();
+ const suggestion=nodes.find(n=>n.props.className==='ws-po-suggestion');assert.ok(suggestion);
+ const label=walk(suggestion).map(n=>n.children.filter(c=>typeof c==='string').join(' ')).join(' ');
+ assert.ok(label.includes('PS-AL-3'));assert.ok(label.includes('3 mm thick'));assert.ok(label.includes('1200 × 2400 mm'));assert.ok(label.includes('Finish matches'));
+ assert.equal(nodes.find(n=>n.children.includes('Use reviewed items')).props.disabled,true);
+ suggestion.props.onClick();nodes=x.render();
+ assert.ok(nodes.some(n=>n.children.some(c=>typeof c==='string'&&c.includes('PO unit is unclear'))));
+ assert.equal(nodes.find(n=>n.props.className==='ws-po-import-confirm').children[0].props.checked,false);
+ nodes.find(n=>n.props.className==='ws-po-import-confirm').children[0].props.onChange({target:{checked:true}});nodes=x.render();
+ nodes.find(n=>n.children.includes('Use reviewed items')).props.onClick();nodes=x.render();
+ assert.equal(nodes.find(n=>n.props['aria-label']==='Ordered quantity for PS-AL-3').props.value,4);
+ assert.equal(x.states[3].stockUpdates[0].source.sku,'100129');assert.equal(x.states[3].stockUpdates[0].updateDetails,false);
+ assert.equal(calls.length,1);assert.equal(calls[0].name,'Nexvia_PO7399.pdf');
+ // Once the selected mapping is saved, the next upload can recognise this source.
+ const ref={key:x.context.window.purchaseOrderStockKey('Aluminium supplier',nexviaLine),supplier:'Aluminium supplier',source:nexviaLine,itemId:nexviaStock.id,itemIdentity:x.context.window.purchaseOrderItemIdentity(nexviaStock)};
+ assert.equal(x.context.window.matchPurchaseOrderLine(nexviaLine,[nexviaStock],'Aluminium supplier',[ref]).itemId,nexviaStock.id);
+});
+
+
+test('Nexvia suggestions reject unconverted dimensions and require evidence beyond stock units',()=>{
+ const w=harness(true).context.window;
+ for(const suffix of ['in','inch','inches','ft','cm','m','"']){
+  const line={sku:nexviaStock.sku,description:'Aluminium 1200 x 2400 '+suffix,unit:'sheets'};
+  const result=w.matchPurchaseOrderLine(line,[nexviaStock]);
+  assert.equal(result.itemId,'',suffix);assert.equal(result.candidates.length,0,suffix);
+ }
+ const result=w.matchPurchaseOrderLine({sku:'SUP',description:'Unrecognised vendor product sheet',unit:'sheets'},[nexviaStock]);
+ assert.equal(result.itemId,'');assert.equal(result.candidates.length,0);
+ const wrong={...nexviaStock,thickness:4};
+ assert.equal(w.matchPurchaseOrderLine({sku:wrong.sku,description:'3 mm thick aluminium 1200 x 2400',unit:'sheets'},[wrong]).itemId,'');
+});
+
+test('Nexvia dimensions and alloy specifications work when units and temper are attached to numbers',()=>{
+ const w=harness(true).context.window;
+ for(const dimensions of ['4mm x 1200mm x 2400mm','4 x 1200 x 2400mm']){
+  const result=w.matchPurchaseOrderLine({sku:nexviaStock.sku,description:'Aluminium '+dimensions,unit:'sheets'},[nexviaStock]);
+  assert.equal(result.itemId,'');assert.equal(result.candidates.length,0);
+ }
+ const correct=w.matchPurchaseOrderLine({sku:'THEIRS',description:'Aluminium 3mm x 1200mm x 2400mm',unit:'sheets'},[nexviaStock]);
+ assert.equal(correct.candidates[0],nexviaStock.id);assert.ok(correct.details[nexviaStock.id].reasons.includes('Sheet dimensions match'));
+ const alloy={...nexviaStock,name:'Aluminium 5005H34 sheet'};
+ assert.equal(w.matchPurchaseOrderLine({...nexviaLine,description:'Aluminium 5052H34 sheet'},[alloy]).candidates.length,0);
+ assert.equal(w.matchPurchaseOrderLine({...nexviaLine,description:'Aluminium 5005T34 sheet'},[alloy]).candidates.length,0);
+});
