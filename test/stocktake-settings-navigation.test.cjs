@@ -49,6 +49,6 @@ test('stocktake settings use the baked worker address when no configured address
 
 test('existing settings destinations remain available after adding Stocktake',()=>{
  const h=harness();
- if(isDesktop){for(const label of ['General','Notifications','Dispatch','Schedule','Material Catalogue','Damage Reasons','Email Reports','Backup & Reset'])assert.ok(h.button(label),label);}
+ if(isDesktop){for(const label of ['General','Notifications','Dispatch','Schedule','Panel Catalogue','Material Catalogue','Damage Reasons','Email Reports','Backup & Reset'])assert.ok(h.button(label),label);}
  else {for(const tag of ['notifications','push','email-reports','catalogue','backup','reset','full-reset'])assert.ok(h.nodes().some(node=>node.tag===tag),tag);}
 });

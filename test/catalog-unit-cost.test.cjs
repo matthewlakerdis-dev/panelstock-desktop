@@ -53,7 +53,7 @@ function harness(catalog=[]){
 
 test('catalogue create form keeps price optional and saves numeric zero',()=>{
  for(const [input,expected] of [['',undefined],['0',0],['25.60',25.6]]){
-  const h=harness();h.nodes().find(n=>n.tag==='button'&&/Add material/.test(text(n))).onClick({stopPropagation(){}});
+  const h=harness();h.nodes().find(n=>n.tag==='button'&&/Add panel material/.test(text(n))).onClick({stopPropagation(){}});
   h.draw();h.fill({...details,thickness:'3',unitCostPerM2:input});
   const field=flat(h.renderSingle()).find(n=>n['aria-label']===label);
   assert.equal(field.step,'0.01');assert.equal(field.min,'0');assert.equal(field.max,'1000000000');assert.equal(field.required,undefined);

@@ -14572,11 +14572,11 @@ ${xrefStart}
         "Price per m² (AUD ex GST)": c.unitCostPerM2 == null ? "" : c.unitCostPerM2
       }));
       const csv = rowsToCSV(rows);
-      prepareExport(new Blob([csv], { type: "text/csv" }), `Catalogue_${todayStr()}.csv`);
+      prepareExport(new Blob([csv], { type: "text/csv" }), `PanelCatalogue_${todayStr()}.csv`);
     }
     function exportCatalogPDF() {
       const L = [];
-      L.push({ text: "PanelStock \u2014 Material Catalogue", size: 18 });
+      L.push({ text: "PanelStock \u2014 Panel Catalogue", size: 18 });
       L.push({ text: `Generated ${(/* @__PURE__ */ new Date()).toLocaleString()} \xB7 ${catalog.length} materials`, size: 10 });
       L.push({ text: "", size: 10 });
       L.push({ text: pad("SKU", 18) + pad("Colour", 26) + pad("Material", 20) + "Thickness", size: 11 });
@@ -14584,7 +14584,7 @@ ${xrefStart}
         L.push({ text: pad(c.sku, 18) + pad(c.color, 26) + pad(c.material, 20) + c.thickness + "mm", size: 11, shaded: idx % 2 === 1 });
         L.push({ text: "Price per m² (AUD ex GST): " + catalogPriceLabel(c), size: 10, shaded: idx % 2 === 1 });
       });
-      prepareExport(buildPdfBlob(L), `Catalogue_${todayStr()}.pdf`);
+      prepareExport(buildPdfBlob(L), `PanelCatalogue_${todayStr()}.pdf`);
     }
     function exportDamageReportPDF(damageTxns) {
       const blocks = [];
@@ -14798,6 +14798,7 @@ ${xrefStart}
               onLogTxn: logTxn,
               onResetAllSOH: resetAllSOH,
               onResetAllInformation: resetAllInformation,
+              taskAccess,
               initialSection: tab === "dispatch-settings" ? "dispatch" : settingsSection
             }
           )
@@ -15128,7 +15129,7 @@ ${xrefStart}
   function CatalogSingleForm({ form, setForm, isEditing, onSave, onClose, priceError }) {
     const h = import_jsx_runtime.jsx;
     const field = (key, label, placeholder, type = "text") => h("label", { children: [label, h(type === "text" ? CapitalizedInput : "input", { type, step: "any", value: form[key], placeholder, onChange: value => setForm({ ...form, [key]: type === "text" ? value : value.target.value }) })] });
-    return h("div", { className: "ps-entry", children: [h("h2", { children: isEditing ? "Editing material" : "Add a material" }), h("p", { className: "ps-entry-intro", children: "Catalogue materials are defined by colour, material and thickness. Sheet sizes are entered when stock is received." }), h("div", { className: "ps-entry-grid ps-catalog-grid", children: [field("material", "Material *", "e.g. Solid Aluminium"), field("color", "Colour / finish *", "e.g. White"), field("thickness", "Thickness (mm) *", "e.g. 3", "number"), h("label", { children: ["Price per m² (AUD ex GST)", h("input", { type: "number", min: "0", max: "1000000000", step: "0.01", inputMode: "decimal", "aria-label": "Price per m² (AUD ex GST)", "aria-invalid": !!priceError, value: form.unitCostPerM2 ?? "", placeholder: "Optional", onChange: e => setForm({ ...form, unitCostPerM2: e.target.value }) }), h("small", { children: "Optional. Full panels and offcuts use this rate for their own area." })] }), h("label", {children:["Panel colour (hex)",h("input", {type:"text",value:form.colorHex||"",placeholder:"#FFFFFF",maxLength:7,"aria-label":"Panel colour hex","aria-invalid":!!form.colorHex&&!/^#[0-9a-f]{6}$/i.test(form.colorHex),onChange:e=>setForm({...form,colorHex:e.target.value.trim()})}),h("input", {type:"color","aria-label":"Choose panel colour",value:/^#[0-9a-f]{6}$/i.test(form.colorHex||"")?form.colorHex:"#ffffff",onChange:e=>setForm({...form,colorHex:e.target.value.toUpperCase()})}),h("small",{children:form.colorHex&&!/^#[0-9a-f]{6}$/i.test(form.colorHex)?"Enter # followed by six hex digits, e.g. #FFFFFF.":"Optional. Used for panel previews in workshop stock."})]})] }), h("p", { className: "ps-entry-note", children: "* Required" }), priceError && h("p", { role: "alert", className: "ps-entry-errors", children: priceError }), h("div", { className: "ps-entry-actions", children: [h("button", { onClick: onSave, className: "ps-entry-primary", children: isEditing ? "Save changes" : "Add to catalogue" }), h("button", { onClick: onClose, className: "ps-entry-cancel", children: "Cancel" })] })] });
+    return h("div", { className: "ps-entry", children: [h("h2", { children: isEditing ? "Editing panel material" : "Add a panel material" }), h("p", { className: "ps-entry-intro", children: "Panel catalogue materials are defined by colour, material and thickness. Sheet sizes are entered when stock is received." }), h("div", { className: "ps-entry-grid ps-catalog-grid", children: [field("material", "Material *", "e.g. Solid Aluminium"), field("color", "Colour / finish *", "e.g. White"), field("thickness", "Thickness (mm) *", "e.g. 3", "number"), h("label", { children: ["Price per m² (AUD ex GST)", h("input", { type: "number", min: "0", max: "1000000000", step: "0.01", inputMode: "decimal", "aria-label": "Price per m² (AUD ex GST)", "aria-invalid": !!priceError, value: form.unitCostPerM2 ?? "", placeholder: "Optional", onChange: e => setForm({ ...form, unitCostPerM2: e.target.value }) }), h("small", { children: "Optional. Full panels and offcuts use this rate for their own area." })] }), h("label", {children:["Panel colour (hex)",h("input", {type:"text",value:form.colorHex||"",placeholder:"#FFFFFF",maxLength:7,"aria-label":"Panel colour hex","aria-invalid":!!form.colorHex&&!/^#[0-9a-f]{6}$/i.test(form.colorHex),onChange:e=>setForm({...form,colorHex:e.target.value.trim()})}),h("input", {type:"color","aria-label":"Choose panel colour",value:/^#[0-9a-f]{6}$/i.test(form.colorHex||"")?form.colorHex:"#ffffff",onChange:e=>setForm({...form,colorHex:e.target.value.toUpperCase()})}),h("small",{children:form.colorHex&&!/^#[0-9a-f]{6}$/i.test(form.colorHex)?"Enter # followed by six hex digits, e.g. #FFFFFF.":"Optional. Used for panel previews in workshop stock."})]})] }), h("p", { className: "ps-entry-note", children: "* Required" }), priceError && h("p", { role: "alert", className: "ps-entry-errors", children: priceError }), h("div", { className: "ps-entry-actions", children: [h("button", { onClick: onSave, className: "ps-entry-primary", children: isEditing ? "Save changes" : "Add to Panel Catalogue" }), h("button", { onClick: onClose, className: "ps-entry-cancel", children: "Cancel" })] })] });
   }
   function ReceivePage({ catalog, variants, onSubmit }) {
     const [selected, setSelected] = useState(null);
@@ -17586,7 +17587,7 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
       try { onSave(prepared.rows); onClose(); } finally { saving.current = false; }
     }
     return h("form", { onSubmit: submit, noValidate: true, className: "ps-entry", children: [
-      h("h2", { children: single ? "Add material to catalogue" : "Add multiple materials" }),
+      h("h2", { children: single ? "Add panel material to catalogue" : "Add multiple panel materials" }),
       h("p", { className: "ps-entry-intro", children: "Enter the material, colour and thickness once, then add each size." }),
       h("div", { className: "ps-entry-grid ps-catalog-grid", children: [
         ...[["material", "Material", "e.g. Solid Aluminium"], ["color", "Colour / finish", "e.g. White"], ["thickness", "Thickness (mm)", "e.g. 3"]].map(([key, label, placeholder]) => h("label", { children: [label + " *", h("input", { type: key === "thickness" ? "number" : "text", step: "any", min: key === "thickness" ? "0.001" : undefined, required: true, maxLength: 500, value: shared[key], placeholder, onChange: e => { setShared({ ...shared, [key]: e.target.value }); setErrors([]); } })] }, key)),
@@ -17603,7 +17604,7 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
       ] }),
       h("p", { className: "ps-entry-note", children: "* Required." }),
       errors.length > 0 && h("div", { role: "alert", className: "ps-entry-errors", children: errors.map((error, i) => h("p", { children: error }, i)) }),
-      h("div", { className: "ps-entry-actions", children: [h("button", { type: "submit", className: "ps-entry-primary", children: single ? "Add material and select" : count ? `Add ${count} catalogue item${count === 1 ? "" : "s"}` : "Add to catalogue" }), h("button", { type: "button", onClick: onClose, className: "ps-entry-cancel", children: "Cancel" })] })
+      h("div", { className: "ps-entry-actions", children: [h("button", { type: "submit", className: "ps-entry-primary", children: single ? "Add panel material and select" : count ? `Add ${count} panel material${count === 1 ? "" : "s"}` : "Add to Panel Catalogue" }), h("button", { type: "button", onClick: onClose, className: "ps-entry-cancel", children: "Cancel" })] })
     ] });
   }
   function CatalogAdmin({ catalog, onAdd, onRemove, onEdit, onAddBulk, onExportExcel, onExportPDF }) {
@@ -17657,7 +17658,7 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
         PageHeading,
         {
           icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Layers, { size: 18 }),
-          title: "Material Catalogue",
+          title: "Panel Catalogue",
           subtitle: "Every approved colour, material and thickness. Sheet sizes are managed when stock is received.",
           action: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex items-center gap-2", children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: onExportExcel, className: "flex items-center gap-1.5 text-sm font-medium text-slate-600 border border-slate-300 bg-white rounded-lg px-3 py-2 hover:bg-slate-50", children: [
@@ -17674,14 +17675,14 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
             }, className: "hidden", children: "Bulk entry" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => mode ? cancel() : startAdd(), className: "flex items-center gap-1.5 text-sm font-medium text-white bg-cyan-800 rounded-lg px-3 py-2 hover:bg-cyan-900", children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Plus, { size: 15 }),
-              " Add material"
+              " Add panel material"
             ] })
           ] })
         }
       ),
       bulkOpen && (0, import_jsx_runtime.jsx)(CatalogBulkForm, { catalog, onSave: onAddBulk, onClose: () => setBulkOpen(false) }),
         mode && (0, import_jsx_runtime.jsx)(CatalogSingleForm, { form, setForm: value => { setForm(value); setPriceError(""); }, isEditing, onSave: submit, onClose: cancel, priceError }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "bg-white border border-slate-300 rounded-xl overflow-hidden", children: catalog.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyState, { text: "No materials yet \u2014 add the first one above." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", { className: "w-full text-sm", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "bg-white border border-slate-300 rounded-xl overflow-hidden", children: catalog.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyState, { text: "No panel materials yet \u2014 add the first one above." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", { className: "w-full text-sm", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { className: "bg-slate-50/60", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "w-10" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: "px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Colour" }),
@@ -18249,7 +18250,7 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
     }
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bg-white rounded-xl border-2 border-red-200 p-5", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm font-semibold text-slate-800 mb-1", children: "Stocktake reset" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "text-sm text-slate-500 mb-4 leading-relaxed", children: "Sets every panel's SOH to zero and clears all off-cuts, ready for a fresh physical count. Your material catalogue, damage reasons, and activity history are untouched \u2014 this reset itself is logged in Recent activity. This cannot be undone." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "text-sm text-slate-500 mb-4 leading-relaxed", children: "Sets every panel's SOH to zero and clears all off-cuts, ready for a fresh physical count. Your panel catalogue, damage reasons, and activity history are untouched \u2014 this reset itself is logged in Recent activity. This cannot be undone." }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Type RESET to confirm", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: inputCls, value: confirmText, onChange: (e) => setConfirmText(e.target.value), placeholder: "RESET" }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: handleReset, disabled: !canReset, className: "w-full bg-red-800 disabled:opacity-40 text-white font-semibold rounded-lg py-2.5 text-sm hover:bg-red-900", children: "Reset all SOH for stocktake" })
     ] });
@@ -18268,7 +18269,7 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-sm font-semibold text-red-800", children: "Full reset \u2014 all information" })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { className: "text-sm text-slate-500 mb-4 leading-relaxed", children: [
-        "Wipes the entire material catalogue, all SOH and off-cuts, damage reasons (restored to default), while preserving the activity history. Registered users, admin status, and PINs are ",
+        "Wipes the entire panel catalogue, all SOH and off-cuts, damage reasons (restored to default), while preserving the activity history. Registered users, admin status, and PINs are ",
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "font-semibold text-slate-700", children: "not" }),
         " affected \u2014 nobody needs to log in again. This cannot be undone."
       ] }),
@@ -18717,10 +18718,11 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
       )
     );
   }
-  function SettingsPage({ reasons, onAddReason, onRemoveReason, onExportExcel, onExportPDF, onExportCatalogExcel, onExportCatalogPDF, emailConfig, onSaveEmailConfig, onSendReportNow, onPushLocalData, onOpenDamageLog, username, isAdmin, catalog, onAddCatalogItem, onRemoveCatalogItem, onEditCatalogItem, onAddCatalogItemsBulk, onLogTxn, onResetAllSOH, onResetAllInformation, workerUrl, workerSecret, initialSection="general" }) {
+  function SettingsPage({ reasons, onAddReason, onRemoveReason, onExportExcel, onExportPDF, onExportCatalogExcel, onExportCatalogPDF, emailConfig, onSaveEmailConfig, onSendReportNow, onPushLocalData, onOpenDamageLog, username, isAdmin, catalog, onAddCatalogItem, onRemoveCatalogItem, onEditCatalogItem, onAddCatalogItemsBulk, onLogTxn, onResetAllSOH, onResetAllInformation, workerUrl, workerSecret, taskAccess={}, initialSection="general" }) {
     const [newReason, setNewReason] = useState("");
     const [newReasonPhotoOptional, setNewReasonPhotoOptional] = useState(false);
     const [section, setSection] = useState(initialSection);
+    const canReadMaterials=isAdmin||taskAccess['factory.stock']===true;
     useEffect(()=>setSection(initialSection),[initialSection]);
     const sections = [
       { key: "general", label: "General" },
@@ -18728,7 +18730,8 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
       ...isAdmin ? [{ key: "dispatch", label: "Dispatch" }] : [],
       ...isAdmin ? [{ key: "schedule", label: "Schedule" }] : [],
       ...isAdmin ? [{ key: "stocktake", label: "Stocktake" }] : [],
-      ...isAdmin ? [{ key: "catalog", label: "Material Catalogue" }] : [],
+      ...isAdmin ? [{ key: "catalog", label: "Panel Catalogue" }] : [],
+      ...canReadMaterials ? [{ key: "material-catalogue", label: "Material Catalogue" }] : [],
       ...isAdmin ? [{ key: "reasons", label: "Damage Reasons" }] : [],
       ...isAdmin ? [{ key: "email", label: "Email Reports" }] : [],
       ...isAdmin ? [{ key: "backup", label: "Backup & Reset" }] : []
@@ -18766,6 +18769,7 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
           section === "schedule" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ScheduleSettingsPanel, {}),
           section === "stocktake" && isAdmin && (0, import_jsx_runtime.jsx)(StocktakeSettings, { workerUrl: workerUrl || BAKED_WORKER_URL, isAdmin }),
           section === "catalog" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CatalogAdmin, { catalog, onAdd: onAddCatalogItem, onRemove: onRemoveCatalogItem, onEdit: onEditCatalogItem, onAddBulk: onAddCatalogItemsBulk, onExportExcel: onExportCatalogExcel, onExportPDF: onExportCatalogPDF }),
+          section === "material-catalogue" && canReadMaterials && (0, import_jsx_runtime.jsx)(WorkshopStock, { workerUrl: workerUrl || BAKED_WORKER_URL, isAdmin, taskAccess, catalogueOnly: true, stockRevision: PanelStock.revision }),
           section === "reasons" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "max-w-xl mx-auto", children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
               PageHeading,

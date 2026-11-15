@@ -177,7 +177,7 @@ test('web navigation uses exclusive parent sections with CNC settings under CNC'
  assert.match(html,/projects:"Projects"/);
  assert.match(html,/isAdmin\|\|can\('site\.orders\.manage'\)\?\[\['projects',null\]\]/);
  assert.doesNotMatch(navigation,/label:"Material Catalogue"/);
- assert.match(html,/key: "catalog", label: "Material Catalogue"/);
+ assert.match(html,/key: "catalog", label: "Panel Catalogue"/);
  assert.doesNotMatch(navigation,/label:"Roles"/);
  assert.doesNotMatch(navigation,/label:"Schedule Settings"/);
  assert.doesNotMatch(navigation,/label:"Other Settings"/);

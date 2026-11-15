@@ -32,7 +32,7 @@ function harness(){
 test('catalogue-priced panels and offcuts show the shared square-metre rate in SOH and read-only area costing in the editor',()=>{
  const x=harness();for(const [name,area,cost] of [['Catalogue full panel','2.88','$115.20'],['Catalogue offcut','0.72','$28.80']]){
   const row=x.render().find(n=>n.type==='tr'&&walk(n).some(child=>child.props['aria-label']==='Stock action for '+name)),label=walk(row).find(n=>n.props.className==='ws-unit-cost');assert.equal(text(label),'$40.00 / m² (AUD ex GST)');
-  x.openItem(name);for(const key of pricingKeys)assert.equal(x.control(key),undefined,key+' must not be editable');const form=x.render().find(n=>n.type==='form'),content=text(form);assert.match(content,/Catalogue area pricing/);assert.match(content,/White ACP/);assert.ok(content.includes('Rate: $40.00 / m² (AUD ex GST)'));assert.ok(content.includes('Area: '+area+' m²'));assert.ok(content.includes('Calculated cost per sheets: '+cost));assert.ok(content.includes('Change the price per m² in Catalogue.'));x.button('Cancel').props.onClick();
+  x.openItem(name);for(const key of pricingKeys)assert.equal(x.control(key),undefined,key+' must not be editable');const form=x.render().find(n=>n.type==='form'),content=text(form);assert.match(content,/Panel Catalogue area pricing/);assert.match(content,/White ACP/);assert.ok(content.includes('Rate: $40.00 / m² (AUD ex GST)'));assert.ok(content.includes('Area: '+area+' m²'));assert.ok(content.includes('Calculated cost per sheets: '+cost));assert.ok(content.includes('Change the price per m² in Panel Catalogue.'));x.button('Cancel').props.onClick();
  }
 });
 
@@ -73,7 +73,7 @@ test('a bulk selection containing only manually priced items retains editable pr
 });
 
 test('unresolved catalogue pricing shows its actual reason and distinguishable priced catalogue choices',()=>{
- const cases={conflicting_rates:'Catalogue prices conflict',unpriced_material:'Set price per m² in Catalogue',no_matching_material:'Link the correct catalogue material',invalid_material:'Check colour, material and thickness'};
+ const cases={conflicting_rates:'Panel Catalogue prices conflict',unpriced_material:'Set price per m² in Panel Catalogue',no_matching_material:'Link the correct Panel Catalogue material',invalid_material:'Check colour, material and thickness'};
  for(const [status,hint] of Object.entries(cases)){
   const x=harness(),item=x.states[0].items.find(i=>i.id==='offcut:area');item.areaCost=null;item.areaCostSources=[];item.cataloguePricingStatus=status;
   x.states[0].catalog=[{id:'priced-a',color:'White',material:'ACP',thickness:3,unitCostPerM2:84},{id:'priced-b',color:'White',material:'ACP',thickness:3,unitCostPerM2:90}];
