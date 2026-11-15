@@ -185,6 +185,7 @@
 .ws-delivery-balance>div{display:flex;justify-content:space-between;gap:12px;margin-top:12px;font-size:12px}
 .ws-delivery-balance>div>span{min-width:0;overflow-wrap:anywhere}
 .ws-delivery-balance>div>strong{white-space:nowrap}
+.ws-delivery-balance .ws-delivery-issue-alert{display:block;margin:4px 0 0}
 @media(max-width:640px){.ws-delivery-heading{align-items:flex-start;flex-direction:column;gap:8px}.ws-po-dialog .ws-delivery-heading h4{font-size:20px}.ws-delivery-guide{padding:12px}.ws-delivery-shortcuts{display:grid;grid-template-columns:1fr;width:100%}.ws-delivery-shortcuts button{justify-content:center;width:100%}.ws-delivery-review-summary{padding:12px;flex-direction:column;align-items:flex-start}.ws-delivery-balance summary{min-height:44px;display:flex;align-items:center}}
 
 .ws-po-files>summary{cursor:pointer;font-weight:600;color:#244358;font-size:13px;padding:12px 0;min-height:44px}.ws-po-files[open]>summary{margin-bottom:8px}.ws-po-dialog details.ws-po-files{padding-bottom:8px}.ws-po-files>summary:focus-visible{outline:2px solid #0891b2;outline-offset:2px}

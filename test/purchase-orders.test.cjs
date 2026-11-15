@@ -332,3 +332,128 @@ test('purchase orders exclude panel and workshop offcuts from manual and importe
  assert.equal(x.context.window.matchPurchaseOrderLine({sku:'SHEET'},items).itemId,'variant:sheet');
  nodes.find(n=>n.children.includes('Create stock item')).props.onClick();nodes=x.render();assert.ok(!nodes.some(n=>n.type==='option'&&n.props.value==='offcuts'));
 });
+
+
+test('supplier codes recognise changed wording without renaming stock or transferring quantities',()=>{
+ const x=harness(true),w=x.context.window;
+ const item={id:'sheet',sku:'OUR-AL',name:'Our aluminium sheet',unit:'sheets',width:1200,height:2400,thickness:3,material:'aluminium'};
+ const source={sku:'100129',description:'3.00 1200 2400 MF 5005 H34 MILL FINISH',dimensions:'3.00 1200 2400',unit:'sheets'};
+ const ref={supplier:'Supplier A',source,key:w.purchaseOrderStockKey('Supplier A',source),itemId:item.id,itemIdentity:w.purchaseOrderItemIdentity(item)};
+ const changed={...source,description:'MF MILL FINISH 3 × 1200 × 2400 5005 H34',dimensions:'3 × 1200 × 2400',quantity:17};
+ assert.equal(w.matchPurchaseOrderLine(changed,[item],' SUPPLIER A ',[ref]).itemId,'sheet');
+ assert.equal(w.matchPurchaseOrderLine(changed,[item],'Supplier B',[ref]).itemId,'');
+ assert.equal(changed.quantity,17);assert.equal(item.name,'Our aluminium sheet');
+ for(const patch of [{dimensions:'1500 x 3000 x 3'},{unit:'packs'},{description:'MILL FINISH 5052 H34 2400 x 1200 x 3'},{description:'BLACK 5005 H34 2400 x 1200 x 3'},{description:'MILL FINISH sheet'}]){
+  const result=w.matchPurchaseOrderLine({...changed,...patch},[item],'Supplier A',[ref]);
+  assert.equal(result.itemId,'');assert.ok(result.reviewReason);assert.ok(result.candidates.includes('sheet'));
+ }
+ const other={...item,id:'other',sku:'OTHER'};
+ const conflict={...ref,itemId:other.id,itemIdentity:w.purchaseOrderItemIdentity(other)};
+ assert.equal(w.matchPurchaseOrderLine(changed,[item,other],'Supplier A',[ref,conflict]).itemId,'');
+ assert.equal(w.matchPurchaseOrderLine(changed,[{...item,thickness:4}],'Supplier A',[ref]).itemId,'');
+ assert.equal(w.matchPurchaseOrderLine({...changed,sku:''},[item],'Supplier A',[ref]).itemId,'');
+});
+
+test('receiving progress keeps units and open issues visible without changing received stock',()=>{
+ const x=harness(true);x.states[1]={orders:[{...order,issues:[{id:'issue',itemId:'angle',kind:'damaged',quantity:2,unit:'lengths',status:'open',name:'Angle'}]}],items:[],restoreEpoch:0};
+ let nodes=x.render();nodes.find(n=>n.type==='button'&&n.props.className==='ws-po-card').props.onClick();nodes=x.render();
+ assert.ok(nodes.some(n=>n.props['aria-label']==='Receiving progress'));
+ const amounts=walk(nodes.find(n=>n.props.className==='ws-po-amounts'));
+ for(const quantity of ['10 lengths','3 lengths','7 lengths'])assert.ok(amounts.some(n=>n.children.includes(quantity)));
+ assert.ok(nodes.some(n=>n.props.className==='ws-delivery-issue-alert'&&n.children.some(c=>typeof c==='string'&&c.includes('2 lengths · Needs attention'))));
+ assert.equal(x.requests.length,0);
+});
+test('closed-short and cancelled POs show unreceived quantities as no longer expected',()=>{
+ for(const status of ['closed_short','cancelled']){
+  const x=harness(true);x.states[1]={orders:[{...order,status}],items:[],restoreEpoch:0};
+  // Open the existing order directly, as when following a PO link.
+  x.states[2]='po';const nodes=x.render();
+  assert.ok(nodes.some(n=>n.children.includes('1 item not received')));
+  assert.ok(nodes.some(n=>n.children.some(c=>typeof c==='string'&&c.includes('Unreceived quantities are no longer expected.'))));
+  assert.ok(!nodes.some(n=>n.props['aria-label']==='Receive ANG Angle'));
+  assert.ok(!nodes.some(n=>n.children.includes('1 item outstanding')));
+ }
+});
+
+test('supplier aliases require review when previously absent variant evidence appears or disappears',()=>{
+ const w=harness(true).context.window,item=stock[0];
+ const source={sku:'SUP',description:'Black angle',colour:'',lengthMm:null,dimensions:'',unit:'lengths'};
+ const ref={supplier:'Supplier',source,key:w.purchaseOrderStockKey('Supplier',source),itemId:item.id,itemIdentity:w.purchaseOrderItemIdentity(item)};
+ for(const change of [{colour:'White'},{lengthMm:3000},{colour:'Black'},{dimensions:'30 x 30'},{unit:''}]){
+  const result=w.matchPurchaseOrderLine({...source,...change},stock,'Supplier',[ref]);
+  assert.equal(result.itemId,'');assert.ok(result.reviewReason);
+ }
+ const detailed={...source,colour:'Black',lengthMm:6000};
+ const detailedRef={...ref,source:detailed,key:w.purchaseOrderStockKey('Supplier',detailed)};
+ assert.equal(w.matchPurchaseOrderLine(source,stock,'Supplier',[detailedRef]).itemId,'');
+});
+
+test('exact saved descriptions cannot bypass conflicting or expired supplier code mappings',()=>{
+ const w=harness(true).context.window;
+ const source={sku:'SUP',description:'Black angle',colour:'Black',lengthMm:6000,unit:'lengths'};
+ const ref={supplier:'Supplier',source,key:w.purchaseOrderStockKey('Supplier',source),itemId:'black',itemIdentity:w.purchaseOrderItemIdentity(stock[0])};
+ const otherSource={...source,description:'White angle',colour:'White'};
+ const other={...ref,source:otherSource,key:w.purchaseOrderStockKey('Supplier',otherSource),itemId:'white',itemIdentity:w.purchaseOrderItemIdentity(stock[1])};
+ let result=w.matchPurchaseOrderLine(source,stock,'Supplier',[ref,other]);
+ assert.equal(result.itemId,'');assert.ok(result.candidates.includes('black'));assert.ok(result.candidates.includes('white'));
+ result=w.matchPurchaseOrderLine(source,stock,'Supplier',[ref,{...other,itemIdentity:'expired'}]);
+ assert.equal(result.itemId,'');assert.ok(result.reviewReason);
+});
+
+test('supplier code matching preserves numeric meaning, temper, finishes and missing specifications',()=>{
+ const w=harness(true).context.window,item={id:'bolt',sku:'OUR-BOLT',name:'Bolt',unit:'each'};
+ const cases=[
+  ['Steel bolt M6 x 20 pack 100','Steel bolt M20 x 6 pack 100'],
+  ['Angle 30 x 50','Angle 50 x 30'],
+  ['Alloy 5005 H34','Alloy 5005 T34'],
+  ['Aluminium satin 3 x 1200 x 2400','Aluminium polished 3 x 1200 x 2400'],
+  ['Width 30 depth 50','Depth 30 width 50'],
+  ['Steel bend -45 degrees','Steel bend 45 degrees'],
+  ['Steel 1/2 inch','Steel 1 2 inch'],
+  ['Steel 20 mm','Steel 20 cm'],
+  ['Steel 20 mm x 10 cm','Steel 20 cm x 10 mm'],
+  ['Steel internal 30 external 50','Steel external 30 internal 50'],
+  ['Steel coat aluminium core 30','Aluminium coat steel core 30'],
+  ['Grey steel 20 mm','Steel 20 mm']
+ ];
+ for(const [before,after] of cases){
+  const source={sku:'SUP',description:before,unit:'each'};
+  const ref={supplier:'Supplier',source,key:w.purchaseOrderStockKey('Supplier',source),itemId:item.id,itemIdentity:w.purchaseOrderItemIdentity(item)};
+  const result=w.matchPurchaseOrderLine({...source,description:after},[item],'Supplier',[ref]);
+  assert.equal(result.itemId,'',before+' must differ from '+after);assert.ok(result.reviewReason);
+ }
+});
+
+test('supplier code matching accepts conservative spelling and unit aliases',()=>{
+ const w=harness(true).context.window,item={id:'sheet',sku:'OUR',name:'Sheet',unit:'sheets'};
+ const source={sku:'SUP',description:'Aluminum grey sheet MF 3.00 x 1200 x 2400',dimensions:'3.00 x 1200 x 2400',unit:'sheet'};
+ const ref={supplier:'Supplier',source,key:w.purchaseOrderStockKey('Supplier',source),itemId:item.id,itemIdentity:w.purchaseOrderItemIdentity(item)};
+ const result=w.matchPurchaseOrderLine({...source,description:'Grey aluminium mill finish sheets 3 × 1200 × 2400',dimensions:'3 × 1200 × 2400',unit:'sheets'},[item],'Supplier',[ref]);
+ assert.equal(result.itemId,item.id);assert.equal(result.remembered,true);
+});
+
+test('changing the imported supplier clears prior stock choices and requires another review',async()=>{
+ const x=harness(true);x.states[1]={orders:[],items:stock,restoreEpoch:0,stockLearning:true,stockReferences:[]};
+ x.context.FileReader=class{readAsDataURL(){this.result='data:application/pdf;base64,JVBERi0xLjc=';this.onload();}};
+ x.context.PanelStock.apiFetch=async()=>({ok:true,json:async()=>({reference:'X',supplier:'Supplier',lines:[{sku:'ANG',description:'Black angle',colour:'Black',lengthMm:6000,quantity:4,unit:'lengths'}]})});
+ let nodes=x.render();nodes.find(n=>n.children.includes('New purchase order')).props.onClick();nodes=x.render();
+ await nodes.find(n=>n.type==='input'&&n.props.type==='file').props.onChange({target:{files:[{name:'PO.pdf',size:8}],value:''}});nodes=x.render();
+ assert.ok(nodes.some(n=>n.children.includes('Stock item selected')));
+ nodes.find(n=>n.type==='input'&&n.props.type==='checkbox'&&n.props.checked===false).props.onChange({target:{checked:true}});nodes=x.render();
+ nodes.find(n=>n.props.placeholder==='Supplier name').props.onChange({target:{value:'Other supplier'}});nodes=x.render();
+ assert.ok(!nodes.some(n=>n.children.includes('Stock item selected')));
+ assert.equal(nodes.find(n=>n.children.includes('Use reviewed items')).props.disabled,true);
+ assert.equal(nodes.find(n=>n.props.className==='ws-po-import-confirm').children[0].props.checked,false);
+});
+
+test('review includes issues for zero-accepted items in the outstanding balance and preserves quantities',()=>{
+ const x=harness(false),extra={itemId:'sheet',sku:'SHEET',name:'Aluminium sheet',unit:'sheets',ordered:5,received:0};
+ let nodes=open(x,{...order,lines:[...order.lines,extra],issues:[{id:'missing',itemId:'sheet',name:'Aluminium sheet',kind:'missing',quantity:2,unit:'sheets',status:'open'}]});
+ nodes.find(n=>n.props['aria-label']==='Receive ANG Angle').props.onChange({target:{value:'4'}});nodes=x.render();
+ nodes.find(n=>n.children.includes('Review delivery')).props.onClick();nodes=x.render();
+ const balance=nodes.find(n=>n.props.className==='ws-delivery-balance');assert.ok(balance);
+ assert.ok(walk(balance).some(n=>n.children.includes('Missing: 2 sheets · Needs attention')));
+ assert.ok(walk(balance).some(n=>n.children.includes('5 sheets')));
+ assert.equal(x.states[1].orders[0].lines[0].received,3);
+ assert.equal(x.requests.length,0);
+});
