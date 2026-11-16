@@ -6,7 +6,8 @@ const path=require('node:path');
 test('desktop web exposes permission-aware order management',()=>{
  const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
  const client=fs.readFileSync(path.join(__dirname,'../panelstock-client.js'),'utf8');
- assert.match(html,/function OrdersPage\(\{ canCreate, canManage, isAdmin, projectsOnly = false \}\)/);
+ assert.match(html,/function OrdersPage\(\{ canCreate, canManage, canDispatch = false, isAdmin, projectsOnly = false \}\)/);
+ assert.match(html,/canDispatch: can\("factory.dispatch"\)/);
  assert.match(html,/Add project/);
  assert.match(html,/\/projects/);
  assert.match(html,/Project details/);
