@@ -15,11 +15,11 @@ function fixture({entries=[entry,pending,panel],canFinalQa=false,post}={}){
  vm.createContext(context);vm.runInContext(code,context);
  return {states,calls,render(){cursor=refIndex=0;return context.DispatchCenter();}};
 }
-test('Dispatch shows only ready orders; tracking retains waiting orders and history',()=>{
+test('Dispatch exposes all four status tabs on the main screen',()=>{
  const view=fixture();let tree=view.render();assert.equal(nodes(tree).filter(n=>n.tag==='article').length,2);
- assert.equal(button(tree,'Site orders'),undefined);assert.equal(button(tree,'Panel loads'),undefined);
+ assert.equal(button(tree,'Site orders'),undefined);assert.equal(button(tree,'Panel loads'),undefined);for(const label of ['Ready for dispatch','Waiting','At powder coaters','Dispatched'])assert.ok(button(tree,label));assert.equal(button(tree,'Tracking & history'),undefined);
  nodes(tree).find(n=>n.tag==='select').props.onChange({target:{value:'Panels'}});tree=view.render();assert.equal(nodes(tree).filter(n=>n.tag==='article').length,1);
- button(view.render(),'Tracking & history').props.onClick();tree=view.render();assert.equal(nodes(tree).filter(n=>n.tag==='article').length,1);assert.equal(button(tree,'Dispatch to site'),undefined);button(tree,'Back to dispatch').props.onClick();assert.equal(nodes(view.render()).filter(n=>n.tag==='article').length,2);
+ button(view.render(),'Waiting').props.onClick();tree=view.render();assert.equal(nodes(tree).filter(n=>n.tag==='article').length,0);nodes(tree).find(n=>n.tag==='select').props.onChange({target:{value:'all'}});tree=view.render();assert.equal(nodes(tree).filter(n=>n.tag==='article').length,1);assert.equal(button(tree,'Dispatch to site'),undefined);button(tree,'Ready for dispatch').props.onClick();assert.equal(nodes(view.render()).filter(n=>n.tag==='article').length,2);
 });
 test('shared form prefills defaults and submits non-panel orders with the concurrency and retry guards',async()=>{
  const view=fixture();await button(view.render(),'Dispatch to site').props.onClick();let tree=view.render();
@@ -43,8 +43,8 @@ test('a stale ready entry is rechecked and a failed save preserves the entered f
 });
 test('final QA remains a confirmed action shown only to users with QA access',async()=>{
  const final={...panel,status:'waiting',ready:false,reason:'Awaiting final QA',load:{...panel.load,status:'awaiting_final_qa'}};
- const denied=fixture({entries:[final]});button(denied.render(),'Tracking & history').props.onClick();assert.equal(button(denied.render(),'Approve final QA'),undefined);
- const view=fixture({entries:[final],canFinalQa:true});button(view.render(),'Tracking & history').props.onClick();await button(view.render(),'Approve final QA').props.onClick();
+ const denied=fixture({entries:[final]});button(denied.render(),'Waiting').props.onClick();assert.equal(button(denied.render(),'Approve final QA'),undefined);
+ const view=fixture({entries:[final],canFinalQa:true});button(view.render(),'Waiting').props.onClick();await button(view.render(),'Approve final QA').props.onClick();
  assert.deepEqual(JSON.parse(JSON.stringify(view.calls.find(call=>call.body).body)),{id:'l',action:'final-qa',confirmed:true});
 });
 
