@@ -68,12 +68,14 @@
         requireValue(response.data?.request?.id===pending.requestId,'The returned request did not match the saved request.');
         return accept(response.data.request);
       }
-      if(response.status===409&&response.data?.code==='PURCHASE_REQUEST_CHOICES_CHANGED'){
+      if(response.status===409&&['PURCHASE_REQUEST_CHOICES_CHANGED','PURCHASE_REQUEST_REVIEW_CHANGED'].includes(response.data?.code)){
         // Only unlock a stale-choices rejection after a status read proves
         // this UUID was not saved. Other conflicts remain ambiguous.
         const existing=await resolve();if(existing)return existing;
         await storage.clear();pending=null;
-        const error=Error('Project choices changed. Retry project choices before submitting.');error.choicesChanged=true;throw error;
+        const reviewChanged=response.data.code==='PURCHASE_REQUEST_REVIEW_CHANGED';
+        const error=Error(reviewChanged?(response.data.error||'The request review changed. Check the original request again before preparing a retry.'):'Project choices changed. Retry project choices before submitting.');
+        if(reviewChanged)error.reviewChanged=true;else error.choicesChanged=true;throw error;
       }
       if([400,422].includes(response.status)){await storage.clear();pending=null;}
       throw Error(response.data?.error||'The result is uncertain. Check status or retry this saved request.');
@@ -102,7 +104,7 @@
       get id(){return selectedId;},get value(){return value;},get busy(){return busy;},get error(){return error;},
       select(id){if(id!==selectedId)value=null;selectedId=id;return load(id);},
       show(record){++generation;selectedId=record.id;value=record;busy=false;error='';changed();},
-      summary(record){if(record?.id===selectedId&&value)value={...value,...record,lines:value.lines};},
+      summary(record){if(record?.id===selectedId&&value)value={...value,...record,lines:value.lines,...(record.review&&value.review?{review:{...value.review,...record.review}}:{})};},
       refresh(){return selectedId?load(selectedId):Promise.resolve();},
     };
   }
@@ -227,6 +229,8 @@
     const doc=host.ownerDocument||root.document,owner=options.username;
     let alive=true,catalog=null,catalogRefreshing=false,catalogBlocked=false,lookupVersion=0,busy=false,locked=false,quote=null;
     let requests=[],projects=[],projectSignature='',permissions={create:false,manage:false},timers=new Set();
+    let reviewBusy=false,reviewVersion=0,retryDraft=null;
+    const reviewDrafts=new Map();
     let shared=null,sharedBlocked=false,sharedLoading=true,sharedVersion=0,sharedSupported=true,sharedFailure='';
     let referenceSync=null,syncBusy=false,syncVersion=0,syncTimer=null;
     const sharedFields=['suppliers','services','accounts','taxes'];
@@ -319,7 +323,8 @@
     const itemsSection=el('section',null,'pr-form-section pr-items-section');
     const itemsHeading=el('div',null,'pr-section-heading');append(itemsHeading,el('h3','Items'),el('span','Prices exclude GST','pr-section-hint'));
     append(itemsSection,itemsHeading,lineBox,addLineButton);
-    const attachment=el('div',null,'pr-attachment');append(attachment,field('Quote PDF (optional)',file),fileStatus);
+    const quoteField=field('Quote PDF (optional)',file);
+    const attachment=el('div',null,'pr-attachment');append(attachment,quoteField,fileStatus);
     const formBottom=el('div',null,'pr-form-bottom');append(formBottom,attachment,totalBox);
     append(formFields,requestSection,purchaseSection,itemsSection,formBottom);
     const send=el('button','Submit purchase request','pr-primary');send.type='submit';
@@ -327,12 +332,118 @@
     const fresh=button('New purchase request',()=>newRequest());fresh.hidden=true;
     const actions=el('div',null,'pr-actions');append(actions,send,retry,fresh);
     append(form,formFields,actions);
-    const formHeading=el('header',null,'pr-card-heading');append(formHeading,el('h2','New purchase request'),el('p','Request a purchase order and track its progress below.','pr-help'));
+    const retryBanner=el('div',null,'pr-retry-banner');retryBanner.hidden=true;
+    const formHeading=el('header',null,'pr-card-heading');append(formHeading,el('h2','New purchase request'),el('p','Request a purchase order and track its progress below.','pr-help'),retryBanner);
     append(formCard,formHeading,form);
     const historyCard=el('section',null,'pr-card pr-history-card');const historyList=el('div',null,'pr-history'),historyInfo=el('p',null,'pr-help');
     const details=el('section',null,'pr-details');details.hidden=true;
     append(historyCard,el('h2','Purchase requests'),historyInfo,historyList,details);append(shell,top,syncPanel,status,formCard,historyCard);host.replaceChildren(shell);
     function notice(message,error=false){if(!current())return;status.textContent=message;status.classList.toggle('pr-error',error);}
+    function requestStatus(request){
+      if(request.state==='needs_review'&&request.review?.status==='retry_ready'&&request.review.canRetry!==true)return 'Needs review';
+      if(request.state==='needs_review')return ({checking:'Under review',retry_ready:'Ready for retry',closed:'Review closed',replaced:'Replacement created'})[request.review?.status]||'Needs review';
+      return STATES[request.state]||'Status pending';
+    }
+    function openRequest(id){return detailLoader.select(id);}
+    function renderRetryBanner(){
+      retryBanner.replaceChildren();retryBanner.hidden=!retryDraft;
+      file.required=!!retryDraft?.quoteRequired;
+      const quoteCaption=quoteField.children[0];
+      if(file.required){const star=el('span','*','pr-required');star.setAttribute('aria-hidden','true');quoteCaption.replaceChildren(el('span','Quote PDF '),star);}
+      else quoteCaption.textContent='Quote PDF (optional)';
+      fileStatus.textContent=retryDraft?.quoteRequired?'Attach the quote PDF again for this retry. PanelStock removes its temporary copy after Nexvia confirms the attachment.':'Optional PDF, up to 10 MB. It will be attached to the Nexvia PO. PanelStock removes its temporary copy after Nexvia confirms the attachment.';
+      if(!retryDraft)return;
+      append(retryBanner,el('strong','Retry of '+retryDraft.reference),el('p',retryDraft.blocked?'This review has changed. Check the original request again before preparing a retry. Your entered details are retained.':'Review the copied details, then submit to create a new request. The original request stays in history.','pr-help'));
+      if(retryDraft.missing.size)retryBanner.appendChild(el('p','Select current choices for: '+[...retryDraft.missing].join(', ')+'.','pr-help'));
+      const actions=el('div',null,'pr-review-actions');
+      append(actions,button('View '+retryDraft.reference,()=>void openRequest(retryDraft.requestId)),button('Start a blank request',async()=>{
+        if(busy||reviewBusy||submitter.pending)return;
+        if(!options.confirm||!await options.confirm({title:'Discard this retry draft?',message:'Your unsent entries will be cleared. The original request stays in history.',confirmLabel:'Start a blank request'}))return;
+        if(current()&&!busy&&!reviewBusy&&!submitter.pending)newRequest();
+      }));
+      retryBanner.appendChild(actions);
+    }
+    function hasUnsubmittedDraft(){
+      if(locked)return false;
+      const standard=shared?.taxes?.find(value=>Number(value.rate)===10&&!value.disabled);
+      return !!retryDraft||!!quote||[project,supplier,service,breakdown,reference].some(node=>!!node.value)||lineValues().some(line=>line.description||line.unitPriceExGst||line.chartOfAccountId||line.quantity!=='1'||line.taxRateId&&line.taxRateId!==String(standard?.id??''));
+    }
+    function refreshRetryMissing(){
+      if(!retryDraft)return;
+      const labels={project:'project',supplier:'supplier',service:'service',breakdown:'extent of work',account:'cost of sales',tax:'tax'};
+      const nodes=[project,supplier,service,breakdown,...[...lineBox.children].flatMap(row=>[row.querySelector('[name=account]'),row.querySelector('[name=tax]')])];
+      retryDraft.missing.clear();
+      for(const node of nodes)if(!node.value)retryDraft.missing.add(labels[node.name]);
+    }
+    function applyRetrySelections(){
+      const draft=retryDraft;if(!draft||!verifiedEow()||!commonMatchesCatalog()||locked||submitter.pending)return;
+      for(const [node,value] of draft.pending){
+        const sameProject=node!==breakdown||catalog.projectPageId===draft.projectPageId;
+        const available=sameProject&&[...node.options].some(option=>option.value===value&&!option.disabled);
+        node.value=available?value:'';node.searchControl?.sync();
+        draft.pending.delete(node);
+      }
+      refreshRetryMissing();renderRetryBanner();updateTotals();
+    }
+    function copyRetryFields(request,reviewId,blocked=false){
+      requireValue(Array.isArray(request.lines)&&request.lines.length>0&&request.lines.length<=200,'Saved request lines are unavailable.');
+      requireValue(newRequest(true),'The current request cannot be replaced.');
+      const draft=retryDraft={requestId:request.id,reviewId,reference:requestReference(request)||'original request',projectPageId:request.projectPageId,quoteRequired:!!request.quote,pending:new Map(),missing:new Set(),blocked};
+      name.value=request.requestor.name;email.value=request.requestor.email;date.value=request.date;reference.value=request.supplierReference||'';
+      project.value=[...project.options].some(option=>option.value===String(request.projectPageId)&&!option.disabled)?String(request.projectPageId):'';
+      if(!project.value)draft.missing.add('project');
+      const remember=(node,value)=>{node.value='';draft.pending.set(node,String(value??''));node.searchControl?.sync();node.addEventListener('change',()=>{if(retryDraft===draft){draft.pending.delete(node);refreshRetryMissing();renderRetryBanner();}});};
+      remember(supplier,request.supplierId);remember(service,request.serviceId);remember(breakdown,request.breakdownType);
+      for(const row of lineBox.children){row.querySelector('[name=account]')?.searchControl?.destroy();row.querySelector('[name=tax]')?.searchControl?.destroy();}
+      lineBox.replaceChildren();
+      for(const line of request.lines){addLine();const row=lineBox.children[lineBox.children.length-1];row.defaultTaxPending=false;row.querySelector('[name=description]').value=line.description;row.querySelector('[name=quantity]').value=String(line.quantity);row.querySelector('[name=price]').value=String(line.unitPriceExGst);remember(row.querySelector('[name=account]'),line.chartOfAccountId);remember(row.querySelector('[name=tax]'),line.taxRateId);}
+      renderRetryBanner();updateTotals();
+      if(project.value)void lookup();
+      return draft;
+    }
+    async function prepareRetry(source){
+      if(!current()||busy||reviewBusy)return;
+      if(submitter.pending){notice('Check the saved request outcome before preparing another request.',true);return;}
+      if(!permissions.manage||!permissions.create)return;
+      const id=source.id,version=++reviewVersion;reviewBusy=true;renderDetails();
+      try{
+        const response=await api('/purchase-requests/'+encodeURIComponent(id));
+        if(!current()||version!==reviewVersion||detailLoader.id!==id)return;
+        requireValue(permissions.manage&&permissions.create,'Your account cannot prepare a retry.');
+        requireValue(response.ok&&response.data.request?.id===id,response.data.error||'Request details could not be loaded.');
+        const request=response.data.request;upsert(request);detailLoader.show(request);renderHistory();
+        requireValue(request.state==='needs_review'&&request.review?.status==='retry_ready'&&request.review.canRetry===true&&request.review.assessment?.status==='retry_ready'&&typeof request.review.assessment.id==='string'&&!request.review.replacement,'Check this request again before preparing a retry.');
+        requireValue(Array.isArray(request.lines)&&request.lines.length>0&&request.lines.length<=200,'Full request lines are unavailable. Reload the request before preparing a retry.');
+        if(hasUnsubmittedDraft()){
+          requireValue(typeof options.confirm==='function','Finish or clear the current draft before preparing a retry.');
+          if(!await options.confirm({title:'Replace the current draft?',message:'Copy '+requestReference(request)+' into the form? Your current unsent entries will be replaced. Nothing is submitted until you click Submit.',confirmLabel:'Prepare retry'}))return;
+          if(!current()||version!==reviewVersion||detailLoader.id!==id||submitter.pending||busy||!permissions.manage||!permissions.create)return;
+        }
+        const draft=copyRetryFields(request,request.review.assessment.id);
+        notice('Retry draft prepared from '+draft.reference+'. Check the details'+(draft.quoteRequired?' and attach the quote PDF again':'')+', then submit.');
+        formCard.scrollIntoView?.({behavior:'smooth',block:'start'});
+      }catch(error){if(current()&&version===reviewVersion)notice(error.message,true);}
+      finally{if(current()&&version===reviewVersion){reviewBusy=false;renderDetails();}}
+    }
+    async function reviewAction(request,action,note=''){
+      if(!current()||!permissions.manage||busy||reviewBusy)return;
+      if(submitter.pending){notice('Check the saved request outcome before changing this review.',true);return;}
+      const text=note.trim();if(['note','close'].includes(action)&&!text){notice('Enter a review note first.',true);return;}
+      const id=request.id,version=++reviewVersion;
+      if(action==='close'&&options.confirm&&!await options.confirm({title:'Close this review?',message:'Keep '+requestReference(request)+' in history with your resolution note. This will not create a purchase order.',confirmLabel:'Close review'}))return;
+      if(!current()||version!==reviewVersion||busy||reviewBusy||submitter.pending||!permissions.manage)return;
+      reviewBusy=true;renderDetails();
+      try{
+        const response=await api('/purchase-requests/'+encodeURIComponent(id)+'/review',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,...(text?{note:text}:{})})});
+        if(!current()||version!==reviewVersion)return;
+        requireValue(response.ok&&response.data.request?.id===id,response.data.error||'The review could not be updated.');
+        const saved=response.data.request;upsert(saved);
+        if(reviewDrafts.get(id)===note)reviewDrafts.delete(id);
+        if(detailLoader.id===id)detailLoader.show(saved);renderHistory();
+        notice(action==='check'?'Request check queued. This check does not create a purchase order.':action==='close'?'Review closed.':action==='reopen'?'Review reopened.':'Review note saved.');
+      }catch(error){if(current()&&version===reviewVersion)notice(error.message,true);}
+      finally{if(current()&&version===reviewVersion){reviewBusy=false;renderDetails();}}
+    }
     function referenceDate(value){const date=new Date(value);return Number.isFinite(date.getTime())?new Intl.DateTimeFormat('en-AU',{timeZone:'Australia/Brisbane',day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'}).format(date):'time unavailable';}
     function syncActive(value=referenceSync){return ['queued','refreshing'].includes(value?.state);}
     function renderReferenceSync(){
@@ -456,7 +567,7 @@
       for(const node of [supplier,service,breakdown])choiceAvailability(node);
       for(const row of lineBox.children)for(const fieldName of ['account','tax'])choiceAvailability(row.querySelector('[name='+fieldName+']'));
       for(const control of searchControls)control.syncDisabled();
-      send.disabled=value||!permissions.create||!verifiedEow()||!commonMatchesCatalog();retry.hidden=!submitter.pending;retry.disabled=busy;
+      send.disabled=value||!permissions.create||!!retryDraft?.blocked||!verifiedEow()||!commonMatchesCatalog();retry.hidden=!submitter.pending;retry.disabled=busy;
       sharedStatus.textContent=commonReady()?(sharedFailure?'Using saved Nexvia choices while updates are unavailable. ':'')+'Nexvia choices updated '+referenceDate(shared.updatedAt)+'. Updates sync daily.':sharedLoading||catalogRefreshing?'Loading common Nexvia choices…':!sharedSupported&&!shared&&!project.value?'Select a project to load shared choices.':(sharedFailure||'Common choices are unavailable.')+' Retry project choices to reload them.';
       const recoverProject=!!project.value&&catalogBlocked,recoverCommon=!commonReady()&&!sharedLoading&&sharedSupported;
       const mismatch=matchingCatalog()&&!catalogBlocked&&!commonMatchesCatalog();
@@ -499,7 +610,7 @@
     }
     function setCatalog(value){
       catalog=value;if(value)cacheEow(value,true);
-      const removed=populateEow();updateTotals();return removed;
+      const removed=populateEow();applyRetrySelections();updateTotals();return removed;
     }
     async function refreshShared({force=false}={}){
       if(!current()||locked||busy||submitter.pending||!permissions.create||doc.hidden)return;
@@ -578,13 +689,15 @@
       catch(error){fail(error);}
     }
     project.addEventListener('input',()=>lock(locked));
-    project.addEventListener('change',()=>void lookup());
+    project.addEventListener('change',()=>{if(retryDraft&&Number(project.value)!==retryDraft.projectPageId)retryDraft.pending.delete(breakdown);void lookup();});
     breakdown.addEventListener('change',()=>{eowSelectionRemoved=false;});
     file.addEventListener('change',()=>{
       quote=file.files?.[0]||null;
       if(quote&&(quote.size>MAX_PDF||!quote.name.toLowerCase().endsWith('.pdf'))){notice('Choose a PDF no larger than 10 MB.',true);file.value='';quote=null;}
     });
     async function payload(){
+      requireValue(!retryDraft?.blocked,'Check the original request again before preparing a retry.');
+      requireValue(!retryDraft?.quoteRequired||!!quote,'Attach the quote PDF again before submitting this retry.');
       requireValue(verifiedEow(),'Load the selected project choices before submitting.');
       requireValue(commonMatchesCatalog(),'Common choices changed. Retry project choices before submitting.');
       const valid=(field,id)=>!!id&&catalog[field].some(row=>String(row.id)===String(id)&&!row.disabled);
@@ -592,6 +705,7 @@
       const lines=lineValues();calculateTotals(lines,catalog.taxes);
       requireValue(lines.every(line=>valid('accounts',line.chartOfAccountId)&&valid('taxes',line.taxRateId)),'Select current cost of sales and tax choices for every line.');
       const body={requestId:root.crypto.randomUUID(),projectPageId:catalog.projectPageId,catalogRevision:catalog.revision,requestor:{name:name.value.trim(),email:email.value.trim()},date:date.value,supplierId:supplier.value,supplierReference:reference.value.trim(),serviceId:service.value,breakdownType:breakdown.value,quote:null,quoteBase64:'',lines};
+      if(retryDraft)body.retryOf={requestId:retryDraft.requestId,reviewId:retryDraft.reviewId};
       if(quote){
         requireValue(quote.size<=MAX_PDF,'The PDF must be no larger than 10 MB.');
         const bytes=new Uint8Array(await quote.arrayBuffer());requireValue(new TextDecoder().decode(bytes.slice(0,5))==='%PDF-','Choose a valid PDF file.');
@@ -602,35 +716,101 @@
     }
     async function submit(isRetry){
       if(busy||!current())return;
+      if(!permissions.create||retryDraft&&!permissions.manage){notice('Your account cannot submit this request.',true);return;}
       if(!isRetry&&(catalogRefreshing||catalogBlocked)){notice('Wait for current project choices or refresh them before submitting.',true);return;}
       if(!isRetry&&!form.reportValidity())return;
+      const savedRetry=isRetry?submitter.pending:null;let rejectedReview=null;
       busy=true;lock(true);send.textContent='Submitting…';notice('Saving your request…');
       try{
         const request=isRetry?await submitter.retry():await submitter.submit(await payload());
-        if(!current())return;quote=null;file.value='';upsert(request);detailLoader.show(request);renderHistory();fresh.hidden=false;send.hidden=true;
+        if(!current())return;quote=null;file.value='';retryDraft=null;renderRetryBanner();upsert(request);detailLoader.show(request);renderHistory();fresh.hidden=false;send.hidden=true;
         notice('Request '+requestReference(request)+' saved. '+(request.state==='needs_review'?'It is waiting for office review.':'Follow its PO status below.'));
       }catch(error){
         if(!current())return;
         if(error.choicesChanged){++lookupVersion;catalogRefreshing=false;catalogBlocked=true;retryChoices.hidden=false;lookupStatus.textContent='Retry project choices and check the supplier, service and account selections. Your entries are retained.';}
+        if(error.reviewChanged){
+          if(retryDraft){retryDraft.blocked=true;renderRetryBanner();lock(false);void detailLoader.select(retryDraft.requestId);void refresh();}
+          else if(savedRetry?.retryOf)rejectedReview=savedRetry;
+        }
         const retained=submitter.pending;notice(retained?'The outcome is not yet confirmed. Your saved request is locked to avoid a duplicate. Check status and retry the same request. '+error.message:error.message,true);
         lock(!!retained);
-      }finally{busy=false;if(current()){send.textContent='Submit purchase request';retry.hidden=!submitter.pending;retry.disabled=false;}}
+      }finally{busy=false;if(current()){
+        if(rejectedReview){
+          try{
+            const source=requests.find(request=>request.id===rejectedReview.retryOf.requestId);
+            const restored=copyRetryFields({...rejectedReview,id:rejectedReview.retryOf.requestId,displayReference:source?requestReference(source):'original request'},rejectedReview.retryOf.reviewId,true);
+            notice('The saved retry was not submitted. Your entered details are restored. Check the original request again'+(restored.quoteRequired?' and select the quote PDF again':'')+'.',true);
+            void detailLoader.select(restored.requestId);void refresh();
+          }catch(error){notice('The saved retry was not submitted. Reload the original request before preparing another retry. '+error.message,true);}
+        }
+        send.textContent='Submit purchase request';retry.hidden=!submitter.pending;retry.disabled=false;
+      }}
     }
     form.addEventListener('submit',event=>{event.preventDefault();void submit(false);});
-    function newRequest(){if(submitter.pending||busy)return;++lookupVersion;++sharedVersion;++eowVersion;eowSelectionRemoved=false;catalogRefreshing=false;catalogBlocked=false;retryChoices.hidden=true;form.reset();project.value='';supplier.value='';service.value='';breakdown.value='';name.value=options.profile?.name||name.value;email.value=options.profile?.email||email.value;date.value=new Intl.DateTimeFormat('en-CA',{timeZone:'Australia/Brisbane',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());quote=null;for(const row of lineBox.children){row.querySelector("[name=account]")?.searchControl?.destroy();row.querySelector("[name=tax]")?.searchControl?.destroy();}lineBox.replaceChildren();setCatalog(null);locked=false;addLine();populateCommon();lock(false);send.hidden=false;fresh.hidden=true;notice('');if(!commonReady())void refreshShared();}
+    function newRequest(preparing=false){if(submitter.pending||busy||reviewBusy&&!preparing)return false;++lookupVersion;++sharedVersion;++eowVersion;retryDraft=null;renderRetryBanner();eowSelectionRemoved=false;catalogRefreshing=false;catalogBlocked=false;retryChoices.hidden=true;form.reset();project.value='';supplier.value='';service.value='';breakdown.value='';name.value=options.profile?.name||name.value;email.value=options.profile?.email||email.value;date.value=new Intl.DateTimeFormat('en-CA',{timeZone:'Australia/Brisbane',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());quote=null;file.value='';for(const row of lineBox.children){row.querySelector("[name=account]")?.searchControl?.destroy();row.querySelector("[name=tax]")?.searchControl?.destroy();}lineBox.replaceChildren();setCatalog(null);locked=false;addLine();populateCommon();lock(false);send.hidden=false;fresh.hidden=true;notice('');if(!commonReady())void refreshShared();return true;}
     function upsert(request){requests=[request,...requests.filter(value=>value.id!==request.id)].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));}
     function renderHistory(){
       historyList.replaceChildren();if(!requests.length){const empty=el('div',null,'pr-empty');append(empty,el('span','No purchase requests yet.','pr-empty-title'),el('p','Your requests and PO updates will appear here.','pr-help'));historyList.appendChild(empty);return;}
       const table=el('table');const head=el('tr');for(const label of ['Request','Project','Total incl GST','Status','PO'])head.appendChild(el('th',label));append(table,append(el('thead'),head));const body=el('tbody');
-      for(const request of requests){const row=el('tr');const open=button(requestReference(request),()=>void detailLoader.select(request.id),'pr-link');append(row,append(el('td'),open),el('td',request.project),el('td',money(request.totalCents)),el('td',STATES[request.state]||'Status pending'),el('td',request.result?.purchaseOrderNumber||'—'));body.appendChild(row);}
+      for(const request of requests){const row=el('tr');const open=button(requestReference(request),()=>void openRequest(request.id),'pr-link');append(row,append(el('td'),open),el('td',request.project),el('td',money(request.totalCents)),el('td',requestStatus(request)),el('td',request.result?.purchaseOrderNumber||'—'));body.appendChild(row);}
       append(table,body);historyList.appendChild(table);
     }
+    function renderReviewPanel(request){
+      if(request.state!=='needs_review')return null;
+      const panel=el('section',null,'pr-review-panel');panel.setAttribute('aria-label','Review request');
+      const review=request.review,heading=el('div',null,'pr-section-heading');
+      append(heading,el('h4','Review request'),el('span',requestStatus(request),'pr-review-state'));panel.appendChild(heading);
+      if(!review){panel.appendChild(el('p','Review tools are unavailable. Refresh requests to check for an update.','pr-help'));return panel;}
+      if(review.assessment?.message)panel.appendChild(el('p',review.assessment.message,'pr-review-message'));
+      else panel.appendChild(el('p',review.status==='checking'?'Waiting for the Nexvia connection to check this request.':review.status==='closed'?'This review is closed. The original request remains in history.':review.status==='replaced'?'A replacement request has been created. Follow its progress below.':'Check whether this request can be retried safely. A check does not create a purchase order.','pr-help'));
+      if(review.assessment?.checkedAt)panel.appendChild(el('p','Last checked '+referenceDate(review.assessment.checkedAt)+'.','pr-help'));
+      if(review.note)panel.appendChild(el('p',review.note,'pr-review-note'));
+      if(review.reviewedBy)panel.appendChild(el('p','Reviewed by '+review.reviewedBy+(review.reviewedAt?' · '+referenceDate(review.reviewedAt):''),'pr-help'));
+      if(review.replacement){
+        const link=button('Open '+review.replacement.displayReference,()=>void openRequest(review.replacement.id),'pr-link');
+        append(panel,append(el('p',null,'pr-review-link'),el('span','Replacement request: '),link));
+      }
+      if(Array.isArray(review.events)&&review.events.length){
+        const history=el('details',null,'pr-review-history'),list=el('ol');
+        history.appendChild(el('summary','Review history'));
+        const labels={check:'Request check queued',result:'Request checked',note:'Review note',close:'Review closed',reopen:'Review reopened',replacement:'Replacement created'};
+        for(const event of review.events.slice(-20).reverse()){
+          const item=el('li');append(item,el('strong',labels[event.action]||'Review updated'),el('span',(event.by?' · '+event.by:'')+(event.at?' · '+referenceDate(event.at):''),'pr-help'));
+          if(event.note)item.appendChild(el('p',event.note,'pr-review-note'));list.appendChild(item);
+        }
+        history.appendChild(list);panel.appendChild(history);
+      }
+      if(!permissions.manage)return panel;
+      const waiting=()=>busy||reviewBusy||!!submitter.pending;
+      if(review.status==='closed'&&!review.replacement){const reopen=button('Reopen review',()=>void reviewAction(request,'reopen'));reopen.disabled=waiting();panel.appendChild(append(el('div',null,'pr-review-actions'),reopen));return panel;}
+      if(review.status==='replaced'||review.replacement)return panel;
+      const note=el('textarea');note.name='reviewNote';note.reviewRequestId=request.id;note.rows=3;note.maxLength=2000;note.setAttribute('aria-label','Review note');
+      note.value=reviewDrafts.has(request.id)?reviewDrafts.get(request.id):(review.note||'');note.disabled=waiting();panel.reviewNote=note;
+      const actions=el('div',null,'pr-review-actions');
+      const check=button('Check request',()=>void reviewAction(request,'check'));check.disabled=waiting()||review.canCheck!==true;
+      const save=button('Save note',()=>void reviewAction(request,'note',note.value));save.disabled=waiting()||!note.value.trim();
+      append(actions,check,save);
+      let close=null;
+      if(review.canClose===true){close=button('Close review',()=>void reviewAction(request,'close',note.value));close.disabled=waiting()||!note.value.trim();actions.appendChild(close);}
+      note.addEventListener('input',()=>{reviewDrafts.set(request.id,note.value);save.disabled=waiting()||!note.value.trim();if(close)close.disabled=waiting()||!note.value.trim();});
+      append(panel,field('Review note',note),el('p','Add a resolution note before closing this review.','pr-help'),actions);
+      if(review.canRetry===true&&review.status==='retry_ready'&&review.assessment?.status==='retry_ready'){
+        if(permissions.create){const prepare=button('Prepare retry',()=>void prepareRetry(request),'pr-primary');prepare.disabled=waiting();actions.appendChild(prepare);}
+        else panel.appendChild(el('p','Create-request permission is required to prepare a retry.','pr-help'));
+      }
+      return panel;
+    }
     function renderDetails(){
-      const request=detailLoader.value||requests.find(value=>value.id===detailLoader.id);details.hidden=!detailLoader.id;details.replaceChildren();if(!detailLoader.id)return;
+      const request=detailLoader.value||requests.find(value=>value.id===detailLoader.id),activeNote=doc.activeElement;
+      const restoreNote=activeNote?.name==='reviewNote'&&activeNote.reviewRequestId===detailLoader.id,selection=restoreNote?[activeNote.selectionStart,activeNote.selectionEnd]:null;
+      details.hidden=!detailLoader.id;details.replaceChildren();if(!detailLoader.id)return;
       if(detailLoader.busy)details.appendChild(el('p','Loading request details…','pr-help'));
       if(detailLoader.error)details.appendChild(el('p',detailLoader.error,'pr-error'));
       if(!request)return;
-      append(details,el('h3',requestReference(request)),el('p',(STATES[request.state]||'Status pending')+' · '+request.project),el('p',request.message||'', 'pr-help'));
+      if(retryDraft?.requestId===request.id&&requestReference(request)){retryDraft.reference=requestReference(request);renderRetryBanner();}
+      append(details,el('h3',requestReference(request)),el('p',requestStatus(request)+' · '+request.project),el('p',request.message||'', 'pr-help'));
+      if(request.retryOf?.id)append(details,append(el('p',null,'pr-review-link'),el('span','Retry of '),button(request.retryOf.displayReference,()=>void openRequest(request.retryOf.id),'pr-link')));
+      const reviewPanel=renderReviewPanel(request);if(reviewPanel)details.appendChild(reviewPanel);
       const pairs=[['Requested by',request.requestor.name+' · '+request.requestor.email],['Supplier',request.supplierName],['Service',request.serviceName],['Extent of work',extentWorkName(request.breakdownName,request.breakdownType)],['Order date',request.date],['Supplier reference',request.supplierReference||'—'],['Total including GST',money(request.totalCents)]];
       if(request.quote){
         const transfer=request.quoteTransfer;
@@ -657,6 +837,7 @@
         if(busy)return;if(options.confirm&&!await options.confirm({title:'Cancel purchase request?',message:'Cancel '+requestReference(request)+' before it is processed?',confirmLabel:'Cancel request'}))return;
         busy=true;try{const response=await api('/purchase-requests/'+encodeURIComponent(request.id)+'/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});requireValue(response.ok,response.data.error||'The request could not be cancelled.');upsert(response.data.request);if(detailLoader.id===request.id)detailLoader.show(response.data.request);renderHistory();notice('Request cancelled.');}catch(error){notice(error.message,true);}finally{busy=false;}
       }));
+      if(restoreNote&&reviewPanel?.reviewNote){reviewPanel.reviewNote.focus?.();if(selection.every(Number.isInteger))reviewPanel.reviewNote.setSelectionRange?.(...selection);}
     }
     async function refresh(initial=false){
       try{
@@ -688,7 +869,7 @@
       const refreshChoices=()=>{void refreshShared();void lookup({background:true});later(refreshChoices,CHOICE_REFRESH_MS);};later(refreshChoices,CHOICE_REFRESH_MS);
     }
     void start();
-    return {destroy(){alive=false;++lookupVersion;++sharedVersion;++eowVersion;controller.abort();for(const timer of timers)root.clearTimeout(timer);timers.clear();for(const control of searchControls)control.destroy();host.replaceChildren();},refresh};
+    return {destroy(){alive=false;++lookupVersion;++sharedVersion;++eowVersion;++reviewVersion;retryDraft=null;quote=null;reviewDrafts.clear();controller.abort();for(const timer of timers)root.clearTimeout(timer);timers.clear();for(const control of searchControls)control.destroy();host.replaceChildren();},refresh};
   }
   root.PanelStockPurchaseRequests={mount,calculateTotals,createSubmission,createDetailLoader,searchableSelect,MAX_PDF};
 })(typeof window!=='undefined'?window:globalThis);
