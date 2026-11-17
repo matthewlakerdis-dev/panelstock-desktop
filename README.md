@@ -1,5 +1,14 @@
 # PanelStock desktop
 
+In **Work → Site Orders**, **Active orders PDF** downloads a fresh branded report
+of all current active orders, grouped by project and order number. It includes
+orders ready for dispatch and excludes dispatched/cancelled orders, independently
+of the selected list tab, search or grouping. Order details, delivery dates,
+contacts, notes and ordered item quantities are included; permitted admin notes
+follow their existing visibility rules. Dates use Brisbane time. The report is
+available to users with Site Orders view access. Deploy the companion Worker
+report API before publishing this control.
+
 Desktop browser interface for the same inventory used by `matthewlakerdis-dev/panelstock`.
 
 **Work → Purchase Requests** is the native Lennox request form, request history,
