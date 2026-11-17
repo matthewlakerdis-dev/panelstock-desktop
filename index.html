@@ -16917,6 +16917,89 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
     },[username]);
     return (0,import_jsx_runtime.jsxs)("section",{children:[(0,import_jsx_runtime.jsx)(PageHeading,{icon:(0,import_jsx_runtime.jsx)(ClipboardList,{size:18}),title:"Gate Progress",subtitle:"Villa completion, individual QA and separate deliveries."}),error&&(0,import_jsx_runtime.jsx)("p",{role:"alert",children:error}),(0,import_jsx_runtime.jsx)("div",{ref:root,children:"Loading gate progress…"})]});
   }
+  function NexviaProjectMatch({ project, projects, onSaved }) {
+    const e=import_react.createElement;
+    const current=project.nexviaProjectPageId??null;
+    const [directory,setDirectory]=useState(null);
+    const [choice,setChoice]=useState(String(current??""));
+    const [search,setSearch]=useState("");
+    const [status,setStatus]=useState("");
+    const busy=useRef(false);
+    const [working,setWorking]=useState(false);
+    async function request(path,options){
+      const response=await PanelStock.apiFetch(BAKED_WORKER_URL+path,options);
+      const result=await response.json().catch(()=>({}));
+      if(!response.ok)throw Error(result.error||"The Nexvia project request failed.");
+      return result;
+    }
+    async function refresh(){
+      if(busy.current)return;
+      busy.current=true;
+      setWorking(true);
+      setStatus("");
+      try{
+        const result=await request("/projects/nexvia");
+        setDirectory(result.projects.slice().sort((a,b)=>a.name.localeCompare(b.name,"en-AU",{numeric:true})));
+      }catch(error){
+        setStatus(error.message);
+      }finally{
+        busy.current=false;
+        setWorking(false);
+      }
+    }
+    async function save(event){
+      event.preventDefault();
+      if(busy.current)return;
+      busy.current=true;
+      setWorking(true);
+      setStatus("");
+      try{
+        const result=await request("/projects/"+encodeURIComponent(project.id)+"/nexvia",{
+          method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({projectPageId:choice?Number(choice):null,expectedProjectPageId:current})
+        });
+        onSaved(result.project);
+        setStatus(choice?"Nexvia match saved.":"Nexvia match removed.");
+      }catch(error){
+        setStatus(error.message);
+      }finally{
+        busy.current=false;
+        setWorking(false);
+      }
+    }
+    const linkedElsewhere=new Map(projects.filter(row=>row.id!==project.id&&row.nexviaProjectPageId)
+      .map(row=>[row.nexviaProjectPageId,row.name]));
+    const query=search.trim().toLocaleLowerCase("en-AU");
+    const choices=(directory||[]).filter(row=>String(row.projectPageId)===choice||
+      row.name.toLocaleLowerCase("en-AU").includes(query)||String(row.projectPageId).includes(query));
+    const currentName=directory?.find(row=>row.projectPageId===current)?.name;
+    const fieldClass="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm";
+    const buttonClass="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold disabled:opacity-50";
+    return e("form",{onSubmit:save,className:"mb-4 rounded-xl border border-slate-300 bg-white p-4"},
+      e("div",{className:"flex flex-wrap items-start justify-between gap-3"},
+        e("div",null,e("h3",{className:"text-sm font-semibold text-slate-900"},"Nexvia project match"),
+          e("p",{className:"mt-1 text-xs text-slate-600"},current
+            ? "Matched to "+(currentName?currentName+" · ":"")+"Nexvia ID "+current
+            : "No Nexvia project matched")),
+        e("button",{type:"button",className:buttonClass,disabled:working,onClick:refresh},
+          working&&directory===null?"Loading…":directory===null?"Load Nexvia projects":"Refresh Nexvia projects")),
+      directory!==null&&e("div",{className:"mt-3 grid gap-3 md:grid-cols-2"},
+        e("label",{className:"text-xs font-medium text-slate-600"},"Search Nexvia projects",
+          e("input",{type:"search",className:fieldClass,value:search,onChange:event=>setSearch(event.target.value)})),
+        e("label",{className:"text-xs font-medium text-slate-600"},"Nexvia project",
+          e("select",{className:fieldClass,value:choice,disabled:working,onChange:event=>setChoice(event.target.value)},
+            e("option",{value:""},"No match"),
+            choice&&!choices.some(row=>String(row.projectPageId)===choice)&&
+              e("option",{value:choice},"Nexvia ID "+choice+" (unavailable)"),
+            choices.map(row=>e("option",{key:row.projectPageId,value:row.projectPageId,disabled:linkedElsewhere.has(row.projectPageId)},
+              row.name+" · ID "+row.projectPageId+(linkedElsewhere.has(row.projectPageId)
+                ? " (matched to "+linkedElsewhere.get(row.projectPageId)+")":"")))))),
+      directory!==null&&directory.length===0&&e("p",{className:"mt-2 text-xs text-slate-600"},"No projects have been synced from Nexvia yet."),
+      directory!==null&&e("div",{className:"mt-3 flex justify-end"},
+        e("button",{type:"submit",disabled:working||choice===String(current??""),
+          className:"rounded-lg bg-cyan-800 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"},"Save Nexvia match")),
+      status&&e("p",{role:"status",className:"mt-2 text-sm text-slate-700"},status));
+  }
   function OrdersPage({ canCreate, canManage, canDispatch = false, isAdmin, projectsOnly = false }) {
     const e = import_react.createElement;
     const [orders, setOrders] = useState([]);
@@ -17309,6 +17392,9 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
       e(PageHeading, { icon: e(projectsOnly ? Briefcase : ClipboardList, { size: 18 }), title: projectsOnly ? "Projects" : "Orders", subtitle: projectsOnly ? "Manage shared project details and project order numbering." : "View site requests, create orders and manage delivery progress.", action: !projectsOnly ? e("div", { className: "flex flex-wrap items-center gap-2" }, e(ActiveOrdersReportButton,{orders,loadingOrders}), CNC_PUBLIC_TOKEN && e("a", { href: "https://cnc.panelstockhq.com/cnc-tracker?token=" + encodeURIComponent(CNC_PUBLIC_TOKEN), referrerPolicy: "no-referrer", className: "flex items-center gap-1.5 text-sm font-medium text-slate-600 border border-slate-300 bg-white rounded-lg px-3 py-2 hover:bg-slate-50" }, e(FileSpreadsheet, { size: 15 }), "Production Tracker"), canCreate && e("button", { onClick: () => openPanel("new"), className: "inline-flex items-center gap-2 rounded-lg bg-cyan-800 px-4 py-2.5 text-sm font-semibold text-white hover:bg-cyan-900" }, e(Plus, { size: 16 }), "New order")) : null }),
       notice && e("div", { className: "mb-4 rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-900" }, notice),
       projectsOnly && isAdmin && e("form", { onSubmit: saveProject, className: "mb-4 rounded-xl border border-slate-300 bg-white p-4" }, e("div", { className: "flex flex-wrap items-start justify-between gap-3" }, e("div", null, e("h3", { className: "text-sm font-semibold text-slate-900" }, "Project details"), e("p", { className: "mt-1 text-xs text-slate-500" }, "Projects are shared across the App, Web and Site app.")), e("select", { value: projectEditor.id, onChange: (event) => { const project = projects.find((value) => value.id === event.target.value); setProjectEditor(project ? { id: project.id, name: project.name, projectNumber: project.projectNumber || "", address: project.address || "", notes: project.notes || "", active: project.active !== false } : { id: "", name: "", projectNumber: "", address: "", notes: "", active: true }); }, className: "h-10 min-w-52 rounded-lg border border-slate-300 bg-white px-3 text-sm" }, e("option", { value: "" }, "+ New project"), projects.map((project) => e("option", { key: project.id, value: project.id }, `${project.projectNumber ? project.projectNumber + " · " : ""}${project.name}${project.active===false?" (Inactive)":""}`)))), e("div", { className: "mt-3 grid gap-3 md:grid-cols-2" }, e("label", { className: "text-xs font-medium text-slate-600" }, "Project name", e("input", { required: true, value: projectEditor.name, maxLength: 120, onChange: (event) => setProjectEditor((current) => ({ ...current, name: event.target.value })), className: "mt-1.5 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm" })), e("label", { className: "text-xs font-medium text-slate-600" }, "Project number (optional)", e("input", { type: "text", value: projectEditor.projectNumber || "", maxLength: 50, placeholder: "e.g. 00123 or PRJ-123", onChange: (event) => setProjectEditor((current) => ({ ...current, projectNumber: event.target.value })), className: "mt-1.5 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm" })), e("label", { className: "text-xs font-medium text-slate-600" }, "Address", e("span", { className: "mt-1.5 flex gap-2" }, e("input", { value: projectEditor.address, maxLength: 300, onChange: (event) => setProjectEditor((current) => ({ ...current, address: event.target.value })), className: "h-10 min-w-0 flex-1 rounded-lg border border-slate-300 px-3 text-sm" }), e("a", { href: projectEditor.address.trim() ? googleMapsUrl(projectEditor.address) : undefined, target: "_blank", rel: "noopener noreferrer", title: "Open address in Google Maps", "aria-label": "Open address in Google Maps", className: `grid h-10 w-10 shrink-0 place-items-center rounded-lg border ${projectEditor.address.trim() ? "border-cyan-700 text-cyan-800 hover:bg-cyan-50" : "pointer-events-none border-slate-200 text-slate-300"}` }, e(GoogleMapsButtonIcon)))), e("label", { className: "text-xs font-medium text-slate-600 md:col-span-2" }, "Project notes", e("textarea", { rows: 2, value: projectEditor.notes, maxLength: 1000, onChange: (event) => setProjectEditor((current) => ({ ...current, notes: event.target.value })), className: "mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" }))), e("div", { className: "mt-3 flex justify-end gap-3" }, projectEditor.id && e("button", { type: "button", onClick: () => setProjectActive(projectEditor.active===false), disabled: savingProject, className: `rounded-lg border px-4 py-2.5 text-sm font-semibold disabled:opacity-50 ${projectEditor.active===false?"border-green-300 text-green-700 hover:bg-green-50":"border-amber-300 text-amber-700 hover:bg-amber-50"}` }, projectEditor.active===false?"Reactivate project":"Deactivate project"), projectEditor.id && e("button", { type: "button", onClick: deleteProject, disabled: savingProject, className: "rounded-lg border border-red-300 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50" }, "Delete project"), e("button", { type: "submit", disabled: savingProject || !projectEditor.name.trim(), className: "rounded-lg bg-cyan-800 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50" }, savingProject ? "Saving..." : projectEditor.id ? "Save project" : "Add project"))),
+      projectsOnly && isAdmin && projects.some(project=>project.id===projectEditor.id) &&
+        e(NexviaProjectMatch,{key:projectEditor.id,project:projects.find(project=>project.id===projectEditor.id),projects,
+          onSaved:project=>setProjects(current=>current.map(row=>row.id===project.id?{...row,nexviaProjectPageId:project.nexviaProjectPageId}:row))}),
       projectsOnly && canManage && e("form", { onSubmit: saveProjectSequence, className: "mb-4 rounded-xl border border-slate-300 bg-white p-4" },
         e("div", { className: "mb-3" }, e("h3", { className: "text-sm font-semibold text-slate-900" }, "Project order numbering"), e("p", { className: "mt-1 text-xs text-slate-500" }, "Set the next unused order number for a project. New projects start at Order 1.")),
         e("div", { className: "grid gap-3 sm:grid-cols-[minmax(0,1fr)_180px_auto] sm:items-end" },
