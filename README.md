@@ -9,6 +9,14 @@ follow their existing visibility rules. Dates use Brisbane time. The report is
 available to users with Site Orders view access. Deploy the companion Worker
 report API before publishing this control.
 
+**Active orders PDF** opens a filter dialog for All active orders/My orders,
+Project, Order type, active Status and Delivery schedule. Optional From/To dates
+apply to Date ordered, Requested delivery or Scheduled delivery, inclusively in
+Brisbane time. All selected filters are combined. The PDF retains compact layout
+A and prints the filters used, including when no orders match. Reset restores all
+active orders, and the screen's order-list filters stay unchanged. Download uses
+fresh server data; deploy the companion Worker filter support before this UI.
+
 Desktop browser interface for the same inventory used by `matthewlakerdis-dev/panelstock`.
 
 **Work → Purchase Requests** is the native Lennox request form, request history,
