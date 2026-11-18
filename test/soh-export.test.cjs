@@ -93,3 +93,33 @@ test('the inline Material Catalogue keeps panel and offcut stock out of the expo
  assert.match(x.downloads[0],/^Lennox-Material-Catalogue-.*[.]pdf$/);
  assert.match(await realExports().soh.pdf(report).text(),/MATERIAL CATALOGUE/);
 });
+
+test('SOH PDF embeds a compact profile thumbnail per row and reuses shared pictures',async()=>{
+ const x=harness(),img='data:image/png;base64,AA==';
+ let decoded=0;
+ const drawSizes=[];
+ x.context.Image=class {
+  constructor(){this.naturalWidth=1600;this.naturalHeight=800;}
+  set src(value){assert.equal(value,img);decoded++;this.onload();}
+ };
+ const originalCreate=x.context.document.createElement;
+ x.context.document.createElement=tag=>tag==='canvas'?{
+  getContext:()=>({fillRect(){},drawImage(_image,_x,_y,width,height){drawSizes.push([width,height]);}}),
+  toDataURL:()=> 'data:image/jpeg;base64,/9j/2Q=='
+ }:originalCreate(tag);
+ x.states[0].items[0].image=img;
+ x.states[0].items[1].image=img;
+ x.states[0].items[2].colorHex='#24546b';
+ x.open();
+ await x.button('Download PDF').props.onClick();
+ const snapshot=x.exports.at(-1).snapshot;
+ assert.equal(decoded,1);
+ assert.deepEqual(drawSizes,[[96,48]]);
+ const pdf=await realExports().soh.pdf(snapshot).text();
+ assert.equal((pdf.match(/\/StockImage\d+ Do/g)||[]).length,2);
+ assert.equal((pdf.match(/\/Subtype \/Image/g)||[]).length,2);
+ assert.match(pdf,/q 26[.]00 0 0 13[.]00 43[.]00 [0-9.]+ cm \/StockImage/);
+ assert.match(pdf,/0[.]141 0[.]329 0[.]420 rg 47 [0-9.]+ 18 18 re f/);
+ await x.button('Download Excel').props.onClick();
+ assert.ok(x.exports.at(-1).snapshot.rows.every(row=>!row.thumbnail&&!row.swatch));
+});

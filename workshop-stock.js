@@ -366,9 +366,49 @@ window.createWorkshopStock = function(React) {
     location:i.location||'',supplier:i.supplier||'',unit:i.unit||'',qty:Number(i.qty||0),reserved:Number(i.reserved||0),available:Number(i.available??i.qty??0),onOrder:Number(i.onOrder||0),reorderLevel:Number(i.reorderLevel||0),...(scope.includeCostings?{unitCost:i.unitCost===null||i.unitCost===undefined||i.unitCost===''?null:Number(i.unitCost),costBasis:i.costBasis||'unit',packCost:i.packCost===null||i.packCost===undefined||i.packCost===''?null:Number(i.packCost),packSize:i.packSize??1,...(i.costBasis==='area'?{areaCost:i.areaCost?{...i.areaCost}:null,areaCostStatus:i.areaCostStatus||'',width:i.width,height:i.height}:{}),...(i.costBasis==='catalogue-area'?{catalogueCost:i.catalogueCost?{...i.catalogueCost}:null,width:i.width,height:i.height}:{})}:{}),status:i.available<=0?'Out of stock':i.available<=Number(i.reorderLevel||0)?'Needs restocking':'In stock'
    }))};
   }
-  function exportSOH(format){
+  async function prepareSOHThumbnails(rows,items){
+   const thumbnails=new Map();
+   for(const [index,item] of items.entries()){
+    const row=rows[index],source=item.image;
+    if(typeof source==='string'&&/^data:image\/(?:png|jpeg|webp);base64,/i.test(source)){
+     if(!thumbnails.has(source)){
+      let picture;
+      try{
+       const image=new Image();
+       await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=reject;image.src=source;});
+       const scale=Math.min(1,96/Math.max(image.naturalWidth,image.naturalHeight));
+       const canvas=document.createElement('canvas');
+       canvas.width=Math.max(1,Math.round(image.naturalWidth*scale));
+       canvas.height=Math.max(1,Math.round(image.naturalHeight*scale));
+       const ctx=canvas.getContext('2d');
+       ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
+       ctx.drawImage(image,0,0,canvas.width,canvas.height);
+       const jpeg=canvas.toDataURL('image/jpeg',.8);
+       if(jpeg.startsWith('data:image/jpeg;base64,')){
+        const hex=Array.from(atob(jpeg.slice(23)),char=>char.charCodeAt(0).toString(16).padStart(2,'0')).join('');
+        picture={width:canvas.width,height:canvas.height,hex};
+       }
+      }catch{}
+      thumbnails.set(source,picture);
+     }
+     row.thumbnail=thumbnails.get(source);
+    }
+    if(!row.thumbnail&&/^#[0-9a-f]{6}$/i.test(item.colorHex||''))row.swatch=item.colorHex;
+   }
+  }
+  async function exportSOH(format){
    const snapshot=sohSnapshot(sohExport);if(!snapshot)return;
-   try{const blob=window.PanelStockStocktakeReport.soh[format](snapshot),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=(catalogueOnly?'Lennox-Material-Catalogue-':'Lennox-SOH-')+new Date().toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})+'.'+format;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);setNotice('Exported '+exportItems.length+' matching stock items.');}catch(e){setError('SOH export could not be created: '+e.message);}
+   const owner=PanelStock.username,withPictures=format==='pdf'&&exportItems.some(item=>item.image||item.colorHex);
+   try{
+    setError('');
+    if(withPictures){setBusy(true);await prepareSOHThumbnails(snapshot.rows,exportItems);}
+    if(PanelStock.username!==owner)return;
+    const blob=window.PanelStockStocktakeReport.soh[format](snapshot),url=URL.createObjectURL(blob),link=document.createElement('a');
+    link.href=url;link.download=(catalogueOnly?'Lennox-Material-Catalogue-':'Lennox-SOH-')+new Date().toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})+'.'+format;
+    document.body.appendChild(link);link.click();link.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),60000);setNotice('Exported '+snapshot.rows.length+' matching stock items.');
+   }catch(e){setError('SOH export could not be created: '+e.message);}
+   finally{if(withPictures)setBusy(false);}
   }
   const xeroSettingsKey='panelstock:xero-settings:v1:'+workerUrl+':'+PanelStock.username;
   const xeroNarration=date=>'Stock Take for Factory '+new Date(date+'T00:00:00Z').toLocaleDateString('en-AU',{month:'short',year:'numeric',timeZone:'Australia/Brisbane'}).replace(' ','-');
@@ -1879,6 +1919,9 @@ License: GPL-2+
   };
   const font=makeFont(reportFonts.regular,'StocktakeSans-Regular'),bold=makeFont(reportFonts.bold,'StocktakeSans-Bold');
   const logo=add('<< /Type /XObject /Subtype /Image /Width '+brand.width+' /Height '+brand.height+' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter [/ASCIIHexDecode /DCTDecode] /Length '+(brand.jpegHex.length+1)+' >>\nstream\n'+brand.jpegHex+'>\nendstream');
+  const imageIds=new Map();
+  const hasPictures=soh&&report.rows.some(row=>row.thumbnail||row.swatch);
+  const itemX=hasPictures?76:42, detailWidth=322-itemX;
   const measure=(v,size,b=false)=>Array.from(clean(v)).reduce((n,c)=>n+(reportFonts[b?'bold':'regular'].widths[c.charCodeAt(0)-32]||0),0)*size/1000;
   const wrap=(v,width,size,b=false)=>{
    const lines=[];let line='';
@@ -1891,12 +1934,12 @@ License: GPL-2+
    if(line)lines.push(line);return lines;
   };
   const prepared=report.rows.map(r=>{
-   const name=wrap(r.name,280,9.2,true),spec=wrap([r.sku,r.colour,r.lengthMm?r.lengthMm+' mm':'',r.dimensions].filter(Boolean).join(' / '),280,7.5);
-   const storage=wrap([soh&&r.category?'Category: '+r.category:'',r.location?'Location: '+r.location:'',r.supplier?'Supplier: '+r.supplier:''].filter(Boolean).join(' / '),280,7.2);
+   const name=wrap(r.name,detailWidth,9.2,true),spec=wrap([r.sku,r.colour,r.lengthMm?r.lengthMm+' mm':'',r.dimensions].filter(Boolean).join(' / '),detailWidth,7.5);
+   const storage=wrap([soh&&r.category?'Category: '+r.category:'',r.location?'Location: '+r.location:'',r.supplier?'Supplier: '+r.supplier:''].filter(Boolean).join(' / '),detailWidth,7.2);
    const areaSourcePrice=r.areaCost?(r.areaCost.sourceCostBasis==='pack'?(r.areaCost.sourcePackCost===null?null:Number(r.areaCost.sourcePackCost)/Number(r.areaCost.sourcePackSize)):r.areaCost.sourceUnitCost):null;
    const catalogue=r.catalogueCost,itemWidth=r.width??catalogue?.width,itemHeight=r.height??catalogue?.height,itemKind=r.categoryKey==='offcuts'||r.category==='Offcuts'||String(r.itemId||'').startsWith('offcut:')?'offcut':'sheet';
    const catalogueLines=['Source catalogue: '+(catalogue?[catalogue.name,catalogue.catalogId].filter(Boolean).join(' / ')||'Not available':'Not available'),'Actual item size: '+(Number(itemWidth)>0&&Number(itemHeight)>0?itemWidth+' x '+itemHeight+' mm':'Unknown'),'Catalogue rate (AUD ex GST / m2): '+(r.areaRatePerM2===null?'Not priced':preciseCurrency(r.areaRatePerM2))+' / Area per '+itemKind+': '+(r.unitAreaM2===null?'Unknown':Number(r.unitAreaM2).toLocaleString('en-AU',{maximumFractionDigits:12}))+' m2','Equivalent '+itemKind+' cost (AUD ex GST): '+(r.effectiveUnitCost===null?'Not priced':preciseCurrency(r.effectiveUnitCost))];
-   const cost=costed?[...(r.costBasis==='catalogue-area'?catalogueLines:r.costBasis==='area'?[...(r.areaCost?['Source full sheet: '+r.areaCost.sourceName+' / '+r.areaCost.sourceWidth+' x '+r.areaCost.sourceHeight+' mm','Full-sheet cost (AUD ex GST): '+(areaSourcePrice===null||!Number.isFinite(Number(areaSourcePrice))?'Not priced':preciseCurrency(areaSourcePrice))]:['Source full sheet: not available']), 'Rate (AUD ex GST / m2): '+(r.areaRatePerM2===null?'Not priced':preciseCurrency(r.areaRatePerM2))+' / Area per offcut: '+(r.unitAreaM2===null?'Unknown':Number(r.unitAreaM2).toLocaleString('en-AU',{maximumFractionDigits:12}))+' m2','Equivalent offcut cost (AUD ex GST): '+(r.effectiveUnitCost===null?'Not priced':preciseCurrency(r.effectiveUnitCost))]:r.costBasis==='pack'?['Pack price (AUD ex GST): '+(r.packCost===null?'Not priced':currency(r.packCost))+' / '+r.packSize+' '+r.unit+' per pack','Equivalent unit cost (AUD ex GST): '+(r.effectiveUnitCost===null?'Not priced':preciseCurrency(r.effectiveUnitCost))]:['Unit cost (AUD ex GST): '+(r.effectiveUnitCost===null?'Not priced':currency(r.effectiveUnitCost))]),'On-hand value (AUD ex GST): '+(r.lineValue===null?'Not priced':currency(r.lineValue))].flatMap(line=>wrap(line,280,8,true)):[];
+   const cost=costed?[...(r.costBasis==='catalogue-area'?catalogueLines:r.costBasis==='area'?[...(r.areaCost?['Source full sheet: '+r.areaCost.sourceName+' / '+r.areaCost.sourceWidth+' x '+r.areaCost.sourceHeight+' mm','Full-sheet cost (AUD ex GST): '+(areaSourcePrice===null||!Number.isFinite(Number(areaSourcePrice))?'Not priced':preciseCurrency(areaSourcePrice))]:['Source full sheet: not available']), 'Rate (AUD ex GST / m2): '+(r.areaRatePerM2===null?'Not priced':preciseCurrency(r.areaRatePerM2))+' / Area per offcut: '+(r.unitAreaM2===null?'Unknown':Number(r.unitAreaM2).toLocaleString('en-AU',{maximumFractionDigits:12}))+' m2','Equivalent offcut cost (AUD ex GST): '+(r.effectiveUnitCost===null?'Not priced':preciseCurrency(r.effectiveUnitCost))]:r.costBasis==='pack'?['Pack price (AUD ex GST): '+(r.packCost===null?'Not priced':currency(r.packCost))+' / '+r.packSize+' '+r.unit+' per pack','Equivalent unit cost (AUD ex GST): '+(r.effectiveUnitCost===null?'Not priced':preciseCurrency(r.effectiveUnitCost))]:['Unit cost (AUD ex GST): '+(r.effectiveUnitCost===null?'Not priced':currency(r.effectiveUnitCost))]),'On-hand value (AUD ex GST): '+(r.lineValue===null?'Not priced':currency(r.lineValue))].flatMap(line=>wrap(line,detailWidth,8,true)):[];
    const user=soh?[]:wrap(r.quantitySource==='soh-snapshot'?'SOH snapshot':r.user||'Not recorded',182,8.4);
    return {r,name,spec,storage,cost,user,height:Math.max(36,14+name.length*11+spec.length*9+storage.length*9,16+user.length*10+10)};
   });
@@ -1930,12 +1973,31 @@ License: GPL-2+
    text(375,414-titleExtra-scopeExtra,7,soh?'EXPORT SUMMARY':'COUNT SUMMARY',true,'0.35 0.43 0.49');text(375,402-titleExtra-scopeExtra,9,soh?report.rows.length+' items / '+changed+' with available stock':report.rows.filter(r=>r.quantitySource!=='soh-snapshot').length+' items counted / '+report.rows.filter(r=>r.quantitySource==='soh-snapshot').length+' panel types from SOH',true);
    if(costed){text(375,386-titleExtra-scopeExtra,9,'Known on-hand value (AUD ex GST): '+currency(report.costSummary.totalValue),true,'0.08 0.37 0.46');text(375,373-titleExtra-scopeExtra,7.5,report.costSummary.unpricedItems+' item(s) not priced; excluded from this total',false,'0.35 0.43 0.49');}
    rect(32,tableTop,778,22,'0.08 0.37 0.46');
-   (soh?[[42,'ITEM / STOCK CODE'],[337,'UNIT'],[400,'ON HAND'],[466,'RESERVED'],[532,'AVAILABLE'],[605,'ON ORDER'],[676,'REORDER'],[744,'STATUS']]:[[42,'ITEM / STOCK CODE'],[337,'UNIT'],[400,'EXPECTED'],[468,'QUANTITY'],[538,'VARIANCE'],[612,'COUNT / SNAPSHOT DETAILS']]).forEach(([x,v])=>text(x,tableTop+8,7.5,v,true,'1 1 1'));
+   (soh?[[itemX,'ITEM / STOCK CODE'],[337,'UNIT'],[400,'ON HAND'],[466,'RESERVED'],[532,'AVAILABLE'],[605,'ON ORDER'],[676,'REORDER'],[744,'STATUS']]:[[42,'ITEM / STOCK CODE'],[337,'UNIT'],[400,'EXPECTED'],[468,'QUANTITY'],[538,'VARIANCE'],[612,'COUNT / SNAPSHOT DETAILS']]).forEach(([x,v])=>text(x,tableTop+8,7.5,v,true,'1 1 1'));
    let y=tableTop;
+   const pageImages=new Set();
    items.forEach((item,i)=>{
     const {r}=item;if(i%2===0)rect(32,y-item.height,778,item.height,'0.96 0.98 0.99');
     rect(32,y-item.height,778,.4,'0.87 0.91 0.93');
-    let lineY=y-13;for(const line of item.detail){text(42,lineY,line.size,line.text,line.bold,line.cost?'0.08 0.37 0.46':line.bold?'0.09 0.14 0.19':'0.35 0.43 0.49');lineY-=line.size+2;}
+    if(hasPictures&&!item.continuation){
+     const {thumbnail,swatch}=r;
+     if(thumbnail){
+      if(!imageIds.has(thumbnail)){
+       const {width,height,hex}=thumbnail;
+       const id=add('<< /Type /XObject /Subtype /Image /Width '+width+' /Height '+height+' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter [/ASCIIHexDecode /DCTDecode] /Length '+(hex.length+1)+' >>\nstream\n'+hex+'>\nendstream');
+       imageIds.set(thumbnail,id);
+      }
+      const id=imageIds.get(thumbnail),scale=26/Math.max(thumbnail.width,thumbnail.height);
+      const w=thumbnail.width*scale,h=thumbnail.height*scale;
+      pageImages.add(id);
+      stream+='q '+w.toFixed(2)+' 0 0 '+h.toFixed(2)+' '+(43+(26-w)/2).toFixed(2)+' '+(y-5-(26+h)/2).toFixed(2)+' cm /StockImage'+id+' Do Q\n';
+     }else if(swatch){
+      const color=[1,3,5].map(offset=>(parseInt(swatch.slice(offset,offset+2),16)/255).toFixed(3)).join(' ');
+      rect(46,y-28,20,20,'0.87 0.91 0.93');
+      rect(47,y-27,18,18,color);
+     }
+    }
+    let lineY=y-13;for(const line of item.detail){text(itemX,lineY,line.size,line.text,line.bold,line.cost?'0.08 0.37 0.46':line.bold?'0.09 0.14 0.19':'0.35 0.43 0.49');lineY-=line.size+2;}
     const top=y-14;text(337,top,8,value(r.unit));
     if(!item.continuation){
      if(soh){rightIn(449,top,49,9,value(r.qty));rightIn(517,top,49,9,value(r.reserved));rightIn(589,top,52,9,value(r.available),true,r.available<=0?'0.65 0.22 0.08':'0.08 0.37 0.46');rightIn(660,top,52,9,value(r.onOrder));rightIn(728,top,52,9,value(r.reorderLevel));wrap(r.status,65,7.3).forEach((line,i)=>text(744,top-i*9,7.3,line));}
@@ -1948,9 +2010,9 @@ License: GPL-2+
    if(costed)text(32,44,7.2,'All prices and values exclude GST. '+report.costSummary.unpricedItems+' unpriced item(s) are excluded from the known value total.',false,'0.35 0.43 0.49');
    if(report.rows.some(r=>r.historicalDetails))text(32,44,7.2,'Historical descriptions use available records; unrecoverable baselines are marked Unknown.',false,'0.35 0.43 0.49');
    rect(32,33,778,.5,'0.8 0.86 0.9');text(32,20,7.5,soh?'LENNOX FACADES / STOCK ON HAND':'LENNOX FACADES / STOCKTAKE',true,'0.08 0.37 0.46');right(810,20,7.5,'Page '+(page+1)+' of '+chunks.length,false,'0.35 0.43 0.49');
-   const content=add('<< /Length '+enc.encode(stream).length+' >>\nstream\n'+stream+'endstream');ids.push(add('<< /Type /Page /Parent '+pages+' 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 '+font+' 0 R /F2 '+bold+' 0 R >> /XObject << /Logo '+logo+' 0 R >> >> /Contents '+content+' 0 R >>'));
+   const content=add('<< /Length '+enc.encode(stream).length+' >>\nstream\n'+stream+'endstream');ids.push(add('<< /Type /Page /Parent '+pages+' 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 '+font+' 0 R /F2 '+bold+' 0 R >> /XObject << /Logo '+logo+' 0 R '+[...pageImages].map(id=>'/StockImage'+id+' '+id+' 0 R').join(' ')+' >> >> /Contents '+content+' 0 R >>'));
   });
-  objects[pages]='<< /Type /Pages /Kids ['+ids.map(id=>id+' 0 R').join(' ')+'] /Count '+ids.length+' >>';const catalog=add('<< /Type /Catalog /Pages '+pages+' 0 R >>');let result='%PDF-1.4\n',offsets=[0];for(let i=1;i<objects.length;i++){offsets[i]=enc.encode(result).length;result+=i+' 0 obj\n'+objects[i]+'\nendobj\n';}const xref=enc.encode(result).length;result+='xref\n0 '+objects.length+'\n0000000000 65535 f \n'+offsets.slice(1).map(n=>String(n).padStart(10,'0')+' 00000 n \n').join('')+'trailer\n<< /Size '+objects.length+' /Root '+catalog+' 0 R >>\nstartxref\n'+xref+'\n%%EOF';return new Blob([result],{type:'application/pdf'});
+  objects[pages]='<< /Type /Pages /Kids ['+ids.map(id=>id+' 0 R').join(' ')+'] /Count '+ids.length+' >>';const catalog=add('<< /Type /Catalog /Pages '+pages+' 0 R >>');let result='%PDF-1.4\n',xref=enc.encode(result).length;const offsets=[0];for(let i=1;i<objects.length;i++){const entry=i+' 0 obj\n'+objects[i]+'\nendobj\n';offsets[i]=xref;xref+=enc.encode(entry).length;result+=entry;}result+='xref\n0 '+objects.length+'\n0000000000 65535 f \n'+offsets.slice(1).map(n=>String(n).padStart(10,'0')+' 00000 n \n').join('')+'trailer\n<< /Size '+objects.length+' /Root '+catalog+' 0 R >>\nstartxref\n'+xref+'\n%%EOF';return new Blob([result],{type:'application/pdf'});
  }
  return {pdf,xlsx,prepareWorkbook:prepareStocktakeReport,prepareMonthly:prepareMonthlyStocktakeReport,prepareYear:prepareYearStocktakeReport,soh:{prepare:prepareSOHReport,pdf:report=>pdf(prepareSOHReport(report)),xlsx:report=>xlsx(prepareSOHReport(report)),xero:{prepare:xeroJournalPrepare,csv:xeroJournalCsv,groups:xeroJournalGroups}},logo:'data:image/png;base64,'+brand.pngBase64};
 })();
