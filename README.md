@@ -92,3 +92,8 @@ New order choices replace Gate with Bin Gate and Buggy Gate. Both use the existi
 Historical orders labelled Gate retain their type and production/QA links. The generic Gate choice is hidden in new-order and correction selectors; older saved/queued Gate requests stay compatible. No existing order is guessed into a new subtype.
 
 Gate Progress appears under Work for users with Site Orders view access. New component-based gates are configured and monitored there; existing gates with recorded QA retain the Site Orders production form. Dispatch remains in the normal Dispatch page, and signed full-order receipt updates component delivery progress.
+
+
+Site Order Location is available for every non-Gate order type. Panels, Fabrication and Fibre Cement require it when creating or saving an order, including order-type corrections; other types may leave it blank. Gates continue to use required Villa and Colour. Location and Notes stay separate, and older order records are not rewritten. Incomplete drafts remain supported.
+
+Expanded Site Orders put their action toolbar above Items, aligned to the right. The duplicate Created caption is removed; Date ordered remains in the summary. Add schedule entry opens the existing schedule editor for permitted schedulers, preselecting the current active project and order using fresh schedule data and saved schedule hours. It leaves the assignee blank, respects general/CNC permissions, and preserves the order list position and expansion when cancelled or saved. Stale, cancelled, dispatched or unavailable-project orders must be reviewed before scheduling. Release the matching Worker/Site Location rules first.

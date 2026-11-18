@@ -6,7 +6,7 @@ const path=require('node:path');
 test('desktop web exposes permission-aware order management',()=>{
  const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
  const client=fs.readFileSync(path.join(__dirname,'../panelstock-client.js'),'utf8');
- assert.match(html,/function OrdersPage\(\{ canCreate, canManage, canDispatch = false, isAdmin, projectsOnly = false \}\)/);
+ assert.match(html,/function OrdersPage\(\{ canCreate, canManage, canDispatch = false, isAdmin, projectsOnly = false, scheduleAccess = \{\} \}\)/);
  assert.match(html,/canDispatch: can\("factory.dispatch"\)/);
  assert.match(html,/Add project/);
  assert.match(html,/\/projects/);
@@ -71,7 +71,7 @@ test('desktop dispatch uses the same material sorting as stock and damage',()=>{
 
 test('web manages the shared schedule',()=>{
  const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
- assert.match(html,/function SchedulePage\(\{ canManage,canManageCnc \}\)/);
+ assert.match(html,/function SchedulePage\(\{ canManage,canManageCnc,entryOrder=null,/);
  assert.match(html,/function ScheduleCalendarIcon/);
  assert.match(html,/New schedule entry/);
  assert.match(html,/Save schedule/);

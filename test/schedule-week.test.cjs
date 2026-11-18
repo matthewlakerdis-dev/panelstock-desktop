@@ -1,5 +1,5 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
-const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8'),a=html.indexOf('    const renderTimeline='),b=html.indexOf('    return e("div",null,',a);
+const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8'),a=html.indexOf('    const renderTimeline='),b=html.indexOf('    const entryDialog=',a);
 const walk=n=>!n||typeof n!=='object'?[]:[n,...(n.children||[]).flat(Infinity).flatMap(walk)];
 function week(options={}){
  let edited,scrolled;const entries=[{id:'mon',date:'2026-11-30',startTime:'07:00',endTime:'10:00',title:'Order 12 · Panels · Villa 7',project:'Harbour View',assignedUsername:'alex'},{id:'tue',date:'2026-12-01',startTime:'08:00',endTime:'12:00',title:'Order 18 · Gate · Villa 12',project:'Harbour View',assignedUsername:'alex',scheduleType:'cnc'},{id:'sam',date:'2026-11-30',startTime:'09:00',endTime:'11:00',title:'Other work',project:'Riverside',assignedUsername:'sam'}];
