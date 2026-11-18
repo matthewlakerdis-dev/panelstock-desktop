@@ -6,6 +6,8 @@
       const [selection, setSelection] = useState("");
       const [format, setFormat] = useState("pdf");
       const [range, setRange] = useState("all");
+      const [period, setPeriod] = useState("daily");
+      const [product, setProduct] = useState("all");
       const [busy, setBusy] = useState(false);
       const [status, setStatus] = useState(null);
       const [orders, setOrders] = useState(null);
@@ -39,6 +41,7 @@
         {id: "activity", label: "Stock activity and audit", formats: activity},
         {id: "catalogue", label: "Material catalogue", formats: catalogue},
         {id: "damage", label: "Stock damage", run: () => damage(range)},
+        {id: "m2", label: "Production m²", run: () => download(`m2-${period}-${product}`)},
         {id: "cnc-tracker", label: "CNC tracker"},
         {id: "cnc-daily", label: "CNC daily production"},
         {id: "cnc-weekly", label: "CNC weekly production"},
@@ -82,6 +85,10 @@
             h("option", {key:"", value:""}, "Choose a report"),
             ...reports.map(item => h("option", {key:item.id, value:item.id}, item.label))
           ]),
+          selection === "m2" && field("Product", {value:product, onChange:event => {setProduct(event.target.value); setStatus(null);}},
+            [["all", "Panels and gates"], ["panels", "Panels only"], ["gates", "Gates only"]].map(([value, label]) => h("option", {key:value, value}, label))),
+          selection === "m2" && field("Group by", {value:period, onChange:event => {setPeriod(event.target.value); setStatus(null);}},
+            [["daily", "Daily"], ["weekly", "Weekly"], ["monthly", "Monthly"]].map(([value, label]) => h("option", {key:value, value}, label))),
           report?.formats && field("Format", {value:format, onChange:event => {setFormat(event.target.value); setStatus(null);}}, [
             h("option", {key:"pdf", value:"pdf"}, "PDF"),
             h("option", {key:"csv", value:"csv"}, "CSV")
