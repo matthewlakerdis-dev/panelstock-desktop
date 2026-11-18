@@ -7,6 +7,8 @@
       const [format, setFormat] = useState("pdf");
       const [range, setRange] = useState("all");
       const [period, setPeriod] = useState("daily");
+      const [from, setFrom] = useState("");
+      const [to, setTo] = useState("");
       const [product, setProduct] = useState("all");
       const [busy, setBusy] = useState(false);
       const [status, setStatus] = useState(null);
@@ -41,7 +43,7 @@
         {id: "activity", label: "Stock activity and audit", formats: activity},
         {id: "catalogue", label: "Material catalogue", formats: catalogue},
         {id: "damage", label: "Stock damage", run: () => damage(range)},
-        {id: "m2", label: "Production m²", run: () => download(`m2-${period}-${product}`)},
+        {id: "m2", label: "Production m²", run: () => download(`m2-${period}-${product}`, {from, to, format:"pdf"})},
         {id: "cnc-tracker", label: "CNC tracker"},
         {id: "cnc-daily", label: "CNC daily production"},
         {id: "cnc-weekly", label: "CNC weekly production"},
@@ -59,6 +61,12 @@
       const selectClass = "block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm";
       const field = (label, props, options) => h("label", {className:"block space-y-2 text-sm font-semibold text-slate-800"},
         h("span", null, label), h("select", {...props, disabled:busy, className:selectClass}, options));
+      const periodField = {daily:["date","YYYY-MM-DD"], weekly:["week","YYYY-Www"], monthly:["month","YYYY-MM"]}[period];
+      const periodBound = (label, value, onChange) =>
+        h("label", {className:"block space-y-2 text-sm font-semibold text-slate-800"},
+          h("span", null, label),
+          h("input", {key:period, type:periodField[0], placeholder:periodField[1], value, disabled:busy, className:selectClass,
+            onChange:event => {onChange(event.target.value); setStatus(null);}}));
       async function run(event) {
         event.preventDefault();
         if (!canRun || isActiveOrders) return;
@@ -87,8 +95,10 @@
           ]),
           selection === "m2" && field("Product", {value:product, onChange:event => {setProduct(event.target.value); setStatus(null);}},
             [["all", "Panels and gates"], ["panels", "Panels only"], ["gates", "Gates only"]].map(([value, label]) => h("option", {key:value, value}, label))),
-          selection === "m2" && field("Group by", {value:period, onChange:event => {setPeriod(event.target.value); setStatus(null);}},
+          selection === "m2" && field("Group by", {value:period, onChange:event => {setPeriod(event.target.value); setFrom(""); setTo(""); setStatus(null);}},
             [["daily", "Daily"], ["weekly", "Weekly"], ["monthly", "Monthly"]].map(([value, label]) => h("option", {key:value, value}, label))),
+          selection === "m2" && h("div", {className:"grid gap-4 sm:grid-cols-2"},
+            periodBound("From " + periodField[0], from, setFrom), periodBound("To " + periodField[0], to, setTo)),
           report?.formats && field("Format", {value:format, onChange:event => {setFormat(event.target.value); setStatus(null);}}, [
             h("option", {key:"pdf", value:"pdf"}, "PDF"),
             h("option", {key:"csv", value:"csv"}, "CSV")
@@ -104,7 +114,7 @@
             ? "Recipients: " + recipients.join(", ")
             : "Add and save recipients in Email Reports settings before sending."),
           !isActiveOrders && h("button", {type:"submit", disabled:!canRun, className:"rounded-lg bg-cyan-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"},
-            busy ? "Running…" : isEmail ? "Send email report" : "Run report"),
+            busy ? "Running…" : isEmail ? "Send email report" : selection === "m2" ? "Download PDF" : "Run report"),
           status && h("p", {role:"status", className:status.ok ? "text-sm text-green-700" : "text-sm text-red-700"}, status.message)),
         isActiveOrders && h("div", {className:"mt-4"},
           orders ? h(ActiveOrdersReportButton, {orders}) : !status && h("p", {role:"status", className:"text-sm text-slate-600"}, "Loading active orders…")));

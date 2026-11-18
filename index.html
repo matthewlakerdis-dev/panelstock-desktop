@@ -14511,16 +14511,18 @@ ${xrefStart}
       setTimeout(() => URL.revokeObjectURL(url), 3e4);
       showToast(`${filename} ready`);
     }
-    async function downloadReport(report) {
-      const response = await PanelStock.apiFetch(BAKED_WORKER_URL + "/reports/" + encodeURIComponent(report));
+    async function downloadReport(report, filters = {}) {
+      const query = new URLSearchParams(Object.entries(filters).filter(([,value]) => value));
+      const response = await PanelStock.apiFetch(BAKED_WORKER_URL + "/reports/" + encodeURIComponent(report) + (query.toString() ? "?" + query.toString() : ""));
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
         throw new Error(body.error || "The report could not be downloaded.");
       }
-      if (!/^application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet(?:;|$)/i.test(response.headers.get("Content-Type") || "")) {
-        throw new Error("The server did not return an Excel report.");
-      }
-      prepareExport(await response.blob(), `${report}_${todayStr()}.xlsx`);
+      const pdf = filters.format === "pdf";
+      const contentType = response.headers.get("Content-Type")?.split(";")[0].toLowerCase();
+      const expected = pdf ? "application/pdf" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+      if (contentType !== expected) throw new Error(`The server did not return a ${pdf ? "PDF" : "spreadsheet"} report.`);
+      prepareExport(await response.blob(), `${report}_${todayStr()}.${pdf ? "pdf" : "xlsx"}`);
     }
     function exportExcel() {
       const rows = [
