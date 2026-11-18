@@ -123,7 +123,7 @@
           status && h("p", {role:"status", className:status.ok ? "text-sm text-green-700" : "text-sm text-red-700"}, status.message)),
         stockExportOpen && renderStockExport(() => setStockExportOpen(false)),
         isActiveOrders && h("div", {className:"mt-4"},
-          orders ? h(ActiveOrdersReportButton, {orders}) : !status && h("p", {role:"status", className:"text-sm text-slate-600"}, "Loading active orders…")));
+          orders ? h(ActiveOrdersReportButton, {orders, openOnMount:true}) : !status && h("p", {role:"status", className:"text-sm text-slate-600"}, "Loading active orders…")));
     };
   };
 })();
