@@ -24,15 +24,12 @@ test('panel dialog preserves changes on conflicts, prevents duplicate saves and 
 test('terminal panel orders are read-only in the drawing dialog',()=>{
  const f=fixture();f.render();f.hooks[0]={...f.hooks[0],order:{...order,status:'dispatched'}};assert.equal(f.select('Drawn').props.disabled,true);assert.equal(f.button('Save drawing status'),undefined);
 });
-test('Drawn buttons are available at both native Gate button locations',()=>{
- const rowStart=source.indexOf('isPanelOrder(order)&&e("button",{type:"button","aria-label":`Drawn status for Order');
- const rowEnd=source.indexOf(',"Drawn"),',rowStart)+',"Drawn")'.length;
- assert.ok(rowStart>=0);const row=source.slice(rowStart,rowEnd);
- const detailStart=source.indexOf('panel.mode==="view"&&isPanelOrder(panel.order)&&e("button",{type:"button",onClick:()=>setDrawingOrder');
- const detailEnd=source.indexOf(',"Drawn"),',detailStart)+',"Drawn")'.length;assert.ok(detailStart>=0);
- const selected=[],e=(type,props,...children)=>({type,props,children}),context={order,panel:{mode:'view',order},isPanelOrder:o=>o.orderType==='Panels',e,setDrawingOrder:value=>selected.push(value)};
- const button=vm.runInNewContext(row,context),detail=vm.runInNewContext(source.slice(detailStart,detailEnd),context);assert.equal(button.children[0],'Drawn');button.props.onClick();detail.props.onClick();assert.equal(selected.length,2);assert.equal(selected[0],order);
- context.order={...order,orderType:'Gate'};assert.equal(vm.runInNewContext(row,context),false);
+test('Drawn remains available in View after simplifying the row toolbar',()=>{
+ const start=source.indexOf('panel.mode==="view"&&isPanelOrder(panel.order)&&e("button",{type:"button",onClick:()=>setDrawingOrder');
+ const end=source.indexOf(',"Drawn"),',start)+',"Drawn")'.length;assert.ok(start>=0);
+ const selected=[],context={panel:{mode:'view',order},isPanelOrder:o=>o.orderType==='Panels',e:(type,props,...children)=>({type,props,children}),setDrawingOrder:value=>selected.push(value)};
+ const button=vm.runInNewContext(source.slice(start,end),context);assert.equal(button.children[0],'Drawn');button.props.onClick();assert.equal(selected[0],order);
+ context.panel.order={...order,orderType:'Gate'};assert.equal(vm.runInNewContext(source.slice(start,end),context),false);
 });
 test('saving the native panel dialog refreshes the order row and open order view',()=>{
  const start=source.indexOf('      drawingOrder&&e(PanelDrawingModal,');assert.ok(start>=0);const end=source.indexOf('\n',start);
