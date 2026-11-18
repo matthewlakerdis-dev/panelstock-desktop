@@ -32,6 +32,13 @@ test('Audit Centre has a left control rail and at most 30 records, with bottom-s
  all.find(n=>n.type==='input'&&n.placeholder).onChange({target:{value:'Record 75'}});all=draw();assert.equal(all.filter(n=>n.type==='article').length,1);assert.equal(all.filter(n=>n.type==='article')[0].key,'75');
  all.find(n=>n.type==='button'&&n.children?.includes('Clear filters')).onClick();all=draw();assert.equal(all.filter(n=>n.type==='article')[0].key,'1');
  for(const button of all.filter(n=>n.type==='button'&&n.children?.some(text=>text==='Excel'||text==='PDF')))button.onClick();assert.equal(exports,2);
+ const captured=[];
+ props.reportMode=true;props.onExportExcel=records=>captured.push(Array.from(records,r=>r.id));props.onExportPDF=props.onExportExcel;
+ all.find(n=>n.type==='input'&&n.placeholder).onChange({target:{value:'Record 75'}});
+ all=draw();
+ for(const button of all.filter(n=>n.type==='button'&&n.children?.some(text=>text==='Excel'||text==='PDF')))button.onClick();
+ assert.deepEqual(captured,[['75'],['75']]);
+
 });
 test('one Complete sheet action sits beside each pending sheet summary, never inside the expansion button',()=>{
  const runtime=hooks(),render=vm.runInNewContext(source('CncSheetGroups')+';CncSheetGroups',runtime.context);
