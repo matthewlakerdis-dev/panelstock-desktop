@@ -9,16 +9,16 @@ const fixture=()=>({revision:42,movements:[],items:[
  {id:'bolt',category:'fixings',name:'Bolt',sku:'',qty:0,reserved:0,available:0,onOrder:0,reorderLevel:0,unit:'each'}
 ]});
 const walk=n=>!n||typeof n!=='object'?[]:[n,...(n.children||[]).flat(Infinity).flatMap(walk)];
-function harness(admin=true){
- const states=[],exports=[],downloads=[];let cursor=0;
- const React={createElement:(type,props,...children)=>({type,props:props||{},children}),useState:v=>{const i=cursor++;if(!(i in states))states[i]=typeof v==='function'?v():v;return [states[i],v=>states[i]=typeof v==='function'?v(states[i]):v];},useEffect(){},Fragment:'fragment'};
- const context={window:{},TextEncoder,Blob,atob,PanelStock:{username:'viewer'},localStorage:{getItem:()=>null},document:{addEventListener(){},createElement:()=>({click(){downloads.push(this.download);},remove(){}}),body:{appendChild(){}}},URL:{createObjectURL:()=> 'blob:soh-test',revokeObjectURL(){}},setTimeout(){return 0;}};
+function harness(admin=true,onCloseExport){
+ const states=[],exports=[],downloads=[],effects=[];let cursor=0;
+ const React={createElement:(type,props,...children)=>({type,props:props||{},children}),useState:v=>{const i=cursor++;if(!(i in states))states[i]=typeof v==='function'?v():v;return [states[i],v=>states[i]=typeof v==='function'?v(states[i]):v];},useEffect(effect){effects.push(effect);},Fragment:'fragment'};
+ const context={window:{},TextEncoder,Blob,atob,PanelStock:{username:'viewer',apiFetch:async()=>({ok:true,json:async()=>fixture()})},localStorage:{getItem:()=>null},document:{addEventListener(){},createElement:()=>({click(){downloads.push(this.download);},remove(){}}),body:{appendChild(){}}},URL:{createObjectURL:()=> 'blob:soh-test',revokeObjectURL(){}},setTimeout(){return 0;}};
  vm.runInNewContext(source,context);const Component=context.window.createWorkshopStock(React);
- const render=()=>{cursor=0;return walk(Component({isAdmin:admin,taskAccess:{'factory.stock':true},onExportExcel(){throw Error('Legacy unfiltered exporter called');},onExportPDF(){throw Error('Legacy unfiltered exporter called');}}));};
+ const render=()=>{cursor=0;effects.length=0;return walk(Component({isAdmin:admin,onCloseExport,taskAccess:{'factory.stock':true},onExportExcel(){throw Error('Legacy unfiltered exporter called');},onExportPDF(){throw Error('Legacy unfiltered exporter called');}}));};
  render();states[0]=fixture();
  context.window.PanelStockStocktakeReport.soh={xlsx:s=>{exports.push({format:'xlsx',snapshot:s});return new Blob(['xlsx']);},pdf:s=>{exports.push({format:'pdf',snapshot:s});return new Blob(['pdf']);}};
  const node=label=>render().find(n=>n.props['aria-label']===label),button=text=>render().find(n=>n.type==='button'&&n.children.includes(text));
- return {states,exports,downloads,context,render,node,button,open(){node('Export SOH').props.onClick();assert.ok(node('Export stock on hand'));},change(label,value){node(label).props.onChange({target:{value}});},check(label,checked){node(label).props.onChange({target:{checked}});},download(format='Excel'){button('Download '+format).props.onClick();return exports.at(-1)?.snapshot;}};
+ return {states,exports,downloads,context,render,node,button,runEffects(){effects.slice().forEach(effect=>effect());},open(){node('Export SOH').props.onClick();assert.ok(node('Export stock on hand'));},change(label,value){node(label).props.onChange({target:{value}});},check(label,checked){node(label).props.onChange({target:{checked}});},download(format='Excel'){button('Download '+format).props.onClick();return exports.at(-1)?.snapshot;}};
 }
 test('SOH export popup includes Panels independently from Offcuts and ignores hidden bulk selections',()=>{
  const x=harness();x.check('Select Angle 10 ',true);x.render().find(n=>n.type==='button'&&n.children[0]==='Panels').props.onClick();x.open();
@@ -52,4 +52,32 @@ test('SOH Excel has its own thirteen-column snapshot schema and preserves numeri
 test('SOH PDF is labelled as a current stock export and retains panel and workshop quantities',async()=>{
  const x=harness();x.open();const snapshot=x.download();const pdf=await realExports().soh.pdf(snapshot).text();assert.ok(pdf.startsWith('%PDF-1.4'));assert.match(pdf,/STOCK ON HAND/);assert.doesNotMatch(pdf,/STOCKTAKE REPORT/);assert.match(pdf,/White ACP panel/);assert.match(pdf,/Angle 20/);assert.match(pdf,/\/Subtype \/Image/);assert.match(pdf,/\/FontFile2/);assert.match(pdf,/Page 1 of/);
  const offset=Number(pdf.match(/startxref\n(\d+)/)[1]);assert.equal(pdf.slice(offset,offset+4),'xref');
+});
+
+test('the Reports entry opens the shared stock export with its filters and all three download actions',async()=>{
+ let closed=false;
+ const x=harness(true,()=>{closed=true;});
+ const reportsSource=fs.readFileSync(path.join(__dirname,'../reports-page.js'),'utf8');
+ const state=[];let cursor=0;
+ vm.runInNewContext(reportsSource,x.context);
+ const Reports=x.context.window.createReportsPage({
+  createElement:(type,props,...children)=>({type,props:props||{},children}),
+  useState:initial=>{const i=cursor++;if(!(i in state))state[i]=initial;return [state[i],value=>{state[i]=value;}];},
+  useEffect(){}
+ });
+ const report=()=>{cursor=0;return walk(Reports({renderStockExport:()=>({type:'shared-export',props:{}})}));};
+ report().find(n=>n.type==='select').props.onChange({target:{value:'stock'}});
+ assert.equal(report().filter(n=>n.type==='select').length,1);
+ await report().find(n=>n.type==='form').props.onSubmit({preventDefault(){}});
+ assert.ok(report().some(n=>n.type==='shared-export'));
+
+ x.render();x.runEffects();
+ assert.ok(x.node('Export stock on hand'));
+ assert.equal(x.node('Include Panels').props.checked,true);
+ assert.equal(x.node('Include Offcuts').props.checked,true);
+ for(const label of ['Xero journal CSV','Download Excel','Download PDF'])assert.ok(x.button(label));
+ x.change('Export supplier',JSON.stringify('Beta'));
+ assert.deepEqual(Array.from(x.download('PDF').rows,r=>r.itemId),['angle20']);
+ x.button('Cancel').props.onClick();
+ assert.equal(closed,true);
 });
