@@ -38,3 +38,9 @@ test('dispatched orders are hidden while previously scheduled orders are marked 
 
 test('selecting an order offers its PDF without changing the schedule draft',()=>{const draft={projectId:'p1',orderId:'a',title:'Order 1 · Panels',notes:'Keep these notes',date:'2026-11-17'},h=render(draft),button=h.tree.children.find(node=>node?.type==='button'&&node.children.includes('Open order PDF'));assert.ok(button);assert.equal(button.props.type,'button');button.props.onClick();assert.equal(h.pdf().id,'a');assert.equal(h.current(),draft);});
 test('Other, no order, and mismatched projects do not offer an order PDF',()=>{for(const draft of [{projectId:'p1'},{projectId:'p1',activityOther:true,title:'Collect goods'},{projectId:'p2',orderId:'a'}]){const h=render(draft);assert.equal(h.tree.children.some(node=>node?.type==='button'&&node.children.includes('Open order PDF')),false);}});
+
+test('all order types show their explicit Location in schedule activities while historical non-panel notes stay notes',()=>{
+ for(const orderType of ['Fabrication','Fibre Cement','Fixings','Consumables']){
+  const h=render({projectId:'p1'},[{id:'a',projectId:'p1',orderNumber:'7',orderType,location:'Zone B',locationNotes:'Keep this note separate'}]);const select=h.tree.children[1];assert.equal(select.children[2][0].children[0],`Order 7 · ${orderType} · Zone B`);select.props.onChange({target:{value:'a'}});assert.equal(h.current().title,`Order 7 · ${orderType} · Zone B`);
+ }
+});
