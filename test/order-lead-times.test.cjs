@@ -1,0 +1,19 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),lead=require('../order-lead-times.js');
+const html=fs.readFileSync(__dirname+'/../index.html','utf8');
+test('web date picker disables dates before the minimum and validates an earlier restored draft',()=>{
+ const start=html.indexOf('  function ModernDatePicker('),end=html.indexOf('  function ScheduleTimeField(',start),context={import_react:{createElement:(tag,props,...children)=>({tag,props:props||{},children:children.flat(Infinity)})},useState:value=>[typeof value==='function'?value():value,()=>{}],useRef:()=>({current:null}),useEffect(){},todayStr:()=> '2026-11-20',ScheduleCalendarIcon:()=>null};
+ let stateIndex=0;context.useState=value=>{const initial=typeof value==='function'?value():value;return [stateIndex++===0?true:initial,()=>{}];};vm.runInNewContext(html.slice(start,end),context);
+ const tree=context.ModernDatePicker({label:'Requested delivery date',value:'2026-11-20',required:true,minDate:'2026-11-23',validationMessage:'Too soon'}),all=[];function walk(node){if(!node||typeof node!=='object')return;all.push(node);for(const child of node.children||[])walk(child);}walk(tree);
+ const day=n=>all.find(node=>node.tag==='button'&&node.children.length===1&&node.children[0]===n);assert.equal(day(20).props.disabled,true);assert.equal(day(23).props.disabled,false);assert.equal(all.find(n=>n.tag==='button'&&n.props.children==='OK').props.disabled,true);let message;all.find(n=>n.props['data-date-value']==='').props.ref({setCustomValidity:value=>message=value});assert.equal(message,'Too soon');
+});
+function controller(fetcher){
+ const state={draft:null,busy:false,message:''},context={types:['Panels','Fixings'],draft:null,lock:{current:false},BAKED_WORKER_URL:'https://api.test',PanelStock:{username:'admin',apiFetch:fetcher},current:()=>context.alive&&context.PanelStock.username==='admin',alive:true,setBusy:value=>state.busy=value,setMessage:value=>state.message=value,setDraft:value=>context.draft=state.draft=value,onSaved:value=>state.saved=value};vm.createContext(context);
+ const a=html.indexOf('    async function load(){',html.indexOf('  function OrderLeadTimeSettings(')),b=html.indexOf('    return e("section"',a);vm.runInContext(html.slice(a,b),context);return {state,context,load:()=>context.load(),save:()=>context.save({preventDefault(){}})};
+}
+test('admin setting saves independent numeric minimums once and preserves input on a stale-settings conflict',async()=>{
+ let posts=0,finish;const settings={days:{Panels:5,Fixings:1},updatedAt:'first'},c=controller(async(url,options)=>{if(!options)return Response.json({leadTimes:settings});posts++;return new Promise(resolve=>finish=resolve);});await c.load();c.context.draft={...c.context.draft,days:{Panels:'7',Fixings:'2'}};const pending=c.save();await c.save();assert.equal(posts,1);finish(Response.json({error:'Lead times changed. Reload the settings before saving.'},{status:409}));await pending;assert.equal(c.context.draft.days.Panels,'7');assert.match(c.state.message,/changed/);assert.equal(c.state.busy,false);
+});
+test('late settings responses cannot write into another signed-in account or a closed settings panel',async()=>{
+ for(const mode of ['account','closed']){let finish;const c=controller(()=>new Promise(resolve=>finish=resolve)),pending=c.load();if(mode==='account')c.context.PanelStock.username='other';else c.context.alive=false;finish(Response.json({leadTimes:{days:{Panels:7}}}));await pending;assert.equal(c.state.draft,null);assert.equal(c.state.saved,undefined);}
+});
+test('working-day minimum matches the API boundary and does not block an unconfigured type',()=>{assert.equal(lead.minimumDate({days:{Panels:2}},'Panels','2026-11-20'),'2026-11-24');assert.equal(lead.error({days:{Panels:2}},'Panels','2026-11-24','2026-11-20'),'');assert.equal(lead.error({days:{Panels:2}},'Other','2026-11-20','2026-11-20'),'');});

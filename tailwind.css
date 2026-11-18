@@ -2340,6 +2340,8 @@ video {
 }.focus\:ring-cyan-100:focus {
   --tw-ring-opacity: 1;
   --tw-ring-color: rgb(207 250 254 / var(--tw-ring-opacity, 1));
+}.disabled\:cursor-not-allowed:disabled {
+  cursor: not-allowed;
 }.disabled\:border-slate-200:disabled {
   --tw-border-opacity: 1;
   border-color: rgb(226 232 240 / var(--tw-border-opacity, 1));
@@ -2451,6 +2453,10 @@ video {
 
   .lg\:grid-cols-2 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .lg\:grid-cols-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .lg\:grid-cols-5 {
