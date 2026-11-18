@@ -57,3 +57,26 @@ test('default export remains unfiltered and only selected date bounds are transm
  assert.equal(query(defaults()),'');assert.equal(query({...defaults(),dateField:'scheduled'}),'');
  assert.deepEqual(Object.fromEntries(new URLSearchParams(query({...defaults(),dateField:'ordered',dateTo:'2026-11-30'}))),{dateField:'ordered',dateTo:'2026-11-30'});
 });
+
+test('opening from Reports uses the same filter dialog and PDF endpoint as Site Orders',async()=>{
+  const reports=fs.readFileSync(__dirname+'/../reports-page.js','utf8');
+  assert.match(reports,/h\(ActiveOrdersReportButton, \{orders, openOnMount:true\}\)/);
+  const orders=[{project:'Workshop',orderType:'Gate',status:'ordered'}];
+  const direct=fixture(async()=>success(),{orders});
+  assert.equal(direct.form(),undefined);
+  direct.open();
+  const launched=fixture(async()=>success(),{orders,openOnMount:true});
+  launched.render();
+  const fields=form=>nodes(form).filter(n=>n.props.name).map(n=>[n.props.name,n.props.value]);
+  assert.deepEqual(fields(launched.form()),fields(direct.form()));
+  assert.equal(fields(launched.form()).length,8);
+  assert.equal(launched.calls.length,0);
+  launched.change('project','Workshop');
+  await launched.submit();
+  assert.equal(launched.calls[0].url,'https://api.test/orders/active-report.pdf?project=Workshop');
+  assert.equal(launched.downloads.length,1);
+  nodes(launched.form()).find(n=>n.tag==='button'&&n.children.includes('Close')).props.onClick();
+  assert.equal(launched.form(),undefined);
+  launched.dispose();
+  direct.dispose();
+});

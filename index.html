@@ -14522,7 +14522,8 @@ ${xrefStart}
       const contentType = response.headers.get("Content-Type")?.split(";")[0].toLowerCase();
       const expected = pdf ? "application/pdf" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
       if (contentType !== expected) throw new Error(`The server did not return a ${pdf ? "PDF" : "spreadsheet"} report.`);
-      prepareExport(await response.blob(), `${report}_${todayStr()}.${pdf ? "pdf" : "xlsx"}`);
+      const filename = pdf ? response.headers.get("Content-Disposition")?.match(/filename="(Production-m2_[A-Za-z0-9_-]+[.]pdf)"/i)?.[1] : null;
+      prepareExport(await response.blob(), filename || `${report}_${todayStr()}.${pdf ? "pdf" : "xlsx"}`);
     }
     function exportExcel() {
       const rows = [

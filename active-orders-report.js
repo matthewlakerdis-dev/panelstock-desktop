@@ -17,10 +17,14 @@
   }
   function createButton({React,client,baseUrl,document,URL,AbortController,setTimeout,clearTimeout}){
     const {createElement:e,useState,useRef,useEffect}=React;
-    return function ActiveOrdersReportButton({orders=[],loadingOrders=false}={}){
+    return function ActiveOrdersReportButton({orders=[],loadingOrders=false,openOnMount=false}={}){
       const [state,setState]=useState({busy:false,error:'',open:false,filters:defaults()}),request=useRef(null),alive=useRef(true),download=useRef(null),dialog=useRef(null),owner=useRef(null),previous=useRef(null);
       function release(){if(download.current){clearTimeout(download.current.timer);URL.revokeObjectURL(download.current.url);download.current=null;}}
-      useEffect(()=>{alive.current=true;return()=>{alive.current=false;request.current?.abort();release();};},[]);
+      useEffect(()=>{
+        alive.current=true;
+        if(openOnMount)open();
+        return()=>{alive.current=false;request.current?.abort();release();};
+      },[]);
       useEffect(()=>{if(state.open)dialog.current?.querySelector('select')?.focus();},[state.open]);
       useEffect(()=>{if(owner.current&&owner.current!==client.username){request.current?.abort();request.current=null;owner.current=null;release();setState({busy:false,error:'',open:false,filters:defaults()});}},[client.username]);
       function close(){if(request.current)return;setState(current=>({...current,open:false,error:''}));if(previous.current?.isConnected)previous.current.focus({preventScroll:true});}
