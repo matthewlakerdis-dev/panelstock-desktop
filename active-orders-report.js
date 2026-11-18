@@ -1,5 +1,5 @@
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.PanelStockActiveOrdersReport=api;})(typeof window==='object'?window:globalThis,function(){
-  const statuses=[['submitted','Submitted'],['approved','Approved'],['ordered','Ordered'],['in_stock','In stock'],['completed','Ready for dispatch']];
+  const statuses=[['submitted','Submitted'],['approved','Approved'],['ordered','Ordered'],['in_stock','In stock'],['completed','Ready for dispatch'],['part_dispatched','Part dispatched']];
   const defaults=()=>({scope:'all',project:'',orderType:'',status:'',schedule:'all',dateField:'requested',dateFrom:'',dateTo:''});
   function query(filters){
     const params=new URLSearchParams();

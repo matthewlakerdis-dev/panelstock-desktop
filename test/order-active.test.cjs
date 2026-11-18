@@ -3,7 +3,7 @@ const source=fs.readFileSync(require('node:path').join(__dirname,'../index.html'
 const start=source.indexOf('    const activeStatuses'),end=source.indexOf('    const orderDate',start);
 const code=source.slice(start,end)+'globalThis.result={counts,ids:shown.map(order=>order.id)};';
 function view(orders,filter='active',orderSection='orders',searchStatus='all',username='alice'){
-  const context={PanelStock:{username},orders,filter,orderSection,searchStatus,searchProject:'',orderSearch:''};
+  const context={window:{PanelStockOrderDispatch:require('../order-dispatch-progress.js')},PanelStock:{username},orders,filter,orderSection,searchStatus,searchProject:'',orderSearch:''};
   vm.runInNewContext(code,context);return JSON.parse(JSON.stringify(context.result));
 }
 const order=(id,status)=>({id,status,project:'Test project',orderNumber:id,items:[]});
