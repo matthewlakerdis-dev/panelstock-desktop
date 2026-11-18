@@ -17,15 +17,15 @@
   }
   function createButton({React,client,baseUrl,document,URL,AbortController,setTimeout,clearTimeout}){
     const {createElement:e,useState,useRef,useEffect}=React;
-    return function ActiveOrdersReportButton({orders=[],loadingOrders=false,openOnMount=false}={}){
+    return function ActiveOrdersReportButton({orders=[],loadingOrders=false,inline=false}={}){
       const [state,setState]=useState({busy:false,error:'',open:false,filters:defaults()}),request=useRef(null),alive=useRef(true),download=useRef(null),dialog=useRef(null),owner=useRef(null),previous=useRef(null);
       function release(){if(download.current){clearTimeout(download.current.timer);URL.revokeObjectURL(download.current.url);download.current=null;}}
       useEffect(()=>{
         alive.current=true;
-        if(openOnMount)open();
+        if(inline)open();
         return()=>{alive.current=false;request.current?.abort();release();};
       },[]);
-      useEffect(()=>{if(state.open)dialog.current?.querySelector('select')?.focus();},[state.open]);
+      useEffect(()=>{if(state.open&&!inline)dialog.current?.querySelector('select')?.focus();},[state.open]);
       useEffect(()=>{if(owner.current&&owner.current!==client.username){request.current?.abort();request.current=null;owner.current=null;release();setState({busy:false,error:'',open:false,filters:defaults()});}},[client.username]);
       function close(){if(request.current)return;setState(current=>({...current,open:false,error:''}));if(previous.current?.isConnected)previous.current.focus({preventScroll:true});}
       function open(){if(loadingOrders||request.current)return;owner.current=client.username;previous.current=document.activeElement;setState(current=>({...current,open:true,error:''}));}
@@ -64,8 +64,8 @@
         }
       }
       return e('div',{className:'flex flex-col items-start gap-1'},
-        e('button',{type:'button',disabled:loadingOrders||state.busy,onClick:open,title:'Choose filters and export current active Site Orders',className:'rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700'},'Active orders PDF'),
-        state.open&&owner.current===client.username&&e('div',{className:'fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-3 sm:p-6'},e('form',{ref:dialog,tabIndex:-1,role:'dialog','aria-modal':true,'aria-label':'Active orders report',onSubmit:exportReport,onKeyDown:keyDown,className:'max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-xl bg-white p-5 shadow-2xl sm:p-6'},
+        !inline&&e('button',{type:'button',disabled:loadingOrders||state.busy,onClick:open,title:'Choose filters and export current active Site Orders',className:'rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700'},'Active orders PDF'),
+        state.open&&owner.current===client.username&&e('div',{className:inline?'w-full':'fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-3 sm:p-6'},e('form',{ref:dialog,tabIndex:inline?undefined:-1,role:inline?undefined:'dialog','aria-modal':inline?undefined:true,'aria-label':'Active orders report',onSubmit:exportReport,onKeyDown:inline?undefined:keyDown,className:inline?'w-full rounded-xl border border-slate-200 bg-white p-5':'max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-xl bg-white p-5 shadow-2xl sm:p-6'},
           e('h2',{className:'text-lg font-semibold text-slate-900'},'Active orders report'),
           e('p',{className:'mt-1 text-sm text-slate-600'},'Choose which active orders to include in the compact PDF. Dispatched and cancelled orders are excluded.'),
           e('fieldset',{disabled:state.busy,className:'mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2'},
@@ -80,7 +80,7 @@
           state.error&&e('p',{role:'alert',className:'mt-3 text-sm text-red-700'},state.error),
           e('div',{className:'mt-5 flex flex-wrap justify-end gap-2'},
             e('button',{type:'button',disabled:state.busy,onClick:()=>setState(current=>({...current,filters:defaults(),error:''})),className:'rounded-lg border border-slate-300 px-3 py-2 text-sm'},'Reset filters'),
-            e('button',{type:'button',disabled:state.busy,onClick:close,className:'rounded-lg border border-slate-300 px-3 py-2 text-sm'},'Close'),
+            !inline&&e('button',{type:'button',disabled:state.busy,onClick:close,className:'rounded-lg border border-slate-300 px-3 py-2 text-sm'},'Close'),
             e('button',{type:'submit',disabled:state.busy,'aria-busy':state.busy,className:'rounded-lg bg-cyan-800 px-4 py-2 text-sm font-semibold text-white'},state.busy?'Preparing report…':'Download PDF')))));
     };
   }

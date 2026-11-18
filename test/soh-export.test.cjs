@@ -9,12 +9,12 @@ const fixture=()=>({revision:42,movements:[],items:[
  {id:'bolt',category:'fixings',name:'Bolt',sku:'',qty:0,reserved:0,available:0,onOrder:0,reorderLevel:0,unit:'each'}
 ]});
 const walk=n=>!n||typeof n!=='object'?[]:[n,...(n.children||[]).flat(Infinity).flatMap(walk)];
-function harness(admin=true,onCloseExport){
+function harness(admin=true,inlineExport,catalogueOnly){
  const states=[],exports=[],downloads=[],effects=[];let cursor=0;
  const React={createElement:(type,props,...children)=>({type,props:props||{},children}),useState:v=>{const i=cursor++;if(!(i in states))states[i]=typeof v==='function'?v():v;return [states[i],v=>states[i]=typeof v==='function'?v(states[i]):v];},useEffect(effect){effects.push(effect);},Fragment:'fragment'};
  const context={window:{},TextEncoder,Blob,atob,PanelStock:{username:'viewer',apiFetch:async()=>({ok:true,json:async()=>fixture()})},localStorage:{getItem:()=>null},document:{addEventListener(){},createElement:()=>({click(){downloads.push(this.download);},remove(){}}),body:{appendChild(){}}},URL:{createObjectURL:()=> 'blob:soh-test',revokeObjectURL(){}},setTimeout(){return 0;}};
  vm.runInNewContext(source,context);const Component=context.window.createWorkshopStock(React);
- const render=()=>{cursor=0;effects.length=0;return walk(Component({isAdmin:admin,onCloseExport,taskAccess:{'factory.stock':true},onExportExcel(){throw Error('Legacy unfiltered exporter called');},onExportPDF(){throw Error('Legacy unfiltered exporter called');}}));};
+ const render=()=>{cursor=0;effects.length=0;return walk(Component({isAdmin:admin,inlineExport,catalogueOnly,taskAccess:{'factory.stock':true},onExportExcel(){throw Error('Legacy unfiltered exporter called');},onExportPDF(){throw Error('Legacy unfiltered exporter called');}}));};
  render();states[0]=fixture();
  context.window.PanelStockStocktakeReport.soh={xlsx:s=>{exports.push({format:'xlsx',snapshot:s});return new Blob(['xlsx']);},pdf:s=>{exports.push({format:'pdf',snapshot:s});return new Blob(['pdf']);}};
  const node=label=>render().find(n=>n.props['aria-label']===label),button=text=>render().find(n=>n.type==='button'&&n.children.includes(text));
@@ -54,9 +54,8 @@ test('SOH PDF is labelled as a current stock export and retains panel and worksh
  const offset=Number(pdf.match(/startxref\n(\d+)/)[1]);assert.equal(pdf.slice(offset,offset+4),'xref');
 });
 
-test('the Reports entry opens the shared stock export with its filters and all three download actions',async()=>{
- let closed=false;
- const x=harness(true,()=>{closed=true;});
+test('the Reports entry shows the shared stock filters and download actions inline',()=>{
+ const x=harness(true,true);
  const reportsSource=fs.readFileSync(path.join(__dirname,'../reports-page.js'),'utf8');
  const state=[];let cursor=0;
  vm.runInNewContext(reportsSource,x.context);
@@ -68,7 +67,7 @@ test('the Reports entry opens the shared stock export with its filters and all t
  const report=()=>{cursor=0;return walk(Reports({renderStockExport:()=>({type:'shared-export',props:{}})}));};
  report().find(n=>n.type==='select').props.onChange({target:{value:'stock'}});
  assert.equal(report().filter(n=>n.type==='select').length,1);
- await report().find(n=>n.type==='form').props.onSubmit({preventDefault(){}});
+ assert.equal(report().some(n=>n.type==='button'),false);
  assert.ok(report().some(n=>n.type==='shared-export'));
 
  x.render();x.runEffects();
@@ -78,6 +77,19 @@ test('the Reports entry opens the shared stock export with its filters and all t
  for(const label of ['Xero journal CSV','Download Excel','Download PDF'])assert.ok(x.button(label));
  x.change('Export supplier',JSON.stringify('Beta'));
  assert.deepEqual(Array.from(x.download('PDF').rows,r=>r.itemId),['angle20']);
- x.button('Cancel').props.onClick();
- assert.equal(closed,true);
+ assert.equal(x.node('Export stock on hand').props.role,undefined);
+ assert.equal(x.button('Cancel'),undefined);
+});
+
+test('the inline Material Catalogue keeps panel and offcut stock out of the export',async()=>{
+ const x=harness(true,true,true);
+ x.render();x.runEffects();
+ assert.ok(x.node('Export material catalogue'));
+ assert.equal(x.node('Include Panels'),undefined);
+ assert.equal(x.node('Include Offcuts'),undefined);
+ const report=x.download('PDF');
+ assert.equal(report.name,'Material Catalogue');
+ assert.deepEqual(Array.from(report.rows,r=>r.itemId),['angle2','angle10','angle20','bolt']);
+ assert.match(x.downloads[0],/^Lennox-Material-Catalogue-.*[.]pdf$/);
+ assert.match(await realExports().soh.pdf(report).text(),/MATERIAL CATALOGUE/);
 });

@@ -648,3 +648,5 @@ body:has(.ws-stock-screen,.ws-receiving-screen) #root header.sticky:has(img[alt=
 .ws-material-import-remember{display:flex;align-items:center;gap:10px;font-size:12px}.ws-material-import-remember input{width:20px;height:20px;flex-shrink:0}
 .ws-material-import-dialog .ws-count-footer{justify-content:space-between;flex-wrap:wrap}.ws-material-import-dialog .ws-count-footer>span{font-size:12px;color:#526478}
 @media(max-width:700px){.ws-material-import-row{grid-template-columns:1fr}.ws-material-import-source,.ws-material-import-review{padding:14px}.ws-material-import-review .ws-fields{grid-template-columns:1fr}.ws-material-import-dialog .ws-count-footer button{min-height:44px}}
+
+.ws.ws-report-export{padding:0;margin-top:16px}.ws .ws-inline-export{width:100%;height:auto;max-height:none;border:1px solid var(--ws-line);box-shadow:none}.ws .ws-inline-export .ws-count-body{overflow:visible}
