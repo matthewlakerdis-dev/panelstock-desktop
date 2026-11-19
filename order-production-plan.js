@@ -5,6 +5,7 @@
  function pickup(date){return date?lead.minimumDate({days:{powderCoating:5}},'powderCoating',date):'';}
  function definitions(data,draft){const values=data.stageDefinitions||stages;return data.coating?.canChoose?stages.filter(([name])=>name!=='powderCoating'||draft.panelCoating!=='already_coated'):values;}
  function dates(draft,stageDefinitions=stages){const values=stageDefinitions.flatMap(([stage,label])=>{const row=draft.stages[stage];if(!row||row.notApplicable||!row.date)return [];return [{stage,label:stage==='powderCoating'?'Powder coating · Send':label,date:row.date},...(stage==='powderCoating'?[{stage:'powderPickup',label:'Powder coating · Pickup',date:pickup(row.date)}]:[])];});if(draft.scheduledDeliveryDate)values.push({stage:'siteDelivery',label:'Schedule delivery',date:draft.scheduledDeliveryDate});return values.sort((a,b)=>a.date.localeCompare(b.date)||a.stage.localeCompare(b.stage));}
+ function rowDates(order,summary){return [{stage:'dateOrdered',label:'Date ordered',date:order.dateOrdered||order.createdAt||''},{stage:'requested',label:'Requested date',date:order.requestedDeliveryDate||''},...(summary?.milestones||[]),{stage:'siteDelivery',label:'Scheduled date',date:order.scheduledDeliveryDate||'',time:order.scheduledDeliveryTime||''}];}
  function draftFrom(data){return {stages:Object.fromEntries(stages.map(([name])=>{const row=data.plan.stages[name];return [name,{date:row.date,notApplicable:row.notApplicable,notes:row.notes}];})),panelCoating:data.coating?.selection||data.plan.panelCoating||'required',scheduledDeliveryDate:data.order.scheduledDeliveryDate||'',scheduledDeliveryTime:data.order.scheduledDeliveryTime||''};}
  function createController({client,baseUrl,orderId,onChange,onSaved,uuid=()=>crypto.randomUUID()}){
   const owner=client.username;let live=true,locked=false,pending=null,generation=0;
@@ -44,5 +45,5 @@
   }
   return {state,load,update,save,destroy(){live=false;generation++;}};
  }
- return {stages,definitions,pickup,dates,createController};
+ return {stages,definitions,pickup,dates,rowDates,createController};
 });
