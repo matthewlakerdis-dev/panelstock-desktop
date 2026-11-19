@@ -51,3 +51,5 @@ jobs:
         run: node scripts/verify-gate-production.cjs
       - name: Verify published spreadsheet tab focus
         run: node scripts/verify-tracker-handoff-production.cjs
+      - name: Verify published admin CNC undo without changing stock
+        run: node scripts/verify-cnc-undo-production.cjs
