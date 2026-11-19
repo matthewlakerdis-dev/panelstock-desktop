@@ -211,6 +211,7 @@
 @media(max-width:540px){.ps-measure{grid-template-columns:1fr;gap:10px}.ps-measure svg{max-height:none}.ps-measure h3{font-size:13px}.ps-measure p{font-size:12px}}
 </style>
 <link rel="stylesheet" href="workshop-stock.css?v=3">
+<link rel="stylesheet" href="org-chart.css?v=1">
 <link rel="stylesheet" href="purchase-requests.css?v=1">
 </head>
 <body>
@@ -247,6 +248,7 @@
 <script src="tracker-tab-handoff.js?v=1"></script>
 <script src="reports-page.js?v=1"></script>
 <script src="workshop-stock.js?v=4"></script>
+<script src="org-chart.js?v=1"></script>
 <script src="purchase-requests.js?v=1"></script>
 <script src="pull-refresh.js?v=20261029"></script>
 <script src="tab-workspace.js?v=20261102"></script>
@@ -13774,6 +13776,8 @@ ${xrefStart}
   const catalogKey = item => `${String(item.color || "").trim().toLowerCase()}|${String(item.material || "").trim().toLowerCase()}|${Number(item.thickness)}`;
   const ReportsPage = window.createReportsPage(import_react.default);
   const WorkshopStock = window.createWorkshopStock(import_react.default);
+  const OrganisationChart = window.PanelStockOrgChart.create(import_react.default);
+  const requestOrgChart = window.PanelStockOrgChart.createRequest(BAKED_WORKER_URL);
   const StocktakeSettings = window.createStocktakeSettings(import_react.default);
   const PurchaseOrderReceiving = window.createPurchaseOrderReceiving(import_react.default);
   const ExcelOrderAction = window.PanelStockExcelActions.createComponent(import_react.default,PanelStock,BAKED_WORKER_URL,window.PanelStockExcelActions.link);
@@ -14700,7 +14704,7 @@ ${xrefStart}
       [variants, offcuts]
     );
     useEffect(()=>{if(!username){setNotificationCount(0);return;}let active=true;const load=async()=>{try{const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/notifications"),result=await response.json().catch(()=>({}));if(active&&response.ok)setNotificationCount((result.notifications||[]).filter(item=>!item.read).length);}catch{}};void load();const stop=window.PanelStockPullRefresh?.subscribe(load);const timer=setInterval(load,30000);return()=>{active=false;stop?.();clearInterval(timer);};},[username]);
-    useEffect(()=>{if(!username)return;const params=new URLSearchParams(location.search),requestedRaw=params.get('page')||params.get('open'),requested=requestedRaw==='stock'?'workshop':requestedRaw,initial=permittedPages.includes(requested)?requested:permittedPages.includes(tab)?tab:permittedPages[0]||"profile";setTab(initial);setNavSelection(initial);if(initial==="cad")setOpenNavGroup("cncGroup");if(initial==="gate-progress"||initial==="purchase-requests")setOpenNavGroup("workGroup");history.replaceState({panelstock:true,key:initial,target:initial,section:null},"",`${location.pathname}?page=${encodeURIComponent(initial)}${initial==="gate-progress"&&params.get("gateOrder")?"&gateOrder="+encodeURIComponent(params.get("gateOrder")):""}`);const onBack=event=>{const state=event.state;if(state?.panelstock===true&&permittedPages.includes(state.target)){const group=navGroups.find(value=>value.items.some(item=>item.target===state.target));setOpenNavGroup(group?.key||null);setPreviewNavGroup(null);setNavSelection(state.key||state.target);if(state.section)setSettingsSection(state.section);setTab(state.target);}};addEventListener("popstate",onBack);return()=>removeEventListener("popstate",onBack);},[username,isAdmin,taskAccess]);
+    useEffect(()=>{if(!username)return;const params=new URLSearchParams(location.search),requestedRaw=params.get('page')||params.get('open'),requested=requestedRaw==='stock'?'workshop':requestedRaw,initial=permittedPages.includes(requested)?requested:permittedPages.includes(tab)?tab:permittedPages[0]||"profile";setTab(initial);setNavSelection(initial);if(initial==="cad")setOpenNavGroup("cncGroup");if(initial==="org-chart")setOpenNavGroup("adminGroup");if(initial==="gate-progress"||initial==="purchase-requests")setOpenNavGroup("workGroup");history.replaceState({panelstock:true,key:initial,target:initial,section:null},"",`${location.pathname}?page=${encodeURIComponent(initial)}${initial==="gate-progress"&&params.get("gateOrder")?"&gateOrder="+encodeURIComponent(params.get("gateOrder")):""}`);const onBack=event=>{const state=event.state;if(state?.panelstock===true&&permittedPages.includes(state.target)){const group=navGroups.find(value=>value.items.some(item=>item.target===state.target));setOpenNavGroup(group?.key||null);setPreviewNavGroup(null);setNavSelection(state.key||state.target);if(state.section)setSettingsSection(state.section);setTab(state.target);}};addEventListener("popstate",onBack);return()=>removeEventListener("popstate",onBack);},[username,isAdmin,taskAccess]);
     function lookupSku(code) {
       const v = variants.find((x) => x.sku === code);
       if (v) return { ...v, itemType: "variant" };
@@ -14714,7 +14718,7 @@ ${xrefStart}
       ...(canUsePurchaseRequests?[["purchase-requests",null]]:[]),
       ['workshop','factory.stock'],['receive','factory.receive'],['dispatch','factory.dispatch'],['transfer','factory.transfer'],['damage','factory.damage'],['cnc','factory.cnc'],...(isAdmin?[['cnc-settings',null],['qa-settings',null],['dispatch-settings',null]]:[]),
       ...(isAdmin||can('site.orders.manage')?[['projects',null]]:[]),['orders','site.orders.view'],...(globalThis.PANELSTOCK_GATE_PROGRESS_ENABLED?[['gate-progress','site.orders.view']]:[]),['schedule',can('schedule.view')?'schedule.view':'schedule.cnc.view'],['jobs','factory.jobs'],['qa','factory.qa'],
-      ...(isAdmin?[['access',null],['audit',null],['reports',null]]:[]),['notifications',null],['support',null],['profile',null],['settings','factory.settings']
+      ...(isAdmin?[['org-chart',null],['access',null],['audit',null],['reports',null]]:[]),['notifications',null],['support',null],['profile',null],['settings','factory.settings']
     ].filter(([,task])=>task===null||can(task)).map(([page])=>page);
     useEffect(()=>{if(username&&!permittedPages.includes(tab)&&permittedPages[0])setTab(permittedPages[0]);},[username,tab,taskAccess,isAdmin]);
     // History listeners survive loading renders, so initialize their navigation data before returning.
@@ -14726,7 +14730,7 @@ ${xrefStart}
       {key:"cncGroup",label:"CNC",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(CncRouterIcon,{size:16}),items:[...(can("factory.cnc")?[{key:"cnc",label:"CNC Tracker",target:"cnc",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(CncRouterIcon,{size:16})}]:[]),...(isAdmin?[{key:"cnc-settings",label:"CNC Settings",target:"cnc-settings",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Settings2,{size:16})}]:[])]},
       {key:"workGroup",label:"Work",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Briefcase,{size:16}),items:[...(canUsePurchaseRequests?[{key:"purchase-requests",label:"Purchase Requests",target:"purchase-requests",icon:(0,import_jsx_runtime.jsx)(ClipboardList,{size:16})}]:[]),...(can("schedule.view")||can("schedule.cnc.view")?[{key:"schedule",label:"Schedule",target:"schedule",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(ScheduleCalendarIcon,{size:16})}]:[]),...(isAdmin||can("site.orders.manage")?[{key:"projects",label:"Projects",target:"projects",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Briefcase,{size:16})}]:[]),...(can("factory.jobs")?[{key:"jobs",label:"Jobs",target:"jobs",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Briefcase,{size:16})}]:[]),...(can("site.orders.view")?[{key:"orders",label:"Site Orders",target:"orders",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(ClipboardList,{size:16})}]:[]),...(globalThis.PANELSTOCK_GATE_PROGRESS_ENABLED&&can("site.orders.view")?[{key:"gate-progress",label:"Gate Progress",target:"gate-progress",icon:(0,import_jsx_runtime.jsx)(ClipboardList,{size:16})}]:[])]},
       {key:"qaGroup",label:"QA",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(ClipboardList,{size:16}),items:[...(can("factory.qa")?[{key:"qa",label:"QA Check",target:"qa",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(ClipboardList,{size:16})}]:[]),...(isAdmin?[{key:"qa-settings",label:"QA Settings",target:"qa-settings",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Settings2,{size:16})}]:[])]},
-      {key:"adminGroup",label:"Administration",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Settings2,{size:16}),items:[...(isAdmin?[{key:"access",label:"User Access",target:"access",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(User,{size:16})},{key:"audit",label:"Audit Centre",target:"audit",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(ClipboardList,{size:16})},{key:"reports",label:"Reports",target:"reports",icon:(0,import_jsx_runtime.jsx)(ClipboardList,{size:16})}]:[]),...(can("factory.settings")?[{key:"settings",label:"Settings",target:"settings",section:"general",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Settings2,{size:16})}]:[])]}
+      {key:"adminGroup",label:"Administration",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Settings2,{size:16}),items:[...(isAdmin?[{key:"org-chart",label:"Organisation chart",target:"org-chart",icon:(0,import_jsx_runtime.jsx)(User,{size:16})},{key:"access",label:"User Access",target:"access",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(User,{size:16})},{key:"audit",label:"Audit Centre",target:"audit",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(ClipboardList,{size:16})},{key:"reports",label:"Reports",target:"reports",icon:(0,import_jsx_runtime.jsx)(ClipboardList,{size:16})}]:[]),...(can("factory.settings")?[{key:"settings",label:"Settings",target:"settings",section:"general",icon:/* @__PURE__ */ (0,import_jsx_runtime.jsx)(Settings2,{size:16})}]:[])]}
     ].filter(group=>group.items.length);
     if (loading) {
       return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "min-h-screen flex items-center justify-center bg-slate-50", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "text-slate-400 font-mono text-sm", children: "Loading stock data\u2026" }) });
@@ -14742,7 +14746,7 @@ ${xrefStart}
         }
       );
     }
-    const pageLabels = { cad: "Panel CAD", workshop: "SOH", stock: "Stock", receive: "Receive", dispatch: "Dispatch", transfer:"Convert", damage: "Damage", cnc: "CNC", "cnc-settings":"CNC Settings", qa:"QA Check", "qa-settings":"QA Settings", "dispatch-settings":"Dispatch Settings", projects:"Projects", "purchase-requests":"Purchase Requests", orders: "Orders", "gate-progress":"Gate Progress", schedule: "Schedule", jobs: "Jobs", access: "User Access", audit:"Audit Centre", reports:"Reports", notifications:"Notifications", support:"Support", profile:"My Profile", settings: "Settings" };
+    const pageLabels = { cad: "Panel CAD", workshop: "SOH", stock: "Stock", receive: "Receive", dispatch: "Dispatch", transfer:"Convert", damage: "Damage", cnc: "CNC", "cnc-settings":"CNC Settings", qa:"QA Check", "qa-settings":"QA Settings", "dispatch-settings":"Dispatch Settings", projects:"Projects", "purchase-requests":"Purchase Requests", orders: "Orders", "gate-progress":"Gate Progress", schedule: "Schedule", jobs: "Jobs", "org-chart": "Organisation chart", access: "User Access", audit:"Audit Centre", reports:"Reports", notifications:"Notifications", support:"Support", profile:"My Profile", settings: "Settings" };
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex h-screen bg-slate-50 text-slate-900 font-sans", children: [
       (0,import_jsx_runtime.jsx)(ExcelOrderAction,{username}),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("aside", { className: "w-60 bg-slate-900 flex flex-col shrink-0", children: [
@@ -14824,6 +14828,7 @@ ${xrefStart}
           tab === "jobs" && can("factory.jobs") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(JobsPage, { transactions }),
           tab === "qa" && can("factory.qa") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(QaCenter, { username, isAdmin, canManage:isAdmin||can("factory.qa.manage"), canDispatch:isAdmin||can("factory.qa.dispatch") }),
           tab === "qa-settings" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(QaSettingsPage, {}),
+          tab === "org-chart" && isAdmin && (0, import_jsx_runtime.jsx)(OrganisationChart, {isAdmin, request:requestOrgChart}, username),
           tab === "access" && isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeading, { icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(User, { size: 18 }), title: "User Access", subtitle: "Manage users, administrators and the tasks each person can use." }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AdminPanel, { username, workerUrl: emailConfig.workerUrl, secret: emailConfig.secret, onLogTxn: logTxn })
@@ -18350,6 +18355,7 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
     const [roles, setRoles] = useState([]);
     const [accessUser, setAccessUser] = useState(null);
     const [editUser, setEditUser] = useState(null);
+    const originalUser = useRef(null);
     const [createOpen, setCreateOpen] = useState(false);
     const [rolesOpen, setRolesOpen] = useState(false);
     const [roleOpen, setRoleOpen] = useState(false);
@@ -18459,10 +18465,47 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
       }
     }
     async function unlockUser(targetUsername){setBusy(true);setStatus(null);try{const result=await callWorker("/admin/unlock-user",{username,targetUsername});setBusy(false);if(!result.ok){setStatus({kind:"err",msg:result.error||"Could not unlock account."});return;}setUsers(prev=>prev.map(user=>user.username===targetUsername?{...user,failedLoginAttempts:0,lockedUntil:null}:user));setEditUser(value=>value?.username===targetUsername?{...value,failedLoginAttempts:0,lockedUntil:null}:value);setStatus({kind:"ok",msg:`${targetUsername}'s account was unlocked.`});onLogTxn({type:"user",desc:`Unlocked account for ${targetUsername}`,qty:""});}catch{setBusy(false);setStatus({kind:"err",msg:"Could not reach the server."});}}
-    function openUser(user){setAccessUser(user.username);setEditUser({...user,newUsername:user.username});setStatus(null);}
-    async function saveUser(next=editUser,closeAfterSave=false){if(!next)return;setBusy(true);setStatus(null);try{const result=await callWorker("/admin/update-user",{username,targetUsername:next.username,displayName:next.displayName,title:next.title,location:next.location,email:next.email||"",phone:next.phone||"",employeeProfile:next.employeeProfile||emptyEmployeeProfile(),active:next.active,isAdmin:next.isAdmin,roleIds:next.roleIds||[]});setBusy(false);if(!result.ok){setStatus({kind:"err",msg:result.error||"Could not update user."});return;}const merged={...next,...result.user};setUsers(prev=>prev.map(user=>user.username===result.user.username?merged:user));if(closeAfterSave){setAccessUser(null);setEditUser(null);}else setEditUser(merged);setStatus({kind:"ok",msg:`${result.user.displayName} was updated.`});onLogTxn({type:"user",desc:`Updated user ${result.user.username}`,qty:""});}catch{setBusy(false);setStatus({kind:"err",msg:"Could not reach the server."});}}
-    async function standardiseLogin(user){const next=String(editUser?.newUsername||"").trim().toLowerCase();if(!next||next===user.username)return;if(!await PanelStock.confirm({title:"Change login name?",message:`Change ${user.displayName}'s login from ${user.username} to ${next}?\n\nOnly continue after they have synced all pending work. They will be signed out, and their old login will work as an alias for 14 days.`,confirmLabel:"Change login"}))return;setBusy(true);setStatus(null);try{const result=await callWorker("/admin/rename-user",{username,targetUsername:user.username,newUsername:next,confirmedSynced:true});setBusy(false);if(!result.ok){setStatus({kind:"err",msg:result.error||"Could not change the login name."});return;}setUsers(prev=>prev.map(value=>value.username===user.username?result.user:value).sort((a,b)=>a.username.localeCompare(b.username)));setAccessUser(result.user.username);setEditUser(result.user);setStatus({kind:"ok",msg:`Login changed to ${result.user.username}. The old login remains available for 14 days.`});onLogTxn({type:"user",desc:`Changed login ${user.username} to ${result.user.username}`,qty:""});if(user.username===username)setTimeout(()=>location.reload(),1200);}catch{setBusy(false);setStatus({kind:"err",msg:"Could not reach the server."});}}
-    async function toggleActive(user){await saveUser({...user,active:!user.active});}
+    function openUser(user) {
+      originalUser.current = user;
+      setAccessUser(user.username);
+      setEditUser({...user, newUsername:user.username});
+      setStatus(null);
+    }
+    async function saveUser(next=editUser, closeAfterSave=false, original=originalUser.current) {
+      if (!next) return;
+      setBusy(true);
+      setStatus(null);
+      try {
+        const result = await callWorker("/admin/update-user", {
+          username, targetUsername:next.username,
+          previousReporting:{title:original.title || "", managerId:original.employeeProfile?.supervisorUsername || null},
+          displayName:next.displayName, title:next.title, location:next.location,
+          email:next.email || "", phone:next.phone || "", employeeProfile:next.employeeProfile || emptyEmployeeProfile(),
+          active:next.active, isAdmin:next.isAdmin, roleIds:next.roleIds||[]
+        });
+        if (!result.ok) {
+          setStatus({kind:"err", msg:result.error || "Could not update user."});
+          return;
+        }
+        const merged = {...next, ...result.user};
+        originalUser.current = merged;
+        setUsers(prev => prev.map(user => user.username === result.user.username ? merged : user));
+        if (closeAfterSave) {
+          setAccessUser(null);
+          setEditUser(null);
+        } else {
+          setEditUser(merged);
+        }
+        setStatus({kind:"ok", msg:`${result.user.displayName} was updated.`});
+        onLogTxn({type:"user", desc:`Updated user ${result.user.username}`, qty:""});
+      } catch {
+        setStatus({kind:"err", msg:"Could not reach the server."});
+      } finally {
+        setBusy(false);
+      }
+    }
+    async function standardiseLogin(user){const next=String(editUser?.newUsername||"").trim().toLowerCase();if(!next||next===user.username)return;if(!await PanelStock.confirm({title:"Change login name?",message:`Change ${user.displayName}'s login from ${user.username} to ${next}?\n\nOnly continue after they have synced all pending work. They will be signed out, and their old login will work as an alias for 14 days.`,confirmLabel:"Change login"}))return;setBusy(true);setStatus(null);try{const result=await callWorker("/admin/rename-user",{username,targetUsername:user.username,newUsername:next,confirmedSynced:true});setBusy(false);if(!result.ok){setStatus({kind:"err",msg:result.error||"Could not change the login name."});return;}setUsers(prev=>prev.map(value=>value.username===user.username?result.user:value).sort((a,b)=>a.username.localeCompare(b.username)));openUser(result.user);setStatus({kind:"ok",msg:`Login changed to ${result.user.username}. The old login remains available for 14 days.`});onLogTxn({type:"user",desc:`Changed login ${user.username} to ${result.user.username}`,qty:""});if(user.username===username)setTimeout(()=>location.reload(),1200);}catch{setBusy(false);setStatus({kind:"err",msg:"Could not reach the server."});}}
+    async function toggleActive(user){await saveUser({...user,active:!user.active},false,user);}
     function openRole(role=null){setEditRole(role?{...role,taskAccess:{...role.taskAccess}}:{id:null,name:"",taskAccess:Object.fromEntries(tasks.map(task=>[task.code,false]))});setRolesOpen(true);setRoleOpen(true);setStatus(null);}
     async function saveRole(event){event.preventDefault();if(!editRole)return;setBusy(true);setStatus(null);try{const path=editRole.id?`/admin/roles/${editRole.id}`:"/admin/roles";const result=await callWorker(path,{username,name:editRole.name,taskAccess:editRole.taskAccess});setBusy(false);if(!result.ok){setStatus({kind:"err",msg:result.error||"Could not save role."});return;}setRoles(prev=>editRole.id?prev.map(role=>role.id===result.role.id?result.role:role):[...prev,result.role].sort((a,b)=>a.name.localeCompare(b.name)));if(editRole.id)setUsers(prev=>prev.map(user=>user.roleId===result.role.id?{...user,taskAccess:result.role.taskAccess}:user));setRoleOpen(false);setEditRole(null);setStatus({kind:"ok",msg:`${result.role.name} role was saved.`});onLogTxn({type:"user",desc:`Saved role ${result.role.name}`,qty:""});}catch{setBusy(false);setStatus({kind:"err",msg:"Could not reach the server."});}}
     async function deleteRole(role){if(!await PanelStock.confirm({title:"Delete role?",message:`Delete the ${role.name} role?`,confirmLabel:"Delete role"}))return;setBusy(true);setStatus(null);try{const result=await callWorker(`/admin/roles/${role.id}`,{username,delete:true});setBusy(false);if(!result.ok){setStatus({kind:"err",msg:result.error||"Could not delete role."});return;}setRoles(prev=>prev.filter(value=>value.id!==role.id));setStatus({kind:"ok",msg:`${role.name} role was deleted.`});}catch{setBusy(false);setStatus({kind:"err",msg:"Could not reach the server."});}}
