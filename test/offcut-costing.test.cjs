@@ -25,6 +25,7 @@ test('only sheet offcuts offer area pricing and the source picker shows dimensio
  const options=walk(x.control('costSourceItemId')).filter(n=>n.type==='option');assert.equal(options[0].props.value,'');assert.match(options[0].children.join(''),/Automatic/);
  assert.match(options[1].children.join(''),/White ACP full panel.*2400 × 1200 mm.*41\.66666667.*ex GST/);assert.match(options.at(-1).children.join(''),/Unquoted matching panel.*Not priced/);
  x.set('costSourceItemId','variant:small');const payload=await x.save();assert.equal(payload.action,'metadata');assert.equal(payload.itemId,'offcut:cut');assert.equal(payload.costBasis,'area');assert.equal(payload.costSourceItemId,'variant:small');assert.equal(payload.unit,'sheets');assert.equal(payload.unitCost,9);assert.deepEqual(x.states[0],before);
+ Object.assign(x.states[0].items.find(item=>item.id==='variant:white'),{qty:1,available:1});
  for(const name of ['White ACP full panel','Workshop extrusion offcut']){x.openItem(name);assert.ok(!walk(x.control('costBasis')).some(n=>n.type==='option'&&n.props.value==='area'));assert.equal(x.control('costSourceItemId'),undefined);}
 });
 

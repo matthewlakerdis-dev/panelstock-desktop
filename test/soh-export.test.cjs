@@ -123,3 +123,60 @@ test('SOH PDF embeds a compact profile thumbnail per row and reuses shared pictu
  await x.button('Download Excel').props.onClick();
  assert.ok(x.exports.at(-1).snapshot.rows.every(row=>!row.thumbnail&&!row.swatch));
 });
+
+test('SOH hides panel and offcut records without on-hand stock from rows, counts and exports',()=>{
+ const x=harness(),expected=['angle2','angle10','angle20','bolt','offcut:o','variant:p'];
+ for(const category of ['panels','offcuts'])for(const [label,quantity] of [['zero',0],['negative',-1],['missing',undefined]]){
+  x.states[0].items.push({...fixture().items[0],id:category+'-'+label,category,name:category+' '+label,qty:quantity,reserved:2,available:-2,location:''});
+ }
+ for(const prefix of ['variant:','offcut:'])x.states[0].items.push({...fixture().items[2],id:prefix+'uncategorised',name:prefix+' without stock',qty:0,reserved:2,available:-2,location:''});
+ const tree=x.render(),table=tree.find(n=>n.type==='tbody');
+ assert.deepEqual(walk(table).filter(n=>n.type==='tr').map(n=>n.props.key),expected);
+ for(const [label,count] of [['Stock items',6],['Needs restocking',4],['Allocated to jobs',4],['Location needed',1]]){
+  const metric=tree.find(n=>n.type==='button'&&n.props.className?.startsWith('ws-metric ')&&walk(n).some(v=>v.children?.includes(label)));
+  assert.equal(walk(metric).find(n=>n.type==='strong').children[0],count,label);
+ }
+ const tabs=walk(x.node('Stock categories'));
+ for(const [label,count] of [['All Stock',6],['Panels',1],['Offcuts',1],['Extrusions',3],['Fixings',1]]){
+  const tab=tabs.find(n=>n.type==='button'&&n.children[0]===label);
+  assert.equal(walk(tab).find(n=>n.type==='span').children[0],count,label);
+ }
+ x.open();
+ for(const [label,count] of [['Panels',1],['Offcuts',1],['Extrusions',3],['Fixings',1]]){
+  const category=x.render().find(n=>n.type==='label'&&walk(n).some(v=>v.props['aria-label']==='Include '+label));
+  assert.equal(walk(category).find(n=>n.type==='small').children[0],' ('+count+')',label);
+ }
+ assert.ok(x.render().some(n=>n.type==='strong'&&n.children[0]==='6 items will be exported'));
+ for(const format of ['Excel','PDF'])assert.deepEqual(Array.from(x.download(format).rows,r=>r.itemId),expected);
+});
+
+test('fully reserved panels and offcuts remain in SOH and exports until Available only is enabled',()=>{
+ const x=harness();
+ for(const item of x.states[0].items.filter(i=>['panels','offcuts'].includes(i.category))){item.reserved=item.qty;item.available=0;}
+ const rowIds=()=>walk(x.render().find(n=>n.type==='tbody')).filter(n=>n.type==='tr').map(n=>n.props.key);
+ assert.ok(rowIds().includes('variant:p'));assert.ok(rowIds().includes('offcut:o'));
+ x.open();
+ let report=x.download();
+ for(const id of ['variant:p','offcut:o']){
+  const row=report.rows.find(r=>r.itemId===id);assert.ok(row);assert.equal(row.qty,row.reserved);assert.equal(row.available,0);
+ }
+ x.check('Export available stock only',true);report=x.download('PDF');
+ assert.ok(report.rows.every(r=>!['variant:p','offcut:o'].includes(r.itemId)));
+ x.button('Close').props.onClick();x.button('Available only').props.onClick();
+ assert.deepEqual(rowIds(),['angle2','angle10']);
+});
+
+test('a refreshed panel with no stock cannot remain bulk-selected and zero workshop stock still needs restocking',()=>{
+ const x=harness();x.check('Select White ACP panel PANEL',true);assert.equal(x.button('Bulk edit').props.disabled,false);
+ x.states[0]={...x.states[0],items:x.states[0].items.map(i=>i.id==='variant:p'?{...i,qty:0,available:0}:i)};
+ assert.equal(x.node('Select White ACP panel PANEL'),undefined);
+ assert.equal(x.button('Bulk edit').props.disabled,true);
+ assert.ok(x.render().some(n=>n.type==='span'&&n.children[0]==='0 selected'));
+ x.check('Select all visible stock items',true);x.button('Bulk edit').props.onClick();
+ const bulk=x.states.find(v=>v?.action==='bulk_metadata');
+ assert.ok(!bulk.itemIds.includes('variant:p'));assert.ok(bulk.itemIds.includes('angle20'));assert.ok(bulk.itemIds.includes('bolt'));
+ x.button('Cancel').props.onClick();
+ x.render().find(n=>n.type==='button'&&n.props.className?.startsWith('ws-metric ')&&walk(n).some(v=>v.children?.includes('Needs restocking'))).props.onClick();
+ const restock=walk(x.node('Restocking overview')).filter(n=>n.type==='article').map(n=>n.props.key);
+ assert.ok(restock.includes('angle20'));assert.ok(restock.includes('bolt'));assert.ok(!restock.includes('variant:p'));
+});
