@@ -55,3 +55,77 @@ test('completion dialog reviews each kept offcut without adding stock before con
  draw().find(n=>n['aria-label']==='Saved offcut 1 width').onChange({target:{value:'0'}});assert.equal(draw().find(n=>n.children==='Complete sheet').disabled,true);
  draw().find(n=>n['aria-label']==='Add offcut 1 to SOH').onChange({target:{checked:false}});assert.equal(draw().find(n=>n.children==='Complete sheet').disabled,false);draw().find(n=>n.children==='Complete sheet').onClick();assert.equal(payloads[1].confirmed,false);assert.equal(payloads[1].offcuts.length,0);
 });
+
+
+test('Remake and Template preserve drawn cut offcuts, kept pieces and manual edits',async()=>{
+ const actualStock={...stock,width:3000,height:1200},layout={anchor:'bottom-left',usedLength:2523,usedWidth:592};
+ const detected=[
+  {length:3000,width:598,dimensionOrder:'sheet',rectangle:{x:0,y:602,width:3000,height:598},cutEdges:['bottom'],cutEdgeAllowance:10,minimumOffcutSize:1,layout},
+  {length:467,width:581,dimensionOrder:'sheet',rectangle:{x:2533,y:1,width:467,height:581},cutEdges:['left','top'],cutEdgeAllowance:10,minimumOffcutSize:1,layout}
+ ];
+ const page={page:1,orderNumber:'42',sheetNumber:'1',panelIds:['C1F-38'],quantity:1,sheetWidth:3000,sheetHeight:1200,panelArea:1.49,material:'ACM 4 mm',finish:'White',proposedOffcuts:detected,proposedOffcut:detected[0]},saved=[];
+ let analyses=0;
+ const runtime=hooks({BAKED_WORKER_URL:'https://example.test',FileReader:class{readAsDataURL(){this.result='data:application/pdf;base64,AA==';this.onload();}},PanelStock:{apiFetch:async()=>{analyses++;return {ok:true,json:async()=>({pages:[page]})};}}});
+ const render=vm.runInNewContext(normalizers+source('expandCncPdfSheets')+source('cncRecutSheetPlan')+source('cncPdfStockMatch')+source('CncPdfImport')+';CncPdfImport',runtime.context),props={variants:[actualStock],offcuts:[],cncPanels:[],onSave:rows=>saved.push(rows),onClose(){}},draw=()=>runtime.render(render,props),classification=()=>draw().find(n=>n.type==='classification'),rows=()=>JSON.parse(JSON.stringify(classification().value.offcutRows));
+ await draw().find(n=>n.accept==='application/pdf').onChange({target:{files:[{type:'application/pdf',size:1,name:'order42.pdf'}]}});
+ assert.deepEqual(rows().map(item=>[item.length,item.width]),[[3000,598],[467,581]]);
+ draw().find(n=>n.type==='project-picker').onChange('Notre Dame',{id:'project',name:'Notre Dame'});
+ for(const label of ['Keep offcut for sheet 1','Keep offcut for sheet 1 offcut 2'])draw().find(n=>n['aria-label']===label).onChange({target:{checked:true}});
+ draw().find(n=>n['aria-label']==='Off-cut 2 width').onChange({target:{value:'570'}});
+ draw().find(n=>n.children?.includes?.('Add another offcut')).onClick();
+ draw().find(n=>n['aria-label']==='Keep offcut for sheet 1 offcut 3').onChange({target:{checked:true}});
+ for(const side of ['length','width'])draw().find(n=>n['aria-label']===`Off-cut 3 ${side}`).onChange({target:{value:'100'}});
+ const expected=rows();
+ for(const patch of [{isRemake:true},{remakeReason:'Drawing error'},{isTemplate:true},{isRemake:false},{isTemplate:false},{isRemake:true}]){
+  classification().onChange(patch);
+  assert.deepEqual(rows(),expected,`classification ${JSON.stringify(patch)} must preserve reviewed leftovers`);
+ }
+ draw().find(n=>n.type==='stock-picker').onSelect({...actualStock,id:'same-size',sku:'SAME',width:1200,height:3000});
+ assert.deepEqual(rows(),expected,'the same physical sheet stored with reversed axes keeps the drawn cuts and review');
+ assert.equal(analyses,1,'classification and equivalent stock do not analyse the PDF again');
+ const save=draw().find(n=>n.children?.includes?.('Save reviewed sheets'));assert.equal(save.disabled,false);save.onClick();
+ assert.equal(saved.length,1);assert.equal(saved[0][0].isRemake,true);assert.equal(saved[0][0].remakeReason,'Drawing error');
+ assert.deepEqual(JSON.parse(JSON.stringify(saved[0][0].pendingOffcuts.map(item=>[item.length,item.width]))),[[3000,598],[467,570],[100,100]]);
+ assert.deepEqual(JSON.parse(JSON.stringify(saved[0][0].pendingOffcuts[0].rectangle)),detected[0].rectangle);
+ assert.equal(saved[0][0].pendingOffcuts[1].rectangle,undefined,'manual correction remains explicit');
+});
+
+test('a genuinely different stock size recalculates and classification cannot clear a sheet fit error',async()=>{
+ const actualStock={...stock,width:3000,height:1200},detected={length:3000,width:598,dimensionOrder:'sheet',rectangle:{x:0,y:602,width:3000,height:598},layout:{anchor:'bottom-left',usedLength:2523,usedWidth:592},cutEdgeAllowance:10,minimumOffcutSize:1};
+ const page={page:1,orderNumber:'42',sheetNumber:'1',panelIds:['C1F-38'],quantity:1,sheetWidth:3000,sheetHeight:1200,panelArea:1.49,material:'ACM 4 mm',finish:'White',proposedOffcuts:[detected],proposedOffcut:detected};
+ const runtime=hooks({BAKED_WORKER_URL:'https://example.test',FileReader:class{readAsDataURL(){this.result='data:application/pdf;base64,AA==';this.onload();}},PanelStock:{apiFetch:async()=>({ok:true,json:async()=>({pages:[page]})})}});
+ const render=vm.runInNewContext(normalizers+source('expandCncPdfSheets')+source('cncRecutSheetPlan')+source('cncPdfStockMatch')+source('CncPdfImport')+';CncPdfImport',runtime.context),props={variants:[actualStock],offcuts:[],cncPanels:[],onSave(){},onClose(){}},draw=()=>runtime.render(render,props),classification=()=>draw().find(n=>n.type==='classification');
+ await draw().find(n=>n.accept==='application/pdf').onChange({target:{files:[{type:'application/pdf',size:1,name:'order42.pdf'}]}});
+ draw().find(n=>n.type==='project-picker').onChange('Notre Dame',{id:'project'});
+ draw().find(n=>n.type==='stock-picker').onSelect({...actualStock,id:'too-small',sku:'SMALL',width:2400,height:1200});
+ const fitError=classification().value.recutSheetError;assert.ok(fitError);assert.equal(classification().value.offcutRows[0].length,'');
+ classification().onChange({isRemake:false});assert.equal(classification().value.recutSheetError,fitError);
+ assert.equal(draw().find(n=>n.children?.includes?.('Save reviewed sheets')).disabled,true);
+ draw().find(n=>n.type==='stock-picker').onSelect({...actualStock,id:'larger',sku:'LARGE',width:4000,height:1200});
+ assert.equal(classification().value.recutSheetError,'');
+ assert.deepEqual(JSON.parse(JSON.stringify(classification().value.offcutRows.map(item=>[item.length,item.width]))),[[1467,1200],[2513,598]]);
+});
+
+
+test('changing stock dimensions cannot replace explicit drawn separator cuts with an inferred layout',async()=>{
+ const actualStock={...stock,width:3000,height:1200},detected={length:3000,width:598,dimensionOrder:'sheet',rectangle:{x:0,y:602,width:3000,height:598},layout:{anchor:'bottom-left',usedLength:2523,usedWidth:592,cutLines:[{x0:2523,y0:592,x1:3000,y1:592}]},cutEdgeAllowance:10,minimumOffcutSize:1};
+ const second={...detected,length:467,width:581,rectangle:{x:2533,y:1,width:467,height:581}};
+ const page={page:1,orderNumber:'42',sheetNumber:'1',panelIds:['C1F-38'],quantity:1,sheetWidth:3000,sheetHeight:1200,panelArea:1.49,material:'ACM 4 mm',finish:'White',proposedOffcuts:[detected,second],proposedOffcut:detected};
+ const runtime=hooks({BAKED_WORKER_URL:'https://example.test',FileReader:class{readAsDataURL(){this.result='data:application/pdf;base64,AA==';this.onload();}},PanelStock:{apiFetch:async()=>({ok:true,json:async()=>({pages:[page]})})}});
+ const render=vm.runInNewContext(normalizers+source('expandCncPdfSheets')+source('cncRecutSheetPlan')+source('cncPdfStockMatch')+source('CncPdfImport')+';CncPdfImport',runtime.context),props={variants:[actualStock],offcuts:[],cncPanels:[],onSave(){},onClose(){}},draw=()=>runtime.render(render,props),classification=()=>draw().find(n=>n.type==='classification');
+ await draw().find(n=>n.accept==='application/pdf').onChange({target:{files:[{type:'application/pdf',size:1,name:'order42.pdf'}]}});
+ draw().find(n=>n.type==='project-picker').onChange('Notre Dame',{id:'project'});
+ draw().find(n=>n.type==='stock-picker').onSelect({...actualStock,id:'equivalent',width:1200,height:3000});
+ assert.equal(classification().value.offcutRows[0].length,3000,'equivalent stock keeps the explicit cut');
+ draw().find(n=>n.type==='stock-picker').onSelect({...actualStock,id:'different',width:4000,height:1200});
+ const expected='The selected sheet size differs from the drawing. Review the drawn cut lines on a revised PDF.';
+ assert.equal(classification().value.recutSheetError,expected);
+ assert.equal(classification().value.offcutRows[0].length,'','no fabricated replacement offcuts are suggested');
+ for(const patch of [{isRemake:true},{isRemake:false},{isTemplate:true}]){classification().onChange(patch);assert.equal(classification().value.recutSheetError,expected);}
+ assert.equal(draw().find(n=>n.children?.includes?.('Save reviewed sheets')).disabled,true);
+ draw().find(n=>n.type==='stock-picker').onSelect({...actualStock,id:'original',width:1200,height:3000});
+ assert.equal(classification().value.recutSheetError,'','returning to the drawing size clears the mismatch');
+ assert.deepEqual(JSON.parse(JSON.stringify(classification().value.offcutRows.map(({keep,...item})=>item))),[detected,second],'all parsed pieces and their original cut geometry are restored');
+ assert.ok(classification().value.offcutRows.every(item=>!item.keep),'restored pieces are reviewed again');
+ assert.equal(draw().find(n=>n.children?.includes?.('Save reviewed sheets')).disabled,false);
+});
