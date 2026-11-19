@@ -1,8 +1,8 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8'),start=html.indexOf('    function renderOrderRow(order)'),end=html.indexOf('    const receiveOrders=',start),shipping=require('../order-dispatch-progress.js');
 const order={id:'a',orderNumber:'25',project:'Tower',orderType:'Consumables',status:'completed',items:[{quantity:1,description:'SILICON'},{quantity:3,description:'SEALANT'}],dispatches:[{lines:[{index:0,quantity:1}]}]};
-function render(value=order,canManage=true,productionPlans={}){
- const e=(type,props,...children)=>({type,props:props||{},children:children.flat(Infinity).filter(x=>x!==false&&x!==null&&x!==undefined)}),noop=()=>{},context={e,PanelStockProductionPlan:require('../order-production-plan.js'),window:{PanelStockOrderDispatch:shipping},expandedOrders:{a:true},orderListTitle:o=>'#'+o.orderNumber,groupByProject:false,canBulkDispatch:true,bulkSelected:[],saving:false,statusSaving:false,bulkDispatchOpen:false,selectBulkOrder:noop,setExpandedOrders:noop,canManage,isPanelOrder:o=>o.orderType==='Panels',isGateOrder:o=>o.orderType==='Bin Gate',statusChoices:{},setStatusChoices:noop,changeStatus:noop,openPanel:noop,Pencil:'Pencil',setProductionPlanOrder:noop,canAddSchedule:true,scheduleTrigger:{},setScheduleOrder:noop,downloadOrder:noop,isAdmin:canManage,deleteOrder:noop,Trash2:'Trash2',productionPlans,orderDate:v=>v,orderPlacedDate:o=>'',orderDisplayStatus:o=>shipping.get(o).statusLabel,orderStatusLabel:status=>shipping.labels[status]};
+function render(value=order,canManage=true,productionPlans={},onDrawn=()=>{}){
+ const e=(type,props,...children)=>({type,props:props||{},children:children.flat(Infinity).filter(x=>x!==false&&x!==null&&x!==undefined)}),noop=()=>{},context={e,PanelStockProductionPlan:require('../order-production-plan.js'),window:{PanelStockOrderDispatch:shipping},expandedOrders:{a:true},orderListTitle:o=>'#'+o.orderNumber,groupByProject:false,canBulkDispatch:true,bulkSelected:[],saving:false,statusSaving:false,bulkDispatchOpen:false,selectBulkOrder:noop,setExpandedOrders:noop,canManage,isPanelOrder:o=>o.orderType==='Panels',isGateOrder:o=>['Gate','Bin Gate','Buggy Gate','Side Access Gate'].includes(o.orderType),statusChoices:{},setStatusChoices:noop,changeStatus:noop,openPanel:noop,Pencil:'Pencil',setProductionPlanOrder:noop,setGateOrder:o=>onDrawn('gate',o),setDrawingOrder:o=>onDrawn('panel',o),canAddSchedule:true,scheduleTrigger:{},setScheduleOrder:noop,downloadOrder:noop,isAdmin:canManage,deleteOrder:noop,Trash2:'Trash2',productionPlans,orderDate:v=>v,orderPlacedDate:o=>'',orderDisplayStatus:o=>shipping.get(o).statusLabel,orderStatusLabel:status=>shipping.labels[status]};
  vm.runInNewContext(html.slice(start,end)+'globalThis.render=renderOrderRow;',context);return context.render(value);
 }
 function all(node,predicate){return !node||typeof node!=='object'?[]:[...(predicate(node)?[node]:[]),...node.children.flatMap(child=>all(child,predicate))];}
@@ -28,4 +28,12 @@ test('collapsed rows show applicable production dates in order, with a dash for 
 test('collapsed headers omit status while expanded viewers still see the current status',()=>{
  const tree=render({...order,status:'submitted',dispatches:[]},false),summary=all(tree,n=>n.props.className==='ps-order-summary')[0];
  assert.equal(all(summary,n=>n.props.className==='ps-order-badge'||n.props.className==='ps-order-lock').length,0);assert.equal(text(all(tree,n=>n.props.className==='ps-order-lock')[0]),'Submitted');
+});
+
+test('Drawn is available for Panels and every Gate type and opens the matching existing dialog',()=>{
+ for(const [orderType,kind] of [['Panels','panel'],...['Gate','Bin Gate','Buggy Gate','Side Access Gate'].map(type=>[type,'gate'])]){
+  const calls=[],value={...order,orderType},tree=render(value,true,{},(...args)=>calls.push(args)),toolbar=all(tree,n=>n.props.className==='ps-order-toolbar')[0],buttons=all(toolbar,n=>n.type==='button'),drawn=buttons.filter(n=>text(n)==='Drawn');
+  assert.equal(drawn.length,1,orderType);assert.ok(buttons.indexOf(drawn[0])<buttons.findIndex(n=>text(n)==='Production plan'));drawn[0].props.onClick();assert.equal(calls.length,1);assert.equal(calls[0][0],kind);assert.equal(calls[0][1],value);
+ }
+ for(const orderType of ['Fabrication','Fibre Cement','Consumables','Fixings','Other'])assert.equal(all(render({...order,orderType}),n=>n.type==='button'&&text(n)==='Drawn').length,0,orderType);
 });
