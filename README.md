@@ -1,5 +1,7 @@
 # PanelStock desktop
 
+**User Access → Bulk upload** imports up to 100 users from a CSV UTF-8 file. Download the template, fill in display name plus optional username, email, phone, title, location, roles and Web/App/Site access, then review before creating accounts. Separate multiple existing role names with a semicolon; blank role values use normal default task access, and blank app values allow access. Existing usernames are skipped, and duplicate usernames or invalid rows must be corrected. Uploaded users are standard accounts awaiting PIN setup through **Send invite**. Partial uploads show per-row results, support a status check before retrying remaining users, and provide a CSV results download.
+
 In **Work → Site Orders**, **Active orders PDF** downloads a fresh branded report
 of all current active orders, grouped by project and order number. It includes
 orders ready for dispatch and excludes dispatched/cancelled orders, independently

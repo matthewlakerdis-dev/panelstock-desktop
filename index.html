@@ -238,6 +238,8 @@
 <link rel="stylesheet" href="excel-order-actions.css?v=20261102">
 <script src="excel-order-actions.js?v=20261106-gate-area"></script>
 <script src="site-order-bulk-dispatch.js?v=1"></script>
+<link rel="stylesheet" href="user-bulk-import.css?v=1">
+<script src="user-bulk-import.js?v=1"></script>
 <script src="order-lead-times.js?v=1"></script>
 <script src="order-production-plan.js?v=1"></script>
 <script src="order-dispatch-progress.js?v=1"></script>
@@ -13781,6 +13783,7 @@ ${xrefStart}
   const ExcelOrderAction = window.PanelStockExcelActions.createComponent(import_react.default,PanelStock,BAKED_WORKER_URL,window.PanelStockExcelActions.link);
   const ReverseDispatchModal = window.PanelStockOrderDispatchReversal.createComponent(import_react.default,PanelStock,BAKED_WORKER_URL);
   const BulkDispatchModal = window.PanelStockBulkDispatch.createComponent(import_react.default,PanelStock,BAKED_WORKER_URL);
+  const UserBulkUpload = window.PanelStockUserBulkImport.createComponent(import_react.default);
   const ActiveOrdersReportButton = window.PanelStockActiveOrdersReport.createButton({React:import_react.default,client:PanelStock,baseUrl:BAKED_WORKER_URL,document,URL,AbortController,setTimeout,clearTimeout});
   const canReadStockSession=(user={})=>user.isAdmin===true||["factory.stock","factory.receive","factory.dispatch","factory.transfer","factory.damage","factory.cnc","factory.cad","factory.jobs","factory.qa","factory.settings"].some(task=>user.taskAccess?.[task]===true);
   function App() {
@@ -18358,6 +18361,7 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
     const [roleOpen, setRoleOpen] = useState(false);
     const [editRole, setEditRole] = useState(null);
     const [newUser, setNewUser] = useState(emptyNewUser);
+    const [bulkUsersOpen,setBulkUsersOpen]=useState(false);
     useEffect(()=>window.PanelStockPullRefresh?.subscribe(()=>loadUsers()));
     useEffect(()=>{try{sessionStorage.removeItem("panelstock-admin-temporary-pins");}catch{}},[]);
     const [status, setStatus] = useState(null);
@@ -18547,6 +18551,7 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
         setStatus({ kind: "err", msg: "Could not reach the server." });
       }
     }
+    if(bulkUsersOpen)return (0, import_jsx_runtime.jsx)(UserBulkUpload,{client:PanelStock,baseUrl:workerUrl,onClose:()=>{setBulkUsersOpen(false);void loadUsers();},onCreated:user=>setUsers(previous=>[...previous.filter(existing=>existing.username!==user.username),user].sort((a,b)=>a.username.localeCompare(b.username)))});
     if(inviteUser)return (0, import_jsx_runtime.jsx)(UserInvite,{user:inviteUser,workerUrl,reset:inviteUser.resetLink===true,onClose:()=>setInviteUser(null)});
     if(roleOpen&&editRole)return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"max-w-3xl",children:[
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"mb-4 flex items-center justify-between",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2",{className:"text-lg font-semibold text-slate-900",children:editRole.id?"Edit role":"Create role"}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p",{className:"mt-1 text-sm text-slate-500",children:"Everyone assigned to this role receives the same task access."})]}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button",{type:"button",onClick:()=>{setRoleOpen(false);setEditRole(null);setStatus(null);},className:"rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600",children:"Back to roles"})]}),
@@ -18590,7 +18595,7 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
     ]});
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "grid grid-cols-3 gap-6", children:[
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "col-span-3 bg-white border border-slate-300 rounded-xl overflow-x-auto", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"flex items-center justify-between border-b border-slate-200 px-5 py-4",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div",{className:"text-sm font-semibold text-slate-800",children:"Accounts"}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p",{className:"mt-0.5 text-xs text-slate-500",children:"Manage who can sign in and what they can access."})]}),/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"flex gap-2",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button",{type:"button",onClick:()=>{setRolesOpen(true);setAccessUser(null);setEditUser(null);setStatus(null);},className:"rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-cyan-800",children:"View Roles"}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button",{type:"button",onClick:()=>{setNewUser(emptyNewUser());setCreateOpen(true);setAccessUser(null);setEditUser(null);setStatus(null);},className:"rounded-lg bg-cyan-800 px-4 py-2 text-sm font-semibold text-white",children:"+ Create user"})]})]}),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"flex items-center justify-between border-b border-slate-200 px-5 py-4",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div",{className:"text-sm font-semibold text-slate-800",children:"Accounts"}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p",{className:"mt-0.5 text-xs text-slate-500",children:"Manage who can sign in and what they can access."})]}),/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div",{className:"flex gap-2",children:[/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button",{type:"button",onClick:()=>{setRolesOpen(true);setAccessUser(null);setEditUser(null);setStatus(null);},className:"rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-cyan-800",children:"View Roles"}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button",{type:"button",disabled:busy||!loaded,onClick:()=>{setBulkUsersOpen(true);setAccessUser(null);setEditUser(null);setStatus(null);},className:"rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-cyan-800",children:"Bulk upload"}),/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button",{type:"button",onClick:()=>{setNewUser(emptyNewUser());setCreateOpen(true);setAccessUser(null);setEditUser(null);setStatus(null);},className:"rounded-lg bg-cyan-800 px-4 py-2 text-sm font-semibold text-white",children:"+ Create user"})]})]}),
         busy && !loaded && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "p-5 text-sm text-slate-400", children: "Loading\u2026" }),
         status && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: status.kind === "err" ? "border-b border-slate-100 bg-red-50 px-5 py-3 text-sm text-red-800" : "fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-lg", children: status.msg }),
         loaded && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", { className: "w-full text-sm", children: [
