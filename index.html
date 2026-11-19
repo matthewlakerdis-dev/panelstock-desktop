@@ -16174,6 +16174,7 @@ function compareCncOrders(a, b) {
   function cncRecutSheetPlan(proposed, sheetWidth, sheetHeight) {
     const length=Math.max(Number(sheetWidth),Number(sheetHeight)),width=Math.min(Number(sheetWidth),Number(sheetHeight)),layout=proposed?.layout;
     if(!layout||layout.anchor!=="bottom-left"){const offcut=cncWholeOffcutProposal(proposed);return {fits:true,offcut:offcut||null,offcuts:offcut?[offcut]:[]};}
+    if(Array.isArray(layout.cutLines)&&layout.cutLines.length)return {fits:false,offcut:null,offcuts:[],error:"The selected sheet size differs from the drawing. Review the drawn cut lines on a revised PDF."};
     const usedLength=Number(layout.usedLength),usedWidth=Number(layout.usedWidth),allowance=Math.max(0,Number(proposed.cutEdgeAllowance)||0),minimum=Math.max(1,Number(proposed.minimumOffcutSize)||1);
     if(!(length>0&&width>0&&usedLength>0&&usedWidth>0)||usedLength>length||usedWidth>width)return {fits:false,offcut:null,offcuts:[]};
     // Partition the space outside the occupied bottom-left bounding box. The
@@ -16202,15 +16203,19 @@ function compareCncOrders(a, b) {
     const proposals=page=>Array.isArray(page.proposedOffcuts)?page.proposedOffcuts:page.proposedOffcut?[page.proposedOffcut]:[];
     const reviewOffcuts=items=>{const whole=items.map(cncWholeOffcutProposal).filter(Boolean);return (whole.length?whole:[{}]).slice(0,20).map(item=>({...item,length:item.length||"",width:item.width||"",keep:false}));};
     const recutPatch=(page,stock)=>{
-      const sheetWidth=stock?.width||page.sheetWidth,sheetHeight=stock?.height||page.sheetHeight,source=proposals(page)[0]||null,plan=cncRecutSheetPlan(source,sheetWidth,sheetHeight);
-      return {sheetWidth,sheetHeight,recutSheetError:plan.fits?"":"The selected sheet is too small for this bottom-left recut layout.",offcutRows:reviewOffcuts(plan.offcuts||[])};
+      const sheetWidth=stock?.width||page.sheetWidth,sheetHeight=stock?.height||page.sheetHeight;
+      if(Math.max(Number(sheetWidth),Number(sheetHeight))===Math.max(Number(page.drawingSheetWidth),Number(page.drawingSheetHeight))&&Math.min(Number(sheetWidth),Number(sheetHeight))===Math.min(Number(page.drawingSheetWidth),Number(page.drawingSheetHeight)))return {sheetWidth,sheetHeight,recutSheetError:"",offcutRows:reviewOffcuts(proposals(page))};
+      const source=proposals(page)[0]||null,plan=cncRecutSheetPlan(source,sheetWidth,sheetHeight);
+      return {sheetWidth,sheetHeight,recutSheetError:plan.fits?"":plan.error||"The selected sheet is too small for this bottom-left recut layout.",offcutRows:reviewOffcuts(plan.offcuts||[])};
     };
     const update=(index,patch)=>setPages(current=>current.map((page,i)=>{
       if(i!==index)return page;
       let next=patch;
-      if(patch.stockItemId!==undefined&&(Number(patch.sheetWidth)!==Number(page.sheetWidth)||Number(patch.sheetHeight)!==Number(page.sheetHeight)))next={...patch,...recutPatch(page,{width:patch.sheetWidth,height:patch.sheetHeight})};
-      else if(patch.isRemake===true)next={...patch,...recutPatch(page,null)};
-      else if(patch.isRemake===false)next={...patch,recutSheetError:"",offcutRows:reviewOffcuts(proposals(page))};
+      // Classification does not alter the drawn cuts or the reviewed leftovers.
+      // Stock records can store equivalent sheet dimensions in either order.
+      const dimensions=value=>[Math.max(Number(value.sheetWidth),Number(value.sheetHeight)),Math.min(Number(value.sheetWidth),Number(value.sheetHeight))];
+      const [length,width]=dimensions(page),[nextLength,nextWidth]=dimensions(patch);
+      if(patch.stockItemId!==undefined&&(nextLength!==length||nextWidth!==width))next={...patch,...recutPatch(page,{width:patch.sheetWidth,height:patch.sheetHeight})};
       return {...page,...next};
     }));
     const updateOffcut=(pageIndex,offcutIndex,patch)=>setPages(current=>current.map((page,i)=>i===pageIndex?{...page,offcutRows:page.offcutRows.map((item,j)=>j===offcutIndex?{...item,...patch,...(patch.length!==undefined||patch.width!==undefined?{rectangle:undefined,dimensionOrder:"sheet"}:{})}:item)}:page));
@@ -16223,7 +16228,7 @@ function compareCncOrders(a, b) {
       try{
         const pdf=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file);}),response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/cnc-pdf/analyse",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pdf})}),result=await response.json();
         if(!response.ok)throw Error(result.error||"The CNC PDF could not be analysed.");
-        setPages(expandCncPdfSheets(result.pages||[]).map(page=>{const stock=cncPdfStockMatch(page,choices);return {...page,jobReference:"",panelNumbers:(page.panelIds||[]).join(", "),stockItemType:stock?.id?(offcuts.some(value=>value.id===stock.id)?"offcut":"variant"):"",stockItemId:stock?.id||"",stockSku:stock?.sku||"",offcutRows:reviewOffcuts(proposals(page))};}));
+        setPages(expandCncPdfSheets(result.pages||[]).map(page=>{const stock=cncPdfStockMatch(page,choices);return {...page,drawingSheetWidth:page.sheetWidth,drawingSheetHeight:page.sheetHeight,jobReference:"",panelNumbers:(page.panelIds||[]).join(", "),stockItemType:stock?.id?(offcuts.some(value=>value.id===stock.id)?"offcut":"variant"):"",stockItemId:stock?.id||"",stockSku:stock?.sku||"",offcutRows:reviewOffcuts(proposals(page))};}));
       }catch(reason){setError(reason.message||"The CNC PDF could not be analysed.");}finally{setBusy(false);}
     }
     useEffect(()=>{if(initialFile)void analyse({target:{files:[initialFile]}});},[initialFile]);
