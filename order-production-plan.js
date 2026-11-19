@@ -3,8 +3,10 @@
  const stages=[['stockOrder','Order stock'],['drawnCnc','Drawn / Toolpath / CNC'],['fabrication','Fabrication'],['powderCoating','Powder coating']];
  const copy=value=>JSON.parse(JSON.stringify(value));
  function pickup(date){return date?lead.minimumDate({days:{powderCoating:5}},'powderCoating',date):'';}
- function dates(draft){const values=stages.flatMap(([stage,label])=>{const row=draft.stages[stage];if(row.notApplicable||!row.date)return [];return [{stage,label:stage==='powderCoating'?'Powder coating · Send':label,date:row.date},...(stage==='powderCoating'?[{stage:'powderPickup',label:'Powder coating · Pickup',date:pickup(row.date)}]:[])];});if(draft.scheduledDeliveryDate)values.push({stage:'siteDelivery',label:'Schedule delivery',date:draft.scheduledDeliveryDate});return values.sort((a,b)=>a.date.localeCompare(b.date)||a.stage.localeCompare(b.stage));}
- function draftFrom(data){return {stages:copy(data.plan.stages),scheduledDeliveryDate:data.order.scheduledDeliveryDate||'',scheduledDeliveryTime:data.order.scheduledDeliveryTime||''};}
+ function definitions(data,draft){const values=data.stageDefinitions||stages;return data.coating?.canChoose?stages.filter(([name])=>name!=='powderCoating'||draft.panelCoating!=='already_coated'):values;}
+ function dates(draft,stageDefinitions=stages){const values=stageDefinitions.flatMap(([stage,label])=>{const row=draft.stages[stage];if(!row||row.notApplicable||!row.date)return [];return [{stage,label:stage==='powderCoating'?'Powder coating · Send':label,date:row.date},...(stage==='powderCoating'?[{stage:'powderPickup',label:'Powder coating · Pickup',date:pickup(row.date)}]:[])];});if(draft.scheduledDeliveryDate)values.push({stage:'siteDelivery',label:'Schedule delivery',date:draft.scheduledDeliveryDate});return values.sort((a,b)=>a.date.localeCompare(b.date)||a.stage.localeCompare(b.stage));}
+ function rowDates(order,summary){return [{stage:'dateOrdered',label:'Date ordered',date:order.dateOrdered||order.createdAt||''},{stage:'requested',label:'Requested date',date:order.requestedDeliveryDate||''},...(summary?.milestones||[]),{stage:'siteDelivery',label:'Scheduled date',date:order.scheduledDeliveryDate||'',time:order.scheduledDeliveryTime||''}];}
+ function draftFrom(data){return {stages:Object.fromEntries(stages.map(([name])=>{const row=data.plan.stages[name];return [name,{date:row.date,notApplicable:row.notApplicable,notes:row.notes}];})),panelCoating:data.coating?.selection||data.plan.panelCoating||'required',scheduledDeliveryDate:data.order.scheduledDeliveryDate||'',scheduledDeliveryTime:data.order.scheduledDeliveryTime||''};}
  function createController({client,baseUrl,orderId,onChange,onSaved,uuid=()=>crypto.randomUUID()}){
   const owner=client.username;let live=true,locked=false,pending=null,generation=0;
   const state={loading:true,saving:false,data:null,draft:null,error:'',conflict:false,uncertain:false,dirty:false};
@@ -16,7 +18,21 @@
    try{const {response,data}=await request();if(!response.ok)throw Error(data.error||'The production plan could not be loaded.');if(version!==generation||!current())return;pending=null;publish({data,draft:draftFrom(data),dirty:false,uncertain:false});}
    catch(error){if(version===generation)publish({error:error.message});}finally{locked=false;if(version===generation)publish({loading:false});}
   }
-  function update(stage,field,value){if(locked||!current()||!state.data?.canEdit||state.uncertain)return;const draft=copy(state.draft);if(stage==='siteDelivery'){if(!state.data.canScheduleDelivery)return;draft[field]=value;if(field==='scheduledDeliveryDate'&&!value)draft.scheduledDeliveryTime='';}else{draft.stages[stage][field]=value;if(field==='notApplicable'&&value){draft.stages[stage].date='';draft.stages[stage].assignedUsername='';}}pending=null;publish({draft,dirty:true,error:'',conflict:false});}
+  function update(stage,field,value){
+   if(locked||!current()||!state.data?.canEdit||state.uncertain)return;
+   const draft=copy(state.draft);
+   if(stage==='plan'){
+    if(field!=='panelCoating'||!state.data.coating?.canChoose||!['required','already_coated'].includes(value))return;
+    draft.panelCoating=value;if(value==='required')draft.stages.powderCoating.notApplicable=false;
+   }else if(stage==='siteDelivery'){
+    if(!state.data.canScheduleDelivery||!['scheduledDeliveryDate','scheduledDeliveryTime'].includes(field))return;
+    draft[field]=value;if(field==='scheduledDeliveryDate'&&!value)draft.scheduledDeliveryTime='';
+   }else{
+    if(!definitions(state.data,draft).some(([name])=>name===stage)||!['date','notApplicable','notes'].includes(field))return;
+    draft.stages[stage][field]=value;if(field==='notApplicable'&&value)draft.stages[stage].date='';
+   }
+   pending=null;publish({draft,dirty:true,error:'',conflict:false});
+  }
   async function save(){
    if(locked||!current()||!state.data?.canEdit||!state.draft)return;
    if(!pending)pending={mutationId:uuid(),expectedRevision:state.data.plan.revision,expectedOrderUpdatedAt:state.data.order.updatedAt||state.data.order.createdAt||'',...copy(state.draft)};
@@ -29,5 +45,5 @@
   }
   return {state,load,update,save,destroy(){live=false;generation++;}};
  }
- return {stages,pickup,dates,createController};
+ return {stages,definitions,pickup,dates,rowDates,createController};
 });

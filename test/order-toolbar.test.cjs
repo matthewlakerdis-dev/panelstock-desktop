@@ -1,8 +1,8 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8'),start=html.indexOf('    function renderOrderRow(order)'),end=html.indexOf('    const receiveOrders=',start),shipping=require('../order-dispatch-progress.js');
 const order={id:'a',orderNumber:'25',project:'Tower',orderType:'Consumables',status:'completed',items:[{quantity:1,description:'SILICON'},{quantity:3,description:'SEALANT'}],dispatches:[{lines:[{index:0,quantity:1}]}]};
-function render(value=order,canManage=true){
- const e=(type,props,...children)=>({type,props:props||{},children:children.flat(Infinity).filter(x=>x!==false&&x!==null&&x!==undefined)}),noop=()=>{},context={e,window:{PanelStockOrderDispatch:shipping},expandedOrders:{a:true},orderListTitle:o=>'#'+o.orderNumber,groupByProject:false,canBulkDispatch:true,bulkSelected:[],saving:false,statusSaving:false,bulkDispatchOpen:false,selectBulkOrder:noop,setExpandedOrders:noop,canManage,isPanelOrder:o=>o.orderType==='Panels',isGateOrder:o=>o.orderType==='Bin Gate',statusChoices:{},setStatusChoices:noop,changeStatus:noop,openPanel:noop,Pencil:'Pencil',setProductionPlanOrder:noop,canAddSchedule:true,scheduleTrigger:{},setScheduleOrder:noop,downloadOrder:noop,isAdmin:canManage,deleteOrder:noop,Trash2:'Trash2',productionPlans:{},orderDate:v=>v,orderPlacedDate:o=>'',orderDisplayStatus:o=>shipping.get(o).statusLabel,orderStatusLabel:status=>shipping.labels[status]};
+function render(value=order,canManage=true,productionPlans={}){
+ const e=(type,props,...children)=>({type,props:props||{},children:children.flat(Infinity).filter(x=>x!==false&&x!==null&&x!==undefined)}),noop=()=>{},context={e,PanelStockProductionPlan:require('../order-production-plan.js'),window:{PanelStockOrderDispatch:shipping},expandedOrders:{a:true},orderListTitle:o=>'#'+o.orderNumber,groupByProject:false,canBulkDispatch:true,bulkSelected:[],saving:false,statusSaving:false,bulkDispatchOpen:false,selectBulkOrder:noop,setExpandedOrders:noop,canManage,isPanelOrder:o=>o.orderType==='Panels',isGateOrder:o=>o.orderType==='Bin Gate',statusChoices:{},setStatusChoices:noop,changeStatus:noop,openPanel:noop,Pencil:'Pencil',setProductionPlanOrder:noop,canAddSchedule:true,scheduleTrigger:{},setScheduleOrder:noop,downloadOrder:noop,isAdmin:canManage,deleteOrder:noop,Trash2:'Trash2',productionPlans,orderDate:v=>v,orderPlacedDate:o=>'',orderDisplayStatus:o=>shipping.get(o).statusLabel,orderStatusLabel:status=>shipping.labels[status]};
  vm.runInNewContext(html.slice(start,end)+'globalThis.render=renderOrderRow;',context);return context.render(value);
 }
 function all(node,predicate){return !node||typeof node!=='object'?[]:[...(predicate(node)?[node]:[]),...node.children.flatMap(child=>all(child,predicate))];}
@@ -17,4 +17,10 @@ test('expanded item table and order badge reflect saved partial shipments withou
  const tree=render(),rows=all(tree,n=>n.type==='tr');assert.equal(text(all(tree,n=>n.props.className==='ps-order-badge')[0]),'Part dispatched');
  assert.deepEqual(rows.slice(1).map(n=>n.children.map(text)),[['1','SILICON','1','0','Dispatched'],['3','SEALANT','0','3','Not dispatched']]);assert.equal(order.status,'completed');
  const viewer=render(order,false);assert.equal(all(viewer,n=>n.type==='select').length,0);assert.ok(!all(viewer,n=>n.type==='button').some(n=>text(n)==='Edit'));
+});
+
+test('collapsed rows show applicable production dates in order, with a dash for every unset date',()=>{
+ const milestones=[{stage:'stockOrder',label:'Order stock',date:''},{stage:'drawnCnc',label:'Drawn',date:'2026-11-23'},{stage:'fabrication',label:'Fabrication',date:''}],summary={a:{revision:1,milestones}};
+ const tree=render({...order,orderType:'Bin Gate',scheduledDeliveryDate:''},true,summary),cells=all(tree,n=>n.props['data-plan-date']);
+ assert.deepEqual(cells.map(n=>n.props['data-plan-date']),['dateOrdered','requested','stockOrder','drawnCnc','fabrication','siteDelivery']);assert.deepEqual(cells.map(n=>text(all(n,x=>x.type==='strong')[0])),['-','-','-','2026-11-23','-','-']);assert.ok(!text(tree).includes('Not scheduled'));assert.ok(!cells.some(n=>text(n).includes('Powder')));
 });
