@@ -17150,7 +17150,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
     const [orders, setOrders] = useState([]);
     const [statusChoices,setStatusChoices]=useState({}),[statusSaving,setStatusSaving]=useState(false),statusRequest=useRef(false);
     const [filter, setFilter] = useState("active");
-    const [groupByProject,setGroupByProject]=useState(false),[expandedOrders,setExpandedOrders]=useState({});
+    const [groupByProject,setGroupByProject]=useState(true),[expandedOrders,setExpandedOrders]=useState({});
     const [bulkSelected,setBulkSelected]=useState([]),[bulkDispatchOpen,setBulkDispatchOpen]=useState(false);
     const canBulkDispatch=(canManage||isAdmin)&&(isAdmin||canDispatch);
     function selectBulkOrder(id,checked){const next=checked?[...new Set([...bulkSelected,id])]:bulkSelected.filter(value=>value!==id);if(next.length>20){setNotice("Select up to 20 orders for one dispatch.");return;}setBulkSelected(next);}
@@ -17329,13 +17329,12 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
         e("button",{type:"button",className:"ps-order-summary","aria-expanded":expanded,"aria-controls":detailsId,"aria-label":title,onClick:()=>setExpandedOrders(current=>({...current,[order.id]:!current[order.id]}))},
           e("span",{className:"ps-order-identity"},e("strong",{className:"ps-order-title"},title),order.urgent===true&&e("span",{className:"ps-order-urgent-badge"},"URGENT"),e("span",{className:"ps-order-meta"},`${order.items?.length||0} item${order.items?.length===1?"":"s"} · Requested by ${order.requestedBy||"Unknown"}`)),
           e("span",{className:"ps-order-delivery-dates"},PanelStockProductionPlan.rowDates(order,productionPlans[order.id]).map(entry=>e("span",{key:entry.stage,className:"ps-order-delivery","data-plan-date":entry.stage},e("span",null,entry.label),e("strong",null,entry.date?(entry.stage==="dateOrdered"?orderPlacedDate(order):orderDate(entry.date)):"-"),entry.date&&entry.time&&e("small",{className:"is-confirmed"},entry.time)))),
-          e("span",{className:"ps-order-badge"},orderDisplayStatus(order)),
           e("svg",{className:"ps-order-chevron","aria-hidden":true,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:1.8},e("path",{d:"m9 5 7 7-7 7",strokeLinecap:"round",strokeLinejoin:"round"}))
         ),
         e("div",{id:detailsId,className:"ps-order-expanded",hidden:!expanded},
           e("div",{className:"ps-order-actions"},e("div",{className:"ps-order-toolbar"},
             canManage&&!isPanelOrder(order)&&!["completed","dispatched"].includes(order.status)&&e("div",{className:"ps-order-status-control"},e("span",{className:"ps-order-status-label"},"Status"),e("select",{disabled:statusSaving,value:statusChoices[order.id]||order.status,"aria-label":"Status for Order "+order.orderNumber,onChange:event=>{const status=event.target.value;setStatusChoices(current=>({...current,[order.id]:status}));void changeStatus(order,status);},className:"h-9 rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700"},["submitted","approved","ordered","in_stock","completed","cancelled"].filter(status=>status!=="completed"||!isGateOrder(order)).map(status=>e("option",{key:status,value:status},orderStatusLabel(status))))),
-            (isPanelOrder(order)||["completed","dispatched"].includes(order.status))&&e("div",{className:"ps-order-state"},e("span",{className:"ps-order-lock"},orderDisplayStatus(order))),
+            (!canManage||isPanelOrder(order)||["completed","dispatched"].includes(order.status))&&e("div",{className:"ps-order-state"},e("span",{className:"ps-order-lock"},orderDisplayStatus(order))),
             e("div",{className:"ps-order-main-actions"},
               e("button",{type:"button",onClick:()=>openPanel("view",order),"aria-label":`View Order ${order.orderNumber} for ${order.project}`,className:"rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700"},"View"),
               canManage&&!isPanelOrder(order)&&order.status!=="dispatched"&&e("button",{type:"button",onClick:()=>openPanel("edit",order),className:"inline-flex items-center gap-1.5 rounded-lg border border-cyan-700 px-3 py-2 text-xs font-semibold text-cyan-800"},e(Pencil,{size:13}),"Edit"),

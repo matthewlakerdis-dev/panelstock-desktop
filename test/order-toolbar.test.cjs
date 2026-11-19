@@ -13,8 +13,8 @@ test('order toolbar follows the requested sequence and excludes retired row cont
  for(const forbidden of ['Apply','Excel','Schedule delivery','View order','Add schedule entry'])assert.ok(!all(toolbar,n=>n.type==='button').some(n=>text(n)===forbidden));
  assert.match(html,/<script src="order-dispatch-progress.js/);
 });
-test('expanded item table and order badge reflect saved partial shipments without changing readiness',()=>{
- const tree=render(),rows=all(tree,n=>n.type==='tr');assert.equal(text(all(tree,n=>n.props.className==='ps-order-badge')[0]),'Part dispatched');
+test('expanded item table and status reflect saved partial shipments without changing readiness',()=>{
+ const tree=render(),rows=all(tree,n=>n.type==='tr');assert.equal(all(tree,n=>n.props.className==='ps-order-badge').length,0);assert.equal(text(all(tree,n=>n.props.className==='ps-order-lock')[0]),'Part dispatched');
  assert.deepEqual(rows.slice(1).map(n=>n.children.map(text)),[['1','SILICON','1','0','Dispatched'],['3','SEALANT','0','3','Not dispatched']]);assert.equal(order.status,'completed');
  const viewer=render(order,false);assert.equal(all(viewer,n=>n.type==='select').length,0);assert.ok(!all(viewer,n=>n.type==='button').some(n=>text(n)==='Edit'));
 });
@@ -23,4 +23,9 @@ test('collapsed rows show applicable production dates in order, with a dash for 
  const milestones=[{stage:'stockOrder',label:'Order stock',date:''},{stage:'drawnCnc',label:'Drawn',date:'2026-11-23'},{stage:'fabrication',label:'Fabrication',date:''}],summary={a:{revision:1,milestones}};
  const tree=render({...order,orderType:'Bin Gate',scheduledDeliveryDate:''},true,summary),cells=all(tree,n=>n.props['data-plan-date']);
  assert.deepEqual(cells.map(n=>n.props['data-plan-date']),['dateOrdered','requested','stockOrder','drawnCnc','fabrication','siteDelivery']);assert.deepEqual(cells.map(n=>text(all(n,x=>x.type==='strong')[0])),['-','-','-','2026-11-23','-','-']);assert.ok(!text(tree).includes('Not scheduled'));assert.ok(!cells.some(n=>text(n).includes('Powder')));
+});
+
+test('collapsed headers omit status while expanded viewers still see the current status',()=>{
+ const tree=render({...order,status:'submitted',dispatches:[]},false),summary=all(tree,n=>n.props.className==='ps-order-summary')[0];
+ assert.equal(all(summary,n=>n.props.className==='ps-order-badge'||n.props.className==='ps-order-lock').length,0);assert.equal(text(all(tree,n=>n.props.className==='ps-order-lock')[0]),'Submitted');
 });
