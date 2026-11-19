@@ -18461,8 +18461,45 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
       }
     }
     async function unlockUser(targetUsername){setBusy(true);setStatus(null);try{const result=await callWorker("/admin/unlock-user",{username,targetUsername});setBusy(false);if(!result.ok){setStatus({kind:"err",msg:result.error||"Could not unlock account."});return;}setUsers(prev=>prev.map(user=>user.username===targetUsername?{...user,failedLoginAttempts:0,lockedUntil:null}:user));setEditUser(value=>value?.username===targetUsername?{...value,failedLoginAttempts:0,lockedUntil:null}:value);setStatus({kind:"ok",msg:`${targetUsername}'s account was unlocked.`});onLogTxn({type:"user",desc:`Unlocked account for ${targetUsername}`,qty:""});}catch{setBusy(false);setStatus({kind:"err",msg:"Could not reach the server."});}}
-    function openUser(user){originalUser.current=user;setAccessUser(user.username);setEditUser({...user,newUsername:user.username});setStatus(null);}
-    async function saveUser(next=editUser,closeAfterSave=false,original=originalUser.current){if(!next)return;setBusy(true);setStatus(null);try{const result=await callWorker("/admin/update-user",{username,targetUsername:next.username,previousReporting:{title:original.title||"",managerId:original.employeeProfile?.supervisorUsername||null},displayName:next.displayName,title:next.title,location:next.location,email:next.email||"",phone:next.phone||"",employeeProfile:next.employeeProfile||emptyEmployeeProfile(),active:next.active,isAdmin:next.isAdmin,roleIds:next.roleIds||[]});setBusy(false);if(!result.ok){setStatus({kind:"err",msg:result.error||"Could not update user."});return;}const merged={...next,...result.user};originalUser.current=merged;setUsers(prev=>prev.map(user=>user.username===result.user.username?merged:user));if(closeAfterSave){setAccessUser(null);setEditUser(null);}else setEditUser(merged);setStatus({kind:"ok",msg:`${result.user.displayName} was updated.`});onLogTxn({type:"user",desc:`Updated user ${result.user.username}`,qty:""});}catch{setBusy(false);setStatus({kind:"err",msg:"Could not reach the server."});}}
+    function openUser(user) {
+      originalUser.current = user;
+      setAccessUser(user.username);
+      setEditUser({...user, newUsername:user.username});
+      setStatus(null);
+    }
+    async function saveUser(next=editUser, closeAfterSave=false, original=originalUser.current) {
+      if (!next) return;
+      setBusy(true);
+      setStatus(null);
+      try {
+        const result = await callWorker("/admin/update-user", {
+          username, targetUsername:next.username,
+          previousReporting:{title:original.title || "", managerId:original.employeeProfile?.supervisorUsername || null},
+          displayName:next.displayName, title:next.title, location:next.location,
+          email:next.email || "", phone:next.phone || "", employeeProfile:next.employeeProfile || emptyEmployeeProfile(),
+          active:next.active, isAdmin:next.isAdmin, roleIds:next.roleIds||[]
+        });
+        if (!result.ok) {
+          setStatus({kind:"err", msg:result.error || "Could not update user."});
+          return;
+        }
+        const merged = {...next, ...result.user};
+        originalUser.current = merged;
+        setUsers(prev => prev.map(user => user.username === result.user.username ? merged : user));
+        if (closeAfterSave) {
+          setAccessUser(null);
+          setEditUser(null);
+        } else {
+          setEditUser(merged);
+        }
+        setStatus({kind:"ok", msg:`${result.user.displayName} was updated.`});
+        onLogTxn({type:"user", desc:`Updated user ${result.user.username}`, qty:""});
+      } catch {
+        setStatus({kind:"err", msg:"Could not reach the server."});
+      } finally {
+        setBusy(false);
+      }
+    }
     async function standardiseLogin(user){const next=String(editUser?.newUsername||"").trim().toLowerCase();if(!next||next===user.username)return;if(!await PanelStock.confirm({title:"Change login name?",message:`Change ${user.displayName}'s login from ${user.username} to ${next}?\n\nOnly continue after they have synced all pending work. They will be signed out, and their old login will work as an alias for 14 days.`,confirmLabel:"Change login"}))return;setBusy(true);setStatus(null);try{const result=await callWorker("/admin/rename-user",{username,targetUsername:user.username,newUsername:next,confirmedSynced:true});setBusy(false);if(!result.ok){setStatus({kind:"err",msg:result.error||"Could not change the login name."});return;}setUsers(prev=>prev.map(value=>value.username===user.username?result.user:value).sort((a,b)=>a.username.localeCompare(b.username)));openUser(result.user);setStatus({kind:"ok",msg:`Login changed to ${result.user.username}. The old login remains available for 14 days.`});onLogTxn({type:"user",desc:`Changed login ${user.username} to ${result.user.username}`,qty:""});if(user.username===username)setTimeout(()=>location.reload(),1200);}catch{setBusy(false);setStatus({kind:"err",msg:"Could not reach the server."});}}
     async function toggleActive(user){await saveUser({...user,active:!user.active},false,user);}
     function openRole(role=null){setEditRole(role?{...role,taskAccess:{...role.taskAccess}}:{id:null,name:"",taskAccess:Object.fromEntries(tasks.map(task=>[task.code,false]))});setRolesOpen(true);setRoleOpen(true);setStatus(null);}
