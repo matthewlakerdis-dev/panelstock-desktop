@@ -20,5 +20,5 @@
   return {days:days,minimumDate:minimum,message:days?String(type)+' requires at least '+days+' '+unit+' day'+(days===1?'':'s')+' lead time. Earliest requested delivery: '+minimum+'.':''};
  }
  function error(settings,type,date,start){var current=rule(settings,type,start);return current.days&&(!dateValue(date)||date<current.minimumDate)?current.message:'';}
- return {today:today,dateValue:dateValue,daysFor:daysFor,minimumDate:minimumDate,rule:rule,error:error};
+ return {urgentNotice:"Contact the factory manager to confirm the requested delivery date can be achieved. Marking an order urgent does not confirm delivery.",today:today,dateValue:dateValue,daysFor:daysFor,minimumDate:minimumDate,rule:rule,error:error};
 });
