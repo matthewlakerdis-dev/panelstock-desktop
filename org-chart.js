@@ -121,7 +121,7 @@
       const [data, setData] = useState(null);
       const [attempt, setAttempt] = useState(0);
       const [error, setError] = useState("");
-      const [notice, setNotice] = useState("");
+      const [notice, setNotice] = useState(null);
       const [draft, setDraft] = useState(null);
       const [busy, setBusy] = useState(false);
       const [conflict, setConflict] = useState("");
@@ -130,6 +130,12 @@
       const returnFocusId = useRef(null);
       const chart = useMemo(() => organise(data?.positions || []), [data]);
       const photoCache = useMemo(() => new Map(), [request]);
+
+      useEffect(() => {
+        if (!notice) return;
+        const timer = setTimeout(() => setNotice(null), 5000);
+        return () => clearTimeout(timer);
+      }, [notice]);
 
       useEffect(() => {
         for (const [id, entry] of photoCache) {
@@ -171,7 +177,7 @@
       function beginEdit(person) {
         setConflict("");
         setError("");
-        setNotice("");
+        setNotice(null);
         setDraft({ id: person.id, name: chart.nameOf(person), title: person.title, managerId: person.managerId });
       }
 
@@ -180,7 +186,7 @@
         setDraft(null);
         setConflict("");
         setError("");
-        setNotice(message);
+        setNotice(message ? { id: draft.id, message } : null);
       }
 
       async function reloadConflict() {
@@ -224,14 +230,22 @@
         return chart.byId.has(id) ? chart.nameOf(chart.byId.get(id)) : "Unavailable supervisor (" + id + ")";
       }
 
-      function personCard(person, deep) {
+      function personCard(person, deep, teamLead = false) {
         const circular = chart.cycles.has(person.id);
         const missing = person.managerId && !chart.byId.has(person.managerId);
-        return h("div", { className: "oc-node" },
+        const reportCount = chart.displayReports.get(person.id)?.length || 0;
+        const classes = ["oc-node"];
+        if (reportCount) classes.push("oc-with-reports");
+        if (draft?.id === person.id) classes.push("oc-selected");
+        if (notice?.id === person.id) classes.push("oc-saved");
+        const editLabel = "Edit " + chart.nameOf(person);
+        return h("div", { className: classes.join(" ") },
           h(StaffAvatar, { key: person.photoVersion || "", person, request, cache: photoCache }),
           h("div", { className: "oc-person" },
             h("strong", null, chart.nameOf(person)),
             h("span", null, person.title || "Job title not set"),
+            teamLead && reportCount > 0 && h("small", { className: "oc-report-count" },
+              reportCount + (reportCount === 1 ? " direct report" : " direct reports")),
             (circular || missing) && h("small", { className: "oc-issue" }, circular
               ? "Circular reporting line with " + supervisorName(person.managerId)
               : supervisorName(person.managerId)),
@@ -239,28 +253,29 @@
               person.managerId ? "Reports to " + supervisorName(person.managerId) : "No supervisor")),
           h("button", {
             type: "button", className: "oc-edit", "data-oc-edit": person.id, disabled: !!editing,
-            "aria-label": "Edit " + chart.nameOf(person), onClick: () => beginEdit(person)
-          }, "Edit"));
+            "aria-label": editLabel, title: editLabel, onClick: () => beginEdit(person)
+          }, h("svg", {
+            width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor",
+            strokeWidth: 1.7, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true, focusable: false
+          }, h("path", { d: "M16 4l4 4M3 21l5-1L21 7a2.8 2.8 0 0 0-4-4L4 16l-1 5Z" }))));
       }
 
       // Flatten deep branches to avoid exhausting the JS stack. Keep the first
       // four levels of connector lines and label the supervisor on deeper rows.
-      function branch(start, includeRoot) {
+      function branch(start) {
         const rows = [];
         const pending = [{ person: start, rails: [], depth: 0, last: true }];
         while (pending.length) {
           const { person, rails, depth, last } = pending.pop();
-          if (includeRoot || depth) {
-            rows.push(h("li", { key: person.id, className: "oc-row" },
-              rails.map((continues, index) => {
-                const elbow = index === depth - 1;
-                return h("span", {
-                  key: index, "aria-hidden": true,
-                  className: "oc-rail" + (elbow ? (last ? " oc-end" : " oc-fork") : continues ? " oc-line" : "")
-                });
-              }),
-              personCard(person, depth > 4)));
-          }
+          rows.push(h("li", { key: person.id, className: "oc-row" },
+            rails.map((continues, index) => {
+              const elbow = index === depth - 1;
+              return h("span", {
+                key: index, "aria-hidden": true,
+                className: "oc-rail" + (elbow ? (last ? " oc-end" : " oc-fork") : continues ? " oc-line" : "")
+              });
+            }),
+            personCard(person, depth > 4)));
           const children = chart.displayReports.get(person.id) || [];
           const nextRails = rails.slice();
           if (depth > 0 && depth <= 4) nextRails[depth - 1] = !last;
@@ -274,13 +289,16 @@
 
       function team(person) {
         const direct = chart.displayReports.get(person.id) || [];
-        const columns = direct.length === 2 || direct.length === 3;
-        return h("li", { className: "oc-team" + (direct.length ? " oc-has-team" : "") + (columns ? " oc-columns" : ""), key: person.id },
-          h("div", { className: "oc-lead" }, personCard(person, false)),
-          columns
-            ? h("ul", { className: "oc-lanes", "aria-label": "Direct reports to " + chart.nameOf(person), style: { "--oc-count": direct.length } },
-                direct.map(child => h("li", { key: child.id, className: "oc-lane" }, branch(child, true))))
-            : direct.length > 0 && branch(person, false));
+        let classes = "oc-team";
+        if (direct.length) {
+          const layout = direct.length === 1 ? "oc-single" : direct.length <= 3 ? "oc-columns" : "oc-many";
+          classes += " oc-has-team " + layout;
+        }
+        return h("li", { className: classes, key: person.id },
+          h("div", { className: "oc-lead" }, personCard(person, false, true)),
+          direct.length > 0 && h("ul", {
+            className: "oc-lanes", "aria-label": "Direct reports to " + chart.nameOf(person), style: { "--oc-count": direct.length }
+          }, direct.map(child => h("li", { key: child.id, className: "oc-lane" }, branch(child)))));
       }
 
       function editor() {
@@ -315,13 +333,13 @@
 
       return h("section", { ref: section, tabIndex: -1, className: "oc", "aria-label": "Lennox Facades organisational chart" },
         h("header", { className: "oc-header" }, h("p", { className: "oc-org" }, "Lennox Facades"), h("h2", null, "Organisational chart"),
-          data?.positions.length > 0 && h("p", { className: "oc-help" }, "Choose Edit beside a staff member to set their job title and supervisor.")),
+          data && h("span", { className: "oc-count" }, data.positions.length + (data.positions.length === 1 ? " staff member" : " staff members")),
+          h("span", { role: "status", className: "oc-notice" }, notice?.message)),
         !data && (error
           ? h("div", { className: "oc-state" }, h("p", { role: "alert", className: "oc-error" }, error),
               h("button", { type: "button", className: "oc-secondary", onClick: () => setAttempt(attempt + 1) }, "Try again"))
           : h("p", { role: "status" }, "Loading chart…")),
         editing && editor(),
-        h("div", { role: "status", className: "oc-notice" }, notice),
         data && !data.positions.length && h("p", { className: "oc-state" }, "No active staff are listed for Lennox Facades."),
         data?.positions.length > 0 && h("ul", { className: "oc-forest", "aria-label": "Reporting structure" },
           (chart.displayReports.get(null) || []).map(team)));
