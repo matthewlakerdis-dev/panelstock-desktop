@@ -15,7 +15,7 @@
         error.status = response.status;
         throw error;
       }
-      if (!result || !Array.isArray(result.positions)) {
+      if (!result || (path === "/org-chart" && !Array.isArray(result.positions))) {
         throw new Error("PanelStock returned an unreadable chart. Please try again.");
       }
       return result;
@@ -79,6 +79,44 @@
   function create(React) {
     const { createElement: h, useState, useEffect, useMemo, useRef } = React;
 
+    function StaffAvatar({ person, request, cache }) {
+      const { id, name, photoVersion } = person;
+      const element = useRef(null);
+      const [source, setSource] = useState("");
+      useEffect(() => {
+        if (!photoVersion) return;
+        let active = true;
+        let observer;
+        function load() {
+          observer?.disconnect();
+          let entry = cache.get(id);
+          if (entry?.version !== photoVersion) {
+            const result = request("/org-chart/photos/" + encodeURIComponent(id)).then(photo => {
+              const src = photo?.profilePhoto;
+              return typeof src === "string" && /^data:image\/(?:jpeg|png|webp);base64,[a-zA-Z0-9+/]+={0,2}$/.test(src) ? src : "";
+            }).catch(() => "");
+            entry = { version: photoVersion, result };
+            cache.set(id, entry);
+          }
+          entry.result.then(src => { if (active) setSource(src); });
+        }
+        if (window.IntersectionObserver) {
+          observer = new IntersectionObserver(entries => {
+            if (entries.some(item => item.isIntersecting)) load();
+          }, { rootMargin: "100px" });
+          observer.observe(element.current);
+        } else {
+          load();
+        }
+        return () => { active = false; observer?.disconnect(); };
+      }, [id, photoVersion, request, cache]);
+
+      const initials = (name || id || "?").trim().split(/\s+/).slice(0, 2)
+        .map(word => Array.from(word)[0]).join("").toUpperCase();
+      return h("span", { ref: element, className: "oc-avatar", "aria-hidden": true },
+        source ? h("img", { src: source, alt: "", decoding: "async", onError: () => setSource("") }) : initials);
+    }
+
     function StaffChart({ request }) {
       const [data, setData] = useState(null);
       const [attempt, setAttempt] = useState(0);
@@ -91,6 +129,13 @@
       const section = useRef(null);
       const returnFocusId = useRef(null);
       const chart = useMemo(() => organise(data?.positions || []), [data]);
+      const photoCache = useMemo(() => new Map(), [request]);
+
+      useEffect(() => {
+        for (const [id, entry] of photoCache) {
+          if (chart.byId.get(id)?.photoVersion !== entry.version) photoCache.delete(id);
+        }
+      }, [chart, photoCache]);
 
       useEffect(() => {
         let active = true;
@@ -183,6 +228,7 @@
         const circular = chart.cycles.has(person.id);
         const missing = person.managerId && !chart.byId.has(person.managerId);
         return h("div", { className: "oc-node" },
+          h(StaffAvatar, { key: person.photoVersion || "", person, request, cache: photoCache }),
           h("div", { className: "oc-person" },
             h("strong", null, chart.nameOf(person)),
             h("span", null, person.title || "Job title not set"),
