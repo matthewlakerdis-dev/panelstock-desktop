@@ -25,3 +25,13 @@ test('production booking defaults save a person and duration per task',async()=>
  assert.equal(h.calls[0].productionBookingDefaults.cnc.username,'operator');
  assert.equal(h.calls[0].productionBookingDefaults.cnc.durationMinutes,90);
 });
+
+test('schedule settings save a configurable powder coating turnaround in working days',async()=>{
+ const h=panel();
+ h.state[8]=[['powderPickup','Powder coating · Pickup']];
+ const input=walk(h.render()).find(node=>node.type==='input'&&node.props.min===1);
+ assert.equal(input.props.value,5);
+ input.props.onChange({target:{value:'3'}});
+ await walk(h.render()).find(node=>node.type==='button'&&node.children.includes('Save schedule settings')).props.onClick();
+ assert.equal(h.calls[0].powderCoatingWorkingDays,3);
+});
