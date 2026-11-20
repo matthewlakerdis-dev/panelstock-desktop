@@ -124,3 +124,10 @@ test('lookup normalizes case and all whitespace while preserving meaningful code
   const x=harness(),before=structuredClone(x.states[0]);x.open();x.code(entered);x.setHandler(url=>url.endsWith('/search')?response({code,products:[{...product,code}],warnings:[]}):url.endsWith('/image')?response({...imageResult(),code}):response(x.states[0]));await x.find();assert.deepEqual(x.requests[0].body,{code});assert.equal(x.node('Capral code').props.value,code);assert.ok(x.button('Use image'));await x.use();assert.equal(x.requests[1].body.code,code);assert.equal(x.preview(),prepared);assert.deepEqual(x.states[0],before);assert.equal(x.requests.filter(request=>request.url.endsWith('/workshop-stock')).length,0);
  }
 });
+
+
+test('both review links and thumbnails accept only verified Capral hosts and the Capral CDN store',async()=>{
+ const allowed='https://cdn11.bigcommerce.com/s-gwvwsryafm/images/stencil/1280x1280/products/3748/5097/angle.png';
+ const x=harness();x.open();x.setHandler(()=>response({code:'E12345',products:[{...product,url:'https://shop.capral.com.au/943511/',images:[{url:allowed,alt:'Angle'},{url:allowed.replace('s-gwvwsryafm','s-anotherstore'),alt:'Foreign store'},{url:'https://evil.test/image.png',alt:'Foreign image'}]},{...product,url:'https://unknown.capral.com.au/product/'}],warnings:[]}));
+ await x.find();assert.equal(x.render().filter(node=>node.type==='button'&&node.children.includes('Use image')).length,1);assert.ok(x.render().some(node=>node.type==='img'&&node.props.src===allowed));assert.ok(!x.render().some(node=>node.type==='img'&&node.props.src?.includes('s-anotherstore')));
+});

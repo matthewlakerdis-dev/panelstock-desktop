@@ -1,50 +1,54 @@
-CAPRAL REFERENCE IMAGE LOOKUP — WORK IN PROGRESS
+CAPRAL REFERENCE IMAGE LOOKUP — RELEASE CANDIDATE (21 NOVEMBER 2026)
 
-Do not merge or deploy this checkpoint. The live Capral search provider is
-deliberately unconfigured until the official website can be inspected and tested.
+Implementation is complete. Do not deploy until live image download and production
+access are verified; see Pending below.
 
-Goal
-Find a stock item's official Capral reference image using an editable Capral
-product/profile code, review the matching product, choose Use image, then save
-through the existing stock item editor. Keep stock codes, quantities and prices
-unchanged. Existing image saving shares the photo across same-SKU variants.
+Behaviour
+An administrator enters an editable Capral product/profile code, reviews an exact
+matching product, chooses Use image, and saves through the existing stock editor.
+Lookup is read-only. Stock codes, quantities and prices are retained. Existing
+same-SKU photo sharing and idempotent stock saving are retained.
 
-Prepared implementation
-- worker/src/capral-reference.js validates codes and official HTTPS URLs, bounds
-  redirects/time/bytes, extracts exact-code JSON-LD products and revalidates image
-  association before downloading PNG/JPEG/WebP. Only apex/www hosts are currently
-  approved internally. searchCapralReference requires internal options.searchUrl;
-  the production default is intentionally absent and returns 503.
-- POST /stock-images/capral/search and /stock-images/capral/image authenticate a
-  full administrator session, bound input and respect maintenance mode. These
-  are read-only lookup routes; stock mutations still use the normal Save flow.
-- workshopView advertises capralReferenceLookupVersion:1 in this draft. Complete
-  the provider before deployment; otherwise the UI would expose an unavailable
-  search.
-- Both clients have editable Capral code, staged product/image previews, exact
-  response-code checks, explicit Use image, upload-equivalent image preparation,
-  cancellation/stale-response guards and ordinary idempotent stock saving.
-- No actual customer stock, photos, prices or quantities were modified.
+Verified live provider contract
+- Capral home links to https://shop.capral.com.au/.
+- Public native search: https://shop.capral.com.au/search.php?search_query=EP10189
+  returns a card for https://shop.capral.com.au/943511/.
+- The product JSON-LD binds SKU 943511 to its image. The productView-info block
+  explicitly identifies SECTION EP10189 and SKU 943511. Profile matching requires
+  exact SECTION, matching SKU and canonical product URL; titles are insufficient.
+- Images use https://cdn11.bigcommerce.com/s-gwvwsryafm/images/stencil/… . Only
+  Capral's specific store image path is accepted on that shared CDN. Product
+  pages remain limited to apex/www/shop.capral.com.au. All redirects are checked.
+- Search reads at most six canonical product cards; fetches remain bounded by
+  bytes, redirects and timeout. Image use revalidates the exact-code association.
+- Public supplier lookup can be rechecked read-only with:
+  In panelstock: cd worker && NODE_USE_ENV_PROXY=1 node scripts/verify-capral-reference.mjs
+  (NODE_USE_ENV_PROXY is needed only for Node environments using an HTTP proxy.)
 
-Validation so far
-- 11 bounded-provider/parser/bitmap tests pass with synthetic responses.
-- 2 additional authentication/maintenance tests pass against local Miniflare.
-- 19 UI tests pass through mobile, desktop and the Worker entrypoint.
-- Full desktop suite: 179 test files pass. Worker deployment dry-run passes.
-- Live Capral lookup/download and the final full Worker suite remain pending.
+Validation completed locally
+- Live provider search returned public EP10189 and its associated image URL.
+- Full Worker suite: 2,495 tests passed; build and deployment dry-run passed.
+- Full desktop suite: 1,300 tests passed, including the host regression.
+- Full mobile suite: 302 tests passed.
+- Additional parser, association, CDN-store, candidate-bound and UI-host tests pass.
+- Desktop production build passed. Mobile loader/index/CSS cache URLs refreshed.
+- Browser checks passed for both clients at 390x844, 768x1024, 1024x768 and
+  1440x1000: preview, Use image, explicit save, no horizontal overflow, and
+  unchanged synthetic stock code/quantity/price. Image bytes were synthetic while
+  the supplier CDN was blocked; repeat with the real image after access applies.
+- Both WIP branches include latest main at initial release comparison:
+  panelstock 41573cc8632814943b3a902babe8df6f562d61c0;
+  panelstock-desktop 51597aa8e498de2f5736ffc7046ffe46057e45e4.
+- No customer stock, photos, prices or quantities were changed.
 
-Resume in an environment with capral.com.au and its required subdomains allowed
-1. Verify actual HTTPS access to Capral. No credentials are expected for public
-   reference images. Do not bypass network policy through another proxy/service.
-2. Inspect the real search endpoint, exact-code product evidence, product-page
-   markup and image hosts. Configure the provider and only verified official
-   hosts/associated image sources; never ship a guessed search URL.
-3. Exercise real search and image download read-only. Public website codes may be
-   used for validation; customer PDF files and results must stay out of commits.
-4. Reconcile this checkpoint with latest main in BOTH repositories before release.
-   It was prepared against panelstock 41573cc8632814943b3a902babe8df6f562d61c0 and
-   panelstock-desktop 51597aa8e498de2f5736ffc7046ffe46057e45e4. Preserve newer work.
-5. Bump mobile index/loader/CSS cache versions, run required Worker+desktop checks
-   and browser/iPad layout tests, then deploy both clients with branch leases.
-6. Observe all relevant production workflows reach terminal success before
-   reporting completion. This checkpoint has not been deployed.
+Pending
+The running environment currently grants only Capral domains. Its proxy denies
+cdn11.bigcommerce.com, api.github.com and production PanelStock hosts. The owner
+has been asked to apply these additions to the running chat environment.
+1. Confirm network policy revision and actual new HTTPS connections.
+2. Run the live supplier smoke check and repeat browser checks with real pixels.
+3. Recheck remote mains; preserve newer changes. Commit both release candidates.
+4. Push WIP and main refs with explicit expected-SHA leases after checks pass.
+5. Observe Worker, mobile Pages, desktop Pages and verification workflows reach
+   terminal success; verify published assets and protected routes read-only.
+This release candidate has not been deployed.
