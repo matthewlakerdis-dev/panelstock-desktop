@@ -62,3 +62,10 @@ test('the pickup preview applies the configured number of working days',()=>{
  draft.powderPickupDateOverride='2026-11-26';
  assert.equal(dates(draft,stages,3).find(row=>row.stage==='powderPickup').date,'2026-11-26');
 });
+test('the plan dialog uses a pickup date moved in the schedule instead of recalculating it',async()=>{
+ const initial=data();initial.plan.stages.powderCoating.date='2026-11-25';initial.plan.powderPickupDateOverride='2026-12-08';
+ const f=fixture(async()=>Response.json(initial));await f.controller.load();
+ assert.equal(dates(f.controller.state.draft).find(row=>row.stage==='powderPickup').date,'2026-12-08');
+ f.controller.update('powderCoating','date','2026-11-26');
+ assert.equal(dates(f.controller.state.draft).find(row=>row.stage==='powderPickup').date,'2026-12-08');
+});

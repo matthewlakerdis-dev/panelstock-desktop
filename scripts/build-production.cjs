@@ -2,13 +2,13 @@ const fs = require('node:fs');
 const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const out = path.join(root, 'dist-production');
-const files = ['schedule-resize.js','user-bulk-import.js','user-bulk-import.css','index.html','reports-page.js','org-chart.js','org-chart.css','purchase-requests.js','purchase-requests.css','offcut-labels.js','tab-workspace.js','excel-order-actions.js','excel-order-actions.css','tracker-tab-handoff.js','order-dispatch-reversal.js','site-order-bulk-dispatch.js','order-lead-times.js','order-production-plan.js','order-dispatch-progress.js','active-orders-report.js','pull-refresh.js','workshop-stock.js','workshop-stock.css','panelstock-client.js','toolbox-launcher.js','tailwind.css','icon-192.png','lennox-logo.jpg','PanelStock_SOP.pdf','push-sw.js','CNAME'];
+const files = ['schedule-move.js','schedule-resize.js','user-bulk-import.js','user-bulk-import.css','index.html','reports-page.js','org-chart.js','org-chart.css','purchase-requests.js','purchase-requests.css','offcut-labels.js','tab-workspace.js','excel-order-actions.js','excel-order-actions.css','tracker-tab-handoff.js','order-dispatch-reversal.js','site-order-bulk-dispatch.js','order-lead-times.js','order-production-plan.js','order-dispatch-progress.js','active-orders-report.js','pull-refresh.js','workshop-stock.js','workshop-stock.css','panelstock-client.js','toolbox-launcher.js','tailwind.css','icon-192.png','lennox-logo.jpg','PanelStock_SOP.pdf','push-sw.js','CNAME'];
 fs.mkdirSync(out,{recursive:true});
 for (const file of files) fs.copyFileSync(path.join(root,file),path.join(out,file));
 // Version styles and workshop assets so published changes bypass browser caches.
 const indexPath=path.join(out,'index.html');
 let indexHtml=fs.readFileSync(indexPath,'utf8');
-for(const asset of ['user-bulk-import.js','user-bulk-import.css','reports-page.js','org-chart.js','org-chart.css','purchase-requests.js','purchase-requests.css','offcut-labels.js','tab-workspace.js','panelstock-client.js','tailwind.css','workshop-stock.js','workshop-stock.css','excel-order-actions.js','excel-order-actions.css','tracker-tab-handoff.js','order-dispatch-reversal.js','site-order-bulk-dispatch.js','order-lead-times.js','order-production-plan.js','order-dispatch-progress.js','active-orders-report.js']){
+for(const asset of ['schedule-move.js','user-bulk-import.js','user-bulk-import.css','reports-page.js','org-chart.js','org-chart.css','purchase-requests.js','purchase-requests.css','offcut-labels.js','tab-workspace.js','panelstock-client.js','tailwind.css','workshop-stock.js','workshop-stock.css','excel-order-actions.js','excel-order-actions.css','tracker-tab-handoff.js','order-dispatch-reversal.js','site-order-bulk-dispatch.js','order-lead-times.js','order-production-plan.js','order-dispatch-progress.js','active-orders-report.js']){
  const version=require('node:crypto').createHash('sha256').update(fs.readFileSync(path.join(out,asset))).digest('hex').slice(0,12);
  indexHtml=indexHtml.replace(new RegExp(asset.replace('.', '\\.')+'\\?v=[^"\\x27]+','g'),asset+'?v='+version);
 }
