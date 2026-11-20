@@ -24,3 +24,15 @@ test('malformed success stays retryable, and malformed reviews never permit disp
 test('account changes and closed dialogs cannot apply late batch responses',async()=>{
  for(const close of [false,true]){let finish;const h=fixture({post:()=>new Promise(resolve=>finish=resolve)});await h.controller.review();const work=h.controller.submit();if(close)h.controller.dispose();else h.client.username='another';finish(Response.json({ok:true,orderIds:['order-a','order-b'],orders:[{id:'order-a',status:'dispatched'},{id:'order-b',status:'dispatched'}]}));assert.equal(await work,null);assert.notEqual(h.controller.state.phase,'done');}
 });
+
+test('each order chooses its own partial quantities, while full deliveries stay unchanged',async()=>{
+ const orders=[{...rows[0],selectionType:'lines',items:[{index:0,quantity:2,description:'BRACKETS'},{index:1,quantity:4,description:'FIXINGS'}]},rows[1]];
+ const h=fixture({orders,post:body=>Response.json({ok:true,orderIds:body.orders.map(row=>row.id),partialOrderIds:['order-a'],orders:[{id:'order-a',status:'completed'},{id:'order-b',status:'dispatched'}]})});await h.controller.review();h.controller.delivery('order-a','part');h.controller.delivery('order-a',null,0,'1');h.controller.delivery('order-a',null,1,'0');assert.ok(await h.controller.submit());assert.deepEqual(h.calls[1].body.orders[0].lines,[{index:0,quantity:1}]);assert.equal(h.calls[1].body.orders[1].lines,undefined);
+});
+test('panel and Gate selections submit physical IDs, reject empty selections, and freeze on an uncertain retry',async()=>{
+ const orders=[{...rows[0],selectionType:'panelIds',items:[{panelId:'p1',quantity:1,description:'P1'},{panelId:'p2',quantity:1,description:'P2'}]},{...rows[1],selectionType:'componentIds',items:[{componentId:'g1',quantity:1,description:'Gate A'}]}];
+ const h=fixture({orders,post:()=>{throw Error('Lost response');}});await h.controller.review();h.controller.delivery('order-a','part');h.controller.delivery('order-a',null,1,0);h.controller.delivery('order-b','part');h.controller.delivery('order-b',null,0,0);assert.equal(await h.controller.submit(),null);assert.equal(h.calls.length,1);h.controller.delivery('order-b',null,0,1);await h.controller.submit();assert.deepEqual(h.calls[1].body.orders[0].panelIds,['p1']);assert.deepEqual(h.calls[1].body.orders[1].componentIds,['g1']);h.controller.delivery('order-a',null,0,0);await h.controller.submit();assert.deepEqual(h.calls[1].body,h.calls[2].body);
+});
+test('partial quantities cannot exceed the reviewed balance or be negative or nonnumeric',async()=>{
+ for(const value of ['3','-1','bad']){const h=fixture({orders:[{...rows[0],selectionType:'lines',items:[{index:0,quantity:2,description:'BRACKETS'}]}]});await h.controller.review();h.controller.delivery('order-a','part');h.controller.delivery('order-a',null,0,value);assert.equal(await h.controller.submit(),null);assert.equal(h.calls.length,1);}
+});
