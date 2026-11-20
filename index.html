@@ -16808,7 +16808,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
     const canEditEntry=entry=>entry.productionPlanStage?canManage:(entry.scheduleType||"general")==="cnc"?canManageCnc:canManage;
     const moveDate=direction=>{const next=new Date((filterDate||todayStr())+"T00:00:00");next.setDate(next.getDate()+direction*(viewMode==="fortnight"?14:viewMode==="week"?7:1));setFilterDate(localDateStr(next));};
     async function load(){
-      const version=++loadVersion.current;setLoading(true);if(entryOrder)setNotice("");
+      const version=++loadVersion.current;if(entryOrder)setNotice("");
       try{
         const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/schedule"),result=await response.json().catch(()=>({}));
         if(!current()||version!==loadVersion.current)return false;
@@ -16838,7 +16838,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
     async function commitScheduleResize(entry,change){
       if(!current()||!canEditEntry(entry)||saveLock.current)return;
       saveLock.current=true;setSaving(true);setNotice("Saving schedule time…");
-      try{const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/schedule/"+encodeURIComponent(entry.id)+"/time",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({edge:change.edge,time:change.time,expectedUpdatedAt:entry.updatedAt||entry.createdAt||""})}),result=await response.json().catch(()=>({}));if(!current())return;if(!response.ok)throw Error(result.error||"The time change could not be confirmed.");setEntries(result.entries||[]);setNotice(`Schedule updated: ${result.entry.startTime} – ${result.entry.endTime}.`);}
+      try{const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/schedule/"+encodeURIComponent(entry.id),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({timeChange:{edge:change.edge,time:change.time,expectedUpdatedAt:entry.updatedAt||entry.createdAt||""}})}),result=await response.json().catch(()=>({}));if(!current())return;if(!response.ok)throw Error(result.error||"The time change could not be confirmed.");setEntries(result.entries||[]);setNotice(`Schedule updated: ${result.entry.startTime} – ${result.entry.endTime}.`);}
       catch(error){if(current()){const refreshed=await load();if(current())setNotice((error.message||"The time change could not be confirmed.")+(refreshed?" Latest schedule loaded.":" Refresh before retrying."));}}
       finally{saveLock.current=false;if(current())setSaving(false);}
     }
