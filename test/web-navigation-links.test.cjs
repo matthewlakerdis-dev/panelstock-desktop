@@ -137,19 +137,19 @@ test('Support, My Profile and the notification bell use the same native-link beh
 
 // Run the real navigation setup and early returns together so effects retain
 // the same render scope that React gives them while stock data is loading.
-function loadingNavigation(){
+function loadingNavigation(search='?page=purchase-requests'){
  const start=html.indexOf('    useEffect(()=>{if(!username)return;const params=new URLSearchParams(location.search)');
  const end=html.indexOf('    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex h-screen',start);
  assert.ok(start>=0&&end>start);
  const source=html.slice(start,end),observed={listeners:new Map(),tab:'workshop',selection:'workshop',group:'stockGroup',preview:'stockGroup',section:'general',replacements:0},hooks=[];let cursor=0,pending=[];
  const jsx=(type,props)=>({type,props}),icons=Object.fromEntries([...source.matchAll(/\(\w+,\{size:16\}\)/g)].map(match=>[match[0].slice(1,match[0].indexOf(',')),'icon']));
- const context={...icons,URLSearchParams,location:{pathname:'/',search:'?page=purchase-requests'},import_jsx_runtime:{jsx,jsxs:jsx},LoginScreen:'login',BAKED_WORKER_URL:'https://worker.example',emailConfig:{},rememberedUsername:'',navSelection:'workshop',settingsSection:'general',
+ const context={...icons,PANELSTOCK_GATE_PROGRESS_ENABLED:true,URLSearchParams,location:{pathname:'/',search},import_jsx_runtime:{jsx,jsxs:jsx},LoginScreen:'login',BAKED_WORKER_URL:'https://worker.example',productionTrackerShare:null,PanelStock:{username:'Coordinator'},emailConfig:{},rememberedUsername:'',navSelection:'workshop',settingsSection:'general',
   setTab:value=>observed.tab=value,setNavSelection:value=>observed.selection=value,setOpenNavGroup:value=>observed.group=value,setPreviewNavGroup:value=>observed.preview=value,setSettingsSection:value=>observed.section=value,
   history:{replaceState(){observed.replacements++;},pushState(){}},
   addEventListener:(type,callback)=>observed.listeners.set(type,callback),removeEventListener:(type,callback)=>{if(observed.listeners.get(type)===callback)observed.listeners.delete(type);},
   useEffect(callback,deps){const index=cursor++,previous=hooks[index];if(!previous||deps.some((value,i)=>!Object.is(value,previous.deps[i])))pending.push(()=>{previous?.cleanup?.();hooks[index]={deps,cleanup:callback()};});}
  };
- vm.runInNewContext('globalThis.renderNavigation=function({loading,username,isAdmin,taskAccess,tab}){'+source+'\nreturn {navigate};\n};',context);
+ vm.runInNewContext('globalThis.renderNavigation=function({loading,username,isAdmin,taskAccess,tab}){'+source+'\nreturn {navigate,breadcrumbParent,navGroups,permittedPages};\n};',context);
  return {observed,render(options){cursor=0;pending=[];context.navSelection=observed.selection;context.settingsSection=observed.section;const result=context.renderNavigation({tab:observed.tab,...options});for(const effect of pending)effect();return result;},back(state){observed.listeners.get('popstate')({state});}};
 }
 
@@ -159,7 +159,7 @@ test('history registered while loading still restores Purchase Requests and side
  const ready=h.render({...session,loading:false});assert.equal(h.observed.listeners.get('popstate'),onBack,'the initial effect remains registered when only loading changes');assert.equal(h.observed.replacements,1);
  ready.navigate('profile');assert.equal(h.observed.tab,'profile');
  assert.doesNotThrow(()=>h.back({panelstock:true,key:'purchase-requests',target:'purchase-requests'}));
- assert.equal(h.observed.tab,'purchase-requests');assert.equal(h.observed.selection,'purchase-requests');assert.equal(h.observed.group,'workGroup');assert.equal(h.observed.preview,null);
+ assert.equal(h.observed.tab,'purchase-requests');assert.equal(h.observed.selection,'purchase-requests');assert.equal(h.observed.group,'purchasingGroup');assert.equal(h.observed.preview,null);
  h.back({panelstock:true,key:'workshop',target:'workshop'});assert.equal(h.observed.group,'stockGroup');
  h.back({panelstock:true,key:'settings',target:'settings',section:'catalog'});assert.equal(h.observed.group,'adminGroup');assert.equal(h.observed.section,'catalog');
  h.back({panelstock:true,key:'profile',target:'profile'});assert.equal(h.observed.tab,'profile');assert.equal(h.observed.group,null);
@@ -168,10 +168,20 @@ test('history registered while loading still restores Purchase Requests and side
 test('requestor history respects changed permissions and removes the listener on sign-out',()=>{
  const h=loadingNavigation(),taskAccess={'purchase-requests.create':true,'factory.stock':false},session={username:'Requestor',isAdmin:false,taskAccess};
  h.render({...session,loading:true});h.render({...session,loading:false});
- assert.doesNotThrow(()=>h.back({panelstock:true,key:'purchase-requests',target:'purchase-requests'}));assert.equal(h.observed.group,'workGroup');
+ assert.doesNotThrow(()=>h.back({panelstock:true,key:'purchase-requests',target:'purchase-requests'}));assert.equal(h.observed.group,'purchasingGroup');
  const original=h.observed.listeners.get('popstate');h.render({...session,loading:false,taskAccess:{...taskAccess,'purchase-requests.create':false}});assert.notEqual(h.observed.listeners.get('popstate'),original);
  const before={...h.observed};
  for(const target of ['purchase-requests','workshop','access'])h.back({panelstock:true,key:target,target});
  assert.equal(h.observed.tab,before.tab);assert.equal(h.observed.selection,before.selection);assert.equal(h.observed.group,before.group);
  h.render({...session,loading:false,username:null});assert.equal(h.observed.listeners.has('popstate'),false);
+});
+
+
+test('every internal sidebar page restores its actual parent and matching breadcrumb on refresh',()=>{
+ const expected={workshop:'Stock',receive:'Stock',damage:'Stock',transfer:'Stock',cnc:'CNC','cnc-settings':'CNC','purchase-requests':'Purchasing',schedule:'Work',projects:'Work',orders:'Work','gate-progress':'Work',dispatch:'Dispatch',jobs:'Dispatch',qa:'QA','qa-settings':'QA','org-chart':'Administration',access:'Administration',audit:'Administration',reports:'Administration',settings:'Administration','dispatch-settings':'Administration',profile:'Account',notifications:'Account',support:'Help'};
+ for(const [page,parent]of Object.entries(expected)){
+  const h=loadingNavigation('?page='+page),session={username:'Tester',isAdmin:true,taskAccess:{}};
+  h.render({...session,loading:true});const rendered=h.render({...session,loading:false});assert.equal(rendered.breadcrumbParent,parent,page);
+  const group=rendered.navGroups.find(group=>group.label===parent);assert.equal(h.observed.group,group?.key||null,page);
+ }
 });

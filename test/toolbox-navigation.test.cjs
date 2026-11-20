@@ -8,7 +8,7 @@ const safetyStart=source.indexOf('    const safetyNavItem='),safety=source.slice
 const jsx=(type,props)=>({type,props}),worker='https://panelstock-reports.matthewlakerdis.workers.dev';
 function context(isAdmin,taskAccess){
  const icons=Object.fromEntries([...groups.matchAll(/\(\w+,\{size:16\}\)/g)].map(m=>[m[0].slice(1,m[0].indexOf(',')),()=>{}]));
- return {...icons,isAdmin,taskAccess,canUsePurchaseRequests:isAdmin||taskAccess['purchase-requests.create']===true||taskAccess['purchase-requests.manage']===true,can:task=>isAdmin||taskAccess[task]!==false,BAKED_WORKER_URL:worker,import_jsx_runtime:{jsx,jsxs:jsx}};
+ return {...icons,productionTrackerShare:null,username:'Tester',PanelStock:{username:'Tester'},safetyNavItem:null,signInRegisterNavItem:null,isAdmin,taskAccess,canUsePurchaseRequests:isAdmin||taskAccess['purchase-requests.create']===true||taskAccess['purchase-requests.manage']===true,can:task=>isAdmin||taskAccess[task]!==false,BAKED_WORKER_URL:worker,import_jsx_runtime:{jsx,jsxs:jsx}};
 }
 function safetyItem(admin,tasks){const c=context(admin,tasks);vm.runInNewContext(safety+'globalThis.item=safetyNavItem;',c);return c.item;}
 function signInRegisterItem(admin,tasks){const c=context(admin,tasks);vm.runInNewContext(safety+'globalThis.item=signInRegisterNavItem;',c);return c.item;}
@@ -16,10 +16,10 @@ test('standalone Safety requires explicit permission despite the existing fallba
  assert.equal(safetyItem(false,{}),null);assert.equal(safetyItem(false,{'factory.toolbox':false}),null);
  assert.equal(safetyItem(false,{'factory.toolbox':true}).href,worker+'/toolbox?app=web');assert.equal(safetyItem(true,{}).label,'Safety');
  const c=context(true,{});vm.runInNewContext(groups+'globalThis.groups=navGroups;',c);
- assert.equal(c.groups.flatMap(group=>group.items).some(item=>item.toolbox),false);
+ assert.ok(c.groups.filter(group=>group.key==='safetyGroup').every(group=>group.items.every(item=>['safety','sign-in-register'].includes(item.key))));
  const navStart=source.indexOf('"nav", { className: "flex-1'),navEnd=source.indexOf('label:"My Profile"',navStart),nav=source.slice(navStart,navEnd);
- assert.ok(nav.indexOf('safetyNavItem &&')>nav.indexOf('group.key!=="stockGroup"'));
- assert.ok(nav.indexOf('safetyNavItem &&')<nav.indexOf('label:"Support"'));
+ assert.ok(source.includes('key:"safetyGroup",label:"Safety"'));
+ assert.ok(nav.indexOf('group.key!=="stockGroup"')<nav.indexOf('label:"Support"'));
 });
 test('Safety announces a new tab and uses the existing authenticated external launcher',()=>{
  let launches=0;const c=context(false,{'factory.toolbox':true});c.ChevronRight=()=>{};c.window={PanelStockToolbox:{open(){launches++}}};
@@ -34,7 +34,8 @@ test('Sign-in register is administrator-only and directly follows Safety in the 
  const item=signInRegisterItem(true,{'factory.toolbox':false});
  assert.equal(item.label,'Sign-in register');assert.equal(item.href,'https://web.panelstockhq.com/sign-in/manage/');assert.equal(item.toolbox,undefined);
  const navStart=source.indexOf('"nav", { className: "flex-1'),navEnd=source.indexOf('label:"My Profile"',navStart),nav=source.slice(navStart,navEnd);
- assert.match(nav,/safetyNavItem && \(0,import_jsx_runtime\.jsx\)\(SideNavItem,safetyNavItem\),\s+signInRegisterNavItem && \(0,import_jsx_runtime\.jsx\)\(SideNavItem,signInRegisterNavItem\),/);
+ assert.match(source,/items:\[\.\.\.\(safetyNavItem\?\[\{\.\.\.safetyNavItem,key:"safety"/);
+ assert.match(source,/signInRegisterNavItem\?\[\{\.\.\.signInRegisterNavItem,key:"sign-in-register"/);
 });
 test('Sign-in register uses the normal external link behavior without a session launcher',()=>{
  const c=context(true,{});c.window={PanelStockToolbox:{open(){assert.fail('The register must open its direct URL');}}};

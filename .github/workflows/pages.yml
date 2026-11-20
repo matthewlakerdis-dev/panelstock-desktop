@@ -58,3 +58,6 @@ jobs:
 
       - name: Verify published Production plan script
         run: node scripts/verify-production-plan.cjs
+
+      - name: Verify published navigation groups and combined dispatch history
+        run: node scripts/verify-web-navigation.cjs

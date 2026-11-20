@@ -37,7 +37,7 @@ test('desktop first installation includes offline CSS and only existing local as
  const root=path.resolve(__dirname,'..'),source=fs.readFileSync(path.join(root,'push-sw.js'),'utf8');
  const h=workerHarness(source,'https://web.example/');
  await h.dispatch('install');await h.dispatch('activate');h.offline();
- for(const url of h.buckets.get('panelstock-shell-v2').keys()){
+ for(const url of h.buckets.get('panelstock-shell-v3').keys()){
    const asset=new URL(url).pathname;
    assert.ok(fs.existsSync(path.join(root,asset==='/'?'index.html':asset.slice(1))),asset);
  }
@@ -48,7 +48,7 @@ test('desktop first installation includes offline CSS and only existing local as
  for(const path of ['/sign-in','/sign-in/','/sign-in/manage','/sign-in/manage/','/sign-in/apple-touch-icon.png']){
   assert.equal(await h.dispatch('fetch',{url:'https://web.example'+path,method:'GET',mode:'navigate',headers:new Headers()}),undefined,'Attendance must remain outside the desktop offline shell: '+path);
  }
- assert.ok([...h.buckets.get('panelstock-shell-v2').keys()].every(url=>!new URL(url).pathname.startsWith('/sign-in')),'Attendance pages must not be cached by the desktop service worker');
+ assert.ok([...h.buckets.get('panelstock-shell-v3').keys()].every(url=>!new URL(url).pathname.startsWith('/sign-in')),'Attendance pages must not be cached by the desktop service worker');
  assert.doesNotMatch(source,/cdn.tailwindcss.com/);
 });
 
@@ -83,4 +83,12 @@ test('opening the desktop shell revalidates its HTML while static assets use the
  assert.equal(h.requests[1].options,undefined);
  h.offline();
  assert.equal(await (await h.dispatch('fetch',navigation)).text(),'online asset');
+});
+
+
+test('dispatch history bookmarks and their versioned workspace remain available offline',async()=>{
+ const source=fs.readFileSync(path.join(__dirname,'../push-sw.js'),'utf8'),h=workerHarness(source,'https://web.example/');await h.dispatch('install');await h.dispatch('activate');h.offline();
+ const page={url:'https://web.example/?page=dispatch&view=job-history',method:'GET',mode:'navigate',headers:new Headers()};assert.equal((await h.dispatch('fetch',page)).status,200);
+ assert.equal((await h.dispatch('fetch',new Request('https://web.example/dispatch-workspace.js?v=content-hash'))).status,200);
+ assert.equal(await h.dispatch('fetch',{...page,url:page.url+'&token=secret'}),undefined);
 });

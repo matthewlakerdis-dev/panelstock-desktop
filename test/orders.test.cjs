@@ -60,7 +60,7 @@ test('desktop web navigation uses browser history for in-app pages',()=>{
  assert.match(html,/state\?\.panelstock===true&&permittedPages\.includes\(state\.target\)/);
  assert.match(html,/open:openNavGroup===group\.key\|\|previewNavGroup===group\.key/);
  assert.match(html,/setOpenNavGroup\(group\.key\);setPreviewNavGroup\(null\);navigate/);
- assert.match(html,/const group=navGroups\.find\(value=>value\.items\.some\(item=>item\.target===state\.target\)\)/);
+ assert.match(html,/const restored=state\.target==="jobs"\?"dispatch":state\.target,group=navGroups\.find/);
 });
 
 test('desktop dispatch uses the same material sorting as stock and damage',()=>{
@@ -189,8 +189,8 @@ test('web navigation uses exclusive parent sections with CNC settings under CNC'
  assert.match(navigation,/label:"Schedule"[^}]+icon:/);
  const workNavigation=navigation.slice(navigation.indexOf('key:"workGroup"'),navigation.indexOf('key:"adminGroup"'));
  assert.ok(workNavigation.indexOf('label:"Schedule"')<workNavigation.indexOf('label:"Projects"'));
- assert.ok(workNavigation.indexOf('label:"Projects"')<workNavigation.indexOf('label:"Jobs"'));
- assert.ok(workNavigation.indexOf('label:"Jobs"')<workNavigation.indexOf('label:"Site Orders"'));
+ assert.ok(workNavigation.indexOf('label:"Projects"')<workNavigation.indexOf('label:"Site Orders"'));
+ assert.doesNotMatch(workNavigation,/label:"Jobs"/);
  assert.match(navigation,/label:"User Access"[^}]+icon:/);
  assert.match(html,/SideNavItem,\{icon:item\.icon,label:item\.label/);
 });
