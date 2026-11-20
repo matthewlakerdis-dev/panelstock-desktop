@@ -42,3 +42,8 @@ test('production plan steps have seven distinct task colours in the schedule',()
  const classes=types.map((scheduleType,index)=>{const h=week({visibleEntries:[{id:'production-'+index,date:'2026-11-30',assignedUsername:'alex',title:'Production task',project:'Tower',startTime:'06:00',endTime:'07:00',scheduleType}]}),card=walk(h.weeklyTimeline).find(node=>node.props.key==='production-'+index);return card.props.className.match(/bg-[a-z]+-\d+/)[0];});
  assert.equal(new Set(classes).size,7);
 });
+
+test('saved task colours apply to cards and choose readable text for bright backgrounds',()=>{
+ const h=week({scheduleSettings:{taskColours:{fabrication:'#00ff00'}},visibleEntries:[{id:'colour',date:'2026-11-30',assignedUsername:'alex',title:'Fabrication',project:'Tower',startTime:'06:00',endTime:'07:00',scheduleType:'fabrication'}]}),card=walk(h.weeklyTimeline).find(node=>node.props.key==='colour');
+ assert.equal(card.props.style.backgroundColor,'#00ff00');assert.equal(card.props.style.color,'#000000');
+});

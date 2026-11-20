@@ -35,3 +35,10 @@ test('schedule settings save a configurable powder coating turnaround in working
  await walk(h.render()).find(node=>node.type==='button'&&node.children.includes('Save schedule settings')).props.onClick();
  assert.equal(h.calls[0].powderCoatingWorkingDays,3);
 });
+
+test('task colours can be changed, saved and reset without altering other settings',async()=>{
+ const h=panel(),tree=h.render(),colour=walk(tree).find(node=>node.type==='input'&&node.props['aria-label']==='Fabrication colour');assert.ok(colour);assert.equal(colour.props.value,'#047857');colour.props.onChange({target:{value:'#ffffff'}});
+ const preview=walk(h.render()).find(node=>node.type==='span'&&node.children.includes('Fabrication'));assert.equal(preview.props.style.backgroundColor,'#ffffff');assert.equal(preview.props.style.color,'#000000');
+ await walk(h.render()).find(node=>node.type==='button'&&node.children.includes('Save schedule settings')).props.onClick();assert.equal(h.calls[0].taskColours.fabrication,'#ffffff');
+ walk(h.render()).find(node=>node.type==='button'&&node.children.includes('Reset task colours')).props.onClick();assert.equal(h.state[0].taskColours.fabrication,undefined);assert.equal(h.state[0].startHour,6);
+});
