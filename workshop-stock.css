@@ -642,7 +642,7 @@ body:has(.ws-stock-screen,.ws-receiving-screen) #root header.sticky:has(img[alt=
 @media(max-width:700px){.ws-material-catalogue-filters{grid-template-columns:1fr}.ws-material-catalogue-card{flex-wrap:wrap;gap:12px}.ws-material-catalogue-card .ws-actions{width:100%;justify-content:flex-start}.ws-material-catalogue-card .ws-actions button{min-height:44px}}
 
 .ws-material-import-overlay{z-index:15000}.ws-material-import-dialog{width:min(1120px,96vw)}
-.ws-material-import-dialog .ws-count-body{display:grid;gap:16px}.ws-material-import-row{display:grid;grid-template-columns:minmax(200px,.8fr) minmax(300px,1.2fr);border:1px solid #d5e2ec;border-radius:10px;overflow:hidden}
+.ws-material-import-dialog .ws-count-body{display:grid;grid-template-columns:minmax(0,1fr);grid-auto-rows:max-content;align-content:start;gap:16px}.ws-material-import-row{display:grid;grid-template-columns:minmax(200px,.8fr) minmax(300px,1.2fr);border:1px solid #d5e2ec;border-radius:10px;overflow:hidden}
 .ws-material-import-source{background:#f3f7fa;padding:18px;overflow-wrap:anywhere}.ws-material-import-source p{font-size:13px;line-height:1.6}.ws-material-import-source small{font-size:12px;color:#526478}
 .ws-material-import-review{padding:18px;display:grid;gap:12px;min-width:0}.ws-material-import-review .ws-fields{grid-template-columns:1fr 1fr}.ws-material-import-review .ws-field{min-width:0}.ws-material-import-review input,.ws-material-import-review select{width:100%;min-width:0}
 .ws-material-import-remember{display:flex;align-items:center;gap:10px;font-size:12px}.ws-material-import-remember input{width:20px;height:20px;flex-shrink:0}
