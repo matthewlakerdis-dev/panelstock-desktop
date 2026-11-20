@@ -4,7 +4,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 const vm=require('node:vm');
 function workerHarness(source,scope){
-  const handlers={},buckets=new Map(),base=new URL(scope);
+  const handlers={},buckets=new Map(),requests=[],base=new URL(scope);
   let offline=false;
   const key=value=>new URL(typeof value==='string'?value:value.url,base).href;
   const caches={
@@ -22,7 +22,7 @@ function workerHarness(source,scope){
   };
   const clients={claim:async()=>{}};
   const context={URL,Request,Response,Headers,caches,clients,console,
-    fetch:async()=>{if(offline)throw Error('Offline');return new Response('online asset');},
+    fetch:async(request,options)=>{requests.push({request,options});if(offline)throw Error('Offline');return new Response('online asset');},
     self:{location:base,registration:{scope},clients,skipWaiting:async()=>{},addEventListener:(name,fn)=>handlers[name]=fn}};
   vm.runInNewContext(source,context);
   async function dispatch(name,request){
@@ -30,7 +30,7 @@ function workerHarness(source,scope){
     handlers[name]({request,waitUntil:promise=>pending.push(promise),respondWith:promise=>{response=promise;}});
     const result=await response;await Promise.all(pending);return result;
   }
-  return {caches,buckets,dispatch,offline:()=>{offline=true;}};
+  return {caches,buckets,requests,dispatch,offline:()=>{offline=true;}};
 }
 
 test('desktop first installation includes offline CSS and only existing local assets',async()=>{
@@ -71,4 +71,16 @@ test('new-tab page links can load the cached shell offline without caching priva
  assert.equal(await h.dispatch('fetch',navigation('https://web.example/?page=cnc&token=secret')),undefined);
  assert.equal(await h.dispatch('fetch',{...navigation('https://web.example/?page=cnc'),headers:new Headers({Authorization:'Bearer test'})}),undefined);
  assert.equal(await h.dispatch('fetch',navigation('https://other.example/?page=cnc')),undefined);
+});
+
+test('opening the desktop shell revalidates its HTML while static assets use their normal cache',async()=>{
+ const source=fs.readFileSync(path.join(__dirname,'../push-sw.js'),'utf8');
+ const h=workerHarness(source,'https://web.example/');
+ const navigation={url:'https://web.example/?page=cnc',method:'GET',mode:'navigate',headers:new Headers()};
+ assert.equal(await (await h.dispatch('fetch',navigation)).text(),'online asset');
+ assert.equal(h.requests[0].options.cache,'no-cache');
+ await h.dispatch('fetch',new Request('https://web.example/tailwind.css'));
+ assert.equal(h.requests[1].options,undefined);
+ h.offline();
+ assert.equal(await (await h.dispatch('fetch',navigation)).text(),'online asset');
 });
