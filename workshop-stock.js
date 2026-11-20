@@ -404,6 +404,8 @@ window.createWorkshopStock = function(React) {
   const [pendingStorage]=useState(()=>workshopPendingStorage(pendingKey));
   const [xeroExport,setXeroExport]=useState(null);
   const [catalogueImportOpen,setCatalogueImportOpen]=useState(false);
+  const [capralCode,setCapralCode]=useState(null),[capralLookup,setCapralLookup]=useState(null),[capralBusy,setCapralBusy]=useState(false),[capralError,setCapralError]=useState(''),[capralSession]=useState(()=>({generation:0,form:null,downloading:false}));
+  capralSession.form=form;
   const can=task=>isAdmin||taskAccess[task]===true;
   const catalogueRequest=request=>['create','metadata','category_save','archive'].includes(request.action)&&(request.action!=='category_save'||!['panels','offcuts'].includes(request.categoryId))&&(request.action!=='create'||window.isMaterialCatalogueItem(request.item)&&Number(request.item.qty||0)===0)&&!/^(variant|offcut):/.test(String(request.itemId||''));
   const acceptView=incoming=>setData(current=>mergeWorkshopStockViews(current,incoming));
@@ -412,17 +414,71 @@ window.createWorkshopStock = function(React) {
   useEffect(()=>{load();},[stockRevision]);
   useEffect(()=>{const changed=()=>load();if(typeof window.addEventListener!=='function')return;window.addEventListener('panelstock-stocktake-settings-changed',changed);return()=>window.removeEventListener('panelstock-stocktake-settings-changed',changed);},[]);
   useEffect(()=>{if(inlineExport)return;let active=true;setBusy(true);pendingStorage.read().then(saved=>{if(!active)return;if(saved){setPending(saved);setForm(catalogueOnly&&!catalogueRequest(saved)?null:saved.item||saved);}setBusy(false);}).catch(()=>{if(!active)return;pendingStorage.unreadable=true;setError('Could not read the pending stock save. Check browser storage before editing.');});return()=>{active=false;};},[]);
-  const change=(key,value)=>setForm(f=>({...f,[key]:value,...(key==='categoryId'?{name:value?categories[value]:''}:{}),...(key==='sku'&&f.action==='create'?(()=>{const p=String(value).trim()&&(data?.items||[]).find(i=>!i.legacy&&String(i.sku).trim().replace(/\s+/g,' ').toLowerCase()===String(value).trim().replace(/\s+/g,' ').toLowerCase());return p?{category:p.category,unit:p.unit,name:p.name,dimensions:p.dimensions||'',image:p.image||'',...(data?.stockProfileReferenceVersion===1?{referenceProfile:p.referenceProfile||''}:{})}:{};})():{}),...(key==='category'?{unit:{extrusions:'lengths',fixings:'each',consumables:'packs',offcuts:'lengths'}[value]||'each'}:{})}));
-  function open(item,action){if(catalogueOnly&&(!isAdmin||pending||item&&!window.isMaterialCatalogueItem(item)||!['create','variant','metadata','category_save','archive'].includes(action)))return;const variant=action==='variant';if(variant)action='create';setError('');setNotice('');setPending(null);setForm({action,variant,categoryId:'',catalogId:item?.legacy&&item.category==='offcuts'?item.catalogId||'':undefined,expectedMaterial:item?.legacy?JSON.stringify([item.catalogId||'',item.color,item.material,Number(item.thickness)]):undefined,itemId:variant?undefined:item?.id,quantity:action==='stocktake'?item.qty:'',job:'',reason:'',location:item?.location||'',supplier:item?.supplier||'',unitCost:item?.unitCost??'',costBasis:item?.costBasis||'unit',...(item?.legacy&&item.category==='offcuts'?{costSourceItemId:item.costSourceItemId||''}:{}),packCost:item?.packCost??'',reorderLevel:item?.reorderLevel||0,category:item?.category||'extrusions',unit:item?.unit||'lengths',qty:0,packSize:item?.packSize||1,xeroGroup:item?.xeroGroup||'',name:item?.name||'',sku:variant?item.sku:'',details:item?.details||'',lengthMm:item?.lengthMm??'',dimensions:item?.dimensions||'',colour:variant?'':item?.colour||'',image:item?.image||'',...(['create','metadata'].includes(action)&&!item?.legacy&&data?.stockProfileReferenceVersion===1?{referenceProfile:item?.referenceProfile||''}:{})});}
+  const change=(key,value)=>{resetCapralLookup();setForm(f=>({...f,[key]:value,...(key==='categoryId'?{name:value?categories[value]:''}:{}),...(key==='sku'&&f.action==='create'?(()=>{const p=String(value).trim()&&(data?.items||[]).find(i=>!i.legacy&&String(i.sku).trim().replace(/\s+/g,' ').toLowerCase()===String(value).trim().replace(/\s+/g,' ').toLowerCase());return p?{category:p.category,unit:p.unit,name:p.name,dimensions:p.dimensions||'',image:p.image||'',...(data?.stockProfileReferenceVersion===1?{referenceProfile:p.referenceProfile||''}:{})}:{};})():{}),...(key==='category'?{unit:{extrusions:'lengths',fixings:'each',consumables:'packs',offcuts:'lengths'}[value]||'each'}:{})}));};
+  function open(item,action){if(catalogueOnly&&(!isAdmin||pending||item&&!window.isMaterialCatalogueItem(item)||!['create','variant','metadata','category_save','archive'].includes(action)))return;const variant=action==='variant';if(variant)action='create';resetCapralLookup();setCapralCode(null);setError('');setNotice('');setPending(null);setForm({action,variant,categoryId:'',catalogId:item?.legacy&&item.category==='offcuts'?item.catalogId||'':undefined,expectedMaterial:item?.legacy?JSON.stringify([item.catalogId||'',item.color,item.material,Number(item.thickness)]):undefined,itemId:variant?undefined:item?.id,quantity:action==='stocktake'?item.qty:'',job:'',reason:'',location:item?.location||'',supplier:item?.supplier||'',unitCost:item?.unitCost??'',costBasis:item?.costBasis||'unit',...(item?.legacy&&item.category==='offcuts'?{costSourceItemId:item.costSourceItemId||''}:{}),packCost:item?.packCost??'',reorderLevel:item?.reorderLevel||0,category:item?.category||'extrusions',unit:item?.unit||'lengths',qty:0,packSize:item?.packSize||1,xeroGroup:item?.xeroGroup||'',name:item?.name||'',sku:variant?item.sku:'',details:item?.details||'',lengthMm:item?.lengthMm??'',dimensions:item?.dimensions||'',colour:variant?'':item?.colour||'',image:item?.image||'',...(['create','metadata'].includes(action)&&!item?.legacy&&data?.stockProfileReferenceVersion===1?{referenceProfile:item?.referenceProfile||''}:{})});}
   useEffect(()=>{if(!preview)return;const close=e=>{if(e.key==='Escape')setPreview(null);};document.addEventListener('keydown',close);return()=>document.removeEventListener('keydown',close);},[preview]);
-  async function uploadImage(event){
-   const file=event.target.files?.[0];event.target.value='';if(!file)return;
-   if(!['image/png','image/jpeg','image/webp'].includes(file.type)){setError('Choose a PNG, JPEG or WebP image.');return;}
-   if(file.size>8*1024*1024){setError('Choose an image smaller than 8 MB.');return;}
-   setImageBusy(true);setError('');let url;
+  useEffect(()=>()=>{capralSession.generation++;},[]);
+  function normaliseCapralLookupCode(value){return String(value||'').toUpperCase().replace(/\s+/g,'');}
+  function suggestedCapralCode(item){
+   const profile=[item?.details,item?.name].map(value=>String(value||'').match(/\bE(?:K|L|P)?\d{3,8}\b/i)?.[0]).find(Boolean);
+   return String(profile||item?.sku||selected?.sku||'').trim().toUpperCase();
+  }
+  function resetCapralLookup(){
+   capralSession.generation++;setCapralLookup(null);setCapralBusy(false);setCapralError('');
+   if(capralSession.downloading){capralSession.downloading=false;setImageBusy(false);}
+  }
+  function currentCapralRequest(ticket,expectedForm){return capralSession.generation===ticket&&capralSession.form===expectedForm;}
+  async function capralRequest(path,body){
+   const response=await PanelStock.apiFetch(workerUrl+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+   let result;try{result=await response.json();}catch{throw Error('The Capral lookup returned an unreadable response. Try again.');}
+   if(!response.ok)throw Error(String(result?.error||'The Capral lookup is unavailable. Try again.').slice(0,400));
+   if(!result||typeof result!=='object'||Array.isArray(result))throw Error('The Capral lookup returned an unreadable response. Try again.');
+   return result;
+  }
+  async function findCapralImage(){
+   if(busy||imageBusy||pending||capralBusy||!form||data?.capralReferenceLookupVersion!==1||sharedProfile)return;
+   const code=normaliseCapralLookupCode(capralCode===null?suggestedCapralCode(form):capralCode);
+   if(!code){setCapralError('Enter a Capral code.');return;}
+   const expectedForm=form;resetCapralLookup();const ticket=capralSession.generation;setCapralBusy(true);setCapralCode(code);
+   try{
+    const result=await capralRequest('/stock-images/capral/search',{code});
+    if(typeof result.code!=='string'||normaliseCapralLookupCode(result.code)!==code)throw Error('The Capral lookup returned a different code. Search again.');
+    const officialPage=value=>typeof value==='string'&&value.length<=2048&&/^https:\/\/(?:[a-z0-9-]+\.)*capral\.com\.au(?:\/|$)/i.test(value)&&!/[\s<>\\]/.test(value);
+    if(!Array.isArray(result.products))throw Error('The Capral lookup returned an unreadable product list. Try again.');
+    const products=result.products.slice(0,6).filter(product=>product&&typeof product.title==='string'&&typeof product.code==='string'&&normaliseCapralLookupCode(product.code)===code&&officialPage(product.url)&&Array.isArray(product.images)).map(product=>({...product,title:product.title.slice(0,200),code:product.code.slice(0,40),images:product.images.slice(0,4).filter(image=>image&&typeof image.url==='string'&&image.url.length<=2048&&/^https:\/\/[^\s<>\\]+$/i.test(image.url)).map(image=>({url:image.url,alt:String(image.alt||product.title).slice(0,200)}))})).filter(product=>product.images.length);
+    if(currentCapralRequest(ticket,expectedForm))setCapralLookup({code,products,warnings:Array.isArray(result.warnings)?result.warnings.filter(value=>typeof value==='string').slice(0,6).map(value=>value.slice(0,300)):[],form:expectedForm});
+   }catch(error){if(currentCapralRequest(ticket,expectedForm))setCapralError(String(error?.message||'The Capral lookup is unavailable. Try again.'));}
+   finally{if(capralSession.generation===ticket)setCapralBusy(false);}
+  }
+  function capralImageBlob(image){
+   const data=image?.data;
+   if(typeof data!=='string'||data.length>12*1024*1024)throw Error('Capral returned an unsupported or oversized image. Choose another image.');
+   const match=data.match(/^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})$/i);
+   if(!match||match[2].length%4!==0||image.mimeType&&image.mimeType!=='image/'+match[1].toLowerCase())throw Error('Capral returned an unsupported image. Choose a PNG, JPEG or WebP image.');
+   let bytes;try{bytes=atob(match[2]);}catch{throw Error('The Capral image could not be read. Choose another image.');}
+   if(!bytes.length||bytes.length>8*1024*1024)throw Error('Choose a Capral image smaller than 8 MB.');
+   return new Blob([Uint8Array.from(bytes,char=>char.charCodeAt(0))],{type:'image/'+match[1].toLowerCase()});
+  }
+  async function useCapralImage(product,picture){
+   if(busy||imageBusy||pending||capralBusy||!form||sharedProfile||data?.capralReferenceLookupVersion!==1||capralLookup?.form!==form)return;
+   const expectedForm=form,code=capralLookup.code,ticket=++capralSession.generation;capralSession.downloading=true;setCapralBusy(true);setImageBusy(true);setCapralError('');
+   try{
+    const result=await capralRequest('/stock-images/capral/image',{code,productUrl:product.url,imageUrl:picture.url});
+    if(!currentCapralRequest(ticket,expectedForm))return;
+    if(typeof result.code!=='string'||normaliseCapralLookupCode(result.code)!==code)throw Error('The Capral image returned a different code. Search again.');
+    const image=await prepareStockImage(capralImageBlob(result.image));
+    if(!currentCapralRequest(ticket,expectedForm))return;
+    setForm(current=>current===expectedForm&&capralSession.generation===ticket?{...current,image}:current);setCapralLookup(null);setNotice('Capral image selected. Save this item to keep it.');
+   }catch(error){if(currentCapralRequest(ticket,expectedForm))setCapralError(String(error?.message||'The Capral image could not be downloaded. Try another image.'));}
+   finally{if(capralSession.generation===ticket){capralSession.downloading=false;setCapralBusy(false);setImageBusy(false);}}
+  }
+  async function prepareStockImage(file){
+   if(!['image/png','image/jpeg','image/webp'].includes(file.type))throw Error('Choose a PNG, JPEG or WebP image.');
+   if(file.size>8*1024*1024)throw Error('Choose an image smaller than 8 MB.');
+   let url;
    try{
     url=URL.createObjectURL(file);const img=new Image();await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(Error('This image could not be read.'));img.src=url;});
-    if(!img.naturalWidth||img.naturalWidth*img.naturalHeight>40000000)throw Error('Choose an image under 40 megapixels.');
+    if(!img.naturalWidth||!img.naturalHeight||img.naturalWidth*img.naturalHeight>40000000)throw Error('Choose an image under 40 megapixels.');
     const maxSavedBytes=4*1024*1024,fits=value=>{const length=value.length-value.indexOf(',')-1,padding=value.endsWith('==')?2:value.endsWith('=')?1:0;return length>0&&length*3/4-padding<=maxSavedBytes;};
     const scale=Math.min(1,1600/Math.max(img.naturalWidth,img.naturalHeight)),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));const ctx=canvas.getContext('2d');let image='';
     for(let attempt=0;attempt<8&&!image;attempt++){
@@ -431,8 +487,15 @@ window.createWorkshopStock = function(React) {
      if(!image){canvas.width=Math.max(1,Math.floor(canvas.width*.75));canvas.height=Math.max(1,Math.floor(canvas.height*.75));}
     }
     if(!image)throw Error('Could not prepare this image within the 4 MB saved-image limit. Please try another image.');
-    setForm(current=>current?{...current,image}:current);
-   }catch(e){setError(e.message||'The image could not be uploaded.');}finally{if(url)URL.revokeObjectURL(url);setImageBusy(false);}
+    return image;
+   }finally{if(url)URL.revokeObjectURL(url);}
+  }
+  async function uploadImage(event){
+   const file=event.target.files?.[0];event.target.value='';if(!file)return;
+   resetCapralLookup();const expectedForm=form,ticket=capralSession.generation;setImageBusy(true);setError('');
+   try{const image=await prepareStockImage(file);setForm(current=>current===expectedForm&&capralSession.generation===ticket?{...current,image}:current);}
+   catch(error){if(capralSession.generation===ticket)setError(error.message||'The image could not be uploaded.');}
+   finally{if(capralSession.generation===ticket)setImageBusy(false);}
   }
   async function stockSaveResponse(response){
    try{const body=await response.json();if(!body||typeof body!=='object'||Array.isArray(body))throw Error();return body;}catch{const error=new Error('The stock service returned an unreadable response'+(Number.isInteger(response.status)?' (HTTP '+response.status+')':'')+'.');error.name='StockResponseError';throw error;}
@@ -627,10 +690,15 @@ window.createWorkshopStock = function(React) {
   const selected=data?.items.find(i=>i.id===form?.itemId);
   const catalogueBlockedPending=catalogueOnly&&pending&&(!catalogueRequest(pending)||pending.itemId&&data&&!window.isMaterialCatalogueItem(data.items.find(i=>i.id===pending.itemId)));
   function allowed(action){if(catalogueOnly)return isAdmin&&['create','metadata','category_save','archive'].includes(action);return ['create','metadata','stocktake','archive'].includes(action)?isAdmin:can(action==='damage'?'factory.damage':['receive','return'].includes(action)?'factory.receive':'factory.dispatch');}
+  const capralImagePicker=item=>{
+   if(data?.capralReferenceLookupVersion!==1||item.legacy||sharedProfile||/^(variant|offcut):/.test(String(item.id||''))||item.unit==='sheets')return null;
+   const code=capralCode===null?suggestedCapralCode(item):capralCode,lookup=capralLookup?.form===form?capralLookup:null,locked=busy||imageBusy||!!pending;
+   return h('div',{className:'ws-capral-picker'},h('strong',null,'Capral reference image'),h('div',{className:'ws-capral-search'},h('label',{className:'ws-field'},'Capral code',h('input',{'aria-label':'Capral code',value:code,maxLength:40,autoComplete:'off',spellCheck:false,disabled:locked,onChange:event=>{resetCapralLookup();setCapralCode(event.target.value);}})),button(capralBusy&&!capralSession.downloading?'Searching Capral…':'Find Capral image',findCapralImage,locked||capralBusy||!String(code).trim())),h('small',null,'Search by Capral product or profile code, then check the matching product before using its image.'),capralError&&h('p',{className:'ws-error',role:'alert'},capralError),(capralBusy||lookup)&&button('Cancel Capral lookup',resetCapralLookup,busy||!!pending),lookup&&h('div',{className:'ws-capral-results',role:'region','aria-label':'Capral image results'},...lookup.warnings.map((warning,index)=>h('p',{key:'warning-'+index,className:'ws-field-hint'},warning)),!lookup.products.length&&h('p',null,'No matching Capral images found. Check the code or upload an image.'),...lookup.products.map(product=>h('article',{key:product.url,className:'ws-capral-product'},h('div',null,h('strong',null,product.title),h('small',null,'Capral code: '+product.code),h('a',{href:product.url,target:'_blank',rel:'noopener noreferrer',referrerPolicy:'no-referrer'},'View Capral product')),h('div',{className:'ws-capral-pictures'},...product.images.map(picture=>h('div',{key:picture.url,className:'ws-capral-picture'},h('img',{src:picture.url,alt:picture.alt,loading:'lazy',referrerPolicy:'no-referrer'}),button('Use image',()=>useCapralImage(product,picture),locked||capralBusy))))))));
+  };
   const imageEditor=()=>{
    const item=sharedProfile||{...selected,...form},source=imageFor(item),reference=!item.image&&window.stockProfileImages.reference(item);
-   const picker=data?.stockProfileReferenceVersion===1&&!item.legacy&&!/^(variant|offcut):/.test(String(item.id||''))&&item.unit!=='sheets'?h('div',{className:'ws-reference-picker'},h('label',{className:'ws-field'},'Reference profile',h('select',{'aria-label':'Reference profile',value:sharedProfile?sharedProfile.referenceProfile||'':form.referenceProfile||'',disabled:busy||imageBusy||!!pending||!!sharedProfile,onChange:event=>{const value=event.target.value;setForm(current=>({...current,referenceProfile:value,...(value&&value!=='none'?{image:''}:{})}));}},[['','Automatic (from item name)'],['none','No reference diagram'],...window.stockProfileImages.options.map(option=>[option.value,option.label])].map(([value,label])=>h('option',{key:value,value},label)))),h('small',null,sharedProfile?'Edit the original profile to change the reference for all variants.':'Selecting a diagram replaces the uploaded image when you save. You can also upload your own photo.')):null;
-   return h('div',{className:'ws-image-editor'},h('div',{className:'ws-image-edit-preview'},source?h('img',{src:source,alt:imageAlt(item)}):icon('box')),sharedProfile?h('div',null,picker,h('p',null,'Uses the existing profile image and dimensions. Edit stock details to update them for all variants.'),reference&&h('p',{className:'ws-profile-reference-note'},'Reference profile diagram — not to scale.')):h('div',null,h('strong',null,'Profile / item image'),picker,reference&&h('p',{className:'ws-profile-reference-note'},'Reference profile diagram — not to scale.'),h('p',null,'Add a profile drawing or product photo. PNG, JPG or WebP, up to 8 MB. Images are optimised to 4 MB or less.'),h('div',{className:'ws-image-controls'},h('label',{className:'ws-upload '+(busy||imageBusy||pending?'is-disabled':'')},h('input',{type:'file',accept:'image/png,image/jpeg,image/webp','aria-label':'Profile or item image',disabled:busy||imageBusy||!!pending,onChange:uploadImage}),imageBusy?'Preparing image…':form.image?'Replace image':'Choose image'),form.image&&button('Remove image',()=>change('image',''),busy||imageBusy||!!pending)),h('small',null,'The image is saved when you save this item.')));
+   const picker=data?.stockProfileReferenceVersion===1&&!item.legacy&&!/^(variant|offcut):/.test(String(item.id||''))&&item.unit!=='sheets'?h('div',{className:'ws-reference-picker'},h('label',{className:'ws-field'},'Reference profile',h('select',{'aria-label':'Reference profile',value:sharedProfile?sharedProfile.referenceProfile||'':form.referenceProfile||'',disabled:busy||imageBusy||!!pending||!!sharedProfile,onChange:event=>{resetCapralLookup();const value=event.target.value;setForm(current=>({...current,referenceProfile:value,...(value&&value!=='none'?{image:''}:{})}));}},[['','Automatic (from item name)'],['none','No reference diagram'],...window.stockProfileImages.options.map(option=>[option.value,option.label])].map(([value,label])=>h('option',{key:value,value},label)))),h('small',null,sharedProfile?'Edit the original profile to change the reference for all variants.':'Selecting a diagram replaces the uploaded image when you save. You can also upload your own photo.')):null;
+   return h('div',{className:'ws-image-editor'},h('div',{className:'ws-image-edit-preview'},source?h('img',{src:source,alt:imageAlt(item)}):icon('box')),sharedProfile?h('div',null,picker,h('p',null,'Uses the existing profile image and dimensions. Edit stock details to update them for all variants.'),reference&&h('p',{className:'ws-profile-reference-note'},'Reference profile diagram — not to scale.')):h('div',null,h('strong',null,'Profile / item image'),picker,reference&&h('p',{className:'ws-profile-reference-note'},'Reference profile diagram — not to scale.'),h('p',null,'Add a profile drawing or product photo. PNG, JPG or WebP, up to 8 MB. Images are optimised to 4 MB or less.'),h('div',{className:'ws-image-controls'},h('label',{className:'ws-upload '+(busy||imageBusy||pending?'is-disabled':'')},h('input',{type:'file',accept:'image/png,image/jpeg,image/webp','aria-label':'Profile or item image',disabled:busy||imageBusy||!!pending,onChange:uploadImage}),imageBusy?'Preparing image…':form.image?'Replace image':'Choose image'),form.image&&button('Remove image',()=>change('image',''),busy||imageBusy||!!pending)),capralImagePicker(item),h('small',null,'The image is saved when you save this item.')));
   };
   const cataloguePricingHint=item=>({conflicting_rates:'Panel Catalogue prices conflict — link the correct material',unpriced_material:'Set price per m² in Panel Catalogue',no_matching_material:'Link the correct Panel Catalogue material',invalid_material:'Check colour, material and thickness'}[item?.cataloguePricingStatus]||'');
   function stockCostLabel(item){
@@ -810,7 +878,7 @@ window.createWorkshopStock = function(React) {
     h('div',{className:'ws-fields'},field(form.action==='stocktake'?'Actual counted quantity':'Quantity','quantity','number'),['use','return','reserve','release'].includes(form.action)&&field('Job reference','job'),field(['damage','stocktake'].includes(form.action)?'Reason (required)':'Delivery reference / notes','reason')),
     selected?.reservations&&Object.values(selected.reservations).some(q=>q>0)&&h('p',{className:'ws-field-hint'},'Reserved for jobs: '+Object.entries(selected.reservations).filter(([,q])=>q>0).map(([j,q])=>j+': '+q).join(', ')),
     error&&h('div',{className:'ws-error',role:'alert'},error),pending&&!busy&&h('p',null,'Save status is uncertain. Retry this unchanged request before starting another movement.'),
-    h('div',{className:'ws-actions'},button('Cancel',()=>setForm(null),busy||imageBusy||!!pending),h('button',{type:'submit',disabled:busy||imageBusy||(!pending&&!data)||(!pending&&form.action==='stocktake_create'&&form.uncountedThisMonth&&(!data?.stocktakeMonth?.key||!stocktakeEligibleItems.length&&!panelSnapshotItems.length))||(form.action==='archive'&&(selected?.qty!==0||selected?.reserved>0))||(form.action==='bulk_metadata'&&!Object.keys(form.changes).length)},imageBusy?'Preparing image…':busy?'Saving…':pending?'Retry save':form.action==='archive'?'Remove item':form.action==='create'?'Create stock item':form.action==='bulk_metadata'?'Apply to '+form.itemIds.length+' items':'Save')))),
+    h('div',{className:'ws-actions'},button('Cancel',()=>{resetCapralLookup();setForm(null);},busy||imageBusy||!!pending),h('button',{type:'submit',disabled:busy||imageBusy||(!pending&&!data)||(!pending&&form.action==='stocktake_create'&&form.uncountedThisMonth&&(!data?.stocktakeMonth?.key||!stocktakeEligibleItems.length&&!panelSnapshotItems.length))||(form.action==='archive'&&(selected?.qty!==0||selected?.reserved>0))||(form.action==='bulk_metadata'&&!Object.keys(form.changes).length)},imageBusy?'Preparing image…':busy?'Saving…':pending?'Retry save':form.action==='archive'?'Remove item':form.action==='create'?'Create stock item':form.action==='bulk_metadata'?'Apply to '+form.itemIds.length+' items':'Save')))),
    incomingId&&!poOpen&&h('div',{className:'ws-overlay ws-incoming-overlay'},h('div',{className:'ws-dialog ws-incoming-dialog',role:'dialog','aria-modal':true,'aria-label':'Stock on order'},
     h('div',{className:'ws-incoming-header'},h('div',{className:'ws-heading'},h('div',null,h('div',{className:'ws-eyebrow'},'STOCK / INCOMING DELIVERIES'),h('h3',null,incomingItem?.name||'Stock item')),button('Close',()=>setIncomingId(null))),incomingItem&&h('p',null,[incomingItem.sku,incomingItem.colour||incomingItem.color,incomingItem.dimensions,incomingItem.lengthMm?incomingItem.lengthMm+' mm':''].filter(Boolean).join(' · '))),
     h('div',{className:'ws-incoming-body'},error&&h('div',{className:'ws-error',role:'alert'},error),incomingLoading?h('p',{role:'status'},'Refreshing incoming deliveries…'):!incomingItem?h('p',null,'This stock item is no longer available.'):h(React.Fragment,null,

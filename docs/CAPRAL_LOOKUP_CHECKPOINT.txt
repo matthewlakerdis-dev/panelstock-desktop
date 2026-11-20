@@ -1,0 +1,50 @@
+CAPRAL REFERENCE IMAGE LOOKUP — WORK IN PROGRESS
+
+Do not merge or deploy this checkpoint. The live Capral search provider is
+deliberately unconfigured until the official website can be inspected and tested.
+
+Goal
+Find a stock item's official Capral reference image using an editable Capral
+product/profile code, review the matching product, choose Use image, then save
+through the existing stock item editor. Keep stock codes, quantities and prices
+unchanged. Existing image saving shares the photo across same-SKU variants.
+
+Prepared implementation
+- worker/src/capral-reference.js validates codes and official HTTPS URLs, bounds
+  redirects/time/bytes, extracts exact-code JSON-LD products and revalidates image
+  association before downloading PNG/JPEG/WebP. Only apex/www hosts are currently
+  approved internally. searchCapralReference requires internal options.searchUrl;
+  the production default is intentionally absent and returns 503.
+- POST /stock-images/capral/search and /stock-images/capral/image authenticate a
+  full administrator session, bound input and respect maintenance mode. These
+  are read-only lookup routes; stock mutations still use the normal Save flow.
+- workshopView advertises capralReferenceLookupVersion:1 in this draft. Complete
+  the provider before deployment; otherwise the UI would expose an unavailable
+  search.
+- Both clients have editable Capral code, staged product/image previews, exact
+  response-code checks, explicit Use image, upload-equivalent image preparation,
+  cancellation/stale-response guards and ordinary idempotent stock saving.
+- No actual customer stock, photos, prices or quantities were modified.
+
+Validation so far
+- 11 bounded-provider/parser/bitmap tests pass with synthetic responses.
+- 2 additional authentication/maintenance tests pass against local Miniflare.
+- 19 UI tests pass through mobile, desktop and the Worker entrypoint.
+- Full desktop suite: 179 test files pass. Worker deployment dry-run passes.
+- Live Capral lookup/download and the final full Worker suite remain pending.
+
+Resume in an environment with capral.com.au and its required subdomains allowed
+1. Verify actual HTTPS access to Capral. No credentials are expected for public
+   reference images. Do not bypass network policy through another proxy/service.
+2. Inspect the real search endpoint, exact-code product evidence, product-page
+   markup and image hosts. Configure the provider and only verified official
+   hosts/associated image sources; never ship a guessed search URL.
+3. Exercise real search and image download read-only. Public website codes may be
+   used for validation; customer PDF files and results must stay out of commits.
+4. Reconcile this checkpoint with latest main in BOTH repositories before release.
+   It was prepared against panelstock 41573cc8632814943b3a902babe8df6f562d61c0 and
+   panelstock-desktop 51597aa8e498de2f5736ffc7046ffe46057e45e4. Preserve newer work.
+5. Bump mobile index/loader/CSS cache versions, run required Worker+desktop checks
+   and browser/iPad layout tests, then deploy both clients with branch leases.
+6. Observe all relevant production workflows reach terminal success before
+   reporting completion. This checkpoint has not been deployed.
