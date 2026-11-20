@@ -15,11 +15,15 @@
     if(!Array.isArray(data.orders)||data.orders.length!==ids.length||new Set(data.orders.map(row=>row.id)).size!==ids.length||data.orders.some(row=>!ids.includes(row.id)||typeof row.eligible!=='boolean'||row.eligible&&(!/^[a-f0-9]{64}$/.test(row.reviewToken||'')||typeof row.expectedUpdatedAt!=='string')))throw Error('The order review response could not be verified.');
     if(version!==generation||!current())return;
     const vehicles=Array.isArray(data.dispatchVehicles)?data.dispatchVehicles:[],drivers=Array.isArray(data.dispatchDrivers)?data.dispatchDrivers:[],driver=drivers.find(value=>value.username===data.dispatchDefaultDriver);
-    pending=null;publish({orders:data.orders,defaults:data,form:{transportChoice:vehicles.length?'vehicle:0':'external',transport:vehicles[0]||'',driverChoice:driver?'user:'+driver.username:'',driver:driver?(driver.displayName||driver.username):'',notes:state.form.notes||'',photo:''},phase:'editing',uncertain:false});
+    pending=null;publish({orders:data.orders.map(row=>({...row,deliveryMode:'all',quantities:(row.items||[]).map(item=>item.quantity)})),defaults:data,form:{transportChoice:vehicles.length?'vehicle:0':'external',transport:vehicles[0]||'',driverChoice:driver?'user:'+driver.username:'',driver:driver?(driver.displayName||driver.username):'',notes:state.form.notes||'',photo:''},phase:'editing',uncertain:false});
    }catch(error){if(version===generation)publish({phase:'blocked',error:error.message});}finally{if(version===generation)publish({busy:false});}
   }
   function change(name,value){if(!current()||locked||state.uncertain||state.phase!=='editing')return;publish({form:{...state.form,[name]:value},error:''});}
   function destination(id,value){if(!current()||locked||state.uncertain||state.phase!=='editing')return;publish({orders:state.orders.map(row=>row.id===id?{...row,destination:value}:row),error:''});}
+  function delivery(id,mode,index,value){
+   if(!current()||locked||state.uncertain||state.phase!=='editing')return;
+   publish({orders:state.orders.map(row=>row.id!==id?row:{...row,...(mode?{deliveryMode:mode}:{quantities:row.quantities.map((quantity,i)=>i===index?value:quantity)})}),error:''});
+  }
   function remove(id){if(!current()||locked||state.uncertain||state.phase!=='editing')return false;ids=ids.filter(value=>value!==id);publish({orders:state.orders.filter(row=>row.id!==id),error:''});return true;}
   async function submit(){
    if(!current()||locked||state.phase!=='editing')return null;
@@ -27,18 +31,29 @@
     if(!state.orders.length||state.orders.some(row=>!row.eligible)){publish({error:'Remove blocked orders or complete their production checks before dispatch.'});return null;}
     const form=state.form;if(!form.transport.trim()||!form.driver.trim()||state.orders.some(row=>!String(row.destination||'').trim())){publish({error:'Enter a vehicle, driver and site address for every order.'});return null;}
     if(state.orders.some(row=>row.requiresPhoto)&&!form.photo){publish({error:'Add the required dispatch photo.'});return null;}
-    pending={mutationId:uuid(),transport:form.transport.trim(),driver:form.driver.trim(),notes:form.notes.trim(),photo:form.photo,orders:state.orders.map(row=>({id:row.id,expectedUpdatedAt:row.expectedUpdatedAt,reviewToken:row.reviewToken,destination:row.destination.trim()}))};
+    const deliveries=[];
+    for(const row of state.orders){
+     let selection={};
+     if(row.deliveryMode==='part'){
+      const chosen=(row.items||[]).map((item,index)=>({...item,send:Number(row.quantities[index])}));
+      if(!row.selectionType||!chosen.some(item=>item.send>0)||chosen.some(item=>!Number.isFinite(item.send)||item.send<0||item.send>item.quantity||row.selectionType!=='lines'&&![0,1].includes(item.send))){publish({error:'Choose at least one item for Order '+row.orderNumber+' and keep quantities within its remaining balance.'});return null;}
+      const sent=chosen.filter(item=>item.send>0);
+      selection=row.selectionType==='lines'?{lines:sent.map(item=>({index:item.index,quantity:item.send}))}:row.selectionType==='componentIds'?{componentIds:sent.map(item=>item.componentId)}:{panelIds:sent.map(item=>item.panelId)};
+     }
+     deliveries.push({id:row.id,expectedUpdatedAt:row.expectedUpdatedAt,reviewToken:row.reviewToken,destination:row.destination.trim(),...selection});
+    }
+    pending={mutationId:uuid(),transport:form.transport.trim(),driver:form.driver.trim(),notes:form.notes.trim(),photo:form.photo,orders:deliveries};
    }
    locked=true;publish({busy:true,error:''});
    try{
     const {response,data}=await request('/dispatch/orders/batch',pending);
     if(!response.ok){if(response.status>=400&&response.status<500){pending=null;publish({phase:'blocked',uncertain:false});}throw Error(data.error||'The dispatch response could not be confirmed.');}
-    const expected=pending.orders.map(row=>row.id);
-    if(!data.ok||!Array.isArray(data.orderIds)||data.orderIds.length!==expected.length||new Set(data.orderIds).size!==expected.length||data.orderIds.some(id=>!expected.includes(id))||!Array.isArray(data.orders)||new Set(data.orders.map(row=>row.id)).size!==data.orders.length||data.orders.some(row=>!expected.includes(row.id)||!data.idempotent&&row.status!=='dispatched')||!data.idempotent&&data.orders.length!==expected.length)throw Error('The dispatch response could not be verified. Retry to confirm the same request.');
+    const expected=pending.orders.map(row=>row.id),partial=data.partialOrderIds||[];
+    if(!Array.isArray(partial)||new Set(partial).size!==partial.length||partial.some(id=>!expected.includes(id))||!data.ok||!Array.isArray(data.orderIds)||data.orderIds.length!==expected.length||new Set(data.orderIds).size!==expected.length||data.orderIds.some(id=>!expected.includes(id))||!Array.isArray(data.orders)||new Set(data.orders.map(row=>row.id)).size!==data.orders.length||data.orders.some(row=>!expected.includes(row.id)||!data.idempotent&&(partial.includes(row.id)?row.status!=='completed':row.status!=='dispatched'))||!data.idempotent&&data.orders.length!==expected.length)throw Error('The dispatch response could not be verified. Retry to confirm the same request.');
     pending=null;publish({phase:'done',uncertain:false});return data;
    }catch(error){publish({error:error.message,uncertain:!!pending});return null;}finally{locked=false;publish({busy:false});}
   }
-  return{state,review,change,destination,remove,submit,error:message=>{if(current()&&!locked)publish({error:message});},dispose(){live=false;++generation;}};
+  return{state,review,change,destination,delivery,remove,submit,error:message=>{if(current()&&!locked)publish({error:message});},dispose(){live=false;++generation;}};
  }
  async function preparePhoto(file){
   if(!file||!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10*1024*1024)throw Error('Choose a JPG, PNG or WebP photo under 10 MB.');
@@ -60,12 +75,13 @@
    const keyDown=event=>{if(event.key==='Escape'&&(!state.busy||state.phase==='loading')&&!photoBusy){event.preventDefault();callbacks.current.onClose();}if(event.key==='Tab'){const controls=[...dialog.current.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled])')],first=controls[0],last=controls[controls.length-1];if(event.shiftKey&&(document.activeElement===first||document.activeElement===dialog.current)){event.preventDefault();last?.focus();}else if(!event.shiftKey&&(document.activeElement===last||document.activeElement===dialog.current)){event.preventDefault();first?.focus();}}};
    return h('div',{className:'ps-excel-action-backdrop'},h('section',{className:'ps-excel-action ps-excel-action-pdf',role:'dialog','aria-modal':true,'aria-label':'Mark ready and dispatch selected orders',ref:dialog,tabIndex:-1,onKeyDown:keyDown},
     h('header',null,h('div',null,h('small',null,'Site Orders'),h('h2',null,'Mark ready & dispatch')),h('button',{type:'button',disabled:state.busy&&state.phase!=='loading'||photoBusy,onClick:()=>callbacks.current.onClose()},'Close')),
-    h('p',null,'Send every remaining item in the selected orders. Production, coating and QA checks still apply. Every order must pass before this batch is dispatched.'),
+    h('p',null,'Choose all remaining items or a part delivery for each order. Anything left stays ready for a later trip. Production, coating and QA checks still apply. Every order must pass before this batch is dispatched.'),
     state.phase==='loading'&&h('p',{role:'status'},'Checking selected orders…'),
     h('form',{onSubmit:submit},h('div',{className:'ps-order-bulk-review'},state.orders.map(row=>h('article',{key:row.id,className:'ps-excel-action-load'},
       h('div',{className:'ps-order-bulk-review-heading'},h('strong',null,'#'+(row.orderNumber||'?')+' · '+(row.project||'Order unavailable')+' · '+(row.orderType||'')),h('button',{type:'button',disabled:frozen,onClick:()=>{if(controller.current?.remove(row.id))callbacks.current.onRemoved?.(row.id);}},'Remove')),
       !row.eligible&&h('p',{role:'alert',className:'ps-excel-action-error'},row.reason||'Review this order in Dispatch'),
-      h('ul',{className:'ps-unified-items'},(row.items||[]).map((item,index)=>h('li',{key:index},item.quantity+' × '+item.description))),
+      row.eligible&&row.selectionType&&h('label',null,'Delivery amount',h('select',{'aria-label':'Delivery amount for Order '+row.orderNumber,className:'ps-unified-input',disabled:frozen,value:row.deliveryMode||'all',onChange:event=>controller.current?.delivery(row.id,event.target.value)},h('option',{value:'all'},'All remaining items'),h('option',{value:'part'},'Part delivery'))),
+      row.deliveryMode==='part'?h('fieldset',{className:'ps-order-bulk-items'},h('legend',null,'Items in this delivery'),h('p',null,'Enter 0 or untick an item to leave it for later.'),(row.items||[]).map((item,index)=>h('label',{key:index,className:'ps-order-bulk-item'},h('span',null,item.description,h('small',{style:{display:'block'}},item.quantity+' remaining')),row.selectionType==='lines'?h('input',{type:'number',min:0,max:item.quantity,step:'any',disabled:frozen,value:row.quantities[index],'aria-label':'Quantity to send for Order '+row.orderNumber+': '+item.description,className:'ps-unified-input ps-order-bulk-quantity',onChange:event=>controller.current?.delivery(row.id,null,index,event.target.value)}):h('input',{type:'checkbox',disabled:frozen,checked:Number(row.quantities[index])===1,'aria-label':'Send for Order '+row.orderNumber+': '+item.description,onChange:event=>controller.current?.delivery(row.id,null,index,event.target.checked?1:0)})))):h('ul',{className:'ps-unified-items'},(row.items||[]).map((item,index)=>h('li',{key:index},item.quantity+' × '+item.description))),
       h('label',null,'Site address ',h('span',{'aria-hidden':true,className:'ps-order-required'},'*'),h('input',{required:true,maxLength:300,disabled:frozen,value:row.destination||'','aria-label':'Site address for Order '+row.orderNumber,className:'ps-unified-input',onChange:event=>controller.current?.destination(row.id,event.target.value)}))
     ))),state.phase!=='loading'&&h('div',{className:'ps-unified-form'},
       h('label',null,'Vehicle / transport company ',h('span',{className:'ps-order-required','aria-hidden':true},'*'),h('select',{required:true,disabled:frozen,className:'ps-unified-input',value:form.transportChoice||'external',onChange:event=>{const choice=event.target.value;update('transportChoice',choice);update('transport',choice==='external'?'':vehicles[Number(choice.slice(8))]||'');}},vehicles.map((value,index)=>h('option',{key:value,value:'vehicle:'+index},value)),h('option',{value:'external'},'Other vehicle / transport'))),
