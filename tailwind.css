@@ -1285,10 +1285,6 @@ video {
   --tw-border-opacity: 1;
   border-color: rgb(103 232 249 / var(--tw-border-opacity, 1));
 }
-.border-cyan-500 {
-  --tw-border-opacity: 1;
-  border-color: rgb(6 182 212 / var(--tw-border-opacity, 1));
-}
 .border-cyan-600 {
   --tw-border-opacity: 1;
   border-color: rgb(8 145 178 / var(--tw-border-opacity, 1));
@@ -2284,10 +2280,6 @@ video {
 }
 .last\:border-0:last-child {
   border-width: 0px;
-}
-.hover\:border-cyan-500:hover {
-  --tw-border-opacity: 1;
-  border-color: rgb(6 182 212 / var(--tw-border-opacity, 1));
 }
 .hover\:border-cyan-600:hover {
   --tw-border-opacity: 1;
