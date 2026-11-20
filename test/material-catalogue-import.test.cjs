@@ -3,21 +3,85 @@ const source=fs.readFileSync(path.join(__dirname,'../workshop-stock.js'),'utf8')
 const walk=n=>!n||typeof n!=='object'?[]:[n,...(n.children||[]).flat(Infinity).flatMap(walk)];
 const stock=()=>({revision:7,materialImportPricingVersion:1,categories:{extrusions:'Extrusions',fixings:'Fixings',consumables:'Consumables',other:'Other',panels:'Panels',offcuts:'Offcuts'},stockReferences:[],items:[{id:'angle',name:'Warehouse angle',sku:'OUR-ANGLE',category:'extrusions',unit:'lengths',qty:7,reserved:2,available:5,colour:'Black',lengthMm:6000,dimensions:'30 x 30',unitCost:12},{id:'variant:sheet',name:'Sheet',category:'panels',legacy:true,unit:'sheets',qty:4},{id:'cut',name:'Offcut',category:'offcuts',unit:'lengths',qty:1}]});
 const documentResult=()=>({ok:true,supplier:'Metals supplier',warnings:['Check the tape unit.'],lines:[{sku:'SUP-ANGLE',description:'Black angle',colour:'Black',dimensions:'30 x 30',lengthMm:6000,unit:'lengths',category:'extrusions',supplier:''},{sku:'TAPE',description:'Protective tape',colour:'',dimensions:'',lengthMm:null,unit:'rolls',category:'consumables',supplier:''},{sku:'IGNORE',description:'Excluded item',colour:'',dimensions:'',lengthMm:null,unit:'each',category:'other',supplier:''}]});
+const capralPng='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jrXkAAAAASUVORK5CYII=';
+const capralProduct={code:'815581',title:'EN7492(ME9395) 6060 T5 6.5m MF',url:'https://shop.capral.com.au/815581/',images:[{url:'https://cdn11.bigcommerce.com/s-gwvwsryafm/images/stencil/1280x1280/products/748/4449/angle.png',alt:'Angle profile'}]};
+const capralSearch=()=>({code:'815581',products:[capralProduct],warnings:[]});
+const capralImage=()=>({code:'815581',productUrl:capralProduct.url,image:{data:capralPng,mimeType:'image/png'}});
+const ok=value=>({ok:true,json:async()=>value});
+const waiting=()=>{let resolve;const promise=new Promise(done=>resolve=done);return {promise,resolve};};
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
-async function harness({saved=null,admin=true,result=documentResult(),data=stock()}={}){
- const states=[],effects=[],requests=[],store=new Map(saved?[['panelstock:material-import-pending:/api:tester',JSON.stringify(saved)]]:[]),callbacks=[];let cursor=0,view=data;
+async function harness({saved=null,admin=true,result=documentResult(),data=stock(),deferDecode=false}={}){
+ const states=[],effects=[],requests=[],store=new Map(saved?[['panelstock:material-import-pending:/api:tester',JSON.stringify(saved)]]:[]),callbacks=[];let cursor=0,view=data;const decoders=[],revoked=[];class FakeImage{constructor(){this.naturalWidth=132;this.naturalHeight=113;decoders.push(this);}set src(value){if(!deferDecode)Promise.resolve().then(()=>this.onload());}}
  const React={createElement:(type,props,...children)=>({type,props:props||{},children}),useState:value=>{const i=cursor++;if(!(i in states))states[i]=typeof value==='function'?value():value;return [states[i],value=>states[i]=typeof value==='function'?value(states[i]):value];},useEffect:fn=>effects.push(fn),Fragment:'fragment'};
- const context={window:{},TextEncoder,Blob,atob,crypto:{randomUUID:()=> 'material-import-12345678'},PanelStock:{username:'tester'},FileReader:class{readAsDataURL(){this.result='data:application/pdf;base64,JVBERi0xLjc=';this.onload();}},localStorage:{getItem:key=>store.get(key)||null,setItem:(key,value)=>store.set(key,value),removeItem:key=>store.delete(key)}};
+ const context={window:{},TextEncoder,Blob,atob,Uint8Array,Image:FakeImage,URL:{createObjectURL:()=> 'blob:synthetic-capral',revokeObjectURL:value=>revoked.push(value)},document:{addEventListener(){},removeEventListener(){},createElement:()=>({getContext:()=>({fillRect(){},drawImage(){}}),toDataURL:()=>capralPng})},crypto:{randomUUID:()=> 'material-import-12345678'},PanelStock:{username:'tester'},FileReader:class{readAsDataURL(){this.result='data:application/pdf;base64,JVBERi0xLjc=';this.onload();}},localStorage:{getItem:key=>store.get(key)||null,setItem:(key,value)=>store.set(key,value),removeItem:key=>store.delete(key)}};
  let handler=async(url,body)=>({ok:true,json:async()=>url.endsWith('/analyse')?result:{...view,revision:8,importSummary:{created:1,matched:1}}});
  context.PanelStock.apiFetch=async(url,options)=>{const body=options?JSON.parse(options.body):undefined;requests.push({url,body});return handler(url,body);};
  vm.runInNewContext(source,context);const C=context.window.createMaterialCatalogueImport(React),render=()=>{cursor=0;effects.length=0;return walk(C({workerUrl:'/api',isAdmin:admin,data:view,onSaved:value=>callbacks.push(value),onClose:()=>callbacks.push('close')}));};render();effects[1]();await tick();
  const row=key=>render().find(n=>n.props['data-import-row']===String(key)),button=label=>render().find(n=>n.type==='button'&&n.children.includes(label)),field=(key,label)=>walk(row(key)).find(n=>n.type==='label'&&n.children.includes(label)),control=(key,label)=>walk(field(key,label)).find(n=>['input','select','textarea'].includes(n.type));
- return {context,requests,store,callbacks,states,render,row,button,control,setHandler:value=>handler=value,choose(key,mode){control(key,'Action').props.onChange({target:{value:mode}});},set(key,label,value){control(key,label).props.onChange({target:{value}});},check(key,label,checked=true){control(key,label).props.onChange({target:{checked}});},confirm(){render().find(n=>n.props.className==='ws-po-import-confirm').children[0].props.onChange({target:{checked:true}});},async upload(name='materials.pdf',size=8){await render().find(n=>n.type==='input'&&n.props.type==='file').props.onChange({target:{files:[{name,size}],value:''}});},async submit(){await button(saved?'Retry saved import':'Import reviewed materials').props.onClick();}};
+ return {context,requests,store,callbacks,states,render,row,button,control,decoders,revoked,setHandler:value=>handler=value,choose(key,mode){control(key,'Action').props.onChange({target:{value:mode}});},set(key,label,value){control(key,label).props.onChange({target:{value}});},check(key,label,checked=true){control(key,label).props.onChange({target:{checked}});},confirm(){render().find(n=>n.props.className==='ws-po-import-confirm').children[0].props.onChange({target:{checked:true}});},async upload(name='materials.pdf',size=8){await render().find(n=>n.type==='input'&&n.props.type==='file').props.onChange({target:{files:[{name,size}],value:''}});},async submit(){await button(saved?'Retry saved import':'Import reviewed materials').props.onClick();}};
 }
 function prepare(x){
  walk(x.row(0)).find(n=>n.props.className==='ws-po-suggestion').props.onClick();
  x.choose(1,'create');x.choose(2,'skip');x.confirm();
 }
+const screenshotResult=()=>({supplier:'Capral Limited',warnings:[],lines:[{sku:'815581 EN7492(ME9395)',description:'815581 EN7492(ME9395) 6060 T5 6.5m MF ANGLE 70X40X1.6',name:'Angle',colour:'Mill Finish',dimensions:'70X40X1.6',lengthMm:6500,unit:'EA',stockUnit:'lengths',category:'extrusions',unitCost:29.59,priceUnit:'each',currency:'AUD',taxBasis:'exGST'}]});
+const rowButton=(x,key,label)=>walk(x.row(key)).find(node=>node.type==='button'&&node.children.includes(label));
+async function capralHarness(options={}){
+ const x=await harness({result:screenshotResult(),data:{...stock(),capralReferenceLookupVersion:1},...options});await x.upload();x.choose(0,'create');
+ x.setHandler(async(url)=>ok(url.endsWith('/search')?capralSearch():url.endsWith('/image')?capralImage():{...stock(),revision:8}));return x;
+}
+const findCapral=x=>rowButton(x,0,'Find Capral image').props.onClick();
+const useCapral=x=>rowButton(x,0,'Use image').props.onClick();
+
+test('PDF import suggests the exact numeric Capral SKU from the compound code without changing source or price',async()=>{
+ const x=await capralHarness(),before=JSON.stringify(x.states[1]);assert.equal(x.control(0,'Capral code').props.value,'815581');await findCapral(x);
+ assert.deepEqual(x.requests[1],{url:'/api/stock-images/capral/search',body:{code:'815581'}});assert.equal(JSON.stringify(x.states[1]),before);assert.ok(rowButton(x,0,'Use image'));assert.equal(x.control(0,'Stock code').props.value,'815581 EN7492(ME9395)');assert.equal(Number(x.control(0,'Unit cost (AUD ex GST, optional)').props.value),29.59);assert.equal(x.requests.some(r=>r.body?.action==='catalogue_import'),false);
+});
+test('a selected Capral photo stays in the PDF draft until explicit reviewed import and preserves code, zero stock and price',async()=>{
+ const x=await capralHarness();await findCapral(x);x.confirm();await useCapral(x);assert.equal(x.states[1][0].item.image,capralPng);assert.equal(x.requests.length,3);assert.equal(x.button('Import reviewed materials').props.disabled,true);assert.ok(walk(x.row(0)).some(n=>n.type==='img'&&n.props.src===capralPng));x.confirm();await x.submit();
+ const row=x.requests.at(-1).body.rows[0];assert.equal(row.item.image,capralPng);assert.equal(row.item.sku,'815581 EN7492(ME9395)');assert.equal(row.source.sku,row.item.sku);assert.equal(row.item.qty,0);assert.equal(row.item.unitCost,29.59);assert.equal(row.item.lengthMm,6500);assert.equal(row.item.dimensions,'70 x 40 x 1.6 mm');assert.equal(row.item.colour,'Mill Finish');assert.ok(!JSON.stringify(row).includes('https://'));assert.deepEqual(x.revoked,['blob:synthetic-capral']);
+});
+test('editing a PDF row or lookup code discards late search results and import waits for active lookup',async()=>{
+ for(const edit of ['Capral code','Stock code','Colour / finish']){
+  const x=await capralHarness(),wait=waiting();x.setHandler(()=>wait.promise);const pending=findCapral(x);x.render();x.confirm();assert.equal(x.button('Import reviewed materials').props.disabled,true);await x.submit();assert.equal(x.requests.length,2);x.set(0,edit,'CHANGED');wait.resolve(ok(capralSearch()));await pending;x.render();assert.equal(rowButton(x,0,'Use image'),undefined);assert.equal(x.states[1][0].item.image||'','');assert.equal(x.requests.some(r=>r.body?.action==='catalogue_import'),false);
+ }
+});
+test('changing mode, replacing the PDF or closing import invalidates late image downloads',async()=>{
+ for(const action of ['mode','replace','close']){
+  const x=await capralHarness();await findCapral(x);const wait=waiting();x.setHandler(()=>wait.promise);const pending=useCapral(x);x.render();if(action==='mode')x.choose(0,'skip');else if(action==='replace'){x.setHandler(()=>Promise.resolve(ok(screenshotResult())));await x.upload('replacement.pdf');}else x.button('Close').props.onClick();wait.resolve(ok(capralImage()));await pending;x.render();assert.equal(x.states[1].some(row=>row.item?.image),false);assert.equal(x.requests.some(r=>r.body?.action==='catalogue_import'),false);
+ }
+});
+test('cancelling image decoding releases its object URL without staging a PDF photo',async()=>{
+ const x=await capralHarness({deferDecode:true});await findCapral(x);const pending=useCapral(x);await tick();x.render();assert.equal(x.decoders.length,1);rowButton(x,0,'Cancel Capral lookup').props.onClick();x.render();x.decoders[0].onload();await pending;x.render();assert.equal(x.states[1][0].item.image||'','');assert.deepEqual(x.revoked,['blob:synthetic-capral']);assert.equal(rowButton(x,0,'Use image'),undefined);
+});
+test('wrong-code, wrong-product and failed downloads leave the prior PDF photo and price intact',async()=>{
+ for(const result of [ok({...capralImage(),code:'815582'}),ok({...capralImage(),productUrl:'https://shop.capral.com.au/815582/'}),{ok:false,status:503,json:async()=>({error:'Download unavailable'})}]){
+  const x=await capralHarness();await findCapral(x);await useCapral(x);await findCapral(x);const before=JSON.stringify(x.states[1]);x.setHandler(()=>Promise.resolve(result));await useCapral(x);assert.equal(JSON.stringify(x.states[1]),before);assert.ok(walk(x.row(0)).some(n=>n.props.role==='alert'));assert.equal(x.requests.some(r=>r.body?.action==='catalogue_import'),false);
+ }
+});
+test('import image search filters untrusted hosts and wrong product codes before displaying results',async()=>{
+ const x=await capralHarness();x.setHandler(()=>Promise.resolve(ok({...capralSearch(),products:[{...capralProduct,code:'815582'},{...capralProduct,url:'https://evil.test/815581/'},{...capralProduct,images:[{url:'https://cdn11.bigcommerce.com/s-other/images/stencil/angle.png'}]},capralProduct]})));await findCapral(x);assert.equal(walk(x.row(0)).filter(n=>n.type==='button'&&n.children.includes('Use image')).length,1);assert.ok(!walk(x.row(0)).some(n=>n.props.src?.includes('s-other')||n.props.href?.includes('evil.test')));
+});
+test('PDF lookup requires the backend capability and is absent for matched or existing shared profiles',async()=>{
+ const old=await capralHarness({data:stock()});assert.equal(rowButton(old,0,'Find Capral image'),undefined);
+ const match=await capralHarness();match.choose(0,'match');assert.equal(rowButton(match,0,'Find Capral image'),undefined);
+ const shared=await capralHarness();shared.set(0,'Stock code','OUR-ANGLE');assert.equal(rowButton(shared,0,'Find Capral image'),undefined);
+});
+test('removing or reassigning a selected PDF photo never changes the row price',async()=>{
+ const x=await capralHarness();await findCapral(x);await useCapral(x);rowButton(x,0,'Remove selected image').props.onClick();assert.equal(x.states[1][0].item.image,'');await findCapral(x);await useCapral(x);x.set(0,'Stock code','NEW-CODE');assert.equal(x.states[1][0].item.image,'');assert.equal(Number(x.control(0,'Unit cost (AUD ex GST, optional)').props.value),29.59);
+});
+test('an uncertain PDF import retries the same selected image and mutation without downloading again',async()=>{
+ const x=await capralHarness();await findCapral(x);await useCapral(x);x.confirm();x.setHandler(async()=>({ok:false,status:503,json:async()=>({error:'Save unconfirmed'})}));await x.submit();const original=structuredClone(x.requests.at(-1).body);assert.equal(original.rows[0].item.image,capralPng);assert.ok(x.button('Retry saved import'));x.setHandler(async()=>ok({...stock(),revision:8}));await x.button('Retry saved import').props.onClick();assert.deepEqual(x.requests.at(-1).body,original);assert.equal(x.requests.filter(r=>r.url.endsWith('/image')).length,1);assert.equal(x.store.size,0);
+});
+test('new PDF variants share a selected profile photo while each retains its own colour, length and price',async()=>{
+ const result=screenshotResult();result.lines.push({...result.lines[0],colour:'Black',description:'Black angle',unitCost:31.20});
+ const x=await capralHarness({result});x.choose(1,'create');await findCapral(x);await useCapral(x);assert.ok(x.states[1].every(row=>row.item.image===capralPng));assert.equal(x.states[1][0].item.colour,'Mill Finish');assert.equal(x.states[1][1].item.colour,'Black');assert.equal(Number(x.states[1][0].item.unitCost),29.59);assert.equal(Number(x.states[1][1].item.unitCost),31.20);
+ rowButton(x,1,'Remove selected image').props.onClick();assert.ok(x.states[1].every(row=>row.item.image===''));
+});
+test('editing a different PDF row does not discard another row’s active Capral lookup',async()=>{
+ const result=screenshotResult();result.lines.push({...result.lines[0],sku:'OTHER',description:'Other angle'});
+ const x=await capralHarness({result});x.choose(1,'create');const wait=waiting();x.setHandler(()=>wait.promise);const pending=findCapral(x);x.render();x.set(1,'Colour / finish','White');wait.resolve(ok(capralSearch()));await pending;assert.ok(rowButton(x,0,'Use image'));assert.equal(rowButton(x,1,'Use image'),undefined);
+});
 test('PDF review matches existing stock, creates selected zero-stock materials and skips unchecked rows',async()=>{
  const x=await harness();await x.upload();assert.equal(x.requests.length,1);assert.equal(x.requests[0].url,'/api/material-catalogue/analyse');assert.deepEqual(Object.keys(x.requests[0].body),['name','data']);
  assert.equal(x.button('Import reviewed materials').props.disabled,true);prepare(x);assert.equal(x.button('Import reviewed materials').props.disabled,false);

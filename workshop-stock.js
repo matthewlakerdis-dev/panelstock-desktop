@@ -233,6 +233,56 @@ function materialImportUnitCost(source,item){
 return {unitCost:materialImportUnitCost,dimensionsKey:materialImportDimensions,unitKey:canonicalUnit};
 })();
 
+/* Shared Capral lookup validation and image preparation. */
+function normaliseCapralLookupCode(value){return String(value||'').toUpperCase().replace(/\s+/g,'');}
+function suggestCapralReferenceCode(item){
+ const sku=String(item?.sku||'').trim().toUpperCase();
+ const product=sku.match(/^(\d{5,10})\s+\S/);if(product)return product[1];
+ const profile=[item?.details,item?.name].map(value=>String(value||'').match(/\bE(?:K|L|N|P)?\d{3,8}\b/i)?.[0]).find(Boolean);
+ return String(profile||sku).trim().toUpperCase();
+}
+  async function capralReferenceRequest(workerUrl,path,body){
+   const response=await PanelStock.apiFetch(workerUrl+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+   let result;try{result=await response.json();}catch{throw Error('The Capral lookup returned an unreadable response. Try again.');}
+   if(!response.ok)throw Error(String(result?.error||'The Capral lookup is unavailable. Try again.').slice(0,400));
+   if(!result||typeof result!=='object'||Array.isArray(result))throw Error('The Capral lookup returned an unreadable response. Try again.');
+   return result;
+  }
+function capralReferenceProducts(result,code){
+    if(typeof result.code!=='string'||normaliseCapralLookupCode(result.code)!==code)throw Error('The Capral lookup returned a different code. Search again.');
+    const officialPage=value=>typeof value==='string'&&value.length<=2048&&/^https:\/\/(?:(?:www|shop)\.)?capral\.com\.au(?:\/|$)/i.test(value)&&!/[\s<>\\]/.test(value);
+    if(!Array.isArray(result.products))throw Error('The Capral lookup returned an unreadable product list. Try again.');
+    const products=result.products.slice(0,6).filter(product=>product&&typeof product.title==='string'&&typeof product.code==='string'&&normaliseCapralLookupCode(product.code)===code&&officialPage(product.url)&&Array.isArray(product.images)).map(product=>({...product,title:product.title.slice(0,200),code:product.code.slice(0,40),images:product.images.slice(0,4).filter(image=>image&&typeof image.url==='string'&&image.url.length<=2048&&(/^https:\/\/(?:(?:www|shop)\.)?capral\.com\.au\//i.test(image.url)||/^https:\/\/cdn11\.bigcommerce\.com\/s-gwvwsryafm\/images\/(?:stencil|products)\//i.test(image.url))&&!/[\s<>\\]/.test(image.url)).map(image=>({url:image.url,alt:String(image.alt||product.title).slice(0,200)}))})).filter(product=>product.images.length);
+ return products;
+}
+  function capralImageBlob(image){
+   const data=image?.data;
+   if(typeof data!=='string'||data.length>12*1024*1024)throw Error('Capral returned an unsupported or oversized image. Choose another image.');
+   const match=data.match(/^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})$/i);
+   if(!match||match[2].length%4!==0||image.mimeType&&image.mimeType!=='image/'+match[1].toLowerCase())throw Error('Capral returned an unsupported image. Choose a PNG, JPEG or WebP image.');
+   let bytes;try{bytes=atob(match[2]);}catch{throw Error('The Capral image could not be read. Choose another image.');}
+   if(!bytes.length||bytes.length>8*1024*1024)throw Error('Choose a Capral image smaller than 8 MB.');
+   return new Blob([Uint8Array.from(bytes,char=>char.charCodeAt(0))],{type:'image/'+match[1].toLowerCase()});
+  }
+  async function prepareStockImage(file){
+   if(!['image/png','image/jpeg','image/webp'].includes(file.type))throw Error('Choose a PNG, JPEG or WebP image.');
+   if(file.size>8*1024*1024)throw Error('Choose an image smaller than 8 MB.');
+   let url;
+   try{
+    url=URL.createObjectURL(file);const img=new Image();await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(Error('This image could not be read.'));img.src=url;});
+    if(!img.naturalWidth||!img.naturalHeight||img.naturalWidth*img.naturalHeight>40000000)throw Error('Choose an image under 40 megapixels.');
+    const maxSavedBytes=4*1024*1024,fits=value=>{const length=value.length-value.indexOf(',')-1,padding=value.endsWith('==')?2:value.endsWith('=')?1:0;return length>0&&length*3/4-padding<=maxSavedBytes;};
+    const scale=Math.min(1,1600/Math.max(img.naturalWidth,img.naturalHeight)),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));const ctx=canvas.getContext('2d');let image='';
+    for(let attempt=0;attempt<8&&!image;attempt++){
+     ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0,canvas.width,canvas.height);
+     for(const [type,quality] of [['image/png'],['image/webp',.9],['image/webp',.75],['image/jpeg',.85],['image/jpeg',.7]]){const candidate=canvas.toDataURL(type,quality);if(fits(candidate)){image=candidate;break;}}
+     if(!image){canvas.width=Math.max(1,Math.floor(canvas.width*.75));canvas.height=Math.max(1,Math.floor(canvas.height*.75));}
+    }
+    if(!image)throw Error('Could not prepare this image within the 4 MB saved-image limit. Please try another image.');
+    return image;
+   }finally{if(url)URL.revokeObjectURL(url);}
+  }
+
 /* Review PDF catalogue rows before linking suppliers or creating zero-stock items. */
 window.createMaterialCatalogueImport=function(React){
  const h=React.createElement,{useState,useEffect}=React;
@@ -242,6 +292,9 @@ window.createMaterialCatalogueImport=function(React){
  return function MaterialCatalogueImport({workerUrl,isAdmin,data,onSaved,onClose}){
   const [view,setView]=useState(data),[rows,setRows]=useState(null),[fileName,setFileName]=useState(''),[supplier,setSupplier]=useState(''),[warnings,setWarnings]=useState([]),[reviewed,setReviewed]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[pending,setPending]=useState(null),[ready,setReady]=useState(false),[stale,setStale]=useState(false);
   const [storage]=useState(()=>workshopPendingStorage('panelstock:material-import-pending:'+workerUrl+':'+PanelStock.username));
+  const [capralDrafts,setCapralDrafts]=useState({}),[capralSession]=useState(()=>({generation:0,versions:{},rows:null}));
+  capralSession.rows=rows;
+  const capralWorking=Object.values(capralDrafts).some(draft=>draft.busy);
   const locked=busy||!!pending||!ready||storage.unreadable;
   const items=(view?.items||[]).filter(window.isMaterialCatalogueItem),categories=view?.categories||{extrusions:'Extrusions',fixings:'Fixings',consumables:'Consumables',other:'Other'};
   const categoryChoices=Object.entries(categories).filter(([key])=>!['all','panels','offcuts'].includes(key));
@@ -257,16 +310,53 @@ window.createMaterialCatalogueImport=function(React){
   const priceDescription=source=>typeof source.unitCost==='number'&&Number.isFinite(source.unitCost)?'PDF unit price: '+(source.currency||'Currency unclear')+' '+source.unitCost.toFixed(2)+' / '+(source.priceUnit||'unit unclear')+' · '+(source.taxBasis==='exGST'?'excluding GST':source.taxBasis==='incGST'?'including GST':'GST basis unclear'):'No clear unit price was read from the PDF.';
   function newItem(row,p=profile(row.source.sku)){const suggested=units.includes(row.source.stockUnit)?row.source.stockUnit:window.purchaseOrderUnit(row.source.unit),item={name:p?.name||row.source.name||row.source.description||'',sku:row.source.sku||'',category:p?.category||row.category||'',unit:p?.unit||(units.includes(suggested)?suggested:''),colour:row.source.colour||'',lengthMm:row.source.lengthMm??'',dimensions:p?.dimensions||formatDimensions(row.source.dimensions),details:row.source.description||'',xeroGroup:p?.xeroGroup||'',unitCost:''};item.unitCost=priceFor(row,item).unitCost??'';return item;}
   async function request(path,body){const response=await PanelStock.apiFetch(workerUrl+path,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:undefined);let result;try{result=await response.json();}catch{throw Error('The service returned an unreadable response. Retry the same import if its save was not confirmed.');}if(!response.ok){const e=Error(result.error||'The material import could not be completed.');e.status=response.status;throw e;}return result;}
-  useEffect(()=>{setView(data);setReviewed(false);},[data]);
+  useEffect(()=>{setView(data);setReviewed(false);resetImportCapral();},[data]);
   useEffect(()=>{let active=true;storage.read().then(value=>{if(active){if(value&&(!value||value.action!=='catalogue_import'||!Array.isArray(value.rows)||!value.rows.length||value.rows.length>200||typeof value.mutationId!=='string'||!Number.isInteger(value.expectedRevision)||value.expectedRevision<0||value.rows.some(row=>!row||!['create','match'].includes(row.mode)||!row.source||typeof row.source!=='object')))throw Error('Invalid saved import');setPending(value);if(value)setFileName(value.fileName||'Saved PDF import');setReady(true);}}).catch(()=>{if(active){storage.unreadable=true;setError('The saved import could not be recovered. Restore browser storage and reopen this screen before importing.');}});return()=>{active=false;};},[]);
-  function change(key,patch){if(locked)return;setReviewed(false);setNotice('');setRows(current=>current.map(row=>row.key===key?{...row,...patch}:row));}
-  function changeItem(row,key,value){const item={...row.item,[key]:value},previous=key==='sku'?profile(row.item.sku):null,p=key==='sku'?profile(value):null;let autoPrice=!!row.autoPrice,priceEdited=!!row.priceEdited;if(p)Object.assign(item,{name:p.name,category:p.category,unit:p.unit,dimensions:p.dimensions||'',xeroGroup:p.xeroGroup||''});else if(previous){const sourceItem=newItem(row,null),changedUnit=pricing.unitKey(item.unit)!==pricing.unitKey(sourceItem.unit);Object.assign(item,{name:sourceItem.name,category:sourceItem.category,unit:sourceItem.unit,dimensions:sourceItem.dimensions});if(!priceEdited){item.unitCost=priceFor(row,item).unitCost??'';autoPrice=item.unitCost!=='';}else if(changedUnit)item.unitCost='';}if(autoPrice&&['sku','category','unit','colour','lengthMm','dimensions'].includes(key))item.unitCost=priceFor(row,item).unitCost??'';if(key==='unitCost'){autoPrice=false;priceEdited=true;}change(row.key,{item,autoPrice,priceEdited});}
+  useEffect(()=>()=>{capralSession.generation++;},[]);
+  function resetImportCapral(){capralSession.generation++;setCapralDrafts({});}
+  function resetImportCapralRow(key){capralSession.versions[key]=(capralSession.versions[key]||0)+1;setCapralDrafts(current=>{const next={...current};delete next[key];return next;});}
+  function currentImportCapral(row,ticket,generation){return capralSession.generation===generation&&capralSession.versions[row.key]===ticket&&capralSession.rows?.some(current=>current.key===row.key&&current.mode==='create'&&current.item===row.item);}
+  function capralDraft(key,patch){setCapralDrafts(current=>({...current,[key]:{...current[key],...patch}}));}
+  function canLookupCapral(row){return view?.capralReferenceLookupVersion===1&&row.mode==='create'&&row.item&&!profile(row.item.sku)&&row.item.unit!=='sheets';}
+  async function findImportCapral(row){
+   if(locked||!canLookupCapral(row)||capralDrafts[row.key]?.busy)return;
+   const code=normaliseCapralLookupCode(capralDrafts[row.key]?.code??suggestCapralReferenceCode(row.item));
+   if(!code){capralDraft(row.key,{error:'Enter a Capral code.'});return;}
+   const ticket=capralSession.versions[row.key]=(capralSession.versions[row.key]||0)+1,generation=capralSession.generation;
+   capralDraft(row.key,{code,busy:'search',lookup:null,error:''});
+   try{
+    const result=await capralReferenceRequest(workerUrl,'/stock-images/capral/search',{code}),products=capralReferenceProducts(result,code);
+    if(currentImportCapral(row,ticket,generation))capralDraft(row.key,{lookup:{code,products,warnings:Array.isArray(result.warnings)?result.warnings.filter(value=>typeof value==='string').slice(0,6).map(value=>value.slice(0,300)):[]}});
+   }catch(error){if(currentImportCapral(row,ticket,generation))capralDraft(row.key,{error:String(error?.message||'The Capral lookup is unavailable. Try again.').slice(0,400)});}
+   finally{if(currentImportCapral(row,ticket,generation))capralDraft(row.key,{busy:false});}
+  }
+  function stageImportImage(row,image){
+   const same=current=>current.mode==='create'&&(current.key===row.key||normal(row.item.sku)&&normal(current.item.sku)===normal(row.item.sku));
+   for(const current of capralSession.rows||[])if(same(current))resetImportCapralRow(current.key);
+   setRows(current=>current.map(value=>same(value)?{...value,item:{...value.item,image}}:value));setReviewed(false);
+  }
+  async function useImportCapral(row,product,picture){
+   const draft=capralDrafts[row.key];if(locked||!canLookupCapral(row)||draft?.busy||!draft?.lookup)return;
+   const code=draft.lookup.code,ticket=capralSession.versions[row.key]=(capralSession.versions[row.key]||0)+1,generation=capralSession.generation;
+   capralDraft(row.key,{busy:'image',error:''});
+   try{
+    const result=await capralReferenceRequest(workerUrl,'/stock-images/capral/image',{code,productUrl:product.url,imageUrl:picture.url});
+    if(!currentImportCapral(row,ticket,generation))return;
+    if(typeof result.code!=='string'||normaliseCapralLookupCode(result.code)!==code||result.productUrl!==product.url)throw Error('The Capral image returned a different product. Search again.');
+    const image=await prepareStockImage(capralImageBlob(result.image));
+    if(!currentImportCapral(row,ticket,generation))return;
+    stageImportImage(row,image);setNotice('Capral image selected. Import reviewed materials to keep it.');
+   }catch(error){if(currentImportCapral(row,ticket,generation))capralDraft(row.key,{error:String(error?.message||'The Capral image could not be downloaded. Try another image.').slice(0,400)});}
+   finally{if(currentImportCapral(row,ticket,generation))capralDraft(row.key,{busy:false});}
+  }
+  function change(key,patch){if(locked)return;resetImportCapralRow(key);setReviewed(false);setNotice('');setRows(current=>current.map(row=>row.key===key?{...row,...patch}:row));}
+  function changeItem(row,key,value){const item={...row.item,[key]:value,...(key==='sku'&&normal(value)!==normal(row.item.sku)?{image:''}:{})},previous=key==='sku'?profile(row.item.sku):null,p=key==='sku'?profile(value):null;let autoPrice=!!row.autoPrice,priceEdited=!!row.priceEdited;if(p)Object.assign(item,{name:p.name,category:p.category,unit:p.unit,dimensions:p.dimensions||'',xeroGroup:p.xeroGroup||''});else if(previous){const sourceItem=newItem(row,null),changedUnit=pricing.unitKey(item.unit)!==pricing.unitKey(sourceItem.unit);Object.assign(item,{name:sourceItem.name,category:sourceItem.category,unit:sourceItem.unit,dimensions:sourceItem.dimensions});if(!priceEdited){item.unitCost=priceFor(row,item).unitCost??'';autoPrice=item.unitCost!=='';}else if(changedUnit)item.unitCost='';}if(autoPrice&&['sku','category','unit','colour','lengthMm','dimensions'].includes(key))item.unitCost=priceFor(row,item).unitCost??'';if(key==='unitCost'){autoPrice=false;priceEdited=true;}change(row.key,{item,autoPrice,priceEdited});}
   function choose(row,mode){const item=mode==='create'?newItem(row):null;change(row.key,{mode,itemId:mode==='match'?row.itemId:'',usePdfPrice:false,...(item?{item,autoPrice:item.unitCost!=='',priceEdited:false}:{})});}
-  function changeSupplier(value){if(locked)return;setSupplier(value);setReviewed(false);setRows(current=>current?.map(row=>row.supplier?row:{...row,itemId:'',mode:row.mode==='match'?'review':row.mode,usePdfPrice:false,remember:!!value.trim()}));}
+  function changeSupplier(value){if(locked)return;resetImportCapral();setSupplier(value);setReviewed(false);setRows(current=>current?.map(row=>row.supplier?row:{...row,itemId:'',mode:row.mode==='match'?'review':row.mode,usePdfPrice:false,remember:!!value.trim()}));}
   async function readPDF(event){
    const file=event.target.files?.[0];event.target.value='';if(!file||locked||!isAdmin)return;
    if(!/\.pdf$/i.test(file.name)||!file.size||file.size>5*1024*1024){setError('Choose a PDF up to 5 MB.');return;}
-   setBusy(true);setError('');setNotice('Reading the material list. This can take up to a minute.');setReviewed(false);
+   resetImportCapral();setBusy(true);setError('');setNotice('Reading the material list. This can take up to a minute.');setReviewed(false);
    try{
     const encoded=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=()=>reject(Error('The PDF could not be read.'));reader.readAsDataURL(file);});
     const result=await request('/material-catalogue/analyse',{name:file.name,data:encoded});
@@ -277,7 +367,7 @@ window.createMaterialCatalogueImport=function(React){
    }catch(e){setError(e.message);setNotice('');}finally{setBusy(false);}
   }
   async function refresh(){
-   if(locked)return;setBusy(true);setError('');
+   if(locked)return;resetImportCapral();setBusy(true);setError('');
    try{const fresh=await request('/workshop-stock');if(!Array.isArray(fresh.items))throw Error('Stock could not be refreshed.');setView(fresh);setRows(current=>current?.map(row=>({...row,itemId:'',mode:row.mode==='match'?'review':row.mode,usePdfPrice:false})));setStale(false);setReviewed(false);setNotice('Current stock refreshed. Review the selected items and supplier matches again.');}catch(e){setError(e.message);}finally{setBusy(false);}
   }
   const selected=(rows||[]).filter(row=>row.mode!=='skip'),counts={create:selected.filter(r=>r.mode==='create').length,match:selected.filter(r=>r.mode==='match').length};
@@ -313,7 +403,7 @@ window.createMaterialCatalogueImport=function(React){
    return {key:row.key,mode:row.mode,supplier:vendor,source,remember:!!row.remember,expectedReferenceVersion:prior?.version||0,...(row.mode==='match'?{itemId:item.id,expectedItemIdentity:window.purchaseOrderItemIdentity(item),...(row.usePdfPrice&&supportsPriceUpdates?{priceUpdate:{unitCost:priceFor(row,item).unitCost,expectedUnitCost:item.unitCost??null}}:{})}:{item:{...row.item,supplier:vendor,lengthMm:row.item.lengthMm===''?null:Number(row.item.lengthMm),qty:0,...(row.item.unitCost===''?{unitCost:undefined}:{unitCost:Number(row.item.unitCost)})}})};
   })};}
   async function save(){
-   if(!isAdmin||busy||!ready||storage.unreadable||!pending&&invalid)return;if(pending?.rows.some(row=>row.priceUpdate)&&!supportsPriceUpdates){setError('Refresh current stock before retrying this saved price update.');return;}
+   if(!isAdmin||busy||capralWorking||!ready||storage.unreadable||!pending&&invalid)return;if(pending?.rows.some(row=>row.priceUpdate)&&!supportsPriceUpdates){setError('Refresh current stock before retrying this saved price update.');return;}
    const input=pending||payload();setBusy(true);setError('');setNotice('');
    try{
     await storage.write(input);setPending(input);
@@ -326,9 +416,19 @@ window.createMaterialCatalogueImport=function(React){
   }
   const field=(label,value,onChange,options,readOnly=false)=>h('label',{className:'ws-field'},label,options?h('select',{value,disabled:locked||readOnly,onChange:e=>onChange(e.target.value)},h('option',{value:''},'Choose…'),options.map(([key,text])=>h('option',{key,value:key},text))):label==='Additional notes'?h('textarea',{value,disabled:locked||readOnly,maxLength:500,rows:3,onChange:e=>onChange(e.target.value)}):h('input',{value,disabled:locked||readOnly,maxLength:160,type:label==='Length (mm)'||label.startsWith('Unit cost')?'number':'text',min:label==='Length (mm)'?0.001:0,step:label==='Length (mm)'?0.001:0.01,onChange:e=>onChange(e.target.value)}));
   const button=(text,action,disabled=locked,primary=false)=>h('button',{type:'button',onClick:action,disabled,className:primary?'ws-primary':''},text);
+  function importCapralPicker(row){
+   if(!canLookupCapral(row))return null;
+   const draft=capralDrafts[row.key]||{},code=draft.code??suggestCapralReferenceCode(row.item),lookup=draft.lookup;
+   return h('div',{className:'ws-material-import-image'},h('div',{className:'ws-capral-picker'},h('strong',null,'Capral reference image'),
+    h('div',{className:'ws-capral-search'},h('label',{className:'ws-field'},'Capral code',h('input',{'aria-label':'Capral code',value:code,maxLength:40,disabled:locked,autoComplete:'off',spellCheck:false,onChange:event=>{resetImportCapralRow(row.key);capralDraft(row.key,{code:event.target.value});}})),button(draft.busy==='search'?'Searching Capral…':'Find Capral image',()=>findImportCapral(row),locked||!!draft.busy||!String(code).trim())),
+    h('small',null,'Review the matching Capral product, then choose its image. The photo is saved when you import reviewed materials.'),draft.error&&h('p',{className:'ws-error',role:'alert'},draft.error),
+    (draft.busy||lookup)&&button('Cancel Capral lookup',()=>resetImportCapralRow(row.key)),
+    lookup&&h('div',{className:'ws-capral-results',role:'region','aria-label':'Capral image results'},...lookup.warnings.map((warning,index)=>h('p',{key:index,className:'ws-field-hint'},warning)),!lookup.products.length&&h('p',null,'No matching Capral images found. Check the code or keep the reference diagram.'),...lookup.products.map(product=>h('article',{key:product.url,className:'ws-capral-product'},h('div',null,h('strong',null,product.title),h('small',null,'Capral code: '+product.code),h('a',{href:product.url,target:'_blank',rel:'noopener noreferrer',referrerPolicy:'no-referrer'},'View Capral product')),h('div',{className:'ws-capral-pictures'},...product.images.map(picture=>h('div',{key:picture.url,className:'ws-capral-picture'},h('img',{src:picture.url,alt:picture.alt,loading:'lazy',referrerPolicy:'no-referrer'}),button('Use image',()=>useImportCapral(row,product,picture),locked||!!draft.busy))))))),
+    row.item.image&&button('Remove selected image',()=>stageImportImage(row,''))));
+  }
   if(!isAdmin)return h('p',{role:'alert'},'Administrator access is required to import materials.');
   return h('div',{className:'ws-overlay ws-material-import-overlay'},h('section',{className:'ws-dialog ws-count-dialog ws-material-import-dialog',role:'dialog','aria-modal':true,'aria-label':'Import material PDF'},
-   h('div',{className:'ws-count-header'},h('div',{className:'ws-heading'},h('div',null,h('div',{className:'ws-eyebrow'},'MATERIAL CATALOGUE / PDF IMPORT'),h('h3',null,'Import material list')),button('Close',onClose,busy)),h('p',null,'Match existing stock or create new materials from a PDF. Check every selected row. New items start at zero stock.')),
+   h('div',{className:'ws-count-header'},h('div',{className:'ws-heading'},h('div',null,h('div',{className:'ws-eyebrow'},'MATERIAL CATALOGUE / PDF IMPORT'),h('h3',null,'Import material list')),button('Close',()=>{resetImportCapral();onClose();},busy)),h('p',null,'Match existing stock or create new materials from a PDF. Check every selected row. New items start at zero stock.')),
    h('div',{className:'ws-count-body'},error&&h('div',{className:'ws-error',role:'alert'},error),notice&&h('div',{className:'ws-notice',role:'status'},notice),
     pending?h('div',{className:'ws-po-warning'},h('strong',null,'Import awaiting confirmation'),h('p',null,(pending.fileName||'Saved PDF')+' · '+pending.rows.length+' selected rows. Retry this saved import to check or finish it safely.')):h(React.Fragment,null,
      h('label',{className:'ws-po-import-upload'},h('strong',null,fileName?'Replace PDF':'Upload material PDF'),h('small',null,'PDF · up to 5 MB and 20 pages · up to 200 material rows'),h('input',{type:'file',accept:'.pdf,application/pdf',disabled:locked,onChange:readPDF})),fileName&&h('p',null,fileName),
@@ -339,11 +439,11 @@ window.createMaterialCatalogueImport=function(React){
          row.mode!=='skip'&&h(React.Fragment,null,field('Row supplier',row.supplier,value=>change(row.key,{supplier:value,itemId:'',mode:row.mode==='match'?'review':row.mode,usePdfPrice:false,remember:!!String(value||supplier).trim()})),
           row.mode==='match'&&h(React.Fragment,null,match.reviewReason&&h('p',{className:'ws-po-warning'},match.reviewReason),field('Find current stock',row.search,value=>change(row.key,{search:value})),field('Current stock item',row.itemId,value=>change(row.key,{itemId:value,usePdfPrice:false}),candidates.map(i=>[i.id,identity(i)])),current&&h('p',{className:'ws-po-selected-stock'},identity(current)),current&&h('div',{className:'ws-material-import-price-review'},h('p',null,'Current unit cost: '+money(current.unitCost)+' (AUD ex GST)'),supportsPriceUpdates&&price.unitCost!==null?h('label',{className:'ws-material-import-remember'},h('input',{type:'checkbox',checked:!!row.usePdfPrice,disabled:locked,onChange:e=>change(row.key,{usePdfPrice:e.target.checked})}),'Use PDF price for this existing material'):h('p',{className:'ws-field-hint'},price.reason||'Review the unit cost in stock details.')),!candidates.length&&h('p',null,'Search your current stock by code, name, supplier or size.')),
           row.mode==='review'&&match.candidates.length>0&&h('div',{className:'ws-po-suggestions'},h('strong',null,'Suggested current stock'),match.candidates.slice(0,3).map(id=>{const item=items.find(i=>i.id===id);return h('button',{type:'button',key:id,disabled:locked,className:'ws-po-suggestion',onClick:()=>change(row.key,{mode:'match',itemId:id,usePdfPrice:false})},h('strong',null,identity(item)),h('small',null,(match.details?.[id]?.reasons||['Saved supplier reference — review required']).join(' · ')));})),
-          row.mode==='create'&&h('div',{className:'ws-fields'},shared&&h('p',{className:'ws-field-hint'},'Uses the existing '+shared.sku+' profile name, category, unit and dimensions. Choose a new colour or length for a new variant.'),field('Stock code',row.item.sku,value=>changeItem(row,'sku',value)),field('Material name',row.item.name,value=>changeItem(row,'name',value),undefined,!!shared),field('Category',row.item.category,value=>changeItem(row,'category',value),categoryChoices,!!shared),field('Stock unit',row.item.unit,value=>changeItem(row,'unit',value),units.map(unit=>[unit,unit]),!!shared),field('Colour / finish',row.item.colour,value=>changeItem(row,'colour',value)),field('Length (mm)',row.item.lengthMm,value=>changeItem(row,'lengthMm',value)),field('Dimensions / profile',row.item.dimensions,value=>changeItem(row,'dimensions',value),undefined,!!shared),field('Unit cost (AUD ex GST, optional)',row.item.unitCost,value=>changeItem(row,'unitCost',value)),field('Xero stock group',row.item.xeroGroup||'',value=>changeItem(row,'xeroGroup',value),groupChoices),h('div',{className:'ws-material-import-notes'},field('Additional notes',row.item.details,value=>changeItem(row,'details',value))),price?.unitCost===null&&typeof row.source.unitCost==='number'&&h('p',{className:'ws-field-hint ws-material-import-price-note'},price.reason+' Enter the correct AUD ex-GST cost for the chosen stock unit.')),
+          row.mode==='create'&&h('div',{className:'ws-fields'},shared&&h('p',{className:'ws-field-hint'},'Uses the existing '+shared.sku+' profile name, category, unit and dimensions. Choose a new colour or length for a new variant.'),importCapralPicker(row),field('Stock code',row.item.sku,value=>changeItem(row,'sku',value)),field('Material name',row.item.name,value=>changeItem(row,'name',value),undefined,!!shared),field('Category',row.item.category,value=>changeItem(row,'category',value),categoryChoices,!!shared),field('Stock unit',row.item.unit,value=>changeItem(row,'unit',value),units.map(unit=>[unit,unit]),!!shared),field('Colour / finish',row.item.colour,value=>changeItem(row,'colour',value)),field('Length (mm)',row.item.lengthMm,value=>changeItem(row,'lengthMm',value)),field('Dimensions / profile',row.item.dimensions,value=>changeItem(row,'dimensions',value),undefined,!!shared),field('Unit cost (AUD ex GST, optional)',row.item.unitCost,value=>changeItem(row,'unitCost',value)),field('Xero stock group',row.item.xeroGroup||'',value=>changeItem(row,'xeroGroup',value),groupChoices),h('div',{className:'ws-material-import-notes'},field('Additional notes',row.item.details,value=>changeItem(row,'details',value))),price?.unitCost===null&&typeof row.source.unitCost==='number'&&h('p',{className:'ws-field-hint ws-material-import-price-note'},price.reason+' Enter the correct AUD ex-GST cost for the chosen stock unit.')),
           h('label',{className:'ws-material-import-remember'},h('input',{type:'checkbox',checked:!!row.remember,disabled:locked||!effectiveSupplier(row),onChange:e=>change(row.key,{remember:e.target.checked})}),'Remember supplier details against this stock item'),!effectiveSupplier(row)&&h('small',null,'Enter a supplier to remember its code.'),problem&&h('p',{className:'ws-field-hint',role:'status'},problem))));
       }),
       h('label',{className:'ws-po-import-confirm'},h('input',{type:'checkbox',checked:reviewed,disabled:locked||stale,onChange:e=>setReviewed(e.target.checked)}),'I checked the selected stock matches, new item details, prices, categories and units against the PDF.')))),
-   h('div',{className:'ws-count-footer'},stale&&button('Refresh stock matches',refresh),h('span',null,pending?'Saved import ready to retry':counts.create+' new · '+counts.match+' matched · '+(rows||[]).filter(r=>r.mode==='skip').length+' skipped'),button(pending?'Retry saved import':'Import reviewed materials',save,busy||!ready||storage.unreadable||!pending&&invalid,true))
+   h('div',{className:'ws-count-footer'},stale&&button('Refresh stock matches',refresh),h('span',null,pending?'Saved import ready to retry':counts.create+' new · '+counts.match+' matched · '+(rows||[]).filter(r=>r.mode==='skip').length+' skipped'),button(pending?'Retry saved import':'Import reviewed materials',save,busy||capralWorking||!ready||storage.unreadable||!pending&&invalid,true))
   ));
  };
 };
@@ -418,23 +518,13 @@ window.createWorkshopStock = function(React) {
   function open(item,action){if(catalogueOnly&&(!isAdmin||pending||item&&!window.isMaterialCatalogueItem(item)||!['create','variant','metadata','category_save','archive'].includes(action)))return;const variant=action==='variant';if(variant)action='create';resetCapralLookup();setCapralCode(null);setError('');setNotice('');setPending(null);setForm({action,variant,categoryId:'',catalogId:item?.legacy&&item.category==='offcuts'?item.catalogId||'':undefined,expectedMaterial:item?.legacy?JSON.stringify([item.catalogId||'',item.color,item.material,Number(item.thickness)]):undefined,itemId:variant?undefined:item?.id,quantity:action==='stocktake'?item.qty:'',job:'',reason:'',location:item?.location||'',supplier:item?.supplier||'',unitCost:item?.unitCost??'',costBasis:item?.costBasis||'unit',...(item?.legacy&&item.category==='offcuts'?{costSourceItemId:item.costSourceItemId||''}:{}),packCost:item?.packCost??'',reorderLevel:item?.reorderLevel||0,category:item?.category||'extrusions',unit:item?.unit||'lengths',qty:0,packSize:item?.packSize||1,xeroGroup:item?.xeroGroup||'',name:item?.name||'',sku:variant?item.sku:'',details:item?.details||'',lengthMm:item?.lengthMm??'',dimensions:item?.dimensions||'',colour:variant?'':item?.colour||'',image:item?.image||'',...(['create','metadata'].includes(action)&&!item?.legacy&&data?.stockProfileReferenceVersion===1?{referenceProfile:item?.referenceProfile||''}:{})});}
   useEffect(()=>{if(!preview)return;const close=e=>{if(e.key==='Escape')setPreview(null);};document.addEventListener('keydown',close);return()=>document.removeEventListener('keydown',close);},[preview]);
   useEffect(()=>()=>{capralSession.generation++;},[]);
-  function normaliseCapralLookupCode(value){return String(value||'').toUpperCase().replace(/\s+/g,'');}
-  function suggestedCapralCode(item){
-   const profile=[item?.details,item?.name].map(value=>String(value||'').match(/\bE(?:K|L|P)?\d{3,8}\b/i)?.[0]).find(Boolean);
-   return String(profile||item?.sku||selected?.sku||'').trim().toUpperCase();
-  }
+  function suggestedCapralCode(item){return suggestCapralReferenceCode({...item,sku:item?.sku||selected?.sku});}
   function resetCapralLookup(){
    capralSession.generation++;setCapralLookup(null);setCapralBusy(false);setCapralError('');
    if(capralSession.downloading){capralSession.downloading=false;setImageBusy(false);}
   }
   function currentCapralRequest(ticket,expectedForm){return capralSession.generation===ticket&&capralSession.form===expectedForm;}
-  async function capralRequest(path,body){
-   const response=await PanelStock.apiFetch(workerUrl+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-   let result;try{result=await response.json();}catch{throw Error('The Capral lookup returned an unreadable response. Try again.');}
-   if(!response.ok)throw Error(String(result?.error||'The Capral lookup is unavailable. Try again.').slice(0,400));
-   if(!result||typeof result!=='object'||Array.isArray(result))throw Error('The Capral lookup returned an unreadable response. Try again.');
-   return result;
-  }
+  async function capralRequest(path,body){return capralReferenceRequest(workerUrl,path,body);}
   async function findCapralImage(){
    if(busy||imageBusy||pending||capralBusy||!form||data?.capralReferenceLookupVersion!==1||sharedProfile)return;
    const code=normaliseCapralLookupCode(capralCode===null?suggestedCapralCode(form):capralCode);
@@ -442,22 +532,10 @@ window.createWorkshopStock = function(React) {
    const expectedForm=form;resetCapralLookup();const ticket=capralSession.generation;setCapralBusy(true);setCapralCode(code);
    try{
     const result=await capralRequest('/stock-images/capral/search',{code});
-    if(typeof result.code!=='string'||normaliseCapralLookupCode(result.code)!==code)throw Error('The Capral lookup returned a different code. Search again.');
-    const officialPage=value=>typeof value==='string'&&value.length<=2048&&/^https:\/\/(?:(?:www|shop)\.)?capral\.com\.au(?:\/|$)/i.test(value)&&!/[\s<>\\]/.test(value);
-    if(!Array.isArray(result.products))throw Error('The Capral lookup returned an unreadable product list. Try again.');
-    const products=result.products.slice(0,6).filter(product=>product&&typeof product.title==='string'&&typeof product.code==='string'&&normaliseCapralLookupCode(product.code)===code&&officialPage(product.url)&&Array.isArray(product.images)).map(product=>({...product,title:product.title.slice(0,200),code:product.code.slice(0,40),images:product.images.slice(0,4).filter(image=>image&&typeof image.url==='string'&&image.url.length<=2048&&(/^https:\/\/(?:(?:www|shop)\.)?capral\.com\.au\//i.test(image.url)||/^https:\/\/cdn11\.bigcommerce\.com\/s-gwvwsryafm\/images\/(?:stencil|products)\//i.test(image.url))&&!/[\s<>\\]/.test(image.url)).map(image=>({url:image.url,alt:String(image.alt||product.title).slice(0,200)}))})).filter(product=>product.images.length);
+    const products=capralReferenceProducts(result,code);
     if(currentCapralRequest(ticket,expectedForm))setCapralLookup({code,products,warnings:Array.isArray(result.warnings)?result.warnings.filter(value=>typeof value==='string').slice(0,6).map(value=>value.slice(0,300)):[],form:expectedForm});
    }catch(error){if(currentCapralRequest(ticket,expectedForm))setCapralError(String(error?.message||'The Capral lookup is unavailable. Try again.'));}
    finally{if(capralSession.generation===ticket)setCapralBusy(false);}
-  }
-  function capralImageBlob(image){
-   const data=image?.data;
-   if(typeof data!=='string'||data.length>12*1024*1024)throw Error('Capral returned an unsupported or oversized image. Choose another image.');
-   const match=data.match(/^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})$/i);
-   if(!match||match[2].length%4!==0||image.mimeType&&image.mimeType!=='image/'+match[1].toLowerCase())throw Error('Capral returned an unsupported image. Choose a PNG, JPEG or WebP image.');
-   let bytes;try{bytes=atob(match[2]);}catch{throw Error('The Capral image could not be read. Choose another image.');}
-   if(!bytes.length||bytes.length>8*1024*1024)throw Error('Choose a Capral image smaller than 8 MB.');
-   return new Blob([Uint8Array.from(bytes,char=>char.charCodeAt(0))],{type:'image/'+match[1].toLowerCase()});
   }
   async function useCapralImage(product,picture){
    if(busy||imageBusy||pending||capralBusy||!form||sharedProfile||data?.capralReferenceLookupVersion!==1||capralLookup?.form!==form)return;
@@ -471,24 +549,6 @@ window.createWorkshopStock = function(React) {
     setForm(current=>current===expectedForm&&capralSession.generation===ticket?{...current,image}:current);setCapralLookup(null);setNotice('Capral image selected. Save this item to keep it.');
    }catch(error){if(currentCapralRequest(ticket,expectedForm))setCapralError(String(error?.message||'The Capral image could not be downloaded. Try another image.'));}
    finally{if(capralSession.generation===ticket){capralSession.downloading=false;setCapralBusy(false);setImageBusy(false);}}
-  }
-  async function prepareStockImage(file){
-   if(!['image/png','image/jpeg','image/webp'].includes(file.type))throw Error('Choose a PNG, JPEG or WebP image.');
-   if(file.size>8*1024*1024)throw Error('Choose an image smaller than 8 MB.');
-   let url;
-   try{
-    url=URL.createObjectURL(file);const img=new Image();await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(Error('This image could not be read.'));img.src=url;});
-    if(!img.naturalWidth||!img.naturalHeight||img.naturalWidth*img.naturalHeight>40000000)throw Error('Choose an image under 40 megapixels.');
-    const maxSavedBytes=4*1024*1024,fits=value=>{const length=value.length-value.indexOf(',')-1,padding=value.endsWith('==')?2:value.endsWith('=')?1:0;return length>0&&length*3/4-padding<=maxSavedBytes;};
-    const scale=Math.min(1,1600/Math.max(img.naturalWidth,img.naturalHeight)),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));const ctx=canvas.getContext('2d');let image='';
-    for(let attempt=0;attempt<8&&!image;attempt++){
-     ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0,canvas.width,canvas.height);
-     for(const [type,quality] of [['image/png'],['image/webp',.9],['image/webp',.75],['image/jpeg',.85],['image/jpeg',.7]]){const candidate=canvas.toDataURL(type,quality);if(fits(candidate)){image=candidate;break;}}
-     if(!image){canvas.width=Math.max(1,Math.floor(canvas.width*.75));canvas.height=Math.max(1,Math.floor(canvas.height*.75));}
-    }
-    if(!image)throw Error('Could not prepare this image within the 4 MB saved-image limit. Please try another image.');
-    return image;
-   }finally{if(url)URL.revokeObjectURL(url);}
   }
   async function uploadImage(event){
    const file=event.target.files?.[0];event.target.value='';if(!file)return;

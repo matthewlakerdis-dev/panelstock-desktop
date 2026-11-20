@@ -83,6 +83,12 @@ test('Capral code suggestions use named profile codes before the independent sto
  }
 });
 
+test('compound Capral PDF codes suggest the leading product SKU and EN profiles remain searchable',()=>{
+ for(const [details,sku,expected]of [['EN7492(ME9395) 6060 T5','815581 EN7492(ME9395)','815581'],['EN7492 section','INTERNAL-A','EN7492']]){
+  const data=fixture();Object.assign(data.items[0],{details,sku});const x=harness({data});x.open();assert.equal(x.node('Capral code').props.value,expected);assert.equal(x.states[0].items[0].sku,sku);
+ }
+});
+
 test('empty matches and search errors retain the current photo and only send a public lookup request',async()=>{
  for(const result of [response({code:'E12345',products:[],warnings:['No exact product match']}),response({error:'Capral search unavailable'},503)]){
   const x=harness(),before=structuredClone(x.states[0]);x.open();x.setHandler(()=>result);await x.find();assert.equal(x.button('Use image'),undefined);assert.equal(x.preview(),oldPhoto);assert.equal(x.requests.length,1);assert.deepEqual(x.requests[0].body,{code:'E12345'});assert.deepEqual(x.states[0],before);assert.equal(x.button('Find Capral image').props.disabled,false);

@@ -1,54 +1,51 @@
-CAPRAL REFERENCE IMAGE LOOKUP — RELEASE CANDIDATE (21 NOVEMBER 2026)
+CAPRAL PHOTO LOOKUP — PDF IMPORT FOLLOW-UP (21 NOVEMBER 2026)
 
-Implementation is complete. Do not deploy until live image download and production
-access are verified; see Pending below.
+The initial stock-editor lookup shipped at panelstock aa972ad18079ca61d31508871c2577b1e442648c
+and panelstock-desktop c87ae175fa35f5a2e89035f6adc67fb3dcad457f.
+That release did not expose lookup in the material PDF import review screen.
 
-Behaviour
-An administrator enters an editable Capral product/profile code, reviews an exact
-matching product, chooses Use image, and saves through the existing stock editor.
-Lookup is read-only. Stock codes, quantities and prices are retained. Existing
-same-SKU photo sharing and idempotent stock saving are retained.
+Follow-up behaviour
+- Create new material rows now expose an editable Capral code, Find Capral image,
+  exact matching product review and Use image. Selected images remain drafts until
+  Import reviewed materials is explicitly confirmed. A selection clears review.
+- Compound PDF stock code 815581 EN7492(ME9395) suggests lookup code 815581 without
+  replacing the stock code, raw PDF evidence, finish, length, dimensions or price.
+- Search and download do not write stock. Imports retain zero opening quantity.
+  Existing stock matches and existing shared profiles keep their current images.
+  New same-code variants share the chosen photo but retain separate prices.
+- Stale/cancelled results, changed rows and replacement PDFs cannot attach late
+  images. Uncertain imports retain their original photo and mutation for retry.
+- Validation, image decoding/resizing and supplier response handling are shared
+  with the existing stock editor. Approved hosts, store paths and limits remain.
+- The import dialog clips background horizontal overflow at narrow widths.
 
-Verified live provider contract
-- Capral home links to https://shop.capral.com.au/.
-- Public native search: https://shop.capral.com.au/search.php?search_query=EP10189
-  returns a card for https://shop.capral.com.au/943511/.
-- The product JSON-LD binds SKU 943511 to its image. The productView-info block
-  explicitly identifies SECTION EP10189 and SKU 943511. Profile matching requires
-  exact SECTION, matching SKU and canonical product URL; titles are insufficient.
-- Images use https://cdn11.bigcommerce.com/s-gwvwsryafm/images/stencil/… . Only
-  Capral's specific store image path is accepted on that shared CDN. Product
-  pages remain limited to apex/www/shop.capral.com.au. All redirects are checked.
-- Search reads at most six canonical product cards; fetches remain bounded by
-  bytes, redirects and timeout. Image use revalidates the exact-code association.
-- Public supplier lookup can be rechecked read-only with:
-  In panelstock: cd worker && NODE_USE_ENV_PROXY=1 node scripts/verify-capral-reference.mjs
-  (NODE_USE_ENV_PROXY is needed only for Node environments using an HTTP proxy.)
+Verified public supplier contract
+- https://shop.capral.com.au/815581/ identifies SKU 815581 and
+  EN7492(ME9395) 6060 T5 6.5m MF. Its official image is an angle profile diagram.
+- EP10189 continues to resolve to https://shop.capral.com.au/943511/.
+- Images use only Capral's s-gwvwsryafm store on cdn11.bigcommerce.com, or verified
+  Capral hosts. Product/code association and redirect validation remain enforced.
+- Read-only live supplier check, in panelstock/worker:
+  NODE_USE_ENV_PROXY=1 node scripts/verify-capral-reference.mjs
+  This checks both EP10189 and the screenshot's 815581, without accessing stock.
 
-Validation completed locally
-- Live provider search returned public EP10189 and its associated image URL.
-- Full Worker suite: 2,495 tests passed; build and deployment dry-run passed.
-- Full desktop suite: 1,300 tests passed, including the host regression.
-- Full mobile suite: 302 tests passed.
-- Additional parser, association, CDN-store, candidate-bound and UI-host tests pass.
-- Desktop production build passed. Mobile loader/index/CSS cache URLs refreshed.
-- Browser checks passed for both clients at 390x844, 768x1024, 1024x768 and
-  1440x1000: preview, Use image, explicit save, no horizontal overflow, and
-  unchanged synthetic stock code/quantity/price. Image bytes were synthetic while
-  the supplier CDN was blocked; repeat with the real image after access applies.
-- Both WIP branches include latest main at initial release comparison:
-  panelstock 41573cc8632814943b3a902babe8df6f562d61c0;
-  panelstock-desktop 51597aa8e498de2f5736ffc7046ffe46057e45e4.
-- No customer stock, photos, prices or quantities were changed.
+Release validation
+- Worker: 2,514 tests; production-config deployment dry-run passed.
+- Mobile: 315 tests. Desktop: 1,316 tests and production build passed.
+- PDF import unit tests cover the screenshot's code, $29.59 unit cost, zero stock,
+  explicit review, cancellation, trusted results, variant photo sharing and retry.
+- Real-image browser evidence is recorded separately for both complete clients at
+  390x844, 768x1024, 1024x768 and 1440x1000, using synthetic PDF analysis and stock.
+  Chromium's proxy CA issue requires the standard verified HTTPS transport for
+  thumbnail bytes; actual Capral bytes are decoded and saved through the UI.
 
-Pending
-The running environment currently grants only Capral domains. Its proxy denies
-cdn11.bigcommerce.com, api.github.com and production PanelStock hosts. The owner
-has been asked to apply these additions to the running chat environment.
-1. Confirm network policy revision and actual new HTTPS connections.
-2. Run the live supplier smoke check and repeat browser checks with real pixels.
-3. Recheck remote mains; preserve newer changes. Commit both release candidates.
-4. Push WIP and main refs with explicit expected-SHA leases after checks pass.
-5. Observe Worker, mobile Pages, desktop Pages and verification workflows reach
-   terminal success; verify published assets and protected routes read-only.
-This release candidate has not been deployed.
+Reconciliation and release constraints
+- This follow-up includes newer main work: panelstock 03d04882afea7148eaf03d6d3de53afd591cd28c;
+  desktop bce78d25a6ac6b6e63351f4ad55e1e1108f0185c. Preserve newer compact editor
+  and schedule changes when reconciling again; do not overwrite shared files.
+- Use explicit expected-SHA leases for WIP and main refs. Verify terminal success
+  for every applicable Worker, Pages and verification workflow, then compare the
+  published client assets. Workflow runs for the released main commit are the
+  deployment record; a pushed branch alone does not prove deployment success.
+- Preserve pre-existing local edits. Production verification must stay read-only.
+  No customer stock, quantities, photos or prices may be changed for testing.
