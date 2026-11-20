@@ -49,3 +49,31 @@ Reconciliation and release constraints
   deployment record; a pushed branch alone does not prove deployment success.
 - Preserve pre-existing local edits. Production verification must stay read-only.
   No customer stock, quantities, photos or prices may be changed for testing.
+
+
+GALLERY PHOTO FOLLOW-UP — PREPARED, NOT DEPLOYED
+- The shop JSON-LD lists only the diagram. The verified product page gallery also
+  publishes the requested product photo at:
+  https://store-gwvwsryafm.mybigcommerce.com/content/product/ANGLE_6.jpg
+  for SKU 813740 / EK9216 6060 T5 6.5m Mill Finish.
+- The parser now reads the first productView-images gallery only after canonical
+  product URL and page SKU corroborate the exact matching JSON-LD Product. It
+  prefers that store's product photo and keeps the diagram as another option.
+- Only that exact store host's /content/product/<bitmap filename> path is allowed
+  for images. Other stores, private paths and unassociated photos are rejected.
+  Image selection revalidates the gallery association before downloading bytes.
+- Both stock editing and PDF import accept the photo host and retain explicit
+  selection/save; code, quantity and price are not changed by lookup or selection.
+- Synthetic validation passed after reconciliation: Worker 2,524; mobile 317; desktop 1,320 tests.
+  Desktop production build and Worker production-config dry-run passed.
+- Live product HTML confirms the photo and diagram associations. The photo's
+  actual download and browser checks remain blocked by proxy CONNECT 403 because
+  store-gwvwsryafm.mybigcommerce.com is missing from the running environment's
+  allowed domains. The owner has been asked to add that exact host. Do not bypass
+  network policy, claim the live photo check passed, or deploy this candidate
+  until the real photo download/browser checks have completed.
+- Newer Schedule colour work is preserved at mobile/Worker base
+  d21dc8ad1e34b1c390746d8b156cdc5387fbb729 and desktop base
+  b5e0447685f3604b612bb2a1bd3013dc2b49859b.
+- Gallery verification scripts are prepared separately. The supplier smoke check
+  now includes 813740 and asserts that ANGLE_6.jpg is offered before the diagram.

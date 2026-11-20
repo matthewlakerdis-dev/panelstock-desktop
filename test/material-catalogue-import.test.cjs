@@ -82,6 +82,13 @@ test('editing a different PDF row does not discard another row’s active Capral
  const result=screenshotResult();result.lines.push({...result.lines[0],sku:'OTHER',description:'Other angle'});
  const x=await capralHarness({result});x.choose(1,'create');const wait=waiting();x.setHandler(()=>wait.promise);const pending=findCapral(x);x.render();x.set(1,'Colour / finish','White');wait.resolve(ok(capralSearch()));await pending;assert.ok(rowButton(x,0,'Use image'));assert.equal(rowButton(x,1,'Use image'),undefined);
 });
+
+test('PDF import offers the gallery photo before the diagram and imports only the explicit photo selection',async()=>{
+ const photo='https://store-gwvwsryafm.mybigcommerce.com/content/product/ANGLE_6.jpg',diagram=capralProduct.images[0].url,official={...capralProduct,images:[{url:photo,alt:'Product photo'},{url:diagram,alt:'Profile diagram'}]},x=await capralHarness();
+ x.setHandler(url=>Promise.resolve(ok(url.endsWith('/search')?{...capralSearch(),products:[official]}:url.endsWith('/image')?capralImage():{...stock(),revision:8})));await findCapral(x);
+ assert.deepEqual(walk(x.row(0)).filter(node=>node.type==='img'&&[photo,diagram].includes(node.props.src)).map(node=>node.props.src),[photo,diagram]);assert.equal(walk(x.row(0)).filter(node=>node.type==='button'&&node.children.includes('Use image')).length,2);
+ await useCapral(x);assert.equal(x.requests.at(-1).body.imageUrl,photo);assert.equal(x.requests.some(r=>r.body?.action==='catalogue_import'),false);x.confirm();await x.submit();const item=x.requests.at(-1).body.rows[0].item;assert.equal(item.image,capralPng);assert.equal(item.qty,0);assert.equal(item.unitCost,29.59);assert.equal(item.sku,'815581 EN7492(ME9395)');
+});
 test('PDF review matches existing stock, creates selected zero-stock materials and skips unchecked rows',async()=>{
  const x=await harness();await x.upload();assert.equal(x.requests.length,1);assert.equal(x.requests[0].url,'/api/material-catalogue/analyse');assert.deepEqual(Object.keys(x.requests[0].body),['name','data']);
  assert.equal(x.button('Import reviewed materials').props.disabled,true);prepare(x);assert.equal(x.button('Import reviewed materials').props.disabled,false);
