@@ -660,3 +660,40 @@ body:has(.ws-stock-screen,.ws-receiving-screen) #root header.sticky:has(img[alt=
 
 /* Review official supplier images before adding them to a stock profile. */
 .ws .ws-capral-picker{border-top:1px solid #dce6ee;margin-top:14px;padding-top:14px;min-width:0}.ws .ws-capral-picker>strong{display:block;font-size:12px;margin:0 0 10px;color:#25485f}.ws .ws-capral-picker small{display:block;font-size:10px;line-height:1.5;color:#667d91}.ws .ws-capral-search{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:7px}.ws .ws-capral-search .ws-field{flex:1;min-width:100px;margin:0}.ws .ws-capral-search input{width:100%;min-width:0}.ws .ws-capral-search button{font-size:11px;min-height:40px}.ws .ws-capral-picker>button{margin-top:8px;font-size:10px}.ws .ws-capral-results{display:grid;gap:10px;max-height:360px;overflow:auto;overscroll-behavior:contain;margin-top:10px;padding-right:3px}.ws .ws-capral-product{min-width:0;border:1px solid #dce6ee;border-radius:7px;padding:10px;background:#fff}.ws .ws-capral-product strong{display:block!important;font-size:11px;color:#28455b;line-height:1.4;overflow-wrap:anywhere}.ws .ws-capral-product a{font-size:10px;color:#155e75}.ws .ws-capral-pictures{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px}.ws .ws-capral-picture{display:flex;flex-direction:column;gap:6px;min-width:0}.ws .ws-capral-picture img{width:100%;height:86px;object-fit:contain;background:#f7fafc;border-radius:4px}.ws .ws-capral-picture button{font-size:10px;padding:6px;min-height:32px}.ws .ws-profile-section .ws-image-editor>div:last-child{min-width:0}
+
+/* Edit stock: persistent actions and independently scrolling form content. */
+.ws .ws-dialog.ws-metadata-dialog{display:flex;flex-direction:column;width:1040px;max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);padding:0;overflow:hidden;background:#f8fafc}
+.ws-metadata-dialog>.ws-form-heading{flex:none;margin:0;padding:20px 24px 16px;background:#fff}
+.ws-metadata-dialog>.ws-form-heading h3{font-size:21px;line-height:1.4;margin:4px 0 0}
+.ws-metadata-dialog>.ws-edit-identity{flex:none;margin:12px 24px 0;padding:9px 12px;background:#fff}
+.ws-metadata-dialog>.ws-field-hint{flex:none;margin:10px 24px 0!important;font-size:11px;line-height:1.5}
+.ws-metadata-dialog .ws-edit-content{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(280px,1fr);align-items:start;gap:20px;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:20px 24px}
+.ws-metadata-dialog .ws-edit-details{display:grid;gap:18px;min-width:0}
+.ws-metadata-dialog .ws-form-section{min-width:0;padding:16px;border:1px solid #e2e8f0;border-radius:10px;background:#fff}
+.ws-metadata-dialog .ws-form-section h4{margin-bottom:14px;font-size:10px}
+.ws-metadata-dialog .ws-form-section h4 span{font-size:13px;font-weight:650}
+.ws-metadata-dialog .ws-fields{gap:12px 14px}
+.ws-metadata-dialog .ws-field{font-size:12px;color:#52677b}
+.ws-metadata-dialog .ws-field input,.ws-metadata-dialog .ws-field select{min-width:0;min-height:40px}
+.ws-metadata-dialog .ws-edit-notes{grid-column:auto}
+.ws-metadata-dialog .ws-stock-section{margin:0}
+.ws-metadata-dialog .ws-edit-storage{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+.ws-metadata-dialog .ws-edit-storage .ws-pricing-fields,.ws-metadata-dialog .ws-readonly-stock{grid-column:1/-1}
+.ws-metadata-dialog .ws-readonly-stock{border-left:0;border-top:1px solid #e7edf2;padding:12px 0 0}
+.ws-metadata-dialog .ws-profile-section .ws-image-editor{display:flex;flex-direction:column;align-items:stretch;min-height:0;padding:0;margin:0;border:0;gap:12px;background:transparent}
+.ws-metadata-dialog .ws-profile-section .ws-image-edit-preview{width:100%;height:148px;border:1px solid #e2e8f0;background:#f8fafc}
+.ws-metadata-dialog .ws-image-editor p,.ws-metadata-dialog .ws-image-editor small{max-width:none;font-size:11px;line-height:1.5}
+.ws-metadata-dialog .ws-image-controls{gap:8px;flex-wrap:nowrap}
+.ws-metadata-dialog .ws-image-controls button,.ws-metadata-dialog .ws-upload{min-height:40px;font-size:11px}
+.ws-metadata-dialog .ws-image-controls button{flex:none}
+.ws-metadata-dialog .ws-edit-capral{margin-top:14px;border-top:1px solid #e2e8f0;padding-top:2px}
+.ws-metadata-dialog .ws-edit-capral>summary{min-height:44px;padding:12px 0;font-size:12px;font-weight:600;color:#155e75;cursor:pointer}
+.ws .ws-metadata-dialog .ws-capral-picker{padding-top:0;margin-top:0;border:0}
+.ws-metadata-dialog .ws-capral-picker>strong{display:none}
+.ws-metadata-dialog .ws-capral-results{max-height:240px}
+.ws .ws-metadata-dialog>.ws-actions{position:static;flex:none;gap:12px;margin:0;padding:14px 24px;border-top:1px solid #e2e8f0;background:#fff}
+.ws-metadata-dialog>.ws-actions button{min-height:42px;min-width:84px}
+.ws-metadata-dialog>.ws-error,.ws-metadata-dialog>p:not(.ws-field-hint){flex:none;margin:0;padding:10px 24px;font-size:12px}
+@media(max-width:760px){.ws-metadata-dialog .ws-edit-content{grid-template-columns:minmax(0,1fr);padding:16px;gap:18px}.ws-metadata-dialog>.ws-form-heading{padding:16px}.ws-metadata-dialog>.ws-edit-identity{margin:12px 16px 0}.ws-metadata-dialog>.ws-field-hint{margin:10px 16px 0!important}.ws .ws-metadata-dialog>.ws-actions{padding:12px 16px}.ws-metadata-dialog .ws-edit-notes{grid-column:1/-1}.ws-metadata-dialog .ws-field input,.ws-metadata-dialog .ws-field select{font-size:16px!important;min-height:44px}.ws-metadata-dialog .ws-image-controls button,.ws-metadata-dialog .ws-upload,.ws-metadata-dialog>.ws-actions button{min-height:44px}.ws-metadata-dialog .ws-profile-section .ws-image-editor>div:last-child{flex:none}}
+@media(max-width:380px){.ws-metadata-dialog .ws-edit-storage{grid-template-columns:minmax(0,1fr)!important}.ws-metadata-dialog .ws-edit-notes{grid-column:1/-1}}
+.ws-metadata-dialog .ws-edit-storage .ws-pricing-fields:has(>strong){display:block;grid-column:1/-1;padding:12px;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc;font-size:12px}
