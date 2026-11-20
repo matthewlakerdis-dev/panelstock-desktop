@@ -59,4 +59,6 @@ test('the pickup preview applies the configured number of working days',()=>{
  draft.stages.powderCoating.date='2026-11-20';
  assert.equal(pickup('2026-11-20',3),'2026-11-25');
  assert.equal(dates(draft,stages,3).find(row=>row.stage==='powderPickup').date,'2026-11-25');
+ draft.powderPickupDateOverride='2026-11-26';
+ assert.equal(dates(draft,stages,3).find(row=>row.stage==='powderPickup').date,'2026-11-26');
 });
