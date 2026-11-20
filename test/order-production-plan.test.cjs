@@ -53,3 +53,10 @@ test('the dialog can load and save while the Worker still uses the combined stag
  assert.equal(sent.drawnCnc.date,'2026-11-23');
  assert.equal(sent.cnc,undefined);
 });
+
+test('the pickup preview applies the configured number of working days',()=>{
+ const draft={stages:fields()};
+ draft.stages.powderCoating.date='2026-11-20';
+ assert.equal(pickup('2026-11-20',3),'2026-11-25');
+ assert.equal(dates(draft,stages,3).find(row=>row.stage==='powderPickup').date,'2026-11-25');
+});
