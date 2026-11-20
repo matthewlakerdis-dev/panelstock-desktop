@@ -115,3 +115,16 @@ Admins and users with Site Orders view plus Manage schedule access can edit prod
 Saved dates appear as linked Production plans milestones above the existing web Schedule bookings, using its date range and person filters. Clicking a milestone opens the same plan. Milestones are derived from the saved plan and order, with stable IDs; editing dates or choosing N/A updates them without creating person/vehicle bookings. Closed/deleted orders stop contributing milestones. Existing bookings and public TV schedule behavior are preserved.
 
 The plan editor retains edits on save errors and conflicts, offers an explicit reload, and freezes editing after an uncertain response so retry checks the same save. It restores focus and keeps the order expanded when closing or saving. Its timeline warns when planned production extends past the requested/confirmed delivery target. Release the companion Worker API first.
+
+**Work → Site Orders → Materials to order** is shared by administrators and users
+with both View site orders and Manage site orders access. Every order created
+through the Worker after this release joins automatically, across all order
+types. Existing orders and drafts are not enrolled. Managers tick each item
+Ordered or choose Not required; all items accounted for moves the order to
+Completed, where decisions can be reopened. Search, project filtering, quantities,
+request/scheduled delivery dates and server-recorded user/time remain visible.
+Changes are saved to the shared server, with conflict checks and identical retries
+for uncertain responses. Item quantity/description or project/type/location changes
+require affected materials to be checked again. This checklist does not create a
+purchase order or change production/dispatch status. Deploy the companion Worker
+materials API before publishing this interface.
