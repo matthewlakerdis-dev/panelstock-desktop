@@ -18,26 +18,26 @@ function harness(admin=true,inlineExport,catalogueOnly){
  render();states[0]=fixture();
  context.window.PanelStockStocktakeReport.soh={xlsx:s=>{exports.push({format:'xlsx',snapshot:s});return new Blob(['xlsx']);},pdf:s=>{exports.push({format:'pdf',snapshot:s});return new Blob(['pdf']);}};
  const node=label=>render().find(n=>n.props['aria-label']===label),button=text=>render().find(n=>n.type==='button'&&n.children.includes(text));
- return {states,exports,downloads,context,render,node,button,runEffects(){effects.slice().forEach(effect=>effect());},open(){node('Export SOH').props.onClick();assert.ok(node('Export stock on hand'));},change(label,value){node(label).props.onChange({target:{value}});},check(label,checked){node(label).props.onChange({target:{checked}});},download(format='Excel'){button('Download '+format).props.onClick();return exports.at(-1)?.snapshot;}};
+ return {states,exports,downloads,context,render,node,button,runEffects(){effects.slice().forEach(effect=>effect());},open(){node('Export SOH').props.onClick();assert.ok(node('Export stock on hand'));},change(label,value){node(label).props.onChange({target:{value}});},check(label,checked){node(label).props.onChange({target:{checked}});},download(format='Excel'){button('Download '+format).props.onClick();return exports.at(-1)?.snapshot;},async downloadAsync(format='PDF'){await button('Download '+format).props.onClick();return exports.at(-1)?.snapshot;}};
 }
-test('SOH export popup includes Panels independently from Offcuts and ignores hidden bulk selections',()=>{
+test('SOH export popup includes Panels independently from Offcuts and ignores hidden bulk selections',async()=>{
  const x=harness();x.check('Select Angle 10 ',true);x.render().find(n=>n.type==='button'&&n.children[0]==='Panels').props.onClick();x.open();
  assert.equal(x.node('Include Panels').props.checked,true);assert.equal(x.node('Include Offcuts').props.checked,false);
  const report=x.download();assert.deepEqual(Array.from(report.rows,r=>r.itemId),['variant:p']);assert.equal(report.rows[0].unit,'sheets');assert.equal(report.rows[0].colour,'White');assert.match(report.rows[0].dimensions,/ACP.*3 mm.*1200 x 2400 mm/);assert.equal(report.rows[0].qty,4);assert.equal(report.rows[0].reserved,1);assert.equal(report.rows[0].available,3);assert.equal(report.rows[0].onOrder,5);assert.equal(report.revision,42);assert.equal(report.kind,'soh');assert.ok(!Number.isNaN(Date.parse(report.generatedAt)));
- x.check('Include Offcuts',true);assert.deepEqual(Array.from(x.download('PDF').rows,r=>r.itemId),['offcut:o','variant:p']);
+ x.check('Include Offcuts',true);assert.deepEqual(Array.from((await x.downloadAsync('PDF')).rows,r=>r.itemId),['offcut:o','variant:p']);
 });
-test('SOH export applies popup categories, supplier, location, status, search, availability and chosen sort together',()=>{
+test('SOH export applies popup categories, supplier, location, status, search, availability and chosen sort together',async()=>{
  const x=harness(false);x.open();x.button('Clear categories').props.onClick();x.check('Include Extrusions',true);x.change('Export supplier',JSON.stringify('Alpha'));x.change('Export location',JSON.stringify('Rack A'));x.change('Export status','reorder');x.change('Export search','angle');x.check('Export available stock only',true);x.change('Export sort','available');
- const report=x.download('PDF');assert.deepEqual(Array.from(report.rows,r=>r.itemId),['angle2','angle10']);assert.equal(report.supplier,'Alpha');assert.ok(report.categories.some(v=>v.includes('Sort: Lowest available')));assert.ok(report.categories.some(v=>v.includes('Search: angle')));assert.ok(report.categories.some(v=>v.includes('Available stock only')));assert.equal(report.rows[1].sku,'');assert.equal(x.downloads.length,1);assert.match(x.downloads[0],/^Lennox-SOH-.*\.pdf$/);
+ const report=(await x.downloadAsync('PDF'));assert.deepEqual(Array.from(report.rows,r=>r.itemId),['angle2','angle10']);assert.equal(report.supplier,'Alpha');assert.ok(report.categories.some(v=>v.includes('Sort: Lowest available')));assert.ok(report.categories.some(v=>v.includes('Search: angle')));assert.ok(report.categories.some(v=>v.includes('Available stock only')));assert.equal(report.rows[1].sku,'');assert.equal(x.downloads.length,1);assert.match(x.downloads[0],/^Lennox-SOH-.*\.pdf$/);
 });
 test('SOH popup preselects current filters and changing popup filters does not change the visible SOH filters',()=>{
  const x=harness();x.render().find(n=>n.type==='button'&&n.children[0]==='Extrusions').props.onClick();x.change('Stock supplier',JSON.stringify('Alpha'));x.change('Stock location',JSON.stringify('Rack A'));x.change('Stock status','reorder');x.change('Search stock','Angle');x.change('Sort stock','available');x.button('Available only').props.onClick();x.open();
  assert.equal(x.node('Include Extrusions').props.checked,true);assert.equal(x.node('Include Panels').props.checked,false);assert.equal(x.node('Export supplier').props.value,JSON.stringify('Alpha'));assert.equal(x.node('Export location').props.value,JSON.stringify('Rack A'));assert.equal(x.node('Export status').props.value,'reorder');assert.equal(x.node('Export search').props.value,'Angle');assert.equal(x.node('Export sort').props.value,'available');assert.equal(x.node('Export available stock only').props.checked,true);
  assert.deepEqual(Array.from(x.download().rows,r=>r.itemId),['angle2','angle10']);x.change('Export search','unmatched');x.change('Export supplier','');x.button('Close').props.onClick();assert.equal(x.node('Search stock').props.value,'Angle');assert.equal(x.node('Stock supplier').props.value,JSON.stringify('Alpha'));
 });
-test('SOH export disables downloads for zero categories and for no matching rows',()=>{
+test('SOH export disables downloads for zero categories and for no matching rows',async()=>{
  const x=harness();x.open();x.button('Clear categories').props.onClick();assert.equal(x.button('Download Excel').props.disabled,true);assert.equal(x.button('Download PDF').props.disabled,true);x.download();assert.equal(x.exports.length,0);
- x.check('Include Panels',true);x.change('Export search','unmatched');assert.equal(x.button('Download Excel').props.disabled,true);x.download('PDF');assert.equal(x.exports.length,0);
+ x.check('Include Panels',true);x.change('Export search','unmatched');assert.equal(x.button('Download Excel').props.disabled,true);(await x.downloadAsync('PDF'));assert.equal(x.exports.length,0);
 });
 test('SOH export preserves zero and negative quantities and supports missing supplier and location filters',()=>{
  const x=harness();x.open();let report=x.download();const negative=report.rows.find(r=>r.itemId==='angle20'),zero=report.rows.find(r=>r.itemId==='bolt');assert.equal(negative.qty,0);assert.equal(negative.reserved,2);assert.equal(negative.available,-2);assert.equal(zero.qty,0);assert.equal(zero.reorderLevel,0);assert.equal(zero.sku,'');assert.ok(report.rows.every(r=>typeof r.qty==='number'&&typeof r.available==='number'));
@@ -54,7 +54,7 @@ test('SOH PDF is labelled as a current stock export and retains panel and worksh
  const offset=Number(pdf.match(/startxref\n(\d+)/)[1]);assert.equal(pdf.slice(offset,offset+4),'xref');
 });
 
-test('the Reports entry shows the shared stock filters and download actions inline',()=>{
+test('the Reports entry shows the shared stock filters and download actions inline',async()=>{
  const x=harness(true,true);
  const reportsSource=fs.readFileSync(path.join(__dirname,'../reports-page.js'),'utf8');
  const state=[];let cursor=0;
@@ -76,7 +76,7 @@ test('the Reports entry shows the shared stock filters and download actions inli
  assert.equal(x.node('Include Offcuts').props.checked,true);
  for(const label of ['Xero journal CSV','Download Excel','Download PDF'])assert.ok(x.button(label));
  x.change('Export supplier',JSON.stringify('Beta'));
- assert.deepEqual(Array.from(x.download('PDF').rows,r=>r.itemId),['angle20']);
+ assert.deepEqual(Array.from((await x.downloadAsync('PDF')).rows,r=>r.itemId),['angle20']);
  assert.equal(x.node('Export stock on hand').props.role,undefined);
  assert.equal(x.button('Cancel'),undefined);
 });
@@ -87,7 +87,7 @@ test('the inline Material Catalogue keeps panel and offcut stock out of the expo
  assert.ok(x.node('Export material catalogue'));
  assert.equal(x.node('Include Panels'),undefined);
  assert.equal(x.node('Include Offcuts'),undefined);
- const report=x.download('PDF');
+ const report=(await x.downloadAsync('PDF'));
  assert.equal(report.name,'Material Catalogue');
  assert.deepEqual(Array.from(report.rows,r=>r.itemId),['angle2','angle10','angle20','bolt']);
  assert.match(x.downloads[0],/^Lennox-Material-Catalogue-.*[.]pdf$/);
@@ -150,7 +150,7 @@ test('SOH hides panel and offcut records without on-hand stock from rows, counts
  for(const format of ['Excel','PDF'])assert.deepEqual(Array.from(x.download(format).rows,r=>r.itemId),expected);
 });
 
-test('fully reserved panels and offcuts remain in SOH and exports until Available only is enabled',()=>{
+test('fully reserved panels and offcuts remain in SOH and exports until Available only is enabled',async()=>{
  const x=harness();
  for(const item of x.states[0].items.filter(i=>['panels','offcuts'].includes(i.category))){item.reserved=item.qty;item.available=0;}
  const rowIds=()=>walk(x.render().find(n=>n.type==='tbody')).filter(n=>n.type==='tr').map(n=>n.props.key);
@@ -160,7 +160,7 @@ test('fully reserved panels and offcuts remain in SOH and exports until Availabl
  for(const id of ['variant:p','offcut:o']){
   const row=report.rows.find(r=>r.itemId===id);assert.ok(row);assert.equal(row.qty,row.reserved);assert.equal(row.available,0);
  }
- x.check('Export available stock only',true);report=x.download('PDF');
+ x.check('Export available stock only',true);report=(await x.downloadAsync('PDF'));
  assert.ok(report.rows.every(r=>!['variant:p','offcut:o'].includes(r.itemId)));
  x.button('Close').props.onClick();x.button('Available only').props.onClick();
  assert.deepEqual(rowIds(),['angle2','angle10']);
@@ -179,4 +179,22 @@ test('a refreshed panel with no stock cannot remain bulk-selected and zero works
  x.render().find(n=>n.type==='button'&&n.props.className?.startsWith('ws-metric ')&&walk(n).some(v=>v.children?.includes('Needs restocking'))).props.onClick();
  const restock=walk(x.node('Restocking overview')).filter(n=>n.type==='article').map(n=>n.props.key);
  assert.ok(restock.includes('angle20'));assert.ok(restock.includes('bolt'));assert.ok(!restock.includes('variant:p'));
+});
+
+test('SOH PDF includes default profile references, reuses identical shapes and leaves item images untouched',async()=>{
+ const x=harness(),decoded=[];
+ const base={...x.states[0].items.find(item=>item.category==='extrusions')};
+ x.states[0].items=[{...base,id:'square-one',name:'SHS'},{...base,id:'square-two',name:'Square Hollow'},{...base,id:'rectangle',name:'RHS'}];
+ x.context.Image=class {
+  constructor(){this.naturalWidth=160;this.naturalHeight=120;}
+  set src(value){assert.match(value,/^data:image\/svg\+xml;charset=utf-8,/);decoded.push(decodeURIComponent(value.split(',')[1]));this.onload();}
+ };
+ const originalCreate=x.context.document.createElement;
+ x.context.document.createElement=tag=>tag==='canvas'?{getContext:()=>({fillRect(){},drawImage(){}}),toDataURL:()=> 'data:image/jpeg;base64,/9j/2Q=='}:originalCreate(tag);
+ x.open();await x.button('Download PDF').props.onClick();
+ const snapshot=x.exports.at(-1).snapshot;
+ assert.equal(decoded.length,2);assert.ok(decoded.some(svg=>svg.includes('data-profile-kind="shs"')));assert.ok(decoded.some(svg=>svg.includes('data-profile-kind="rhs"')));
+ assert.ok(snapshot.rows.every(row=>row.thumbnail?.width===96&&row.thumbnail?.height===72));
+ const square=snapshot.rows.filter(row=>row.itemId.startsWith('square-'));assert.equal(square[0].thumbnail,square[1].thumbnail);
+ assert.ok(x.states[0].items.every(item=>!Object.hasOwn(item,'image')));
 });

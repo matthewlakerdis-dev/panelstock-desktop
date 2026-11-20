@@ -14,7 +14,7 @@ function harness(){
  vm.runInNewContext(source,context);const Component=context.window.createWorkshopStock(React),render=()=>{cursor=0;return walk(Component({isAdmin:true,workerUrl:'/api'}));};render();states[0]=fixture();
  context.window.PanelStockStocktakeReport.soh={xlsx:s=>{exports.push(s);return new Blob(['xlsx']);},pdf:s=>{exports.push(s);return new Blob(['pdf']);}};
  const node=label=>render().find(n=>n.props['aria-label']===label),button=label=>render().find(n=>n.type==='button'&&n.children.includes(label));
- return {context,states,sent,exports,render,node,button,field(key){return walk(render().find(n=>n.type==='label'&&n.props.key===key)).find(n=>n.type==='input');},change(label,value){node(label).props.onChange({target:{value}});},check(label,checked){node(label).props.onChange({target:{checked}});},openExport(){node('Export SOH').props.onClick();},download(format='Excel'){button('Download '+format).props.onClick();return exports.at(-1);},openItem(name){node('Stock action for '+name).props.onChange({target:{value:'metadata'}});},async save(){await render().find(n=>n.type==='form').props.onSubmit({preventDefault(){}});return sent.at(-1);}};
+ return {context,states,sent,exports,render,node,button,field(key){return walk(render().find(n=>n.type==='label'&&n.props.key===key)).find(n=>n.type==='input');},change(label,value){node(label).props.onChange({target:{value}});},check(label,checked){node(label).props.onChange({target:{checked}});},openExport(){node('Export SOH').props.onClick();},download(format='Excel'){button('Download '+format).props.onClick();return exports.at(-1);},async downloadAsync(format='PDF'){await button('Download '+format).props.onClick();return exports.at(-1);},openItem(name){node('Stock action for '+name).props.onChange({target:{value:'metadata'}});},async save(){await render().find(n=>n.type==='form').props.onSubmit({preventDefault(){}});return sent.at(-1);}};
 }
 
 test('create form has an optional cost per displayed stock unit and preserves blank and zero values',async()=>{
@@ -38,15 +38,15 @@ test('legacy panels expose a unit cost per sheet in the existing metadata editor
  cost.props.onChange({target:{value:'100.25'}});const payload=await x.save();assert.equal(payload.itemId,'variant:sheet');assert.equal(payload.unitCost,'100.25');
 });
 
-test('costings are opt-in for every popup opening and off snapshots contain no row prices',()=>{
+test('costings are opt-in for every popup opening and off snapshots contain no row prices',async()=>{
  const x=harness();x.openExport();assert.equal(x.node('Include costings').props.checked,false);let snapshot=x.download();assert.equal(snapshot.includeCostings,false);assert.ok(snapshot.rows.every(r=>!Object.hasOwn(r,'unitCost')));
- x.check('Include costings',true);assert.equal(x.node('Include costings').props.checked,true);snapshot=x.download('PDF');assert.equal(snapshot.includeCostings,true);assert.equal(snapshot.rows.find(r=>r.itemId==='angle').unitCost,12.34);
+ x.check('Include costings',true);assert.equal(x.node('Include costings').props.checked,true);snapshot=(await x.downloadAsync('PDF'));assert.equal(snapshot.includeCostings,true);assert.equal(snapshot.rows.find(r=>r.itemId==='angle').unitCost,12.34);
  x.button('Close').props.onClick();x.openExport();assert.equal(x.node('Include costings').props.checked,false);snapshot=x.download();assert.equal(snapshot.includeCostings,false);assert.ok(snapshot.rows.every(r=>!Object.hasOwn(r,'unitCost')));
 });
 
-test('priced SOH snapshots use only selected filtered rows and distinguish zero from missing costs',()=>{
+test('priced SOH snapshots use only selected filtered rows and distinguish zero from missing costs',async()=>{
  const x=harness();x.openExport();x.check('Include costings',true);let snapshot=x.download();assert.equal(snapshot.rows.find(r=>r.itemId==='free').unitCost,0);assert.equal(snapshot.rows.find(r=>r.itemId==='rod').unitCost,null);
- x.button('Clear categories').props.onClick();x.check('Include Extrusions',true);x.change('Export supplier',JSON.stringify('Alpha'));snapshot=x.download('PDF');
+ x.button('Clear categories').props.onClick();x.check('Include Extrusions',true);x.change('Export supplier',JSON.stringify('Alpha'));snapshot=(await x.downloadAsync('PDF'));
  assert.deepEqual(Array.from(snapshot.rows,r=>r.itemId),['angle']);assert.equal(snapshot.rows[0].unitCost,12.34);assert.equal(snapshot.rows[0].qty,2.5);assert.equal(snapshot.rows[0].reserved,0.5);assert.equal(snapshot.rows[0].onOrder,4);assert.equal(snapshot.rows[0].unit,'lengths');
  x.check('Include costings',false);snapshot=x.download();assert.equal(snapshot.includeCostings,false);assert.equal(Object.hasOwn(snapshot.rows[0],'unitCost'),false);
 });

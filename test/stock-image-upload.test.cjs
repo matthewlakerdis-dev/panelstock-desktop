@@ -22,7 +22,7 @@ function harness({width=2400,height=1200,decodeError=false,deferDecode=false,enc
  vm.runInNewContext(source,context);const C=context.window.createWorkshopStock(React),render=()=>{cursor=0;return walk(C({isAdmin:true,workerUrl:'/api'}));};render();
  states[0]={revision:4,movements:[],items:[{id:'angle',name:'Angle',sku:'ANGLE',category:'extrusions',unit:'lengths',qty:5,reserved:1,available:4,image:'data:image/png;base64,b2xk'}]};
  const node=label=>render().find(n=>n.props['aria-label']===label);node('Stock action for Angle').props.onChange({target:{value:'metadata'}});
- const preview=()=>render().find(n=>n.type==='img'&&n.props.alt==='Selected stock profile')?.props.src;
+ const preview=()=>walk(render().find(n=>n.props.className==='ws-image-edit-preview')).find(n=>n.type==='img')?.props.src;
  return {states,render,node,created,revoked,attempts,draws,requests,preview,finishDecode(){images.at(-1).finish();},upload(file={type:'image/png',size:MiB}){const target={files:file?[file]:[],value:'selected-file'};return {target,done:node('Profile or item image').props.onChange({target})};},error:()=>render().find(n=>n.props.role==='alert')?.children.join('')||'',save:()=>render().find(n=>n.type==='button'&&n.props.type==='submit')};
 }
 
