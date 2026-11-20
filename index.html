@@ -284,6 +284,8 @@
 <script src="user-bulk-import.js?v=1"></script>
 <script src="order-lead-times.js?v=1"></script>
 <script src="order-production-plan.js?v=2"></script>
+<script src="order-materials.js?v=1"></script>
+<link rel="stylesheet" href="order-materials.css?v=1">
 <script src="schedule-resize.js?v=1"></script>
 <script src="schedule-move.js?v=1"></script>
 <script src="order-dispatch-progress.js?v=1"></script>
@@ -13827,6 +13829,7 @@ ${xrefStart}
   const ExcelOrderAction = window.PanelStockExcelActions.createComponent(import_react.default,PanelStock,BAKED_WORKER_URL,window.PanelStockExcelActions.link);
   const ReverseDispatchModal = window.PanelStockOrderDispatchReversal.createComponent(import_react.default,PanelStock,BAKED_WORKER_URL);
   const BulkDispatchModal = window.PanelStockBulkDispatch.createComponent(import_react.default,PanelStock,BAKED_WORKER_URL);
+  const OrderMaterialsQueue = window.PanelStockOrderMaterials.createComponent(import_react.default,PanelStock,BAKED_WORKER_URL);
   const UserBulkUpload = window.PanelStockUserBulkImport.createComponent(import_react.default);
   const ActiveOrdersReportButton = window.PanelStockActiveOrdersReport.createButton({React:import_react.default,client:PanelStock,baseUrl:BAKED_WORKER_URL,document,URL,AbortController,setTimeout,clearTimeout});
   const canReadStockSession=(user={})=>user.isAdmin===true||["factory.stock","factory.receive","factory.dispatch","factory.transfer","factory.damage","factory.cnc","factory.cad","factory.jobs","factory.qa","factory.settings"].some(task=>user.taskAccess?.[task]===true);
@@ -17515,7 +17518,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
       );
     }
     const receiveOrders=orders.filter(order=>canReceiveSiteOrder(order,canCreate,canManage,isAdmin)&&[order.orderNumber,order.project,...order.items.map(item=>item.description)].join(" ").toLowerCase().includes(deliveryQuery.trim().toLowerCase()));
-    const orderSections=[["orders","All Orders"],["mine","My Orders"],...((canCreate||canManage||isAdmin)?[["deliveries","Receive"]]:[]),...(canCreate?[["drafts","Drafts ("+drafts.length+")"]]:[]),["search","Search orders"],...((canManage||isAdmin)?[["issues","Delivery issues"]]:[]),...(isAdmin?[["settings","Order settings"]]:[])];
+    const orderSections=[["orders","All Orders"],["mine","My Orders"],...((canManage||isAdmin)?[["materials","Materials to order"]]:[]),...((canCreate||canManage||isAdmin)?[["deliveries","Receive"]]:[]),...(canCreate?[["drafts","Drafts ("+drafts.length+")"]]:[]),["search","Search orders"],...((canManage||isAdmin)?[["issues","Delivery issues"]]:[]),...(isAdmin?[["settings","Order settings"]]:[])];
     const activeProjects = projects.filter((project) => project.active !== false);
     const googleMapsUrl = (address) => "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(address);
     const GoogleMapsButtonIcon = () => e("svg", { viewBox: "0 0 24 24", width: 20, height: 20, fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true }, e("path", { d: "M9 18 3.5 21V6L9 3l6 3 5.5-3v15L15 21l-6-3Z" }), e("path", { d: "M9 3v15M15 6v15" }), e("path", { d: "M15 13s3-2.7 3-5a3 3 0 1 0-6 0c0 2.3 3 5 3 5Z" }), e("circle", { cx: 15, cy: 8, r: .7, fill: "currentColor", stroke: "none" }));
@@ -17730,6 +17733,7 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
         )
       ),
       !projectsOnly && e("nav",{className:"ps-order-sections","aria-label":"Order sections"},orderSections.map(([key,label])=>e("button",{key,type:"button","aria-current":orderSection===key?"page":undefined,onClick:()=>setOrderSection(key),className:orderSection===key?"is-active":""},label,key==="issues"&&e("span",null,deliveryQueue.filter(issue=>issue.status!=="resolved").length)))),
+      !projectsOnly && orderSection==="materials" && (canManage||isAdmin) && e(OrderMaterialsQueue),
       !projectsOnly && orderSection==="deliveries" && e("section",{className:"space-y-4"},
         e("h2",{className:"text-lg font-semibold text-slate-900"},"Receive"),e("p",{className:"text-sm text-slate-600"},"Dispatched orders awaiting delivery confirmation"),
         e("label",{className:"block text-sm"},"Find an order",e("input",{type:"search",value:deliveryQuery,onChange:event=>setDeliveryQuery(event.target.value),placeholder:"Order number, project or item",className:"mt-1.5 h-11 w-full rounded-lg border border-slate-300 px-3"})),
