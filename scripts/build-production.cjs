@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const out = path.join(root, 'dist-production');
-const files = ['user-bulk-import.js','user-bulk-import.css','index.html','reports-page.js','org-chart.js','org-chart.css','purchase-requests.js','purchase-requests.css','offcut-labels.js','tab-workspace.js','excel-order-actions.js','excel-order-actions.css','tracker-tab-handoff.js','order-dispatch-reversal.js','site-order-bulk-dispatch.js','order-lead-times.js','order-production-plan.js','order-dispatch-progress.js','active-orders-report.js','pull-refresh.js','workshop-stock.js','workshop-stock.css','panelstock-client.js','toolbox-launcher.js','tailwind.css','icon-192.png','lennox-logo.jpg','PanelStock_SOP.pdf','push-sw.js','CNAME'];
+const files = ['schedule-resize.js','user-bulk-import.js','user-bulk-import.css','index.html','reports-page.js','org-chart.js','org-chart.css','purchase-requests.js','purchase-requests.css','offcut-labels.js','tab-workspace.js','excel-order-actions.js','excel-order-actions.css','tracker-tab-handoff.js','order-dispatch-reversal.js','site-order-bulk-dispatch.js','order-lead-times.js','order-production-plan.js','order-dispatch-progress.js','active-orders-report.js','pull-refresh.js','workshop-stock.js','workshop-stock.css','panelstock-client.js','toolbox-launcher.js','tailwind.css','icon-192.png','lennox-logo.jpg','PanelStock_SOP.pdf','push-sw.js','CNAME'];
 fs.mkdirSync(out,{recursive:true});
 for (const file of files) fs.copyFileSync(path.join(root,file),path.join(out,file));
 // Version styles and workshop assets so published changes bypass browser caches.

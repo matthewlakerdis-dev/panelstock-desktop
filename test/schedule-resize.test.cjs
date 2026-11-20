@@ -1,0 +1,5 @@
+const test=require('node:test'),assert=require('node:assert/strict'),{resizedTimes}=require('../schedule-resize.js');
+const entry={startTime:'07:00',endTime:'10:00'},bounds={startHour:6,endHour:18};
+test('each edge snaps to absolute half hours while retaining the other edge',()=>{assert.deepEqual(resizedTimes(entry,'start',40,bounds),{startTime:'07:30',endTime:'10:00'});assert.deepEqual(resizedTimes(entry,'end',70,bounds),{startTime:'07:00',endTime:'11:00'});assert.deepEqual(resizedTimes({startTime:'07:15',endTime:'10:15'},'start',31,bounds),{startTime:'08:00',endTime:'10:15'});});
+test('resizing clamps to working hours and a minimum duration of thirty minutes',()=>{assert.equal(resizedTimes(entry,'start',-999,bounds).startTime,'06:00');assert.equal(resizedTimes(entry,'end',999,bounds).endTime,'18:00');assert.equal(resizedTimes(entry,'start',999,bounds).startTime,'09:30');assert.equal(resizedTimes(entry,'end',-999,bounds).endTime,'07:30');});
+test('missing times use the same default hour-long booking as the timeline',()=>{assert.deepEqual(resizedTimes({},'end',30,bounds),{startTime:'06:00',endTime:'07:30'});});
