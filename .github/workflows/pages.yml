@@ -55,3 +55,6 @@ jobs:
         run: node scripts/verify-cnc-undo-production.cjs
       - name: Verify bulk user upload without changing user accounts
         run: node scripts/verify-user-bulk-import-production.cjs
+
+      - name: Verify published Production plan script
+        run: node scripts/verify-production-plan.cjs

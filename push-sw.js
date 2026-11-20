@@ -16,7 +16,7 @@ self.addEventListener('fetch',event=>{
   event.respondWith((async()=>{
     const cache=await caches.open(CACHE);
     try {
-      const response=await fetch(request);
+      const response=await fetch(request,isNavigation?{cache:'no-cache'}:undefined);
       if(response.ok&&!response.redirected&&!/no-store|private/i.test(response.headers.get('Cache-Control')||'')){
         const copy=response.clone();
         event.waitUntil(cache.put(assetUrl,copy).catch(()=>{}));
