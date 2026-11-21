@@ -6,7 +6,13 @@
   const state={busy:true,phase:'loading',orders:[],defaults:{},form:{transport:'',driver:'',notes:'',photo:''},error:'',uncertain:false};
   const current=()=>live&&client.username===owner;
   const publish=patch=>{if(current()){Object.assign(state,patch);onChange({...state});}};
-  async function request(path,body){if(!current())throw Error('Your account changed. Reopen bulk dispatch.');const response=await client.apiFetch(baseUrl+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),data=await response.json().catch(()=>{throw Error('The response could not be confirmed. Try again to check its status.');});if(!current())throw Error('Your account changed. Reopen bulk dispatch.');return{response,data};}
+  async function request(path,body){if(!current())throw Error('Your account changed. Reopen bulk dispatch.');const response=await client.apiFetch(baseUrl+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:typeof AbortSignal!=='undefined'&&typeof AbortSignal.timeout==='function'?AbortSignal.timeout(20000):undefined}),data=await response.json().catch(()=>{throw Error('The response could not be confirmed. Try again to check its status.');});if(!current())throw Error('Your account changed. Reopen bulk dispatch.');return{response,data};}
+  async function dispatchWithRecovery(body){
+   let failure,result;
+   try{result=await request('/dispatch/orders/batch',body);if(result.response.status<500)return result;failure=Error(result.data.error||'The dispatch response could not be confirmed.');}catch(error){failure=error;}
+   try{const status=await request('/dispatch/orders/batch-status',body);if(status.response.ok&&status.data.state==='committed'&&status.data.result)return{response:status.response,data:status.data.result};}catch{}
+   if(result)return result;throw failure;
+  }
   async function review(){
    if(locked||!current())return;const version=++generation;publish({busy:true,phase:'loading',error:''});
    try{
@@ -46,7 +52,7 @@
    }
    locked=true;publish({busy:true,error:''});
    try{
-    const {response,data}=await request('/dispatch/orders/batch',pending);
+    const {response,data}=await dispatchWithRecovery(pending);
     if(!response.ok){if(response.status>=400&&response.status<500){pending=null;publish({phase:'blocked',uncertain:false});}throw Error(data.error||'The dispatch response could not be confirmed.');}
     const expected=pending.orders.map(row=>row.id),partial=data.partialOrderIds||[];
     if(!Array.isArray(partial)||new Set(partial).size!==partial.length||partial.some(id=>!expected.includes(id))||!data.ok||!Array.isArray(data.orderIds)||data.orderIds.length!==expected.length||new Set(data.orderIds).size!==expected.length||data.orderIds.some(id=>!expected.includes(id))||!Array.isArray(data.orders)||new Set(data.orders.map(row=>row.id)).size!==data.orders.length||data.orders.some(row=>!expected.includes(row.id)||!data.idempotent&&(partial.includes(row.id)?row.status!=='completed':row.status!=='dispatched'))||!data.idempotent&&data.orders.length!==expected.length)throw Error('The dispatch response could not be verified. Retry to confirm the same request.');

@@ -1,7 +1,7 @@
 const {test}=require('node:test'),assert=require('node:assert/strict');
 const {createController}=require('../site-order-bulk-dispatch.js');
 const rows=[{id:'order-a',orderNumber:'1',project:'Alpha',eligible:true,expectedUpdatedAt:'v1',reviewToken:'a'.repeat(64),destination:'1 Alpha Road',items:[{quantity:2,description:'BRACKETS'}]},{id:'order-b',orderNumber:'2',project:'Beta',eligible:true,expectedUpdatedAt:'v2',reviewToken:'b'.repeat(64),destination:'2 Beta Road',items:[{quantity:1,description:'FIXINGS'}]}];
-function fixture({orders=rows,post}={}){const calls=[],changes=[];let sequence=0;const client={username:'admin',apiFetch:async(url,options)=>{const body=JSON.parse(options.body);calls.push({url,body});return url.endsWith('/batch-preview')?Response.json({orders,dispatchVehicles:['Configured Truck','Ute'],dispatchDrivers:[{username:'alex',displayName:'Alex Driver'}],dispatchDefaultDriver:'alex'}):post?post(body):Response.json({ok:true,orderIds:body.orders.map(row=>row.id),orders:body.orders.map(row=>({id:row.id,status:'dispatched'}))});}};const controller=createController({orderIds:orders.map(row=>row.id),client,baseUrl:'https://worker.test',onChange:state=>changes.push(state),uuid:()=> 'mutation-'+(++sequence)});return{controller,client,calls,changes};}
+function fixture({orders=rows,post,status}={}){const calls=[],changes=[];let sequence=0;const client={username:'admin',apiFetch:async(url,options)=>{const body=JSON.parse(options.body);if(url.endsWith('/batch-status'))return status?status(body):Response.json({state:'unknown'});calls.push({url,body});return url.endsWith('/batch-preview')?Response.json({orders,dispatchVehicles:['Configured Truck','Ute'],dispatchDrivers:[{username:'alex',displayName:'Alex Driver'}],dispatchDefaultDriver:'alex'}):post?post(body):Response.json({ok:true,orderIds:body.orders.map(row=>row.id),orders:body.orders.map(row=>({id:row.id,status:'dispatched'}))});}};const controller=createController({orderIds:orders.map(row=>row.id),client,baseUrl:'https://worker.test',onChange:state=>changes.push(state),uuid:()=> 'mutation-'+(++sequence)});return{controller,client,calls,changes};}
 test('bulk review prefills shared defaults, keeps separate site addresses and submits reviewed versions',async()=>{
  const h=fixture();await h.controller.review();assert.equal(h.controller.state.form.driver,'Alex Driver');assert.equal(h.controller.state.form.transport,'Configured Truck');h.controller.destination('order-b','Changed address');const result=await h.controller.submit();assert.equal(result.orders.length,2);assert.deepEqual(h.calls[1].body.orders.map(row=>row.destination),['1 Alpha Road','Changed address']);assert.equal(h.calls[1].body.orders[0].reviewToken,rows[0].reviewToken);assert.equal(h.calls[1].body.orders[1].expectedUpdatedAt,'v2');
 });
@@ -35,4 +35,14 @@ test('panel and Gate selections submit physical IDs, reject empty selections, an
 });
 test('partial quantities cannot exceed the reviewed balance or be negative or nonnumeric',async()=>{
  for(const value of ['3','-1','bad']){const h=fixture({orders:[{...rows[0],selectionType:'lines',items:[{index:0,quantity:2,description:'BRACKETS'}]}]});await h.controller.review();h.controller.delivery('order-a','part');h.controller.delivery('order-a',null,0,value);assert.equal(await h.controller.submit(),null);assert.equal(h.calls.length,1);}
+});
+
+test('lost dispatch responses are confirmed once using the exact original body',async()=>{
+ let original,checks=0;const h=fixture({post:body=>{original=body;throw Error('Lost response');},status:body=>{checks++;assert.deepEqual(body,original);return Response.json({state:'committed',result:{ok:true,idempotent:true,orderIds:['order-a','order-b'],orders:[{id:'order-a',status:'dispatched'},{id:'order-b',status:'dispatched'}]}});}});
+ await h.controller.review();assert.ok(await h.controller.submit());assert.equal(checks,1);assert.equal(h.calls.length,2);assert.equal(h.controller.state.phase,'done');
+});
+test('a service error can recover its committed result and an unavailable status preserves the original request',async()=>{
+ const h=fixture({post:()=>Response.json({error:'Service unavailable'},{status:503}),status:()=>Response.json({state:'committed',result:{ok:true,idempotent:true,orderIds:['order-a','order-b'],orders:[]}})});
+ await h.controller.review();assert.ok(await h.controller.submit());
+ const failed=fixture({post:()=>{throw Error('Lost response');},status:()=>{throw Error('Status unavailable');}});await failed.controller.review();await failed.controller.submit();await failed.controller.submit();assert.equal(failed.controller.state.uncertain,true);assert.deepEqual(failed.calls[1].body,failed.calls[2].body);
 });
