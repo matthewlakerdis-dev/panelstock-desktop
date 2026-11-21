@@ -51,3 +51,33 @@ Release procedure
 - Push supplier branch and main with explicit expected-SHA leases.
 - Observe every relevant production workflow reach terminal success, then compare
   published client assets to the tested source/build. Production checks are GETs.
+
+
+MATCHED-STOCK PDF REVIEW FOLLOW-UP — 21 NOVEMBER 2026
+- Image lookup now also appears for Match current stock rows after selecting a
+  current non-panel item. It supports Capral, Rondo and Gyprock Trade, with the
+  existing supplier-specific queries and official image revalidation unchanged.
+- Use image stages an explicit imageUpdate, clears review confirmation, and
+  previews the chosen image. Import reviewed materials is required to save it.
+  Undo selected image restores the existing photo without submitting an update.
+- Shared colour/length profile variants keep one consistent image, as in stock
+  editing. The picker explains this scope. Repeated matched rows stage one photo
+  and submit one update per profile; conflicting updates are rejected atomically.
+- Target/mode/source/query changes, replacement PDFs and closing reject late
+  requests. Changed target/supplier selections clear staged updates. Saved
+  unconfirmed imports retry the exact image and mutation without downloading it.
+- The server validates the active stock identity, current revision and bitmap
+  payload, permits image-only changes, records a zero-quantity audit movement and
+  rejects remote images or invalid updates. Existing stock fields and prices are
+  untouched unless separately and explicitly reviewed through their existing flow.
+- materialImportImageVersion guards compatibility with older backends.
+- Preserves newer mobile/Worker main 1f8570d514abaf2d02b66a876b3621df2acc7def
+  and desktop main 3aabb3763cd99fe3a33612f062f4683b8621cb66.
+- Validation: Worker 2,568; mobile 339; desktop 1,342 passing tests. Production
+  Worker dry-run and desktop build passed. All 24 complete-client matched-row
+  cases passed at the four viewports above, using three real supplier image
+  sources, synthetic PDF/stock, and the actual backend import helper. Every case
+  retained quantities, codes, suppliers and prices across two shared variants.
+- Evidence: /workspace/releases/validation/matched-import/browser-report.json;
+  /workspace/releases/validation/supplier-reference/matched-browser-check.mjs.
+- Original desktop local edit and unrelated checkout normalisation stay excluded.

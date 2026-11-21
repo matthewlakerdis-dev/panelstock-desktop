@@ -261,3 +261,40 @@ for(const source of ['rondo','gyprock-trade']){
   const x=await importSupplierHarness(source),wait=waiting();x.setHandler(()=>wait.promise);const pending=x.find();x.render();x.set(0,'Image source','capral');wait.resolve(ok({source,code:x.product.code,products:[x.product],warnings:[]}));await pending;x.render();assert.equal(rowButton(x,0,'Use image'),undefined);
  });
 }
+
+
+async function matchedImageHarness(source='rondo',options={}){
+ const data={...stock(),capralReferenceLookupVersion:1,supplierReferenceLookupVersion:1,materialImportImageVersion:1};data.items[0].image='data:image/png;base64,b2xk';
+ const x=await harness({result:screenshotResult(),data,...options});await x.upload();x.choose(0,'match');x.set(0,'Current stock item','angle');
+ const old=x.context.URL;x.context.URL=class extends URL{};x.context.URL.createObjectURL=old.createObjectURL;x.context.URL.revokeObjectURL=old.revokeObjectURL;
+ const p=source==='capral'?capralProduct:importSupplierProduct(source);x.set(0,'Image source',source);x.set(0,source==='capral'?'Capral code':source==='rondo'?'Rondo code':'Gyprock product name',p.code);
+ x.setHandler(async url=>ok(url.endsWith('/search')?{source,code:p.code,products:[p],warnings:[]}:url.endsWith('/image')?{source,code:p.code,productUrl:p.url,image:{data:capralPng,mimeType:'image/png'}}:{...data,revision:8}));
+ return {...x,product:p,find:()=>rowButton(x,0,'Find '+(source==='capral'?'Capral':source==='rondo'?'Rondo':'Gyprock Trade')+' image').props.onClick()};
+}
+for(const source of ['capral','rondo','gyprock-trade']){
+ test(source+' matched PDF row exposes image selection, requires review and sends an image-only update',async()=>{
+  const x=await matchedImageHarness(source),before=JSON.stringify(x.states[0].items);await x.find();assert.equal(x.states[1][0].selectedImage,undefined);x.confirm();await useCapral(x);assert.equal(x.states[1][0].selectedImage,capralPng);assert.equal(JSON.stringify(x.states[0].items),before);assert.ok(x.button('Import reviewed materials').props.disabled);assert.ok(rowButton(x,0,'Undo selected image'));x.confirm();await x.submit();
+  const row=x.requests.at(-1).body.rows[0];assert.equal(row.mode,'match');assert.equal(row.itemId,'angle');assert.equal(row.imageUpdate.image,capralPng);assert.equal(row.item,undefined);assert.equal(row.priceUpdate,undefined);assert.equal(row.source.sku,'815581 EN7492(ME9395)');assert.equal(JSON.stringify(x.states[0].items),before);
+ });
+ test(source+' switching matched target, source, query, mode, PDF or closing rejects late images',async()=>{
+  for(const action of ['target','source','query','mode','replace','close']){
+   const x=await matchedImageHarness(source);await x.find();const wait=waiting();x.setHandler(()=>wait.promise);const pending=useCapral(x);x.render();
+   if(action==='target')x.set(0,'Current stock item','cut');else if(action==='source')x.set(0,'Image source',source==='capral'?'rondo':'capral');else if(action==='query')x.set(0,source==='capral'?'Capral code':source==='rondo'?'Rondo code':'Gyprock product name','OTHER');else if(action==='mode')x.choose(0,'skip');else if(action==='close')x.button('Close').props.onClick();else{x.setHandler(async()=>ok(screenshotResult()));await x.upload('replaced.pdf');}
+   wait.resolve(ok({source,code:x.product.code,productUrl:x.product.url,image:{data:capralPng,mimeType:'image/png'}}));await pending;x.render();assert.ok(!x.states[1].some(row=>row.selectedImage));assert.equal(x.requests.some(r=>r.body?.action==='catalogue_import'),false);
+  }
+ });
+}
+test('undoing a matched image keeps its existing photo and sends no image update',async()=>{
+ const x=await matchedImageHarness();await x.find();await useCapral(x);rowButton(x,0,'Undo selected image').props.onClick();x.confirm();await x.submit();assert.equal(x.requests.at(-1).body.rows[0].imageUpdate,undefined);assert.equal(x.states[0].items[0].image,'data:image/png;base64,b2xk');
+});
+test('matched image selection is hidden for an older backend and retry retains the exact image',async()=>{
+ const old=await matchedImageHarness();old.states[0].materialImportImageVersion=undefined;assert.equal(rowButton(old,0,'Find Rondo image'),undefined);
+ const x=await matchedImageHarness();await x.find();await useCapral(x);x.confirm();x.setHandler(async()=>({ok:false,status:503,json:async()=>({error:'Save not confirmed'})}));await x.submit();const original=structuredClone(x.requests.at(-1).body);assert.equal(original.rows[0].imageUpdate.image,capralPng);x.setHandler(async()=>ok({...stock(),revision:8}));await x.button('Retry saved import').props.onClick();assert.deepEqual(x.requests.at(-1).body,original);assert.equal(x.requests.filter(r=>r.url.endsWith('/image')).length,1);
+});
+
+
+test('matched rows for one shared profile stage one photo and send one explicit update',async()=>{
+ const x=await matchedImageHarness(),item={...x.states[0].items[0],id:'angle-long',lengthMm:7000};x.states[0].items.push(item);
+ x.states[1].push({...x.states[1][0],key:'1',source:{...x.states[1][0].source,sku:'SYNTHETIC-SECOND'},itemId:item.id});
+ await x.find();await useCapral(x);assert.ok(x.states[1].every(row=>row.selectedImage===capralPng));x.confirm();await x.submit();const rows=x.requests.at(-1).body.rows;assert.equal(rows.filter(row=>row.imageUpdate).length,1);assert.equal(rows.length,2);
+});
