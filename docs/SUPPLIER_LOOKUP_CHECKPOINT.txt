@@ -166,3 +166,49 @@ Validation
 
 Release: recheck latest main, promote with explicit expected-SHA leases, wait for
 all relevant production workflows to succeed and compare published asset hashes.
+
+
+SCULPTFORM TRACK-CODE FOLLOW-UP — 21 NOVEMBER 2026
+- Fixes the empty lookup for cosmt45252b. Exact reviewed invoice codes
+  cosmt45251b (Part 1 / clip-carrying track) and cosmt45252b (Part 2 / base)
+  now return the official Split Track - 45x25mm assembly diagram. The exact
+  public name is also accepted, including equivalent dimension spacing.
+- Code/description evidence comes from the user-provided Sculptform invoice
+  INV-018542; only the two product code/description associations are encoded.
+  The public technical page does NOT publish those SKUs. Results are explicitly
+  assembly references showing BOTH track parts and the clip, not individual-part
+  photos or finish matches. No Blank/Rear/Top stock-name mapping is inferred.
+- Search/download validate the canonical screen technical page, its h1, the
+  Mounting Tracks section, the exact Split Track card heading, and that card's own
+  pinned bitmap/alt. Changed, neighbouring or redirected assets are rejected.
+  Existing batten references retain their original page and section validation.
+- Both clients label the input Sculptform name or code. Recognised reviewed codes
+  prefill from saved material SKU; editable queries never replace stock metadata.
+  The option, hints, result title and alt explain the assembly-reference scope.
+- cos40100pp explains that only a combined screen-profile chart is available.
+  Combined charts remain excluded from selectable item images. A read-only link
+  opens official screen profiles/track details; existing stock photos are retained.
+- Explicit Use image then Save/Import remains required. No code, name, colour,
+  quantity, supplier, price or existing photo changes merely from lookup. Shared
+  profile, review, cancellation, stale target/source/query/PDF and retry semantics
+  are preserved. Original desktop client edits/line endings remain excluded.
+
+Validation
+- Worker 2,608; mobile 367; desktop 1,370 passing tests. Desktop production build
+  and Worker production dry-run passed. Named-card substitution, prototype keys,
+  exact code suffixes, wrong pages, formats and redirects are covered.
+- Live search plus selection-time revalidation downloaded the official track
+  image for both codes and the exact public name, plus both prior batten names.
+  Verified HTTPS transport/proxy retained. Actual response may be PNG or WebP.
+  Run: NODE_USE_ENV_PROXY=1 node scripts/verify-sculptform-track.mjs
+- 48 complete-client real-image flows passed: both codes x stock/new PDF/matched
+  PDF x both clients x 390x844, 768x1024, 1024x768 and 1440x1000. Real supplier
+  WebP bytes were decoded, selected and saved through the actual local stock/
+  import helper. Quantities/prices/metadata and shared-image consistency checked.
+- 14 additional browser checks passed for stale queries, cancellation, changed
+  PDF targets/actions/sources, replacement/closed PDFs and exact mutation/image
+  retries. Only synthetic stock/PDFs and intercepted local API writes were used.
+- Evidence: /workspace/releases/validation/sculptform-screen-reference/.
+- Release uses expected-SHA leases from mobile b590ec3e3de17cc24c8037c546e65bcffa0b96f5
+  and desktop 41f21ebaff9f5503fd284ba4d0b487720d34bf70; verify all production workflows
+  and compare published assets. Production verification stays read-only.

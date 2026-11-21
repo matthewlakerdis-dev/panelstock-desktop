@@ -241,7 +241,7 @@ test('replacing the PDF clears price approval and requires review of the new amo
 
 const expansionSources=['knotwood','baker-packaging','gabbabolt','sculptform'];
 const expansionLabel=source=>({capral:'Capral',rondo:'Rondo','gyprock-trade':'Gyprock Trade',knotwood:'Knotwood',sculptform:'Sculptform'}[source]);
-const expansionQueryLabel=source=>source==='gyprock-trade'?'Gyprock product name':source==='sculptform'?'Sculptform reference name':expansionLabel(source)+' code';
+const expansionQueryLabel=source=>source==='gyprock-trade'?'Gyprock product name':source==='sculptform'?'Sculptform name or code':expansionLabel(source)+' code';
 const expansionProduct=source=>source==='knotwood'?{source,code:'KEB2550M-03',title:'KEB2550M-03 bracket',url:'https://knotwood.com/au/profiles/battens/',images:[{url:'https://knotwood.com/au/wp-content/uploads/sites/2/2022/09/KEB2550M-03.png'}]}:source==='sculptform'?{source,code:'L Profile Base Trim',title:'L Profile Base Trim — product-name reference (not an exact SKU)',url:'https://sculptform.com/aluminium-click-on-battens-tech-specs/',images:[{url:'https://sculptform.com/hs-fs/hubfs/L-base-profile.jpg?width=300&height=300&name=L-base-profile.jpg'}]}:null;
 const importSupplierProduct=source=>expansionProduct(source)||(source==='rondo'?{source,code:'129',title:'129 Furring Channel',url:'https://www.rondo.com.au/products/ceilings/key-lock/129-furring-channel',images:[{url:'https://www.rondo.com.au/media/1349/furring_channel_129-26.jpg'}]}:{source,code:'Easy Tape',title:'Easy Tape',url:'https://www.gyprock.com.au/products/jointing-tapes/easy-tape',images:[{url:'https://www.csrassetlibrary.com/celum/30755_yConnect_Original_Easytape%20Gyprock.png'}]});
 async function importSupplierHarness(source){
@@ -321,5 +321,16 @@ test('all new supplier defaults follow matched stock independently from the PDF 
  for(const [supplier,expected] of [['Knotwood','knotwood'],['Baker Packaging','baker-packaging'],['Sculptform','sculptform'],['Nut & Bolt Factory Woolloongabba','gabbabolt']]){
   const data={...stock(),capralReferenceLookupVersion:1,materialImportImageVersion:1,supplierReferenceLookupVersion:1,supplierReferenceSources:expansionSources};Object.assign(data.items[0],{supplier,sku:'38.041'});const x=await harness({data,result:screenshotResult()});await x.upload();x.choose(0,'match');x.set(0,'Current stock item','angle');assert.equal(x.control(0,'Image source').props.value,expected);assert.equal(x.states[0].items[0].supplier,supplier);assert.equal(x.states[1][0].source.sku,'815581 EN7492(ME9395)');assert.equal(x.requests.length,1);
   x.set(0,'Image source','rondo');assert.equal(x.states[0].items[0].supplier,supplier);x.choose(0,'create');x.set(0,'Row supplier',supplier);assert.equal(x.control(0,'Image source').props.value,expected);assert.equal(x.states[1][0].item.sku,'815581 EN7492(ME9395)');
+ }
+});
+
+test('Sculptform track-code references work for new and matched PDF rows with explicit reviewed import',async()=>{
+ for(const mode of ['create','match'])for(const code of ['cosmt45251b','cosmt45252b']){
+  const data={...stock(),capralReferenceLookupVersion:1,materialImportImageVersion:1,supplierReferenceLookupVersion:1,supplierReferenceSources:expansionSources};Object.assign(data.items[0],{supplier:'Sculptform',sku:code,image:'data:image/png;base64,b2xk'});const x=await harness({data,result:screenshotResult()});await x.upload();x.choose(0,mode);if(mode==='match')x.set(0,'Current stock item','angle');else x.set(0,'Row supplier','Sculptform');
+  const old=x.context.URL;x.context.URL=class extends URL{};x.context.URL.createObjectURL=old.createObjectURL;x.context.URL.revokeObjectURL=old.revokeObjectURL;
+  if(mode==='match')assert.equal(x.control(0,'Sculptform name or code').props.value,code);else x.set(0,'Sculptform name or code',code);
+  const p={source:'sculptform',code,title:'45 × 25 mm split track — assembly reference (both parts and clip shown)',url:'https://sculptform.com/aluminium-click-on-screens-tech-specs/',images:[{url:'https://sculptform.com/hs-fs/hubfs/COS-split-track-45x25mm.png?width=1948&name=COS-split-track-45x25mm.png'}]};const before=JSON.stringify(x.states[0].items);
+  x.setHandler(async url=>ok(url.endsWith('/search')?{source:'sculptform',code,products:[p],warnings:['Assembly reference only.']}:url.endsWith('/image')?{source:'sculptform',code,productUrl:p.url,image:{data:capralPng,mimeType:'image/png'}}:{...data,revision:8}));
+  await rowButton(x,0,'Find Sculptform image').props.onClick();await useCapral(x);assert.equal(JSON.stringify(x.states[0].items),before);assert.ok(x.button('Import reviewed materials').props.disabled);assert.equal(x.requests.some(r=>r.body?.action==='catalogue_import'),false);x.confirm();await x.submit();const row=x.requests.at(-1).body.rows[0];assert.equal(row.priceUpdate,undefined);if(mode==='match'){assert.equal(row.imageUpdate.image,capralPng);assert.equal(row.item,undefined);}else{assert.equal(row.item.image,capralPng);assert.equal(row.item.qty,0);assert.equal(row.item.sku,'815581 EN7492(ME9395)');}assert.equal(row.source.sku,'815581 EN7492(ME9395)');
  }
 });

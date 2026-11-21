@@ -150,7 +150,7 @@ test('the verified gallery photo is offered first, can be selected, and excludes
 
 const expansionSources=['knotwood','baker-packaging','gabbabolt','sculptform'];
 const expansionLabel=source=>({capral:'Capral',rondo:'Rondo','gyprock-trade':'Gyprock Trade',knotwood:'Knotwood',sculptform:'Sculptform'}[source]);
-const expansionQueryLabel=source=>source==='gyprock-trade'?'Gyprock product name':source==='sculptform'?'Sculptform reference name':expansionLabel(source)+' code';
+const expansionQueryLabel=source=>source==='gyprock-trade'?'Gyprock product name':source==='sculptform'?'Sculptform name or code':expansionLabel(source)+' code';
 const expansionProduct=source=>source==='knotwood'?{source,code:'KEB2550M-03',title:'KEB2550M-03 bracket',url:'https://knotwood.com/au/profiles/battens/',images:[{url:'https://knotwood.com/au/wp-content/uploads/sites/2/2022/09/KEB2550M-03.png'}]}:source==='sculptform'?{source,code:'L Profile Base Trim',title:'L Profile Base Trim — product-name reference (not an exact SKU)',url:'https://sculptform.com/aluminium-click-on-battens-tech-specs/',images:[{url:'https://sculptform.com/hs-fs/hubfs/L-base-profile.jpg?width=300&height=300&name=L-base-profile.jpg'}]}:null;
 const supplierProduct=source=>expansionProduct(source)||(source==='rondo'?{source,code:'129',title:'129 Furring Channel',url:'https://www.rondo.com.au/products/ceilings/key-lock/129-furring-channel',images:[{url:'https://www.rondo.com.au/media/1349/furring_channel_129-26.jpg'}]}:{source,code:'Easy Tape',title:'Easy Tape',url:'https://www.gyprock.com.au/products/jointing-tapes/easy-tape',images:[{url:'https://www.csrassetlibrary.com/celum/30755_yConnect_Original_Easytape%20Gyprock.png'}]});
 function supplierHarness(source){
@@ -204,5 +204,17 @@ test('expanded defaults require backend support and distinguish Woolloongabba fr
 test('unverified supplier queries preserve punctuation and cannot offer guessed product images',async()=>{
  for(const [source,label] of [['baker-packaging','Baker Packaging'],['gabbabolt','Nut & Bolt Factory Woolloongabba']]){
   const data=fixture();Object.assign(data,{supplierReferenceLookupVersion:1,supplierReferenceSources:expansionSources});const x=harness({data});x.open();x.node('Image source').props.onChange({target:{value:source}});x.render();x.node(label+' code').props.onChange({target:{value:'038.041'}});x.render();x.setHandler(()=>response({source,code:'038.041',products:[],warnings:['Mapping unverified. Upload a verified item photo.']}));await x.button('Find '+label+' image').props.onClick();x.render();assert.equal(x.requests[0].body.code,'038.041');assert.equal(x.button('Use image'),undefined);assert.equal(x.preview(),oldPhoto);assert.equal(x.requests.length,1);
+ }
+});
+
+test('Sculptform reviewed track codes prefill without changing supplier, SKU or existing image',async()=>{
+ for(const code of ['cosmt45251b','cosmt45252b']){
+  const data=fixture();Object.assign(data,{supplierReferenceLookupVersion:1,supplierReferenceSources:expansionSources});Object.assign(data.items[0],{supplier:'Sculptform',sku:code,name:'Balustrade Mounting Track'});const before=structuredClone(data),x=harness({data});
+  const old=x.context.URL;x.context.URL=class extends URL{};x.context.URL.createObjectURL=old.createObjectURL;x.context.URL.revokeObjectURL=old.revokeObjectURL;
+  x.open();assert.equal(x.node('Sculptform name or code').props.value,code);
+  const p={source:'sculptform',code,title:'45 × 25 mm split track — assembly reference (both parts and clip shown)',url:'https://sculptform.com/aluminium-click-on-screens-tech-specs/',images:[{url:'https://sculptform.com/hs-fs/hubfs/COS-split-track-45x25mm.png?width=1948&name=COS-split-track-45x25mm.png'}],matchType:'assembly-reference'};
+  x.setHandler(url=>response(url.endsWith('/search')?{source:'sculptform',code,products:[p],warnings:['Assembly reference only: both track parts and clip; finish unverified.']}:url.endsWith('/image')?{source:'sculptform',code,productUrl:p.url,image:{data:downloaded,mimeType:'image/png'}}:x.states[0]));
+  await x.button('Find Sculptform image').props.onClick();x.render();assert.equal(x.preview(),oldPhoto);assert.ok(x.button('Use image'));assert.ok(x.render().some(n=>n.children.includes(p.title)));assert.deepEqual(x.states[0],before);
+  await x.use();assert.equal(x.preview(),prepared);assert.equal(x.requests.some(r=>r.url.endsWith('/workshop-stock')),false);const saved=await x.save();assert.equal(saved.image,prepared);assert.equal(saved.supplier,'Sculptform');assert.equal(saved.unitCost,12.34);assert.deepEqual(x.states[0],before);
  }
 });
