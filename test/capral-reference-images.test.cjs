@@ -173,3 +173,19 @@ for(const source of ['rondo','gyprock-trade']){
  });
 }
 test('older workers expose only the compatible Capral source',()=>{const x=harness();x.open();assert.deepEqual(walk(x.node('Image source')).filter(n=>n.type==='option').map(n=>n.props.value),['capral']);});
+
+
+test('stock image source defaults to the saved material supplier and uses its existing code or name',()=>{
+ for(const [supplier,source,label,expected] of [['Rondo','rondo','Rondo code','559'],['Rondo Building Services Pty Ltd','rondo','Rondo code','559'],['Capral Limited','capral','Capral code','559'],['CSR Gyprock','gyprock-trade','Gyprock product name','Easy Tape'],['Gyprock Trade','gyprock-trade','Gyprock product name','Easy Tape']]){
+  const data=fixture();data.supplierReferenceLookupVersion=1;Object.assign(data.items[0],{supplier,sku:'559',name:'Easy Tape',details:''});const before=structuredClone(data),x=harness({data});x.open();assert.equal(x.node('Image source').props.value,source);assert.equal(x.node(label).props.value,expected);assert.deepEqual(x.states[0],before);assert.equal(x.requests.length,0);
+ }
+});
+test('manual source choice persists until the material supplier changes',()=>{
+ const data=fixture();data.supplierReferenceLookupVersion=1;Object.assign(data.items[0],{supplier:'Rondo',name:'Easy Tape'});const x=harness({data});x.open();x.node('Image source').props.onChange({target:{value:'capral'}});x.set('dimensions','40 x 40');assert.equal(x.node('Image source').props.value,'capral');x.set('supplier','CSR Gyprock');assert.equal(x.node('Image source').props.value,'gyprock-trade');assert.equal(x.node('Gyprock product name').props.value,'Easy Tape');assert.equal(x.states[0].items[0].supplier,'Rondo');assert.equal(x.preview(),oldPhoto);
+});
+test('changing the material supplier discards a late lookup and keeps the current photo',async()=>{
+ const data=fixture();data.supplierReferenceLookupVersion=1;Object.assign(data.items[0],{supplier:'Rondo',sku:'129'});const x=harness({data}),wait=deferred();x.open();x.setHandler(()=>wait.promise);const pending=x.button('Find Rondo image').props.onClick();x.render();x.set('supplier','CSR Gyprock');wait.resolve(response({source:'rondo',code:'129',products:[supplierProduct('rondo')],warnings:[]}));await pending;x.render();assert.equal(x.node('Image source').props.value,'gyprock-trade');assert.equal(x.button('Use image'),undefined);assert.equal(x.preview(),oldPhoto);
+});
+test('an older backend retains its supported Capral source for a saved Rondo supplier',()=>{
+ const data=fixture();data.items[0].supplier='Rondo';const x=harness({data});x.open();assert.equal(x.node('Image source').props.value,'capral');
+});

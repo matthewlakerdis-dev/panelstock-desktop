@@ -81,3 +81,24 @@ MATCHED-STOCK PDF REVIEW FOLLOW-UP — 21 NOVEMBER 2026
 - Evidence: /workspace/releases/validation/matched-import/browser-report.json;
   /workspace/releases/validation/supplier-reference/matched-browser-check.mjs.
 - Original desktop local edit and unrelated checkout normalisation stay excluded.
+
+
+DEFAULT IMAGE SOURCE FROM MATERIAL SUPPLIER — 21 NOVEMBER 2026
+- Stock editing defaults Image source to the supplier already saved on the
+  material. Changing its supplier updates the default and cancels stale results.
+- Matched PDF rows use the matched material's saved supplier, independently of
+  the invoice row supplier. New PDF rows use their row/default PDF supplier.
+- Supported Capral, Rondo and Gyprock supplier names are recognised, including
+  Capral Limited, Rondo Building Services and CSR Gyprock. Older backends retain
+  their supported Capral lookup. Unrecognised/ambiguous suppliers retain the
+  existing fallback; users can choose another source explicitly.
+- Manual source choices remain editable and never change the saved supplier.
+  Selecting a different material resets the source/query to that material.
+- Rondo metadata editing prefills the existing material code. Gyprock continues
+  to use product names; no invoice/manufacturer code mapping is inferred.
+- Explicit image selection and Save/Import remain required. Quantities, stock
+  codes, supplier metadata, prices and existing photos are not changed by a
+  default source or a lookup.
+- Client regression suites: mobile 346; desktop 1,349 passing tests. Desktop
+  production build passed. Browser evidence is retained under
+  /workspace/releases/validation/supplier-default/.

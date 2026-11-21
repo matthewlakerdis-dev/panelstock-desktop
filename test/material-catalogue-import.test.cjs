@@ -298,3 +298,16 @@ test('matched rows for one shared profile stage one photo and send one explicit 
  x.states[1].push({...x.states[1][0],key:'1',source:{...x.states[1][0].source,sku:'SYNTHETIC-SECOND'},itemId:item.id});
  await x.find();await useCapral(x);assert.ok(x.states[1].every(row=>row.selectedImage===capralPng));x.confirm();await x.submit();const rows=x.requests.at(-1).body.rows;assert.equal(rows.filter(row=>row.imageUpdate).length,1);assert.equal(rows.length,2);
 });
+
+
+test('matched PDF rows default to the material supplier instead of the invoice supplier',async()=>{
+ for(const [supplier,source] of [['Rondo','rondo'],['Capral Aluminium','capral'],['CSR Gyprock','gyprock-trade']]){
+  const data={...stock(),capralReferenceLookupVersion:1,supplierReferenceLookupVersion:1,materialImportImageVersion:1};Object.assign(data.items[0],{supplier,sku:'559'});const x=await harness({data,result:screenshotResult()});await x.upload();x.choose(0,'match');x.set(0,'Current stock item','angle');assert.equal(x.control(0,'Image source').props.value,source);assert.equal(x.states[0].items[0].supplier,supplier);assert.equal(x.states[1][0].source.sku,'815581 EN7492(ME9395)');assert.equal(x.requests.length,1);
+ }
+});
+test('changing the matched material resets a manual image source to the new material supplier',async()=>{
+ const data={...stock(),capralReferenceLookupVersion:1,supplierReferenceLookupVersion:1,materialImportImageVersion:1};data.items[0].supplier='Rondo';data.items.push({...data.items[0],id:'tape',sku:'TAPE',name:'Easy Tape',supplier:'CSR Gyprock'});const x=await harness({data,result:screenshotResult()});await x.upload();x.choose(0,'match');x.set(0,'Current stock item','angle');assert.equal(x.control(0,'Image source').props.value,'rondo');x.set(0,'Image source','capral');x.set(0,'Current stock item','tape');assert.equal(x.control(0,'Image source').props.value,'gyprock-trade');assert.equal(x.control(0,'Gyprock product name').props.value,'Easy Tape');assert.equal(x.states[1][0].selectedImage,undefined);
+});
+test('new PDF materials follow their row supplier and keep lookup source independent',async()=>{
+ const data={...stock(),capralReferenceLookupVersion:1,supplierReferenceLookupVersion:1};const x=await harness({data,result:screenshotResult()});await x.upload();x.choose(0,'create');assert.equal(x.control(0,'Image source').props.value,'capral');x.set(0,'Row supplier','Rondo');assert.equal(x.control(0,'Image source').props.value,'rondo');x.set(0,'Image source','gyprock-trade');assert.equal(x.control(0,'Row supplier').props.value,'Rondo');assert.equal(x.states[1][0].item.sku,'815581 EN7492(ME9395)');x.set(0,'Row supplier','CSR Gyprock');assert.equal(x.control(0,'Image source').props.value,'gyprock-trade');
+});
