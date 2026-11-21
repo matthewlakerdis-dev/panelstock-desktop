@@ -238,22 +238,27 @@ test('replacing the PDF clears price approval and requires review of the new amo
 });
 
 
-const importSupplierProduct=source=>source==='rondo'?{source,code:'129',title:'129 Furring Channel',url:'https://www.rondo.com.au/products/ceilings/key-lock/129-furring-channel',images:[{url:'https://www.rondo.com.au/media/1349/furring_channel_129-26.jpg'}]}:{source,code:'Easy Tape',title:'Easy Tape',url:'https://www.gyprock.com.au/products/jointing-tapes/easy-tape',images:[{url:'https://www.csrassetlibrary.com/celum/30755_yConnect_Original_Easytape%20Gyprock.png'}]};
+
+const expansionSources=['knotwood','baker-packaging','gabbabolt','sculptform'];
+const expansionLabel=source=>({capral:'Capral',rondo:'Rondo','gyprock-trade':'Gyprock Trade',knotwood:'Knotwood',sculptform:'Sculptform'}[source]);
+const expansionQueryLabel=source=>source==='gyprock-trade'?'Gyprock product name':source==='sculptform'?'Sculptform reference name':expansionLabel(source)+' code';
+const expansionProduct=source=>source==='knotwood'?{source,code:'KEB2550M-03',title:'KEB2550M-03 bracket',url:'https://knotwood.com/au/profiles/battens/',images:[{url:'https://knotwood.com/au/wp-content/uploads/sites/2/2022/09/KEB2550M-03.png'}]}:source==='sculptform'?{source,code:'L Profile Base Trim',title:'L Profile Base Trim — product-name reference (not an exact SKU)',url:'https://sculptform.com/aluminium-click-on-battens-tech-specs/',images:[{url:'https://sculptform.com/hs-fs/hubfs/L-base-profile.jpg?width=300&height=300&name=L-base-profile.jpg'}]}:null;
+const importSupplierProduct=source=>expansionProduct(source)||(source==='rondo'?{source,code:'129',title:'129 Furring Channel',url:'https://www.rondo.com.au/products/ceilings/key-lock/129-furring-channel',images:[{url:'https://www.rondo.com.au/media/1349/furring_channel_129-26.jpg'}]}:{source,code:'Easy Tape',title:'Easy Tape',url:'https://www.gyprock.com.au/products/jointing-tapes/easy-tape',images:[{url:'https://www.csrassetlibrary.com/celum/30755_yConnect_Original_Easytape%20Gyprock.png'}]});
 async function importSupplierHarness(source){
- const x=await capralHarness({data:{...stock(),capralReferenceLookupVersion:1,supplierReferenceLookupVersion:1}}),p=importSupplierProduct(source);
+ const x=await capralHarness({data:{...stock(),capralReferenceLookupVersion:1,supplierReferenceSources:expansionSources,supplierReferenceLookupVersion:1}}),p=importSupplierProduct(source);
  const old=x.context.URL;x.context.URL=class extends URL{};x.context.URL.createObjectURL=old.createObjectURL;x.context.URL.revokeObjectURL=old.revokeObjectURL;
- x.set(0,'Image source',source);x.set(0,source==='rondo'?'Rondo code':'Gyprock product name',p.code);
+ x.set(0,'Image source',source);x.set(0,expansionQueryLabel(source),p.code);
  x.setHandler(async url=>ok(url.endsWith('/search')?{source,code:p.code,products:[p],warnings:[]}:url.endsWith('/image')?{source,code:p.code,productUrl:p.url,image:{data:capralPng,mimeType:'image/png'}}:{...stock(),revision:8}));
- return {...x,product:p,find:()=>rowButton(x,0,'Find '+(source==='rondo'?'Rondo':'Gyprock Trade')+' image').props.onClick()};
+ return {...x,product:p,find:()=>rowButton(x,0,'Find '+expansionLabel(source)+' image').props.onClick()};
 }
-for(const source of ['rondo','gyprock-trade']){
+for(const source of ['rondo','gyprock-trade','knotwood','sculptform']){
  test(source+' PDF image is an explicit reviewed draft and preserves raw code, price and zero stock',async()=>{
   const x=await importSupplierHarness(source),before=JSON.stringify(x.states[1]);await x.find();assert.equal(JSON.stringify(x.states[1]),before);await useCapral(x);assert.equal(x.states[1][0].item.image,capralPng);assert.equal(x.requests.some(r=>r.body?.action==='catalogue_import'),false);assert.equal(x.button('Import reviewed materials').props.disabled,true);x.confirm();await x.submit();const row=x.requests.at(-1).body.rows[0];assert.equal(row.item.sku,'815581 EN7492(ME9395)');assert.equal(row.item.unitCost,29.59);assert.equal(row.item.qty,0);assert.equal(row.item.image,capralPng);assert.equal(row.source.sku,row.item.sku);assert.equal(row.item.source,undefined);assert.ok(!JSON.stringify(row).includes(x.product.url));
  });
  test(source+' PDF source/query/replacement/close invalidate late downloads',async()=>{
   for(const action of ['source','query','replace','close']){
    const x=await importSupplierHarness(source);await x.find();const wait=waiting();x.setHandler(()=>wait.promise);const pending=useCapral(x);x.render();
-   if(action==='source')x.set(0,'Image source','capral');else if(action==='query')x.set(0,source==='rondo'?'Rondo code':'Gyprock product name','Changed');else if(action==='close')x.button('Close').props.onClick();else {x.setHandler(async()=>ok(screenshotResult()));await x.upload('replacement.pdf');}
+   if(action==='source')x.set(0,'Image source','capral');else if(action==='query')x.set(0,expansionQueryLabel(source),'Changed');else if(action==='close')x.button('Close').props.onClick();else {x.setHandler(async()=>ok(screenshotResult()));await x.upload('replacement.pdf');}
    wait.resolve(ok({source,code:x.product.code,productUrl:x.product.url,image:{data:capralPng,mimeType:'image/png'}}));await pending;x.render();assert.equal(x.states[1].some(row=>row.item?.image),false);assert.equal(x.requests.some(r=>r.body?.action==='catalogue_import'),false);
   }
  });
@@ -264,14 +269,14 @@ for(const source of ['rondo','gyprock-trade']){
 
 
 async function matchedImageHarness(source='rondo',options={}){
- const data={...stock(),capralReferenceLookupVersion:1,supplierReferenceLookupVersion:1,materialImportImageVersion:1};data.items[0].image='data:image/png;base64,b2xk';
+ const data={...stock(),capralReferenceLookupVersion:1,supplierReferenceSources:expansionSources,supplierReferenceLookupVersion:1,materialImportImageVersion:1};data.items[0].image='data:image/png;base64,b2xk';
  const x=await harness({result:screenshotResult(),data,...options});await x.upload();x.choose(0,'match');x.set(0,'Current stock item','angle');
  const old=x.context.URL;x.context.URL=class extends URL{};x.context.URL.createObjectURL=old.createObjectURL;x.context.URL.revokeObjectURL=old.revokeObjectURL;
- const p=source==='capral'?capralProduct:importSupplierProduct(source);x.set(0,'Image source',source);x.set(0,source==='capral'?'Capral code':source==='rondo'?'Rondo code':'Gyprock product name',p.code);
+ const p=source==='capral'?capralProduct:importSupplierProduct(source);x.set(0,'Image source',source);x.set(0,expansionQueryLabel(source),p.code);
  x.setHandler(async url=>ok(url.endsWith('/search')?{source,code:p.code,products:[p],warnings:[]}:url.endsWith('/image')?{source,code:p.code,productUrl:p.url,image:{data:capralPng,mimeType:'image/png'}}:{...data,revision:8}));
- return {...x,product:p,find:()=>rowButton(x,0,'Find '+(source==='capral'?'Capral':source==='rondo'?'Rondo':'Gyprock Trade')+' image').props.onClick()};
+ return {...x,product:p,find:()=>rowButton(x,0,'Find '+expansionLabel(source)+' image').props.onClick()};
 }
-for(const source of ['capral','rondo','gyprock-trade']){
+for(const source of ['capral','rondo','gyprock-trade','knotwood','sculptform']){
  test(source+' matched PDF row exposes image selection, requires review and sends an image-only update',async()=>{
   const x=await matchedImageHarness(source),before=JSON.stringify(x.states[0].items);await x.find();assert.equal(x.states[1][0].selectedImage,undefined);x.confirm();await useCapral(x);assert.equal(x.states[1][0].selectedImage,capralPng);assert.equal(JSON.stringify(x.states[0].items),before);assert.ok(x.button('Import reviewed materials').props.disabled);assert.ok(rowButton(x,0,'Undo selected image'));x.confirm();await x.submit();
   const row=x.requests.at(-1).body.rows[0];assert.equal(row.mode,'match');assert.equal(row.itemId,'angle');assert.equal(row.imageUpdate.image,capralPng);assert.equal(row.item,undefined);assert.equal(row.priceUpdate,undefined);assert.equal(row.source.sku,'815581 EN7492(ME9395)');assert.equal(JSON.stringify(x.states[0].items),before);
@@ -279,7 +284,7 @@ for(const source of ['capral','rondo','gyprock-trade']){
  test(source+' switching matched target, source, query, mode, PDF or closing rejects late images',async()=>{
   for(const action of ['target','source','query','mode','replace','close']){
    const x=await matchedImageHarness(source);await x.find();const wait=waiting();x.setHandler(()=>wait.promise);const pending=useCapral(x);x.render();
-   if(action==='target')x.set(0,'Current stock item','cut');else if(action==='source')x.set(0,'Image source',source==='capral'?'rondo':'capral');else if(action==='query')x.set(0,source==='capral'?'Capral code':source==='rondo'?'Rondo code':'Gyprock product name','OTHER');else if(action==='mode')x.choose(0,'skip');else if(action==='close')x.button('Close').props.onClick();else{x.setHandler(async()=>ok(screenshotResult()));await x.upload('replaced.pdf');}
+   if(action==='target')x.set(0,'Current stock item','cut');else if(action==='source')x.set(0,'Image source',source==='capral'?'rondo':'capral');else if(action==='query')x.set(0,expansionQueryLabel(source),'OTHER');else if(action==='mode')x.choose(0,'skip');else if(action==='close')x.button('Close').props.onClick();else{x.setHandler(async()=>ok(screenshotResult()));await x.upload('replaced.pdf');}
    wait.resolve(ok({source,code:x.product.code,productUrl:x.product.url,image:{data:capralPng,mimeType:'image/png'}}));await pending;x.render();assert.ok(!x.states[1].some(row=>row.selectedImage));assert.equal(x.requests.some(r=>r.body?.action==='catalogue_import'),false);
   }
  });
@@ -302,12 +307,19 @@ test('matched rows for one shared profile stage one photo and send one explicit 
 
 test('matched PDF rows default to the material supplier instead of the invoice supplier',async()=>{
  for(const [supplier,source] of [['Rondo','rondo'],['Capral Aluminium','capral'],['CSR Gyprock','gyprock-trade']]){
-  const data={...stock(),capralReferenceLookupVersion:1,supplierReferenceLookupVersion:1,materialImportImageVersion:1};Object.assign(data.items[0],{supplier,sku:'559'});const x=await harness({data,result:screenshotResult()});await x.upload();x.choose(0,'match');x.set(0,'Current stock item','angle');assert.equal(x.control(0,'Image source').props.value,source);assert.equal(x.states[0].items[0].supplier,supplier);assert.equal(x.states[1][0].source.sku,'815581 EN7492(ME9395)');assert.equal(x.requests.length,1);
+  const data={...stock(),capralReferenceLookupVersion:1,supplierReferenceSources:expansionSources,supplierReferenceLookupVersion:1,materialImportImageVersion:1};Object.assign(data.items[0],{supplier,sku:'559'});const x=await harness({data,result:screenshotResult()});await x.upload();x.choose(0,'match');x.set(0,'Current stock item','angle');assert.equal(x.control(0,'Image source').props.value,source);assert.equal(x.states[0].items[0].supplier,supplier);assert.equal(x.states[1][0].source.sku,'815581 EN7492(ME9395)');assert.equal(x.requests.length,1);
  }
 });
 test('changing the matched material resets a manual image source to the new material supplier',async()=>{
- const data={...stock(),capralReferenceLookupVersion:1,supplierReferenceLookupVersion:1,materialImportImageVersion:1};data.items[0].supplier='Rondo';data.items.push({...data.items[0],id:'tape',sku:'TAPE',name:'Easy Tape',supplier:'CSR Gyprock'});const x=await harness({data,result:screenshotResult()});await x.upload();x.choose(0,'match');x.set(0,'Current stock item','angle');assert.equal(x.control(0,'Image source').props.value,'rondo');x.set(0,'Image source','capral');x.set(0,'Current stock item','tape');assert.equal(x.control(0,'Image source').props.value,'gyprock-trade');assert.equal(x.control(0,'Gyprock product name').props.value,'Easy Tape');assert.equal(x.states[1][0].selectedImage,undefined);
+ const data={...stock(),capralReferenceLookupVersion:1,supplierReferenceSources:expansionSources,supplierReferenceLookupVersion:1,materialImportImageVersion:1};data.items[0].supplier='Rondo';data.items.push({...data.items[0],id:'tape',sku:'TAPE',name:'Easy Tape',supplier:'CSR Gyprock'});const x=await harness({data,result:screenshotResult()});await x.upload();x.choose(0,'match');x.set(0,'Current stock item','angle');assert.equal(x.control(0,'Image source').props.value,'rondo');x.set(0,'Image source','capral');x.set(0,'Current stock item','tape');assert.equal(x.control(0,'Image source').props.value,'gyprock-trade');assert.equal(x.control(0,'Gyprock product name').props.value,'Easy Tape');assert.equal(x.states[1][0].selectedImage,undefined);
 });
 test('new PDF materials follow their row supplier and keep lookup source independent',async()=>{
- const data={...stock(),capralReferenceLookupVersion:1,supplierReferenceLookupVersion:1};const x=await harness({data,result:screenshotResult()});await x.upload();x.choose(0,'create');assert.equal(x.control(0,'Image source').props.value,'capral');x.set(0,'Row supplier','Rondo');assert.equal(x.control(0,'Image source').props.value,'rondo');x.set(0,'Image source','gyprock-trade');assert.equal(x.control(0,'Row supplier').props.value,'Rondo');assert.equal(x.states[1][0].item.sku,'815581 EN7492(ME9395)');x.set(0,'Row supplier','CSR Gyprock');assert.equal(x.control(0,'Image source').props.value,'gyprock-trade');
+ const data={...stock(),capralReferenceLookupVersion:1,supplierReferenceSources:expansionSources,supplierReferenceLookupVersion:1};const x=await harness({data,result:screenshotResult()});await x.upload();x.choose(0,'create');assert.equal(x.control(0,'Image source').props.value,'capral');x.set(0,'Row supplier','Rondo');assert.equal(x.control(0,'Image source').props.value,'rondo');x.set(0,'Image source','gyprock-trade');assert.equal(x.control(0,'Row supplier').props.value,'Rondo');assert.equal(x.states[1][0].item.sku,'815581 EN7492(ME9395)');x.set(0,'Row supplier','CSR Gyprock');assert.equal(x.control(0,'Image source').props.value,'gyprock-trade');
+});
+
+test('all new supplier defaults follow matched stock independently from the PDF supplier',async()=>{
+ for(const [supplier,expected] of [['Knotwood','knotwood'],['Baker Packaging','baker-packaging'],['Sculptform','sculptform'],['Nut & Bolt Factory Woolloongabba','gabbabolt']]){
+  const data={...stock(),capralReferenceLookupVersion:1,materialImportImageVersion:1,supplierReferenceLookupVersion:1,supplierReferenceSources:expansionSources};Object.assign(data.items[0],{supplier,sku:'38.041'});const x=await harness({data,result:screenshotResult()});await x.upload();x.choose(0,'match');x.set(0,'Current stock item','angle');assert.equal(x.control(0,'Image source').props.value,expected);assert.equal(x.states[0].items[0].supplier,supplier);assert.equal(x.states[1][0].source.sku,'815581 EN7492(ME9395)');assert.equal(x.requests.length,1);
+  x.set(0,'Image source','rondo');assert.equal(x.states[0].items[0].supplier,supplier);x.choose(0,'create');x.set(0,'Row supplier',supplier);assert.equal(x.control(0,'Image source').props.value,expected);assert.equal(x.states[1][0].item.sku,'815581 EN7492(ME9395)');
+ }
 });

@@ -102,3 +102,67 @@ DEFAULT IMAGE SOURCE FROM MATERIAL SUPPLIER — 21 NOVEMBER 2026
 - Client regression suites: mobile 346; desktop 1,349 passing tests. Desktop
   production build passed. Browser evidence is retained under
   /workspace/releases/validation/supplier-default/.
+
+
+SUPPLIER EXPANSION — VERIFIED SCOPE (21 NOVEMBER 2026)
+- Reconciled from remote main e4a9839f130f9a7045fb3decfdbab3529ef993ba
+  (mobile/Worker) and a979499a81294b4b4c279ad9b348c5e347814a11 (desktop).
+- Knotwood: exact AU profile codes across Battens, Boards, Geoline and Knotwood
+  Standards. Revision suffixes and male/female codes remain distinct. A card must
+  corroborate its code, visible SKU, name and own image on the canonical page.
+  Selection re-reads that exact page and rechecks image membership. Transparent
+  drawings use a slate background in thumbnails and saved copies: the verified
+  KEB2550M asset is a white drawing, which disappears on a white background.
+- Sculptform: PRODUCT-NAME REFERENCES ONLY for L Profile Base Trim and Back Cover
+  Plate on the aluminium batten technical-specification page. These are not exact
+  SKU, size or finish matches. Only the matching named section's verified bitmap
+  is offered. Invoice codes, other names, project photos, finish swatches and
+  combined profile charts are excluded. Titles and hints explain this scope.
+- Baker Packaging: listed with MAPPING UNAVAILABLE. Its exact variant-code/image
+  association remains unverified because the official catalogue returns origin
+  HTTP 403. Decimal stock codes (38.041, 38.042, including leading zeroes) remain
+  strings. No group image, neighbour image or guessed variant mapping is offered.
+- Nut & Bolt Factory WOOLLOONGABBA: gabbabolt.com.au only. Listed with MAPPING
+  UNAVAILABLE; no verified public item-code/image catalogue or manufacturer-part
+  mapping was found. Official requests return HTTP 406 (www CONNECT 403). Requires
+  a supplier catalogue or independently verified manufacturer part number. Generic
+  fasteners and the Yatala/Toowoomba business are excluded. Ambiguous business
+  names do not default to this source.
+- Actual execution access verified with inherited proxy and TLS verification.
+  Knotwood collections/images and Sculptform references/images return 200.
+  No network policy or proxy configuration changed; no extra image host needed.
+- Backend advertises supplierReferenceSources independently from existing version
+  1 capability. Older servers keep the original three source choices. Both clients
+  use saved material supplier defaults; matched PDF rows use the matched stock
+  supplier independently of the invoice supplier. Manual source overrides never
+  become saved metadata. All existing Capral/Rondo/Gyprock logic is preserved.
+- Use image then Save or Import reviewed materials remains required. Shared
+  variants, existing-photo preservation, review reset, stale request invalidation,
+  cancellation and exact-image/mutation retries retain their existing semantics.
+
+Validation
+- Worker: 2,602 passing tests, including expanded administrator/child-session/
+  maintenance route checks. Mobile: 365; desktop: 1,368 passing tests. Targeted
+  final parser checks passed after tightening cross-supplier name rejection.
+- Production Worker dry-run and desktop production build passed.
+- Live search/download revalidation passed for Knotwood KEB2550M, KEB5050M-03,
+  KECCSF-02, KEGS252516, KEGA505016, and both supported Sculptform names.
+  Reproduce: NODE_USE_ENV_PROXY=1 node scripts/verify-supplier-expansion.mjs
+- Existing live Capral EP10189, 815581, 813740, Rondo 129 and Gyprock Easy Tape
+  search/image contracts passed. No stock access or writes in these checks.
+- Both COMPLETE clients: 48 real-image browser flows across 390x844, 768x1024,
+  1024x768 and 1440x1000 (two sources x stock editor/new PDF/matched PDF). Supplier
+  bytes were decoded, selected, saved through the UI and checked after the real
+  local backend stock/import helpers. Knotwood saved pixels retain white lines.
+- Additional browser checks cover stale searches, cancelled downloads, changed
+  matched targets/actions/sources, replacement PDFs, closing, unavailable mappings
+  and identical-image/mutation retries. Synthetic stock and PDF/analysis only;
+  all API writes intercepted locally. Quantities, prices, codes, suppliers and
+  existing photos before explicit saves were checked, including shared variants.
+- Evidence: /workspace/releases/validation/supplier-expansion/ (browser reports,
+  scripts, screenshots, real contract hashes, access results, build/test logs).
+- Original desktop panelstock-client.js and release-worktree line-ending difference
+  remain untouched and excluded. Production validation is read-only.
+
+Release: recheck latest main, promote with explicit expected-SHA leases, wait for
+all relevant production workflows to succeed and compare published asset hashes.
