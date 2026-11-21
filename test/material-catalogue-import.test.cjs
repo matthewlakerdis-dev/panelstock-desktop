@@ -236,3 +236,28 @@ test('stock conflict refresh clears any prior PDF price approval',async()=>{
 test('replacing the PDF clears price approval and requires review of the new amount',async()=>{
  const x=await selectPriceMatch();x.check(0,pdfPriceLabel);x.confirm();x.setHandler(async url=>({ok:true,json:async()=>url.endsWith('/analyse')?pricedResult({unitCost:9.25}):{...pricedStock(),revision:8}}));await x.upload('revised-materials.pdf');x.choose(0,'match');x.set(0,'Current stock item','angle');assert.equal(x.control(0,pdfPriceLabel).props.checked,false);assert.equal(x.render().find(n=>n.props.className==='ws-po-import-confirm').children[0].props.checked,false);x.check(0,pdfPriceLabel);x.confirm();await x.submit();assert.deepEqual(x.requests[2].body.rows[0].priceUpdate,{unitCost:9.25,expectedUnitCost:12});
 });
+
+
+const importSupplierProduct=source=>source==='rondo'?{source,code:'129',title:'129 Furring Channel',url:'https://www.rondo.com.au/products/ceilings/key-lock/129-furring-channel',images:[{url:'https://www.rondo.com.au/media/1349/furring_channel_129-26.jpg'}]}:{source,code:'Easy Tape',title:'Easy Tape',url:'https://www.gyprock.com.au/products/jointing-tapes/easy-tape',images:[{url:'https://www.csrassetlibrary.com/celum/30755_yConnect_Original_Easytape%20Gyprock.png'}]};
+async function importSupplierHarness(source){
+ const x=await capralHarness({data:{...stock(),capralReferenceLookupVersion:1,supplierReferenceLookupVersion:1}}),p=importSupplierProduct(source);
+ const old=x.context.URL;x.context.URL=class extends URL{};x.context.URL.createObjectURL=old.createObjectURL;x.context.URL.revokeObjectURL=old.revokeObjectURL;
+ x.set(0,'Image source',source);x.set(0,source==='rondo'?'Rondo code':'Gyprock product name',p.code);
+ x.setHandler(async url=>ok(url.endsWith('/search')?{source,code:p.code,products:[p],warnings:[]}:url.endsWith('/image')?{source,code:p.code,productUrl:p.url,image:{data:capralPng,mimeType:'image/png'}}:{...stock(),revision:8}));
+ return {...x,product:p,find:()=>rowButton(x,0,'Find '+(source==='rondo'?'Rondo':'Gyprock Trade')+' image').props.onClick()};
+}
+for(const source of ['rondo','gyprock-trade']){
+ test(source+' PDF image is an explicit reviewed draft and preserves raw code, price and zero stock',async()=>{
+  const x=await importSupplierHarness(source),before=JSON.stringify(x.states[1]);await x.find();assert.equal(JSON.stringify(x.states[1]),before);await useCapral(x);assert.equal(x.states[1][0].item.image,capralPng);assert.equal(x.requests.some(r=>r.body?.action==='catalogue_import'),false);assert.equal(x.button('Import reviewed materials').props.disabled,true);x.confirm();await x.submit();const row=x.requests.at(-1).body.rows[0];assert.equal(row.item.sku,'815581 EN7492(ME9395)');assert.equal(row.item.unitCost,29.59);assert.equal(row.item.qty,0);assert.equal(row.item.image,capralPng);assert.equal(row.source.sku,row.item.sku);assert.equal(row.item.source,undefined);assert.ok(!JSON.stringify(row).includes(x.product.url));
+ });
+ test(source+' PDF source/query/replacement/close invalidate late downloads',async()=>{
+  for(const action of ['source','query','replace','close']){
+   const x=await importSupplierHarness(source);await x.find();const wait=waiting();x.setHandler(()=>wait.promise);const pending=useCapral(x);x.render();
+   if(action==='source')x.set(0,'Image source','capral');else if(action==='query')x.set(0,source==='rondo'?'Rondo code':'Gyprock product name','Changed');else if(action==='close')x.button('Close').props.onClick();else {x.setHandler(async()=>ok(screenshotResult()));await x.upload('replacement.pdf');}
+   wait.resolve(ok({source,code:x.product.code,productUrl:x.product.url,image:{data:capralPng,mimeType:'image/png'}}));await pending;x.render();assert.equal(x.states[1].some(row=>row.item?.image),false);assert.equal(x.requests.some(r=>r.body?.action==='catalogue_import'),false);
+  }
+ });
+ test(source+' PDF switching source invalidates a late search',async()=>{
+  const x=await importSupplierHarness(source),wait=waiting();x.setHandler(()=>wait.promise);const pending=x.find();x.render();x.set(0,'Image source','capral');wait.resolve(ok({source,code:x.product.code,products:[x.product],warnings:[]}));await pending;x.render();assert.equal(rowButton(x,0,'Use image'),undefined);
+ });
+}

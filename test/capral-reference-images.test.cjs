@@ -144,3 +144,32 @@ test('the verified gallery photo is offered first, can be selected, and excludes
  const images=x.render().filter(node=>node.type==='img'&&[photo,diagram].includes(node.props.src));assert.deepEqual(images.map(node=>node.props.src),[photo,diagram]);assert.equal(x.render().filter(node=>node.type==='button'&&node.children.includes('Use image')).length,2);assert.ok(!x.render().some(node=>node.props.src?.includes('otherstore')||node.props.src?.includes('/private/')));
  await x.use();assert.equal(x.requests.at(-1).body.imageUrl,photo);assert.equal(x.preview(),prepared);const saved=await x.save();assert.equal(saved.image,prepared);assert.equal(saved.unitCost,12.34);assert.equal(x.states[0].items[0].qty,5);assert.equal(x.states[0].items[0].sku,'INTERNAL-1');
 });
+
+
+// Supplier choices stay in the editor draft, independently of stock metadata.
+const supplierProduct=source=>source==='rondo'?{source,code:'129',title:'129 Furring Channel',url:'https://www.rondo.com.au/products/ceilings/key-lock/129-furring-channel',images:[{url:'https://www.rondo.com.au/media/1349/furring_channel_129-26.jpg'}]}:{source,code:'Easy Tape',title:'Easy Tape',url:'https://www.gyprock.com.au/products/jointing-tapes/easy-tape',images:[{url:'https://www.csrassetlibrary.com/celum/30755_yConnect_Original_Easytape%20Gyprock.png'}]};
+function supplierHarness(source){
+ const data=fixture();data.supplierReferenceLookupVersion=1;const x=harness({data});
+ const old=x.context.URL;x.context.URL=class extends URL{};x.context.URL.createObjectURL=old.createObjectURL;x.context.URL.revokeObjectURL=old.revokeObjectURL;
+ x.open();x.node('Image source').props.onChange({target:{value:source}});x.render();const p=supplierProduct(source);
+ x.node(source==='rondo'?'Rondo code':'Gyprock product name').props.onChange({target:{value:p.code}});x.render();
+ x.setHandler(url=>response(url.endsWith('/search')?{source,code:p.code,products:[p],warnings:[]}:url.endsWith('/image')?{source,code:p.code,productUrl:p.url,image:{data:downloaded,mimeType:'image/png'}}:x.states[0]));
+ return {...x,product:p,find:async()=>{await x.button('Find '+(source==='rondo'?'Rondo':'Gyprock Trade')+' image').props.onClick();x.render();}};
+}
+for(const source of ['rondo','gyprock-trade']){
+ test(source+' stock lookup selects explicitly then saves only the image with existing fields',async()=>{
+  const x=supplierHarness(source),before=structuredClone(x.states[0]);await x.find();assert.equal(x.preview(),oldPhoto);assert.equal(x.requests[0].url,'/api/stock-images/'+source+'/search');await x.use();assert.equal(x.requests.length,2);assert.equal(x.preview(),prepared);assert.deepEqual(x.states[0],before);const saved=await x.save();assert.equal(saved.image,prepared);assert.equal(saved.unitCost,12.34);assert.equal(saved.supplier,'Example Supplier');assert.equal(saved.qty,0);assert.equal(before.items[0].qty,5);assert.ok(!JSON.stringify(saved).includes(x.product.url));assert.equal(saved.source,undefined);
+ });
+ test(source+' switching sources discards late searches and downloads',async()=>{
+  for(const phase of ['search','image']){
+   const x=supplierHarness(source),wait=deferred();if(phase==='image')await x.find();x.setHandler(()=>wait.promise);
+   const pending=phase==='image'?x.use():x.find();x.render();x.node('Image source').props.onChange({target:{value:'capral'}});x.render();
+   wait.resolve(response(phase==='image'?{source,code:x.product.code,productUrl:x.product.url,image:{data:downloaded,mimeType:'image/png'}}:{source,code:x.product.code,products:[x.product],warnings:[]}));await pending;x.render();assert.equal(x.button('Use image'),undefined);assert.equal(x.preview(),oldPhoto);assert.equal(x.requests.some(r=>r.url.endsWith('/workshop-stock')),false);
+  }
+ });
+ test(source+' rejects wrong-source products, private URLs and mismatched image responses',async()=>{
+  const x=supplierHarness(source),p=x.product;x.setHandler(()=>response({source,code:p.code,products:[{...p,source:'capral'},{...p,url:'https://evil.test/products/example'},{...p,images:[{url:'https://www.csrassetlibrary.com/private/image.png'}]}],warnings:[]}));await x.find();assert.equal(x.button('Use image'),undefined);
+  const y=supplierHarness(source);await y.find();y.setHandler(()=>response({source:'capral',code:p.code,productUrl:p.url,image:{data:downloaded,mimeType:'image/png'}}));await y.use();assert.equal(y.preview(),oldPhoto);assert.equal(y.created.length,0);
+ });
+}
+test('older workers expose only the compatible Capral source',()=>{const x=harness();x.open();assert.deepEqual(walk(x.node('Image source')).filter(n=>n.type==='option').map(n=>n.props.value),['capral']);});

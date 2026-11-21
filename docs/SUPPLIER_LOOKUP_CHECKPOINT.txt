@@ -1,0 +1,53 @@
+SUPPLIER PRODUCT-IMAGE LOOKUP — 21 NOVEMBER 2026
+
+Extends the deployed Capral gallery baseline (the gallery candidate notes in
+CAPRAL_LOOKUP_CHECKPOINT.txt are historical). Capral parsing/routes remain intact.
+Baseline remote main: mobile/Worker c5395a5233e69f2ff0ae4755fd950338c1b59489;
+desktop e249805189909cc757597fb49d2520d25b3b326f.
+
+Behaviour
+- Stock editor and new-material PDF review offer an independent Image source:
+  Capral, Rondo, or Gyprock Trade. Source/query never become stock metadata.
+- Rondo uses exact part-number matching against the product slug and heading,
+  verified canonical page and its own image cell. Compatible-part mentions in
+  search descriptions do not count as matches.
+- Gyprock Trade is explicitly public Gyprock manufacturer PRODUCT-NAME lookup.
+  Invoice codes and other manufacturers' ranges are not mapped. Search requires
+  a matching official product label, canonical page and heading; images come
+  only from that product's overview, excluding banners and related cards.
+- The product's actual photo is preferred; associated bitmap diagrams remain
+  available. Official page/image hosts and paths are separately allowlisted.
+- Image download re-reads the exact product page and checks image membership.
+  Different-product/asset redirects, unapproved hosts/paths, unsupported image
+  formats, excessive responses and timeouts are rejected. TLS stays verified.
+- Explicit Use image stages a decoded/optimised copy. Save or Import reviewed
+  materials is required to persist it. PDF selection clears review confirmation.
+- Source/query changes, changed items, cancellation, closing and replacement
+  PDFs invalidate stale requests. Uncertain saves retain their exact retry image.
+- Search/download do not mutate stock. Existing photos, codes, prices, suppliers
+  and quantities are retained until an explicit save; imports start at zero.
+
+Validation
+- Worker: 2,548 passing tests; production-config deployment dry-run passed.
+- Mobile: 330 passing tests. Desktop: 1,333 passing tests and production build.
+- Live public contract checks downloaded Rondo 129 JPEG (500 x 500) and Gyprock
+  Easy Tape PNG (1500 x 1500), revalidating exact product/image association.
+- Read-only supplier check: in panelstock/worker run
+  NODE_USE_ENV_PROXY=1 node scripts/verify-supplier-reference.mjs
+- Existing live Capral smoke check passed for EP10189, 815581 and 813740.
+- Both COMPLETE clients passed stock selection/Save and PDF selection/reviewed
+  import for BOTH new suppliers at 390x844, 768x1024, 1024x768 and 1440x1000.
+  All 32 flows used real supplier bytes, browser decoding and saved-image copies.
+  Synthetic stock and a synthetic PDF/analysis were used; API writes were
+  intercepted locally. No production stock writes were sent.
+- Browser thumbnails used the inherited verified HTTPS transport; no TLS bypass.
+  Evidence: /workspace/releases/validation/supplier-reference/browser-report.json,
+  browser-check.mjs, live-contract.jsonl and viewport screenshots.
+- The original /workspace/panelstock-desktop/panelstock-client.js is untouched.
+  The unrelated checkout line-ending difference is excluded from this feature.
+
+Release procedure
+- Recheck remote main immediately before promotion; preserve newer work.
+- Push supplier branch and main with explicit expected-SHA leases.
+- Observe every relevant production workflow reach terminal success, then compare
+  published client assets to the tested source/build. Production checks are GETs.
