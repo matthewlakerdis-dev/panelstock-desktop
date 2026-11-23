@@ -19,7 +19,7 @@ function loadFor(items){return {id:'load-one',project:'Example project',orderNum
 function harness({kind='qa',items=[],loads=[],fetcher,live=false}={}){
   const states=kind==='qa'?[items,[],qaData(items).checklists,0,{},false]:[loads,false,'',null,{},'','active'],refs=[],effects=[],pendingEffects=[],requests=[];
   const win=eventTarget(),doc=eventTarget(),timers=new Map();let timerId=0,stateIndex=0,refIndex=0,effectIndex=0;
-  const context={console,window:win,document:doc,setInterval(callback){const id=++timerId;timers.set(id,callback);return id;},clearInterval(id){timers.delete(id);},import_react:{createElement:(tag,props,...children)=>({tag,props,children})},useState(initial){const index=stateIndex++;if(!(index in states))states[index]=typeof initial==='function'?initial():initial;return [states[index],value=>{states[index]=typeof value==='function'?value(states[index]):value;}];},useRef(initial){const index=refIndex++;return refs[index]||(refs[index]={current:initial});},useEffect(callback,deps){const index=effectIndex++,old=effects[index];if(!old||!deps||deps.some((value,j)=>value!==old.deps?.[j])){effects[index]={deps,cleanup:old?.cleanup};if(live)pendingEffects.push(()=>{effects[index].cleanup?.();effects[index].cleanup=callback();});}},PanelStock:{apiFetch:async(url,options)=>{requests.push({url,options});return fetcher?fetcher(url,options):{ok:true,json:async()=>kind==='qa'?qaData(items):{ok:true,loads}};}},BAKED_WORKER_URL:'https://worker.example.test',PageHeading:'heading',ClipboardList:'clipboard',ChevronRight:'chevron',Truck:'truck',Check:'check',Camera:'camera',Upload:'upload'};
+  const context={AbortController,setTimeout,clearTimeout,console,window:win,document:doc,setInterval(callback){const id=++timerId;timers.set(id,callback);return id;},clearInterval(id){timers.delete(id);},import_react:{createElement:(tag,props,...children)=>({tag,props,children})},useState(initial){const index=stateIndex++;if(!(index in states))states[index]=typeof initial==='function'?initial():initial;return [states[index],value=>{states[index]=typeof value==='function'?value(states[index]):value;}];},useRef(initial){const index=refIndex++;return refs[index]||(refs[index]={current:initial});},useEffect(callback,deps){const index=effectIndex++,old=effects[index];if(!old||!deps||deps.some((value,j)=>value!==old.deps?.[j])){effects[index]={deps,cleanup:old?.cleanup};if(live)pendingEffects.push(()=>{effects[index].cleanup?.();effects[index].cleanup=callback();});}},PanelStock:{apiFetch:async(url,options)=>{requests.push({url,options});return fetcher?fetcher(url,options):{ok:true,json:async()=>kind==='qa'?qaData(items):{ok:true,loads}};}},BAKED_WORKER_URL:'https://worker.example.test',PageHeading:'heading',ClipboardList:'clipboard',ChevronRight:'chevron',Truck:'truck',Check:'check',Camera:'camera',Upload:'upload'};
   vm.createContext(context);vm.runInContext(kind==='qa'?qaCode:dispatchCode,context);
   function render(props={}){stateIndex=refIndex=effectIndex=0;const result=kind==='qa'?context.QaCenter({username:'admin',isAdmin:true,canManage:true,canDispatch:false,...props}):context.PanelDispatchLoads();while(pendingEffects.length)pendingEffects.shift()();return result;}
   function unmount(){for(const effect of effects)effect.cleanup?.();}
@@ -72,14 +72,14 @@ test('explicit replacement linking posts the selected approval and updates QA co
   const view=harness({items,fetcher:async()=>({ok:true,json:async()=>qaData([updated,approved])})});
   let tree=openReplacement(view);nodes(tree).find(node=>node.tag==='select').props.onChange({target:{value:approved.id}});tree=view.render();
   nodes(tree).find(node=>node.tag==='form').props.onSubmit({preventDefault(){}});await settle();
-  assert.equal(view.requests.length,1);assert.equal(view.requests[0].url,'https://worker.example.test/qa/recut/resolve');
+  assert.equal(view.requests.length,1);assert.equal(view.requests[0].url,'https://worker.example.test/qa/recut/resolve?view=queue');
   assert.deepEqual(JSON.parse(view.requests[0].options.body),{id:original.id,replacementId:approved.id,reason:'Approved replacement selected in QA Centre'});
   tree=view.render();assert.deepEqual(counts(tree),{'Awaiting QA':0,'Recut required':0,Approved:2});
 });
 
 test('a refresh started before linking cannot overwrite the successful replacement response',async()=>{
   const {items,original,approved}=candidateFixture(),stale=deferred(),updated={...original,replacementId:approved.id,qaResolved:true,qaBlocker:''};let getCount=0;
-  const view=harness({items,live:true,fetcher:async(url,options)=>options?{ok:true,json:async()=>qaData([updated,approved])}:++getCount===1?{ok:true,json:async()=>qaData(items)}:stale.promise});
+  const view=harness({items,live:true,fetcher:async(url,options)=>options?.method?{ok:true,json:async()=>qaData([updated,approved])}:++getCount===1?{ok:true,json:async()=>qaData(items)}:stale.promise});
   view.render();await settle();view.win.emit('panelstock-remote-change');let tree=openReplacement(view);nodes(tree).find(node=>node.tag==='select').props.onChange({target:{value:approved.id}});tree=view.render();nodes(tree).find(node=>node.tag==='form').props.onSubmit({preventDefault(){}});await settle();
   assert.deepEqual(counts(view.render()),{'Awaiting QA':0,'Recut required':0,Approved:2});stale.resolve({ok:true,json:async()=>qaData(items)});await settle();assert.deepEqual(counts(view.render()),{'Awaiting QA':0,'Recut required':0,Approved:2});view.unmount();
 });
@@ -94,22 +94,22 @@ for(const kind of ['qa','dispatch'])test(`${kind} has an explicit Refresh action
   const view=harness({kind,live:true});view.render();await settle();
   const refresh=button(view.render(),'Refresh');assert.ok(refresh);assert.equal(refresh.props.disabled,false);
   await refresh.props.onClick();await settle();assert.equal(view.requests.length,2);
-  assert.equal(view.requests[1].options,undefined);view.unmount();
+  if(kind==='qa'){assert.ok(view.requests[1].options.signal);assert.equal(view.requests[1].url,'https://worker.example.test/qa/queue');}else assert.equal(view.requests[1].options,undefined);view.unmount();
 });
 
 for(const kind of ['qa','dispatch'])test(`${kind} refresh listeners are removed on unmount and late responses cannot change state`,async()=>{
   const pending=[],view=harness({kind,live:true,fetcher:async()=>{const request=deferred();pending.push(request);return request.promise;}});
   view.render();assert.equal(view.requests.length,1);
-  view.win.emit('panelstock-remote-change');view.win.emit('online');view.doc.emit('visibilitychange');assert.equal(view.requests.length,4);
-  view.doc.visibilityState='hidden';view.doc.emit('visibilitychange');assert.equal(view.requests.length,4);
+  view.win.emit('panelstock-remote-change');view.win.emit('online');view.doc.emit('visibilitychange');assert.equal(view.requests.length,kind==='qa'?1:4);
+  view.doc.visibilityState='hidden';view.doc.emit('visibilitychange');assert.equal(view.requests.length,kind==='qa'?1:4);
   assert.ok(view.win.count()>0);assert.ok(view.doc.count()>0);view.unmount();assert.equal(view.win.count(),0);assert.equal(view.doc.count(),0);assert.equal(view.timers.size,0);
   const before=JSON.stringify(view.states);for(const request of pending)request.resolve({ok:true,json:async()=>kind==='qa'?qaData([panel('late','LATE')]):{loads:[loadFor([panel('late','LATE')])]}});await settle();
-  assert.equal(JSON.stringify(view.states),before);view.win.emit('online');assert.equal(view.requests.length,4);
+  assert.equal(JSON.stringify(view.states),before);view.win.emit('online');assert.equal(view.requests.length,kind==='qa'?1:4);
 });
 
 for(const kind of ['qa','dispatch'])test(`${kind} ignores an older GET that completes after a newer refresh`,async()=>{
   const pending=[],view=harness({kind,live:true,fetcher:async()=>{const request=deferred();pending.push(request);return request.promise;}});
-  view.render();view.win.emit('panelstock-remote-change');assert.equal(pending.length,2);
+  view.render();if(kind==='qa')button(view.render(),'Refreshing…').props.onClick();else view.win.emit('panelstock-remote-change');assert.equal(pending.length,2);
   const body=item=>kind==='qa'?qaData([item]):{loads:[{...loadFor([item]),project:item.project}]};
   pending[1].resolve({ok:true,json:async()=>body(panel('new','NEW',{project:'Newest project',status:'awaiting',qaResolved:false,qaBlocker:'Awaiting QA'}))});await settle();assert.match(text(view.render()),/Newest project/);
   pending[0].resolve({ok:true,json:async()=>body(panel('old','OLD',{project:'Older project',status:'awaiting',qaResolved:false,qaBlocker:'Awaiting QA'}))});await settle();const content=text(view.render());assert.match(content,/Newest project/);assert.doesNotMatch(content,/Older project/);view.unmount();
