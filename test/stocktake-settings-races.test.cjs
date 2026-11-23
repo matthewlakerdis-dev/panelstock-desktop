@@ -48,11 +48,11 @@ test('Workshop merging accepts initial and equal stock revisions while preservin
  const legacy=merge(initial,view(11,null,200));assert.equal(legacy.revision,11);assert.equal(legacy.items[0].qty,200);assert.deepEqual(legacy.stocktakeSettings,initial.stocktakeSettings);
 });
 
-test('a late Workshop GET cannot revert the shared COS names/codes or stock accepted from a newer settings refresh',async()=>{
- const lifecycle=hooks(),gets=[],context={...baseContext(),PanelStock:{username:'admin',apiFetch:async(url,options)=>{assert.equal(url,'/api/workshop-stock');assert.equal(options,undefined);return new Promise(resolve=>gets.push(resolve));}}};
+test('a settings change during a Workshop load queues a fresh view without overlapping full stock requests',async()=>{
+ const lifecycle=hooks(),gets=[],context={...baseContext(),PanelStock:{username:'admin',apiFetch:async(url,options)=>{const parsed=new URL(url,'https://app.test');assert.equal(parsed.pathname,'/api/workshop-stock');assert.equal(parsed.searchParams.get('images'),'deferred');assert.equal(options,undefined);return new Promise(resolve=>gets.push(resolve));}}};
  vm.runInNewContext(source,context);const C=context.window.createWorkshopStock(lifecycle.React),render=()=>{lifecycle.begin();return walk(C({workerUrl:'/api',isAdmin:true}));};render();lifecycle.flush();await tick();assert.equal(gets.length,1);
- context.window.dispatchEvent({type:'panelstock-stocktake-settings-changed'});assert.equal(gets.length,2);
- gets[1]({ok:true,json:async()=>view(11,settings(6,'New shared COS','00999'),200)});await tick();render();gets[0]({ok:true,json:async()=>view(10,settings(4,'Old shared COS','00123'),100)});await tick();
+ context.window.dispatchEvent({type:'panelstock-stocktake-settings-changed'});assert.equal(gets.length,1);
+ gets[0]({ok:true,json:async()=>view(10,settings(4,'Old shared COS','00123'),100)});await tick();assert.equal(gets.length,2);gets[1]({ok:true,json:async()=>view(11,settings(6,'New shared COS','00999'),200)});await tick();render();
  assert.equal(lifecycle.states[0].revision,11);assert.equal(lifecycle.states[0].items[0].qty,200);assert.equal(lifecycle.states[0].stocktakeSettings.revision,6);
  render().find(node=>node.props['aria-label']==='Stock action for Spacer').props.onChange({target:{value:'metadata'}});const group=render().find(node=>node.props.key==='xeroGroup'),labels=walk(group).filter(node=>node.type==='option').map(text);assert.ok(labels.includes('New shared COS · 00999'));assert.equal(labels.includes('Old shared COS · 00123'),false);lifecycle.unmount();
 });

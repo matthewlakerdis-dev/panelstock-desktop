@@ -1,10 +1,11 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const source=fs.readFileSync(path.join(__dirname,'../workshop-stock.js'),'utf8');
+const requestPath=url=>new URL(url,'https://app.test').pathname;
 const walk=n=>!n||typeof n!=='object'?[]:[n,...(n.children||[]).flat(Infinity).flatMap(walk)];
 function harness(admin=false,factory='createPurchaseOrderReceiving',props={}){
  const states=[],saved=new Map(),requests=[],effects=[];let cursor=0;
  const React={createElement:(type,props,...children)=>({type,props:props||{},children}),useState:v=>{const i=cursor++;if(!(i in states))states[i]=typeof v==='function'?v():v;return [states[i],v=>states[i]=typeof v==='function'?v(states[i]):v];},useEffect(fn){effects.push(fn);},Fragment:'fragment'};
- const context={window:{},crypto:{randomUUID:()=> '12345678-1234-4234-a234-123456789012'},PanelStock:{username:'tester',apiFetch:async(url,options)=>{requests.push({url,body:JSON.parse(options.body)});return {ok:true,json:async()=>({...states[1],orderId:'po'})};}},localStorage:{getItem:k=>saved.get(k)||null,setItem:(k,v)=>saved.set(k,v),removeItem:k=>saved.delete(k)}};
+ const context={window:{},crypto:{randomUUID:()=> '12345678-1234-4234-a234-123456789012'},PanelStock:{username:'tester',apiFetch:async(url,options)=>{assert.equal(new URL(url).searchParams.get('images'),'deferred');requests.push({url,body:JSON.parse(options.body)});return {ok:true,json:async()=>({...states[1],orderId:'po'})};}},localStorage:{getItem:k=>saved.get(k)||null,setItem:(k,v)=>saved.set(k,v),removeItem:k=>saved.delete(k)}};
  vm.runInNewContext(source,context);const Component=context.window[factory](React);
  const render=()=>{cursor=0;effects.length=0;return walk(Component({isAdmin:admin,workerUrl:'https://api.test',taskAccess:{'factory.receive':true,'factory.stock':true},...props}));};
  render();return {states,saved,requests,effects,render,context};
@@ -29,7 +30,7 @@ test('empty receiving home gives admins a direct new-PO action and completed qua
 test('admin creates missing stock from an imported row and keeps the PO details and quantity',async()=>{
  const x=harness(true),calls=[];x.states[1]={orders:[],items:stock,restoreEpoch:0};
  x.context.FileReader=class{readAsDataURL(){this.result='data:application/pdf;base64,JVBERi0xLjc=';this.onload();}};
- x.context.PanelStock.apiFetch=async(url,options)=>{const body=JSON.parse(options.body);calls.push(body);return {ok:true,json:async()=>url.endsWith('/analyse')?{reference:'PO-CREATE',supplier:'New supplier',lines:[{sku:'NEW-ANG',description:'New angle',colour:'Silver',lengthMm:3000,quantity:7,unit:'lengths'}]}:{orders:[],items:[...stock,{...body.item,id:'created-stock',qty:0}],restoreEpoch:0,itemId:'created-stock'}};};
+ x.context.PanelStock.apiFetch=async(url,options)=>{const body=JSON.parse(options.body);calls.push(body);return {ok:true,json:async()=>requestPath(url).endsWith('/analyse')?{reference:'PO-CREATE',supplier:'New supplier',lines:[{sku:'NEW-ANG',description:'New angle',colour:'Silver',lengthMm:3000,quantity:7,unit:'lengths'}]}:{orders:[],items:[...stock,{...body.item,id:'created-stock',qty:0}],restoreEpoch:0,itemId:'created-stock'}};};
  let nodes=x.render();nodes.find(n=>n.children.includes('New purchase order')).props.onClick();nodes=x.render();await nodes.find(n=>n.type==='input'&&n.props.type==='file').props.onChange({target:{files:[{name:'PO.pdf',size:8}],value:''}});nodes=x.render();nodes.find(n=>n.children.includes('Create stock item')).props.onClick();nodes=x.render();
  const dialog=nodes.find(n=>n.props['aria-label']==='Create stock item from PO');assert.ok(dialog);assert.ok(walk(dialog).some(n=>n.type==='input'&&n.props.value==='NEW-ANG'));
  await walk(dialog).find(n=>n.children.includes('Create & select item')).props.onClick();nodes=x.render();assert.equal(calls[1].action,'create_item');assert.equal(calls[1].item.qty,0);assert.equal(calls[1].sourceRowKey,0);
@@ -57,20 +58,20 @@ test('uploaded document is reviewed before save, attached, then explicitly relea
  const x=harness(true),calls=[];x.states[1]={orders:[],items:stock,restoreEpoch:0};let saved;
  x.context.FileReader=class{readAsDataURL(){this.result='data:application/pdf;base64,JVBERi0xLjc=';this.onload();}};
  x.context.PanelStock.apiFetch=async(url,options)=>{const body=JSON.parse(options.body);calls.push({url,body});let value;
-  if(url.endsWith('/analyse'))value={reference:'PO-IMPORTED',supplier:'Supplier',notes:'',warnings:[],lines:[{sku:'ANG',description:'Black angle',colour:'Black',lengthMm:6000,quantity:4,unit:'lengths'}]};
-  else {if(body.action==='save')saved={...order,id:body.orderId,status:'draft',version:1,reference:body.reference,lines:body.lines.map(l=>({...l,name:'Angle',sku:'ANG',unit:'lengths',received:0})),attachments:[],receipts:[]};else if(url.endsWith('/files')){saved.attachments=[{id:body.id,name:body.name}];saved.version++;}else if(body.action==='publish'){saved.status='open';saved.version++;}value={orders:[saved],items:stock,restoreEpoch:0,orderId:saved.id};}return {ok:true,json:async()=>value};};
+  if(requestPath(url).endsWith('/analyse'))value={reference:'PO-IMPORTED',supplier:'Supplier',notes:'',warnings:[],lines:[{sku:'ANG',description:'Black angle',colour:'Black',lengthMm:6000,quantity:4,unit:'lengths'}]};
+  else {if(body.action==='save')saved={...order,id:body.orderId,status:'draft',version:1,reference:body.reference,lines:body.lines.map(l=>({...l,name:'Angle',sku:'ANG',unit:'lengths',received:0})),attachments:[],receipts:[]};else if(requestPath(url).endsWith('/files')){saved.attachments=[{id:body.id,name:body.name}];saved.version++;}else if(body.action==='publish'){saved.status='open';saved.version++;}value={orders:[saved],items:stock,restoreEpoch:0,orderId:saved.id};}return {ok:true,json:async()=>value};};
  let nodes=x.render();nodes.find(n=>n.children.includes('New purchase order')).props.onClick();nodes=x.render();await nodes.find(n=>n.type==='input'&&n.props.type==='file').props.onChange({target:{files:[{name:'PO.pdf',size:8}],value:''}});nodes=x.render();
  assert.equal(calls.length,1);assert.equal(nodes.find(n=>n.children.includes('Save draft')).props.disabled,true);assert.equal(nodes.find(n=>n.children.includes('Use reviewed items')).props.disabled,true);
  nodes.find(n=>n.type==='input'&&n.props.type==='checkbox').props.onChange({target:{checked:true}});nodes=x.render();nodes.find(n=>n.children.includes('Use reviewed items')).props.onClick();nodes=x.render();
  const release=nodes.find(n=>n.children.includes('Save & make available'));assert.equal(release.props.disabled,false);await release.props.onClick();
- assert.equal(calls.length,4);assert.equal(calls[1].body.action,'save');assert.equal(calls[1].body.lines[0].itemId,'black');assert.equal(calls[1].body.lines[0].ordered,4);assert.ok(calls[2].url.endsWith('/files'));assert.equal(calls[3].body.action,'publish');assert.equal(calls[3].body.expectedVersion,2);assert.equal(x.saved.size,0);
+ assert.equal(calls.length,4);assert.equal(calls[1].body.action,'save');assert.equal(calls[1].body.lines[0].itemId,'black');assert.equal(calls[1].body.lines[0].ordered,4);assert.ok(requestPath(calls[2].url).endsWith('/files'));assert.equal(calls[3].body.action,'publish');assert.equal(calls[3].body.expectedVersion,2);assert.equal(x.saved.size,0);
 });
 test('document upload failure leaves a retryable draft and never publishes it',async()=>{
  const x=harness(true),calls=[];x.states[1]={orders:[],items:stock,restoreEpoch:0};let saved,fail=true;
  x.context.FileReader=class{readAsDataURL(){this.result='data:application/pdf;base64,JVBERi0xLjc=';this.onload();}};
  x.context.PanelStock.apiFetch=async(url,options)=>{const body=JSON.parse(options.body);calls.push({url,body});let value;
-  if(url.endsWith('/analyse'))value={reference:'PO-RETRY',supplier:'Supplier',lines:[{sku:'ANG',colour:'Black',quantity:4,unit:'lengths'}]};
-  else {if(body.action==='save')saved={...order,id:body.orderId,status:'draft',version:1,reference:body.reference,lines:body.lines,attachments:[]};else if(url.endsWith('/files')){if(fail)return {ok:false,status:503,json:async()=>({error:'Temporary upload problem'})};saved.attachments=[{id:body.id,name:body.name}];saved.version++;}value={orders:[saved],items:stock,restoreEpoch:0,orderId:saved.id};}return {ok:true,json:async()=>value};};
+  if(requestPath(url).endsWith('/analyse'))value={reference:'PO-RETRY',supplier:'Supplier',lines:[{sku:'ANG',colour:'Black',quantity:4,unit:'lengths'}]};
+  else {if(body.action==='save')saved={...order,id:body.orderId,status:'draft',version:1,reference:body.reference,lines:body.lines,attachments:[]};else if(requestPath(url).endsWith('/files')){if(fail)return {ok:false,status:503,json:async()=>({error:'Temporary upload problem'})};saved.attachments=[{id:body.id,name:body.name}];saved.version++;}value={orders:[saved],items:stock,restoreEpoch:0,orderId:saved.id};}return {ok:true,json:async()=>value};};
  let nodes=x.render();nodes.find(n=>n.children.includes('New purchase order')).props.onClick();nodes=x.render();await nodes.find(n=>n.type==='input'&&n.props.type==='file').props.onChange({target:{files:[{name:'PO.pdf',size:8}],value:''}});nodes=x.render();nodes.find(n=>n.type==='input'&&n.props.type==='checkbox').props.onChange({target:{checked:true}});nodes=x.render();nodes.find(n=>n.children.includes('Use reviewed items')).props.onClick();nodes=x.render();await nodes.find(n=>n.children.includes('Save & make available')).props.onClick();nodes=x.render();
  assert.ok(!calls.some(c=>c.body.action==='publish'));assert.ok(nodes.some(n=>n.children.includes('Retry upload')));const original=calls[2];fail=false;await nodes.find(n=>n.children.includes('Retry upload')).props.onClick();assert.equal(calls[3].url,original.url);assert.equal(calls[3].body.id,original.body.id);assert.ok(!calls.some(c=>c.body.action==='publish'));
 });
@@ -136,7 +137,7 @@ test('remembered supplier matches are isolated by supplier and full variant deta
 test('admin explicitly reviews optional stock name updates and submits learning only with PO save',async()=>{
  const x=harness(true),calls=[];x.states[1]={orders:[],items:stock,restoreEpoch:0,stockLearning:true,stockReferences:[]};
  x.context.FileReader=class{readAsDataURL(){this.result='data:application/pdf;base64,JVBERi0xLjc=';this.onload();}};
- x.context.PanelStock.apiFetch=async(url,options)=>{const body=JSON.parse(options.body);calls.push(body);return {ok:true,json:async()=>url.endsWith('/analyse')?{reference:'LEARN',supplier:'Supplier',lines:[{sku:'ANG',description:'Black supplier angle',colour:'Black',lengthMm:6000,quantity:4,unit:'lengths'}]}:{...x.states[1],orderId:body.orderId}};};
+ x.context.PanelStock.apiFetch=async(url,options)=>{const body=JSON.parse(options.body);calls.push(body);return {ok:true,json:async()=>requestPath(url).endsWith('/analyse')?{reference:'LEARN',supplier:'Supplier',lines:[{sku:'ANG',description:'Black supplier angle',colour:'Black',lengthMm:6000,quantity:4,unit:'lengths'}]}:{...x.states[1],orderId:body.orderId}};};
  let nodes=x.render();nodes.find(n=>n.children.includes('New purchase order')).props.onClick();nodes=x.render();
  await nodes.find(n=>n.type==='input'&&n.props.type==='file').props.onChange({target:{files:[{name:'PO.pdf',size:8}],value:''}});
  nodes=x.render();const checkbox=label=>walk(nodes.find(n=>n.type==='label'&&walk(n).some(c=>c.children.includes(label)))).find(n=>n.type==='input');
@@ -292,7 +293,7 @@ test('SOH on-order link refreshes read-only summaries, sorts by due date and res
  const dialog=nodes.find(n=>n.props['aria-label']==='Stock on order'),rows=walk(dialog).filter(n=>n.type==='article');
  assert.equal(rows.length,2);assert.ok(walk(rows[0]).some(n=>n.children.includes('PO-EARLY')));assert.ok(walk(rows[1]).some(n=>n.children.includes('PO-LATER')));
  assert.ok(walk(dialog).some(n=>n.children.includes('7 lengths')));assert.ok(walk(dialog).some(n=>n.children.includes('Outstanding')));assert.ok(!walk(dialog).some(n=>n.children.includes('Receive delivery')||n.children.includes('Open PO')));
- assert.equal(x.calls.length,1);assert.equal(x.calls[0].options,undefined);assert.ok(x.calls[0].url.endsWith('/workshop-stock'));
+ assert.equal(x.calls.length,1);assert.equal(x.calls[0].options,undefined);assert.ok(requestPath(x.calls[0].url).endsWith('/workshop-stock'));assert.equal(new URL(x.calls[0].url).searchParams.get('images'),'deferred');
  x.states[0].items[0].onOrder=0;x.states[0].items[0].incomingOrders=[];nodes=x.render();
  assert.ok(nodes.some(n=>n.children.includes('No outstanding purchase orders')));assert.ok(!nodes.some(n=>n.props.className==='ws-on-order-link'));
 });

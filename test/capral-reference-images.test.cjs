@@ -5,6 +5,7 @@ const vm=require('node:vm');
 const path=require('node:path');
 
 const source=fs.readFileSync(path.join(__dirname,'../workshop-stock.js'),'utf8');
+const stockRequest=url=>{const parsed=new URL(url,'https://app.test');if(!parsed.pathname.endsWith('/workshop-stock'))return false;assert.equal(parsed.searchParams.get('images'),'deferred');return true;};
 const walk=node=>!node||typeof node!=='object'?[]:[node,...(node.children||[]).flat(Infinity).flatMap(walk)];
 const oldPhoto='data:image/png;base64,b2xkLXN5bnRoZXRpYy1waG90bw==';
 const downloaded='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jrXkAAAAASUVORK5CYII=';
@@ -48,7 +49,7 @@ test('Use image prepares a bounded copy in the draft and Save writes only the im
 });
 
 test('changing the lookup code discards both staged and late search results',async()=>{
- const x=harness();x.open();await x.find();x.code('E54321');assert.equal(x.button('Use image'),undefined);const wait=deferred();x.setHandler(url=>url.endsWith('/search')?wait.promise:response(x.states[0]));const pending=x.button('Find Capral image').props.onClick();x.render();x.code('E99999');wait.resolve(response({code:'E54321',products:[product],warnings:[]}));await pending;x.render();assert.equal(x.button('Use image'),undefined);assert.equal(x.preview(),oldPhoto);assert.equal(x.requests.filter(request=>request.url.endsWith('/workshop-stock')).length,0);
+ const x=harness();x.open();await x.find();x.code('E54321');assert.equal(x.button('Use image'),undefined);const wait=deferred();x.setHandler(url=>url.endsWith('/search')?wait.promise:response(x.states[0]));const pending=x.button('Find Capral image').props.onClick();x.render();x.code('E99999');wait.resolve(response({code:'E54321',products:[product],warnings:[]}));await pending;x.render();assert.equal(x.button('Use image'),undefined);assert.equal(x.preview(),oldPhoto);assert.equal(x.requests.filter(request=>stockRequest(request.url)).length,0);
 });
 
 test('editing the item or closing it discards a search result that belongs to the prior draft',async()=>{
@@ -56,15 +57,15 @@ test('editing the item or closing it discards a search result that belongs to th
 });
 
 test('download failures preserve the prior edited image and do not make a stock write',async()=>{
- const x=harness();x.open();await x.find();x.setHandler(url=>url.endsWith('/image')?response({error:'Image download unavailable'},502):response(x.states[0]));await x.use();assert.equal(x.preview(),oldPhoto);assert.equal(x.requests.filter(request=>request.url.endsWith('/workshop-stock')).length,0);assert.ok(x.render().some(node=>node.props.role==='alert'&&node.children.join(' ').includes('Image download unavailable')));assert.equal(x.node('Profile or item image').props.disabled,false);
+ const x=harness();x.open();await x.find();x.setHandler(url=>url.endsWith('/image')?response({error:'Image download unavailable'},502):response(x.states[0]));await x.use();assert.equal(x.preview(),oldPhoto);assert.equal(x.requests.filter(request=>stockRequest(request.url)).length,0);assert.ok(x.render().some(node=>node.props.role==='alert'&&node.children.join(' ').includes('Image download unavailable')));assert.equal(x.node('Profile or item image').props.disabled,false);
 });
 
 test('unsupported or oversized downloaded images never replace the existing photo',async()=>{
- for(const image of [{data:'data:image/svg+xml,<svg/>',mimeType:'image/svg+xml',name:'diagram.svg'},{data:'data:image/png;base64,'+'A'.repeat(Math.ceil((8*1024*1024+3)/3)*4),mimeType:'image/png',name:'oversized.png'}]){const x=harness();x.open();await x.find();x.setHandler(url=>url.endsWith('/image')?response({...imageResult(),image}):response(x.states[0]));await x.use();assert.equal(x.preview(),oldPhoto);assert.equal(x.created.length,0);assert.equal(x.requests.filter(request=>request.url.endsWith('/workshop-stock')).length,0);}
+ for(const image of [{data:'data:image/svg+xml,<svg/>',mimeType:'image/svg+xml',name:'diagram.svg'},{data:'data:image/png;base64,'+'A'.repeat(Math.ceil((8*1024*1024+3)/3)*4),mimeType:'image/png',name:'oversized.png'}]){const x=harness();x.open();await x.find();x.setHandler(url=>url.endsWith('/image')?response({...imageResult(),image}):response(x.states[0]));await x.use();assert.equal(x.preview(),oldPhoto);assert.equal(x.created.length,0);assert.equal(x.requests.filter(request=>stockRequest(request.url)).length,0);}
 });
 
 test('downloaded images above the pixel limit or with decode failures preserve the original photo',async()=>{
- for(const config of [{width:8001,height:5000},{decodeError:true}]){const x=harness(config);x.open();await x.find();await x.use();assert.equal(x.preview(),oldPhoto);assert.equal(x.draws.length,0);assert.equal(x.requests.filter(request=>request.url.endsWith('/workshop-stock')).length,0);assert.deepEqual(x.revoked,x.created.map((_,index)=>'blob:capral-image-'+(index+1)));}
+ for(const config of [{width:8001,height:5000},{decodeError:true}]){const x=harness(config);x.open();await x.find();await x.use();assert.equal(x.preview(),oldPhoto);assert.equal(x.draws.length,0);assert.equal(x.requests.filter(request=>stockRequest(request.url)).length,0);assert.deepEqual(x.revoked,x.created.map((_,index)=>'blob:capral-image-'+(index+1)));}
 });
 
 test('Capral lookup is hidden for unsupported backends, legacy panels and shared-profile variants',()=>{
@@ -74,7 +75,7 @@ test('Capral lookup is hidden for unsupported backends, legacy panels and shared
 });
 
 test('an uncertain stock save retries the exact prepared image without downloading it again',async()=>{
- const x=harness();x.open();await x.find();await x.use();x.setHandler(url=>url.endsWith('/workshop-stock')?response({error:'Save not confirmed'},503):response(x.states[0]));await x.save();const first=structuredClone(x.requests.at(-1).body);assert.equal(first.image,prepared);assert.ok(x.button('Retry save'));const downloads=x.requests.filter(request=>request.url.endsWith('/image')).length;x.setHandler(()=>response(x.states[0]));await x.save();assert.deepEqual(x.requests.at(-1).body,first);assert.equal(x.requests.filter(request=>request.url.endsWith('/image')).length,downloads);assert.equal(x.storage.size,0);
+ const x=harness();x.open();await x.find();await x.use();x.setHandler(url=>stockRequest(url)?response({error:'Save not confirmed'},503):response(x.states[0]));await x.save();const first=structuredClone(x.requests.at(-1).body);assert.equal(first.image,prepared);assert.ok(x.button('Retry save'));const downloads=x.requests.filter(request=>request.url.endsWith('/image')).length;x.setHandler(()=>response(x.states[0]));await x.save();assert.deepEqual(x.requests.at(-1).body,first);assert.equal(x.requests.filter(request=>request.url.endsWith('/image')).length,downloads);assert.equal(x.storage.size,0);
 });
 
 test('Capral code suggestions use named profile codes before the independent stock SKU',()=>{
@@ -100,11 +101,11 @@ test('cancelling a staged result keeps the edited photo and does not download th
 });
 
 test('cancelling an in-flight download discards its late response before preparing or saving an image',async()=>{
- const x=harness(),wait=deferred();x.open();await x.find();x.setHandler(url=>url.endsWith('/image')?wait.promise:response(x.states[0]));const pending=x.button('Use image').props.onClick();x.render();assert.equal(x.node('Profile or item image').props.disabled,true);assert.equal(x.button('Cancel Capral lookup').props.disabled,false);x.button('Cancel Capral lookup').props.onClick();x.render();wait.resolve(response(imageResult()));await pending;x.render();assert.equal(x.preview(),oldPhoto);assert.equal(x.created.length,0);assert.equal(x.button('Use image'),undefined);assert.equal(x.node('Profile or item image').props.disabled,false);assert.equal(x.requests.filter(request=>request.url.endsWith('/workshop-stock')).length,0);
+ const x=harness(),wait=deferred();x.open();await x.find();x.setHandler(url=>url.endsWith('/image')?wait.promise:response(x.states[0]));const pending=x.button('Use image').props.onClick();x.render();assert.equal(x.node('Profile or item image').props.disabled,true);assert.equal(x.button('Cancel Capral lookup').props.disabled,false);x.button('Cancel Capral lookup').props.onClick();x.render();wait.resolve(response(imageResult()));await pending;x.render();assert.equal(x.preview(),oldPhoto);assert.equal(x.created.length,0);assert.equal(x.button('Use image'),undefined);assert.equal(x.node('Profile or item image').props.disabled,false);assert.equal(x.requests.filter(request=>stockRequest(request.url)).length,0);
 });
 
 test('cancelling while a downloaded image decodes discards the prepared result and releases its object URL',async()=>{
- const x=harness({deferDecode:true});x.open();await x.find();const pending=x.button('Use image').props.onClick();await new Promise(setImmediate);x.render();assert.equal(x.created.length,1);assert.equal(x.preview(),oldPhoto);x.button('Cancel Capral lookup').props.onClick();x.render();x.finishDecode();await pending;x.render();assert.equal(x.preview(),oldPhoto);assert.equal(x.button('Use image'),undefined);assert.equal(x.node('Profile or item image').props.disabled,false);assert.deepEqual(x.revoked,x.created.map((_,index)=>'blob:capral-image-'+(index+1)));assert.equal(x.requests.filter(request=>request.url.endsWith('/workshop-stock')).length,0);
+ const x=harness({deferDecode:true});x.open();await x.find();const pending=x.button('Use image').props.onClick();await new Promise(setImmediate);x.render();assert.equal(x.created.length,1);assert.equal(x.preview(),oldPhoto);x.button('Cancel Capral lookup').props.onClick();x.render();x.finishDecode();await pending;x.render();assert.equal(x.preview(),oldPhoto);assert.equal(x.button('Use image'),undefined);assert.equal(x.node('Profile or item image').props.disabled,false);assert.deepEqual(x.revoked,x.created.map((_,index)=>'blob:capral-image-'+(index+1)));assert.equal(x.requests.filter(request=>stockRequest(request.url)).length,0);
 });
 
 test('a search response for a missing or different code cannot stage a suggested image',async()=>{
@@ -121,13 +122,13 @@ test('product suggestions require the exact requested code rather than a partial
 
 test('a downloaded image for a missing or different code never enters preparation or replaces the current photo',async()=>{
  for(const code of [undefined,'E123456','E99999']){
-  const x=harness(),before=structuredClone(x.states[0]);x.open();await x.find();x.setHandler(url=>url.endsWith('/image')?response({...imageResult(),code}):response(x.states[0]));await x.use();assert.equal(x.preview(),oldPhoto);assert.equal(x.created.length,0);assert.equal(x.draws.length,0);assert.equal(x.requests.filter(request=>request.url.endsWith('/workshop-stock')).length,0);assert.ok(x.render().some(node=>node.props.role==='alert'&&node.children.join(' ').includes('different code')));assert.deepEqual(x.states[0],before);
+  const x=harness(),before=structuredClone(x.states[0]);x.open();await x.find();x.setHandler(url=>url.endsWith('/image')?response({...imageResult(),code}):response(x.states[0]));await x.use();assert.equal(x.preview(),oldPhoto);assert.equal(x.created.length,0);assert.equal(x.draws.length,0);assert.equal(x.requests.filter(request=>stockRequest(request.url)).length,0);assert.ok(x.render().some(node=>node.props.role==='alert'&&node.children.join(' ').includes('different code')));assert.deepEqual(x.states[0],before);
  }
 });
 
 test('lookup normalizes case and all whitespace while preserving meaningful code hyphens',async()=>{
  for(const [entered,code]of [[' e 1 2 3 4 5 ','E12345'],[' ek- 12 34 ','EK-1234']]){
-  const x=harness(),before=structuredClone(x.states[0]);x.open();x.code(entered);x.setHandler(url=>url.endsWith('/search')?response({code,products:[{...product,code}],warnings:[]}):url.endsWith('/image')?response({...imageResult(),code}):response(x.states[0]));await x.find();assert.deepEqual(x.requests[0].body,{code});assert.equal(x.node('Capral code').props.value,code);assert.ok(x.button('Use image'));await x.use();assert.equal(x.requests[1].body.code,code);assert.equal(x.preview(),prepared);assert.deepEqual(x.states[0],before);assert.equal(x.requests.filter(request=>request.url.endsWith('/workshop-stock')).length,0);
+  const x=harness(),before=structuredClone(x.states[0]);x.open();x.code(entered);x.setHandler(url=>url.endsWith('/search')?response({code,products:[{...product,code}],warnings:[]}):url.endsWith('/image')?response({...imageResult(),code}):response(x.states[0]));await x.find();assert.deepEqual(x.requests[0].body,{code});assert.equal(x.node('Capral code').props.value,code);assert.ok(x.button('Use image'));await x.use();assert.equal(x.requests[1].body.code,code);assert.equal(x.preview(),prepared);assert.deepEqual(x.states[0],before);assert.equal(x.requests.filter(request=>stockRequest(request.url)).length,0);
  }
 });
 
@@ -169,7 +170,7 @@ for(const source of ['rondo','gyprock-trade','knotwood','sculptform']){
   for(const phase of ['search','image']){
    const x=supplierHarness(source),wait=deferred();if(phase==='image')await x.find();x.setHandler(()=>wait.promise);
    const pending=phase==='image'?x.use():x.find();x.render();x.node('Image source').props.onChange({target:{value:'capral'}});x.render();
-   wait.resolve(response(phase==='image'?{source,code:x.product.code,productUrl:x.product.url,image:{data:downloaded,mimeType:'image/png'}}:{source,code:x.product.code,products:[x.product],warnings:[]}));await pending;x.render();assert.equal(x.button('Use image'),undefined);assert.equal(x.preview(),oldPhoto);assert.equal(x.requests.some(r=>r.url.endsWith('/workshop-stock')),false);
+   wait.resolve(response(phase==='image'?{source,code:x.product.code,productUrl:x.product.url,image:{data:downloaded,mimeType:'image/png'}}:{source,code:x.product.code,products:[x.product],warnings:[]}));await pending;x.render();assert.equal(x.button('Use image'),undefined);assert.equal(x.preview(),oldPhoto);assert.equal(x.requests.some(r=>stockRequest(r.url)),false);
   }
  });
  test(source+' rejects wrong-source products, private URLs and mismatched image responses',async()=>{
@@ -215,6 +216,6 @@ test('Sculptform reviewed track codes prefill without changing supplier, SKU or 
   const p={source:'sculptform',code,title:'45 × 25 mm split track — assembly reference (both parts and clip shown)',url:'https://sculptform.com/aluminium-click-on-screens-tech-specs/',images:[{url:'https://sculptform.com/hs-fs/hubfs/COS-split-track-45x25mm.png?width=1948&name=COS-split-track-45x25mm.png'}],matchType:'assembly-reference'};
   x.setHandler(url=>response(url.endsWith('/search')?{source:'sculptform',code,products:[p],warnings:['Assembly reference only: both track parts and clip; finish unverified.']}:url.endsWith('/image')?{source:'sculptform',code,productUrl:p.url,image:{data:downloaded,mimeType:'image/png'}}:x.states[0]));
   await x.button('Find Sculptform image').props.onClick();x.render();assert.equal(x.preview(),oldPhoto);assert.ok(x.button('Use image'));assert.ok(x.render().some(n=>n.children.includes(p.title)));assert.deepEqual(x.states[0],before);
-  await x.use();assert.equal(x.preview(),prepared);assert.equal(x.requests.some(r=>r.url.endsWith('/workshop-stock')),false);const saved=await x.save();assert.equal(saved.image,prepared);assert.equal(saved.supplier,'Sculptform');assert.equal(saved.unitCost,12.34);assert.deepEqual(x.states[0],before);
+  await x.use();assert.equal(x.preview(),prepared);assert.equal(x.requests.some(r=>stockRequest(r.url)),false);const saved=await x.save();assert.equal(saved.image,prepared);assert.equal(saved.supplier,'Sculptform');assert.equal(saved.unitCost,12.34);assert.deepEqual(x.states[0],before);
  }
 });

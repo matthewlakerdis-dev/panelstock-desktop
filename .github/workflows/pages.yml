@@ -61,3 +61,6 @@ jobs:
 
       - name: Verify published navigation groups and combined dispatch history
         run: node scripts/verify-web-navigation.cjs
+
+      - name: Verify published stock and receiving assets
+        run: node scripts/verify-workshop-stock-production.cjs
