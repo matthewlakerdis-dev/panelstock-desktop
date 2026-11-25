@@ -64,3 +64,5 @@ jobs:
 
       - name: Verify published stock and receiving assets
         run: node scripts/verify-workshop-stock-production.cjs
+      - name: Verify published per-panel QA area controls without changing records
+        run: node scripts/verify-qa-panel-area-production.cjs
