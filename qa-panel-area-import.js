@@ -47,15 +47,21 @@
       return rows;
     }finally{await task.destroy();}
   }
+  function newImportId(){
+    if(typeof root.crypto?.randomUUID==='function')return root.crypto.randomUUID();
+    if(typeof root.crypto?.getRandomValues==='function')return Array.from(root.crypto.getRandomValues(new Uint8Array(16)),value=>value.toString(16).padStart(2,'0')).join('');
+    throw Error('This browser cannot create a secure save reference. Open PanelStock in an up-to-date browser and retry.');
+  }
   function View({React,items,canManage,base,request,onSaved,onClose}){
     const h=React.createElement;
     const [rows,setRows]=React.useState([]),[fileName,setFileName]=React.useState(''),[scopeKey,setScopeKey]=React.useState(''),[preview,setPreview]=React.useState([]),[selected,setSelected]=React.useState({}),[busy,setBusy]=React.useState(false),[message,setMessage]=React.useState(''),[confirmed,setConfirmed]=React.useState(false);
+    const [saveMessage,setSaveMessage]=React.useState('');
     const session=React.useRef({active:true,version:0,busy:false}),importId=React.useRef(null),payload=React.useRef(null);
     React.useEffect(()=>{session.current.active=true;return()=>{session.current.active=false;++session.current.version;};},[]);
     const scopes=Array.from(new Map(items.filter(item=>item.kind==='panel').map(item=>[JSON.stringify([item.project,item.orderNumber]),{project:item.project,orderNumber:item.orderNumber}])).entries()).sort((a,b)=>a[1].project.localeCompare(b[1].project)||a[1].orderNumber.localeCompare(b[1].orderNumber,undefined,{numeric:true}));
     const scope=scopeKey?{project:JSON.parse(scopeKey)[0],orderNumber:JSON.parse(scopeKey)[1]}:null;
     function review(nextRows=rows,nextScope=scope,nextItems=items){
-      const matched=nextScope?matchRows(nextRows,nextItems,nextScope,canManage):[];setPreview(matched);setSelected(Object.fromEntries(matched.filter(row=>row.state==='ready').map(row=>[row.page,true])));setConfirmed(false);importId.current=null;payload.current=null;
+      const matched=nextScope?matchRows(nextRows,nextItems,nextScope,canManage):[];setPreview(matched);setSelected(Object.fromEntries(matched.filter(row=>row.state==='ready').map(row=>[row.page,true])));setConfirmed(false);setSaveMessage('');importId.current=null;payload.current=null;
     }
     async function chooseFile(event){
       const file=event.target.files?.[0];if(!file||session.current.busy)return;event.target.value='';
@@ -72,13 +78,15 @@
     }
     const chosen=preview.filter(row=>selected[row.page]&&['ready','replace'].includes(row.state));
     async function save(){
-      if(session.current.busy||!confirmed||!scope||!chosen.length)return;
-      session.current.busy=true;setBusy(true);setMessage('Saving panel areas…');
+      if(session.current.busy)return;
+      if(!scope||!chosen.length){setSaveMessage('Select at least one matched panel area before saving.');return;}
+      if(!confirmed){setSaveMessage('Tick the confirmation below to confirm this project/order and fabrication area, then click Save again.');return;}
+      session.current.busy=true;setBusy(true);setSaveMessage('');setMessage('Saving panel areas…');
       // Reuse the exact request after a lost response. Server receipt makes retries safe.
-      const next={project:scope.project,orderNumber:scope.orderNumber,fileName,rows:chosen.map(row=>({id:row.item.id,reference:row.reference,page:row.page,panelArea:{method:'manual',areaM2:row.areaM2},cutAt:row.item.cutAt||null,expectedAttemptId:row.item.latest?.id||null,expectedAreaRevision:row.item.panelAreaRevision||0}))};
-      const signature=JSON.stringify(next);if(payload.current!==signature){payload.current=signature;importId.current=crypto.randomUUID();}
-      try{const {response,result}=await request(base+'/qa/panels/area-import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...next,importId:importId.current})});if(!session.current.active)return;if(!response.ok)throw Error(result?.error||'Areas could not be saved.');if(!Array.isArray(result.items)||result.items.length!==chosen.length||!result.items.every(item=>chosen.some(row=>row.item.id===item.id&&item.panelArea?.areaM2===row.areaM2)))throw Error('The saved areas could not be verified. Retry the same import.');onSaved(result);}
-      catch(error){if(session.current.active)setMessage(error.message||'Areas could not be saved. Retry, or review the latest matches.');}
+      try{const next={project:scope.project,orderNumber:scope.orderNumber,fileName,rows:chosen.map(row=>({id:row.item.id,reference:row.reference,page:row.page,panelArea:{method:'manual',areaM2:row.areaM2},cutAt:row.item.cutAt||null,expectedAttemptId:row.item.latest?.id||null,expectedAreaRevision:row.item.panelAreaRevision||0}))};
+      const signature=JSON.stringify(next);if(payload.current!==signature||!importId.current){importId.current=newImportId();payload.current=signature;}
+      const {response,result}=await request(base+'/qa/panels/area-import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...next,importId:importId.current})});if(!session.current.active)return;if(!response.ok)throw Error(result?.error||'Areas could not be saved.');if(!Array.isArray(result.items)||result.items.length!==chosen.length||!result.items.every(item=>chosen.some(row=>row.item.id===item.id&&item.panelArea?.areaM2===row.areaM2)))throw Error('The saved areas could not be verified. Retry the same import.');onSaved(result);}
+      catch(error){if(session.current.active){const text=error.message||'Areas could not be saved. Retry, or review the latest matches.';setMessage(text);setSaveMessage(text);}}
       finally{if(session.current.active){session.current.busy=false;setBusy(false);}}
     }
     const button='rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700';
@@ -93,11 +101,12 @@
       !!rows.length&&h('p',{className:'mt-2 text-xs text-slate-500'},'PDF drawing headers: '+Array.from(new Set(rows.filter(row=>!row.error).map(row=>`${row.project||'Project not labelled'} / ${row.order||'Order not labelled'}`))).join('; ')),
       !!preview.length&&h(React.Fragment,null,
         h('button',{type:'button',disabled:busy,className:button,onClick:refreshMatches},'Review latest matches'),
-        h('div',{className:'mt-4 overflow-x-auto'},h('table',{style:{width:'100%',minWidth:760,borderCollapse:'collapse',fontSize:14}},h('thead',{style:{background:'#f1f5f9',color:'#475569'}},h('tr',null,['Use','Page','Panel ID','Drawing m²','Match'].map(value=>h('th',{key:value,scope:'col',style:td},value)))),h('tbody',null,preview.map(row=>h('tr',{key:row.page},h('td',{style:td},['ready','replace'].includes(row.state)?h('input',{type:'checkbox',disabled:busy,checked:!!selected[row.page],'aria-label':`Import panel ${row.reference}`,onChange:event=>{setSelected(value=>({...value,[row.page]:event.target.checked}));setConfirmed(false);}}):'—'),h('td',{style:td},row.page),h('td',{style:td},row.reference||'—'),h('td',{style:td},row.areaM2?.toFixed(3)||'—'),h('td',{style:{...td,color:row.state==='blocked'?'#9f1239':'#475569'}},row.message)))))),
+        h('div',{className:'mt-4 overflow-x-auto'},h('table',{style:{width:'100%',minWidth:760,borderCollapse:'collapse',fontSize:14}},h('thead',{style:{background:'#f1f5f9',color:'#475569'}},h('tr',null,['Use','Page','Panel ID','Drawing m²','Match'].map(value=>h('th',{key:value,scope:'col',style:td},value)))),h('tbody',null,preview.map(row=>h('tr',{key:row.page},h('td',{style:td},['ready','replace'].includes(row.state)?h('input',{type:'checkbox',disabled:busy,checked:!!selected[row.page],'aria-label':`Import panel ${row.reference}`,onChange:event=>{setSelected(value=>({...value,[row.page]:event.target.checked}));setConfirmed(false);setSaveMessage('');}}):'—'),h('td',{style:td},row.page),h('td',{style:td},row.reference||'—'),h('td',{style:td},row.areaM2?.toFixed(3)||'—'),h('td',{style:{...td,color:row.state==='blocked'?'#9f1239':'#475569'}},row.message)))))),
         h('p',{className:'mt-4 text-sm font-semibold text-slate-800'},`${chosen.length} selected · ${chosen.reduce((sum,row)=>sum+row.areaM2,0).toFixed(3)} m²`),
-        h('label',{className:'mt-3 flex items-start gap-2 text-sm text-slate-700'},h('input',{type:'checkbox',disabled:busy||!chosen.length,checked:confirmed,onChange:event=>setConfirmed(event.target.checked)}),`I confirm these drawings belong to ${scope?.project} · Order ${scope?.orderNumber}, and the printed m² is the fabrication area to record.`),
+        saveMessage&&h('p',{role:'alert',className:'mt-3 text-sm text-red-700'},saveMessage),
+        h('label',{className:'mt-3 flex items-start gap-2 text-sm text-slate-700'},h('input',{type:'checkbox',disabled:busy||!chosen.length,checked:confirmed,onChange:event=>{setConfirmed(event.target.checked);setSaveMessage('');}}),`Required: I confirm these drawings belong to ${scope?.project} · Order ${scope?.orderNumber}, and the printed m² is the fabrication area to record.`),
         h('p',{className:'mt-2 text-xs text-slate-500'},'Approved items use their existing QA completion date. Other items count when they pass QA. Fabrication remains separate from the cutting and gate total.'),
-        h('button',{type:'button',disabled:busy||!confirmed||!chosen.length,onClick:save,className:'mt-4 rounded-lg bg-cyan-800 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50'},busy?'Saving…':`Save ${chosen.length} panel areas`)
+        h('button',{type:'button',disabled:busy,onClick:save,className:'mt-4 rounded-lg bg-cyan-800 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50'},busy?'Saving…':`Save ${chosen.length} panel areas`)
       )
     ));
   }
