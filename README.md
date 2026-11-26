@@ -110,6 +110,11 @@ Expanded order Status and Apply controls now share the top-right toolbar with Vi
 
 Each Site Order has a Production plan. The planning rows are Order stock, Drawn / Toolpath, CNC, Fabrication, Powder coating and Site delivery. Drawn / Toolpath, CNC and Fabrication each have their own planned date for panel orders. Powder coating uses a send date and a read-only pickup date calculated five working days later (Monday–Friday; the send day is excluded). Production rows support N/A, an optional responsible person and notes. Stock delivery, Final QA and Ready for dispatch are not planning rows.
 
+Fabrication orders use Order, Fabrication and Schedule delivery. Powder coating is optional and defaults off; enabling it adds send and pickup dates using the configured working-day turnaround. Disabling it removes its scheduled activities and preserves the fabrication date. The order list and Schedule use the same applicable stages.
+
+Site Orders lists check for changes every five seconds while visible and on return to the app. Background reads preserve scroll position and expanded web rows, skip unchanged lists, pause during edits/saves, and ignore stale replies after account changes or navigation. They do not reload the page.
+
+
 Admins and users with Site Orders view plus Manage schedule access can edit production dates. Order viewers can read plans; dispatched/cancelled orders are read-only. Site delivery reuses the existing confirmed delivery date/time and remains admin-only. Changing that date and saving its plan commit together through the existing delivery workflow and notifications. Plan-only changes do not change actual production, QA, dispatch, requested dates, order items, attachments, PDFs or tracker columns.
 
 Saved dates appear as linked Production plans milestones above the existing web Schedule bookings, using its date range and person filters. Clicking a milestone opens the same plan. Milestones are derived from the saved plan and order, with stable IDs; editing dates or choosing N/A updates them without creating person/vehicle bookings. Closed/deleted orders stop contributing milestones. Existing bookings and public TV schedule behavior are preserved.

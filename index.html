@@ -17484,7 +17484,8 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
       data&&draft&&e("div",{className:"space-y-4 p-6"},
         e("p",{className:"text-sm text-slate-600"},"Plan the dates for this order. Scheduled activities also appear in Schedule."),
         !data.canEdit&&e("p",{className:"rounded-lg bg-slate-100 p-3 text-sm text-slate-600"},["dispatched","cancelled"].includes(data.order.status)?"This order is closed. Its production plan is read-only.":"You can view this plan. An admin or schedule manager can change its dates."),
-        data.coating&&e("section",{className:"rounded-xl border border-slate-200 p-4"},e("h3",{className:"mb-3 font-semibold text-slate-900"},"Panel finish"),data.coating.canChoose?e("label",{className:"block text-xs font-medium text-slate-600"},"Powder coating",e("select",{"aria-label":"Panel coating requirement",disabled,value:draft.panelCoating,onChange:event=>change("plan","panelCoating",event.target.value),className:"mt-1.5 h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm"},e("option",{value:"required"},"Requires powder coating"),e("option",{value:"already_coated"},"Already coated")),e("span",{className:"mt-2 block text-xs text-slate-500"},"Choose until linked panel stock has a known finish.")):e("p",{className:"text-sm text-slate-600"},(data.coating.required?"Requires powder coating":"Already coated")+" · Set from linked panel stock.")),
+        data.coating?.kind==="fabrication"&&e("section",{className:"rounded-xl border border-slate-200 p-4"},e("h3",{className:"mb-3 font-semibold text-slate-900"},"Powder coating"),e("label",{className:"flex items-center gap-3 text-sm text-slate-700"},e("input",{type:"checkbox","aria-label":"Include powder coating",disabled,checked:draft.fabricationCoating==="required",onChange:event=>change("plan","fabricationCoating",event.target.checked?"required":"not_required")}),"Include powder coating for this order")),
+        data.coating&&data.coating.kind!=="fabrication"&&e("section",{className:"rounded-xl border border-slate-200 p-4"},e("h3",{className:"mb-3 font-semibold text-slate-900"},"Panel finish"),data.coating.canChoose?e("label",{className:"block text-xs font-medium text-slate-600"},"Powder coating",e("select",{"aria-label":"Panel coating requirement",disabled,value:draft.panelCoating,onChange:event=>change("plan","panelCoating",event.target.value),className:"mt-1.5 h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm"},e("option",{value:"required"},"Requires powder coating"),e("option",{value:"already_coated"},"Already coated")),e("span",{className:"mt-2 block text-xs text-slate-500"},"Choose until linked panel stock has a known finish.")):e("p",{className:"text-sm text-slate-600"},(data.coating.required?"Requires powder coating":"Already coated")+" · Set from linked panel stock.")),
         e("fieldset",{disabled,className:"ps-plan-stages"},stageDefinitions.map(([stage,label])=>{const row=draft.stages[stage];return e("section",{key:stage,"data-plan-stage":stage,className:"ps-plan-stage"},
           e("div",{className:"ps-plan-stage-heading"},e("h3",null,label),e("label",{className:"ps-plan-na"},e("input",{type:"checkbox","aria-label":label+" not applicable",checked:row.notApplicable,onChange:event=>change(stage,"notApplicable",event.target.checked)}),"N/A")),
           e("div",{className:"ps-plan-stage-date"},e(ModernDatePicker,{label:stage==="powderCoating"?"Send date":"Planned date",value:row.date,disabled:disabled||row.notApplicable,onChange:value=>change(stage,"date",value)}),stage==="powderCoating"&&e("p",{className:"ps-plan-pickup"},"Pickup: ",e("strong",{"data-powder-pickup":""},pickup?productionPlanDate(pickup):"Set a send date"),e("small",null,pickupOverride?"Pickup date set in Schedule":powderDays+" working "+(powderDays===1?"day":"days")+" after sending"))),
@@ -17660,23 +17661,33 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
     async function saveOrderFiles(){setSaving(true);setNotice("");try{await uploadOrderFiles(panel.order);await loadOrders();setNotice("Attachments uploaded.");}catch(error){setNotice(error.message);}finally{setSaving(false);}}
     async function downloadAttachment(order,file){setNotice("");try{const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/orders/"+order.id+"/attachments/"+file.id),result=await response.json();if(!response.ok)throw Error(result.error||"Attachment could not be opened.");const url=URL.createObjectURL(new Blob([Uint8Array.from(atob(result.file.data),c=>c.charCodeAt(0))],{type:"application/octet-stream"})),link=document.createElement("a");link.href=url;link.download=file.name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}catch(error){setNotice(error.message);}}
     const blankOrder = () => ({ projectId: "", project: "", orderType: "Other", orderTypeOther: "", siteContact: "", phone: "", requestedDeliveryDate: "", requestedDeliveryTime: "", scheduledDeliveryDate: "", scheduledDeliveryTime: "", locationNotes: "", villa:"", colour:"", location:"", notes:"", status: "submitted", urgent:false, items: [{ quantity: 1, description: "" }] });
-    async function loadOrders() {
-      setLoadingOrders(true);
+    const ordersLive=useRef({alive:true,version:0,snapshot:""}),ordersRefreshBusy=useRef(false);
+    ordersRefreshBusy.current=!!(projectsOnly||!["orders","mine","receive","search"].includes(orderSection)||saving||statusSaving||savingSequence||savingProject||savingType||deliveryScheduleBusy||panel||productionPlanOrder||gateOrder||drawingOrder||typeCorrectionOrder||reverseDispatchOrder||scheduleOrder||receiptOrder||deliveryEditor||bulkDispatchOpen);
+    async function loadOrders(background=false,signal) {
+      const live=ordersLive.current,version=++live.version,owner=PanelStock.username;
+      if(!background){live.snapshot="";setLoadingOrders(true);}
       try {
-        const response = await PanelStock.apiFetch(BAKED_WORKER_URL + "/orders");
+        const response = await PanelStock.apiFetch(BAKED_WORKER_URL + "/orders",{signal});
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw Error(result.error || "Orders could not be loaded.");
+        if(!live.alive||owner!==PanelStock.username||version!==live.version||signal?.aborted||background&&ordersRefreshBusy.current)return false;
+        const snapshot=JSON.stringify(result);if(background&&snapshot===live.snapshot)return true;live.snapshot=snapshot;
         if(Array.isArray(result.orderTypes))setOrderTypes(result.orderTypes);
         if(result.leadTimes)setLeadTimes(result.leadTimes);
         setProductionPlans(result.productionPlans||{});
         setOrders((result.orders || []).map(order=>({...order,project:projectTitleCase(order.project)})));
         setProjects((result.projectRecords || (result.projects || []).map((name) => ({ id: "", name, address: "", notes: "", active: true }))).map(project=>({...project,name:projectTitleCase(project.name)})));
         setProjectSequences(result.projectSequences || []);
-        await loadDeliveryQueue();
-      } catch (error) { setNotice(error.message || "Orders could not be loaded."); return false;}
-      finally { setLoadingOrders(false); }
+        if(!background)await loadDeliveryQueue();return true;
+      } catch (error) { if(!background&&live.alive&&owner===PanelStock.username&&version===live.version)setNotice(error.message || "Orders could not be loaded."); return false;}
+      finally { if(!background&&live.alive&&owner===PanelStock.username)setLoadingOrders(false); }
     }
-    useEffect(() => { void loadOrders(); }, []);
+    useEffect(() => {
+      const live=ordersLive.current;live.alive=true;void loadOrders();
+      const refresh=window.PanelStockScheduleAutoRefresh.createController({interval:5000,isBusy:()=>ordersRefreshBusy.current||document.activeElement?.matches('input,textarea,select,[contenteditable="true"]'),refresh:signal=>loadOrders(true,signal)});
+      const remote=()=>void refresh.refresh();window.addEventListener("panelstock-remote-change",remote);
+      return()=>{live.alive=false;++live.version;refresh.destroy();window.removeEventListener("panelstock-remote-change",remote);};
+    }, []);
     const activeStatuses = ["submitted", "approved", "ordered", "in_stock", "completed"];
     const scopedOrders = orderSection === "mine" ? orders.filter(order=>order.requestedBy===PanelStock.username) : orders;
     const counts = { active: scopedOrders.filter((order) => activeStatuses.includes(order.status)).length, completed: scopedOrders.filter((order) => order.status === "completed").length, dispatched: scopedOrders.filter((order) => order.status === "dispatched").length, cancelled: scopedOrders.filter((order) => order.status === "cancelled").length };
