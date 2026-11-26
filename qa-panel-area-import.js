@@ -52,6 +52,67 @@
     if(typeof root.crypto?.getRandomValues==='function')return Array.from(root.crypto.getRandomValues(new Uint8Array(16)),value=>value.toString(16).padStart(2,'0')).join('');
     throw Error('This browser cannot create a secure save reference. Open PanelStock in an up-to-date browser and retry.');
   }
+  function ResetControls({React,canManage,base,request,busy,onBusy,onReset}){
+    const h=React.createElement;
+    const [preview,setPreview]=React.useState(null),[open,setOpen]=React.useState(false),[confirmed,setConfirmed]=React.useState(false),[working,setWorking]=React.useState(false),[message,setMessage]=React.useState('');
+    const session=React.useRef({active:true,busy:false,previewVersion:0}),operation=React.useRef(null);
+    function validPreview(value){return value?.ok===true&&typeof value.snapshot==='string'&&value.snapshot.length>0&&Number.isSafeInteger(value.panelCount)&&value.panelCount>=0&&Number.isSafeInteger(value.knownAreaCount)&&value.knownAreaCount>=0;}
+    async function loadPreview(){
+      const version=++session.current.previewVersion;
+      const {response,result}=await request(base+'/qa/panels/area-reset',{});
+      if(!session.current.active||version!==session.current.previewVersion)return null;
+      if(response.status===403){setPreview(null);return null;}
+      if(!response.ok||!validPreview(result))throw Error(result?.error||'The reset preview could not be loaded.');
+      setPreview(result);return result;
+    }
+    React.useEffect(()=>{
+      session.current.active=true;
+      if(canManage)loadPreview().catch(()=>{if(session.current.active)setPreview(null);});
+      return()=>{session.current.active=false;};
+    },[base,canManage]);
+    function lock(value){session.current.busy=value;setWorking(value);onBusy?.(value);}
+    async function review(){
+      if(busy||session.current.busy)return;
+      lock(true);setMessage('');
+      try{if(!operation.current){setConfirmed(false);await loadPreview();}if(session.current.active)setOpen(true);}
+      catch(error){if(session.current.active)setMessage(error.message||'The reset preview could not be loaded.');}
+      finally{if(session.current.active)lock(false);}
+    }
+    async function reset(){
+      if(busy||session.current.busy||!confirmed||!preview||preview.panelCount===0)return;
+      lock(true);setMessage('');
+      try{
+        if(!operation.current)operation.current={resetId:newImportId(),expectedSnapshot:preview.snapshot,reason:'Replace existing QA areas with sticker totals'};
+        const {response,result}=await request(base+'/qa/panels/area-reset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(operation.current)});
+        if(!session.current.active)return;
+        if(!response.ok){
+          if(response.status===409){operation.current=null;setConfirmed(false);await loadPreview();setMessage('Panel areas changed. Review the updated counts and confirm again.');return;}
+          if(response.status>=400&&response.status<500){operation.current=null;setConfirmed(false);}
+          throw Error(result?.error||'The reset result could not be confirmed. Retry to check the same reset.');
+        }
+        if(result?.ok!==true||result.resetId!==operation.current.resetId||typeof result.backupId!=='string'||!result.backupId||!Number.isSafeInteger(result.panelCount))throw Error('The reset result could not be verified. Retry to check the same reset.');
+        const refreshed=await request(base+'/qa/queue',{});
+        if(!session.current.active)return;
+        if(!refreshed.response.ok||!Array.isArray(refreshed.result?.items))throw Error('The reset was saved, but QA could not be refreshed. Retry to verify the same reset.');
+        onReset({items:refreshed.result.items,reset:result});
+      }catch(error){if(session.current.active)setMessage(error.message||'The reset result could not be confirmed. Retry to check the same reset.');}
+      finally{if(session.current.active)lock(false);}
+    }
+    if(!canManage||!preview)return null;
+    const button='rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700';
+    return h('section',{'aria-label':'Reset QA panel areas',className:'mt-5 rounded-xl border border-amber-300 bg-amber-50 p-4'},
+      h('h3',{className:'text-base font-semibold text-slate-900'},'Reset panel m² across all orders'),
+      !open&&h('button',{type:'button',disabled:busy||working,className:button+' mt-3',onClick:review},'Review reset for all orders'),
+      open&&h(React.Fragment,null,
+        h('p',{className:'mt-2 text-sm text-slate-800'},`ALL ORDERS · ${preview.panelCount} panels · ${preview.knownAreaCount} with recorded m². Completed and awaiting QA panels are included.`),
+        preview.statusCounts&&h('p',{className:'mt-2 text-sm text-slate-700'},Object.entries(preview.statusCounts).map(([status,count])=>`${status==='approved'?'Completed QA':status==='awaiting'?'Awaiting QA':status.replace(/_/g,' ')}: ${count}`).join(' · ')),
+        h('p',{className:'mt-2 text-sm text-slate-700'},'Current QA m² will be blank until sticker areas are imported or entered. Previous area values are backed up. QA results, photos and history, and CNC sheet areas stay unchanged.'),
+        h('label',{className:'mt-3 flex items-start gap-2 text-sm font-semibold text-slate-800'},h('input',{type:'checkbox',checked:confirmed,disabled:busy||working,'aria-label':'Confirm reset of panel m² for all orders',onChange:event=>setConfirmed(event.target.checked)}),'I confirm this resets panel m² for ALL ORDERS, including completed and awaiting QA.'),
+        h('div',{className:'mt-3 flex flex-wrap gap-3'},h('button',{type:'button',disabled:busy||working||!confirmed||!preview.panelCount,onClick:reset,className:'rounded-lg bg-red-700 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50'},working?'Resetting…':operation.current?'Retry reset verification':'Reset all panel m²'),!operation.current&&h('button',{type:'button',disabled:busy||working,onClick:()=>{setOpen(false);setConfirmed(false);setMessage('');},className:button},'Cancel reset preview'))
+      ),
+      message&&h('p',{role:'alert',className:'mt-3 text-sm text-red-800'},message)
+    );
+  }
   function View({React,items,canManage,base,request,onSaved,onClose}){
     const h=React.createElement;
     const [rows,setRows]=React.useState([]),[fileName,setFileName]=React.useState(''),[scopeKey,setScopeKey]=React.useState(''),[preview,setPreview]=React.useState([]),[selected,setSelected]=React.useState({}),[busy,setBusy]=React.useState(false),[message,setMessage]=React.useState(''),[confirmed,setConfirmed]=React.useState(false);
@@ -62,6 +123,10 @@
     const scope=scopeKey?{project:JSON.parse(scopeKey)[0],orderNumber:JSON.parse(scopeKey)[1]}:null;
     function review(nextRows=rows,nextScope=scope,nextItems=items){
       const matched=nextScope?matchRows(nextRows,nextItems,nextScope,canManage):[];setPreview(matched);setSelected(Object.fromEntries(matched.filter(row=>row.state==='ready').map(row=>[row.page,true])));setConfirmed(false);setSaveMessage('');importId.current=null;payload.current=null;
+    }
+    function areasReset(result){
+      ++session.current.version;setRows([]);setFileName('');setScopeKey('');setPreview([]);setSelected({});setConfirmed(false);setSaveMessage('');importId.current=null;payload.current=null;
+      onSaved(result);
     }
     async function chooseFile(event){
       const file=event.target.files?.[0];if(!file||session.current.busy)return;event.target.value='';
@@ -94,6 +159,7 @@
     return h('section',{className:'mx-auto max-w-6xl px-4 py-5'},h('div',{className:'rounded-xl border border-slate-300 bg-white p-5'},
       h('div',{className:'flex flex-wrap items-center justify-between gap-3'},h('h2',{className:'text-xl font-semibold text-slate-900'},'Import panel m² from PDF'),h('button',{type:'button',className:button,disabled:busy,onClick:onClose},'Back to QA Centre')),
       h('p',{className:'mt-2 text-sm text-slate-600'},'Use the labelled m² from panel stickers. Choose the matching project and order, then review each panel. End plates without their own labelled area are excluded. QA results stay as recorded.'),
+      canManage&&h(ResetControls,{React,canManage,base,request,busy,onBusy:value=>{session.current.busy=value;setBusy(value);},onReset:areasReset}),
       h('label',{className:'mt-4 block text-sm font-semibold text-slate-700'},'Target project / order',h('select',{value:scopeKey,disabled:busy,onChange:event=>{const value=event.target.value;setScopeKey(value);review(rows,value?{project:JSON.parse(value)[0],orderNumber:JSON.parse(value)[1]}:null);},className:'mt-1.5 h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm'},h('option',{value:''},'Choose an order'),scopes.map(([value,order])=>h('option',{key:value,value},`${order.project} · Order ${order.orderNumber}`)))),
       h('label',{className:'mt-4 block text-sm font-semibold text-slate-700'},'Panel stickers PDF',h('input',{type:'file',accept:'.pdf,application/pdf',disabled:busy,onChange:chooseFile,className:'mt-2 block w-full text-sm'})),
       h('p',{role:'status',className:'mt-3 text-sm text-slate-700'},message),
@@ -110,5 +176,6 @@
       )
     ));
   }
-  const api={parsePage,matchRows,extractPdf,View};if(typeof module==='object'&&module.exports)module.exports=api;else root.PanelStockPanelAreaImport=api;
+  const api={parsePage,matchRows,extractPdf,View,ResetControls};if(typeof module==='object'&&module.exports)module.exports=api;else root.PanelStockPanelAreaImport=api;
 })(typeof window==='object'?window:globalThis);
+
