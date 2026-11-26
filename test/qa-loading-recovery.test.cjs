@@ -12,12 +12,12 @@ const attempt=(id='check-old',extra={})=>({id,status:'approved',results:{finish:
 function full(extra={}){const latest=attempt();return {id:'panel-one',kind:'panel',project:'Test project',orderNumber:'7',sheetNumber:'1',reference:'P1',status:'approved',quantity:1,latest,history:[latest],photoAdditions:[{id:'addition',attemptId:latest.id,photos:[image('addition')],addedBy:'later-inspector',addedAt:'2026-11-22T02:00:00Z'}],evidenceLoaded:true,...extra};}
 function compact(item){const strip=value=>{const{photo,photos,...rest}=value;return rest;},count=entry=>[...(entry.photos||entry.photo?[entry.photo]:[]),...(item.photoAdditions||[]).filter(add=>add.attemptId===entry.id).flatMap(add=>add.photos||[])].length;return {...item,latest:item.latest?{...strip(item.latest),photoCount:count(item.latest)}:null,history:(item.history||[]).map(entry=>({...strip(entry),photoCount:count(entry)})),photoAdditions:(item.photoAdditions||[]).map(entry=>({...strip(entry),photoCount:(entry.photos||[]).length})),evidenceLoaded:false,hasPhotoEvidence:!!item.latest?.photo||!!item.photoAdditions?.length};}
 const data=(items=[])=>({ok:true,items,dispatches:[],checklists:{panel:[['finish','Panel finish']],metalwork:[['finish','Metalwork finish']],gate:[]},settings:{},gateOrders:[],preQaCount:0});
-function fixture({fetcher=async()=>Response.json(data()),initialReport=null}={}){
- const states=[],refs=[],effects=[],pending=[],calls=[],controllers=[],clock=fakeClock(),win=target(),doc=target();let cursor=0,refCursor=0,effectCursor=0;
+function fixture({fetcher=async()=>Response.json(data()),initialReport=null,previewReport=null}={}){
+ const states=[],refs=[],effects=[],pending=[],calls=[],controllers=[],clock=fakeClock(),win=target(),doc=target();let cursor=0,refCursor=0,effectCursor=0,closed=false;
  const context={Response,console,Date,Math,Array,Map,Set,AbortController:class extends AbortController{constructor(){super();controllers.push(this);}},setTimeout:clock.setTimeout,clearTimeout:clock.clearTimeout,setInterval:clock.setInterval,clearInterval:clock.clearInterval,window:win,document:doc,PanelStock:{username:'manager',apiFetch:async(url,options)=>{calls.push({url,options});return fetcher(url,options);}},BAKED_WORKER_URL:'https://worker.test',PageHeading:'heading',ClipboardList:'clipboard',ChevronRight:'chevron',Check:'check',Camera:'camera',Upload:'upload',import_react:{createElement:(tag,props,...children)=>({tag,props:props||{},children})},useState(initial){const i=cursor++;if(!(i in states))states[i]=typeof initial==='function'?initial():initial;return [states[i],value=>{states[i]=typeof value==='function'?value(states[i]):value;}];},useRef(initial){const i=refCursor++;return refs[i]||(refs[i]={current:initial});},useEffect(callback,deps){const i=effectCursor++,old=effects[i];if(!old||!deps||deps.some((value,j)=>value!==old.deps?.[j])){effects[i]={deps,cleanup:old?.cleanup};pending.push(()=>{effects[i].cleanup?.();effects[i].cleanup=callback();});}}};
  vm.createContext(context);vm.runInContext(code,context);
- function render(props={}){cursor=refCursor=effectCursor=0;const tree=context.QaCenter({username:'manager',isAdmin:true,canManage:true,canDispatch:false,initialReport,...props});while(pending.length)pending.shift()();return tree;}
- render();return {render,states,calls,controllers,clock,win,doc,context,unmount(){for(const effect of effects)effect.cleanup?.();}};
+ function render(props={}){cursor=refCursor=effectCursor=0;const tree=previewReport?context.QaOrderReport({report:previewReport,owner:'manager',onClose(){closed=true;}}):context.QaCenter({username:'manager',isAdmin:true,canManage:true,canDispatch:false,initialReport,...props});while(pending.length)pending.shift()();return tree;}
+ render();return {render,states,calls,controllers,clock,win,doc,context,closed:()=>closed,unmount(){for(const effect of effects)effect.cleanup?.();}};
 }
 function counts(tree){return Object.fromEntries(['Awaiting QA','Recut required','Approved','QA not required'].map(label=>{const card=nodes(tree).find(node=>node.tag==='button'&&node.children.some(child=>child?.tag==='span'&&text(child)===label));return[label,text(nodes(card).find(node=>node.tag==='strong'))];}));}
 function expand(view,props={}){let tree=view.render(props);for(const node of nodes(tree).filter(node=>node.tag==='button'&&node.props['aria-expanded']===false))node.props.onClick();return view.render(props);}
@@ -88,4 +88,53 @@ for (const permissions of [
  assert.ok(button(tree,'Import panel m² PDF'));
  assert.equal(view.calls.filter(call=>call.options?.method==='POST').length,0);
  view.unmount();
+});
+
+const pdfSnapshot={mime:'application/pdf',fileName:'QA.pdf',data:'JVBERi0xLjQ='};
+const reportSnapshot=(items=[])=>({project:'Test project',orderNumber:'7',generatedAt:'2026-11-27T00:00:00Z',generatedBy:'manager',items,checklists:data().checklists});
+for(const stalled of ['fetch','body'])test(`order report ${stalled} can complete after the queue's20-second deadline and repeated clicks share the generation`,async()=>{
+ const pending=deferred(),item=compact(full({status:'awaiting'}));
+ const view=fixture({fetcher:async url=>url.endsWith('/qa/report')?(stalled==='fetch'?pending.promise:{ok:true,json:()=>pending.promise}):Response.json(data([item]))});await settle();
+ const action=button(view.render(),'Generate QA report'),work=action.props.onClick();assert.equal(action.props.onClick(),work);
+ const call=view.calls.find(value=>value.url.endsWith('/qa/report'));assert.ok(call.options.signal);assert.equal(JSON.parse(call.options.body).responseView,'summary');
+ view.clock.advance(20001);await settle();assert.equal(call.options.signal.aborted,false);assert.match(text(view.render()),/Generating the complete QA report/);
+ const result={ok:true,report:reportSnapshot([item]),pdf:pdfSnapshot};pending.resolve(stalled==='fetch'?Response.json(result):result);await work;
+ assert.equal(view.render().tag,view.context.QaOrderReport);assert.equal(view.calls.filter(value=>value.url.endsWith('/qa/report')).length,1);view.unmount();
+});
+
+test('report deadline covers a stalled JSON body, aborts at120seconds and allows a clean retry',async()=>{
+ let reads=0;const never=new Promise(()=>{}),item=compact(full({status:'awaiting'})),view=fixture({fetcher:async url=>url.endsWith('/qa/report')?(++reads===1?{ok:true,json:()=>never}:Response.json({ok:true,report:reportSnapshot([item]),pdf:pdfSnapshot})):Response.json(data([item]))});await settle();
+ const work=button(view.render(),'Generate QA report').props.onClick();view.clock.advance(119999);await settle();assert.equal(view.calls.find(call=>call.url.endsWith('/qa/report')).options.signal.aborted,false);view.clock.advance(1);await work;
+ let tree=view.render();assert.match(text(tree),/The QA report is taking too long to generate/);assert.doesNotMatch(text(tree),/Generating the complete QA report/);assert.equal(button(tree,'Generate QA report').props.disabled,false);
+ assert.equal(view.calls.find(call=>call.url.endsWith('/qa/report')).options.signal.aborted,true);await button(tree,'Generate QA report').props.onClick();assert.equal(view.render().tag,view.context.QaOrderReport);view.unmount();
+});
+
+for(const change of ['unmount','account'])test(`late generated report cannot publish after ${change}`,async()=>{
+ const pending=deferred(),item=compact(full({status:'awaiting'})),view=fixture({fetcher:async url=>url.endsWith('/qa/report')?pending.promise:Response.json(data([item]))});await settle();const work=button(view.render(),'Generate QA report').props.onClick();
+ if(change==='unmount'){view.unmount();assert.equal(view.calls.find(call=>call.url.endsWith('/qa/report')).options.signal.aborted,true);}else view.context.PanelStock.username='different-account';
+ const before=JSON.stringify(view.states);pending.resolve(Response.json({ok:true,report:reportSnapshot([item]),pdf:pdfSnapshot}));await work;assert.equal(JSON.stringify(view.states),before);view.unmount();
+});
+
+test('summary report loads one panel on demand, preserves its snapshot and excludes newer inspections and photo additions',async()=>{
+ const saved=full(),summary=compact(saved),newer=attempt('later-inspection',{notes:'New inspection not in PDF'}),detail={...saved,latest:newer,history:[...saved.history,newer],photoAdditions:[...saved.photoAdditions,{id:'too-new',attemptId:saved.latest.id,photos:[image('not-in-PDF')],addedBy:'new-person'}]},view=fixture({previewReport:{...reportSnapshot([summary]),pdf:pdfSnapshot},fetcher:async url=>{assert.equal(url,'https://worker.test/qa/items/panel-one');return Response.json({ok:true,item:detail,evidenceLoaded:true});}});
+ assert.equal(view.calls.length,0);let tree=view.render();assert.match(text(tree),/2 saved QA photos included in the PDF/);assert.match(text(tree),/Saved inspection notes/);assert.equal(nodes(tree).filter(node=>node.tag==='img'&&node.props.src.startsWith('data:')).length,0);
+ const load=button(tree,'Load photos');await load.props.onClick();tree=view.render();assert.deepEqual(nodes(tree).filter(node=>node.tag==='img'&&node.props.src.startsWith('data:')).map(node=>node.props.src),[saved.latest.photo,image('addition')]);assert.match(text(tree),/Added by later-inspector/);assert.doesNotMatch(text(tree),/New inspection not in PDF|new-person/);assert.equal(button(tree,'Load photos'),undefined);assert.equal(view.calls.length,1);assert.ok(button(tree,'Download PDF'));view.unmount();
+});
+
+test('legacy anonymous inspections hydrate using their original metadata and history position',async()=>{
+ const old=attempt(undefined,{id:undefined,notes:'Older anonymous inspection'}),saved=full({latest:old,history:[old],photoAdditions:[]}),summary=compact(saved),newer=attempt('newer'),view=fixture({previewReport:{...reportSnapshot([summary]),pdf:pdfSnapshot},fetcher:async()=>Response.json({ok:true,item:{...saved,latest:newer,history:[old,newer]},evidenceLoaded:true})});
+ await button(view.render(),'Load photos').props.onClick();const tree=view.render();assert.deepEqual(nodes(tree).filter(node=>node.tag==='img'&&node.props.src.startsWith('data:')).map(node=>node.props.src),[old.photo]);assert.match(text(tree),/Older anonymous inspection/);view.unmount();
+});
+
+for(const failure of ['timeout','mismatch','missing-snapshot'])test(`lazy report photos ${failure} keeps the PDF and provides a retry`,async()=>{
+ const saved=full(),summary=compact(saved),never=new Promise(()=>{});let reads=0;
+ const view=fixture({previewReport:{...reportSnapshot([summary]),pdf:pdfSnapshot},fetcher:async()=>++reads===1?(failure==='timeout'?{ok:true,json:()=>never}:Response.json({ok:true,item:failure==='mismatch'?{...saved,id:'wrong-panel'}:{...saved,photoAdditions:[]},evidenceLoaded:true})):Response.json({ok:true,item:saved,evidenceLoaded:true})});
+ const work=button(view.render(),'Load photos').props.onClick();if(failure==='timeout')view.clock.advance(20000);await work;let tree=view.render();assert.ok(button(tree,'Retry photos'));assert.ok(button(tree,'Download PDF'));assert.ok(nodes(tree).find(node=>node.props.role==='alert'));assert.equal(nodes(tree).filter(node=>node.tag==='img'&&node.props.src.startsWith('data:')).length,0);
+ await button(tree,'Retry photos').props.onClick();tree=view.render();assert.equal(button(tree,'Retry photos'),undefined);assert.equal(nodes(tree).filter(node=>node.tag==='img'&&node.props.src.startsWith('data:')).length,2);view.unmount();
+});
+
+for(const change of ['close','unmount','account'])test(`lazy report evidence ignores late responses after ${change}`,async()=>{
+ const pending=deferred(),saved=full(),view=fixture({previewReport:{...reportSnapshot([compact(saved)]),pdf:pdfSnapshot},fetcher:async()=>pending.promise});const work=button(view.render(),'Load photos').props.onClick();
+ if(change==='close'){button(view.render(),'← Back to QA Centre').props.onClick();assert.equal(view.closed(),true);}else if(change==='unmount')view.unmount();else view.context.PanelStock.username='different-account';
+ if(change!=='account')assert.equal(view.calls[0].options.signal.aborted,true);const before=JSON.stringify(view.states);pending.resolve(Response.json({ok:true,item:saved,evidenceLoaded:true}));await work;assert.equal(JSON.stringify(view.states),before);view.unmount();
 });

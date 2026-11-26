@@ -13,7 +13,7 @@ function harness({items=[],status='awaiting',kind='all',query='',response,apiFet
   vm.createContext(context);vm.runInContext(qaSource,context);
   function render(props={}){cursor=0;refCursor=0;return context.QaCenter({username:'admin',isAdmin:true,canManage:true,canDispatch:false,...props});}
   render();state[0]=items;state[5]=false;state[8]=status;state[9]=kind;state[10]=query;
-  return {context,state,calls,render,renderReport(report){if(!reportMode){state.length=0;reportMode=true;}cursor=0;refCursor=0;return context.QaOrderReport({report,onClose(){}});}};
+  return {context,state,calls,render,renderReport(report){if(!reportMode){state.length=0;refs.length=0;reportMode=true;}cursor=0;refCursor=0;return context.QaOrderReport({report,onClose(){}});}};
 }
 const panel=(id,reference,status='awaiting',extra={})=>({id,kind:'panel',project:'Library facade',orderNumber:'007',sheetNumber:'2',reference,status,history:[],quantity:1,remainingQuantity:1,...extra});
 const button=(tree,label)=>nodes(tree).find(node=>node.tag==='button'&&node.children.includes(label));
@@ -40,7 +40,7 @@ test('order report fetch requests the server PDF snapshot for the whole order de
   assert.equal(view.calls.length,1);
   assert.equal(view.calls[0].url,'https://worker.example.test/qa/report');
   assert.equal(view.calls[0].options.method,'POST');
-  assert.deepEqual(JSON.parse(view.calls[0].options.body),{project:visible.project,orderNumber:visible.orderNumber,includePdf:true});
+  assert.deepEqual(JSON.parse(view.calls[0].options.body),{project:visible.project,orderNumber:visible.orderNumber,includePdf:true,responseView:"summary"});
   const opened=view.render();
   assert.equal(opened.tag,view.context.QaOrderReport);
   assert.equal(JSON.stringify(opened.props.report),JSON.stringify({...report,pdf}));
