@@ -3,10 +3,10 @@
  const stages=[['stockOrder','Order stock'],['drawnCnc','Drawn / Toolpath'],['cnc','CNC'],['fabrication','Fabrication'],['powderCoating','Powder coating']];
  const copy=value=>JSON.parse(JSON.stringify(value));
  function pickup(date,workingDays=5){return date?lead.minimumDate({days:{powderCoating:workingDays}},'powderCoating',date):'';}
- function definitions(data,draft){const values=data.stageDefinitions||stages;const supported=stages.filter(([name])=>Object.hasOwn(data.plan.stages,name));return data.coating?.canChoose?supported.filter(([name])=>name!=='powderCoating'||draft.panelCoating!=='already_coated'):values;}
+ function definitions(data,draft){const values=data.stageDefinitions||stages;if(!data.coating?.canChoose&&!data.coating?.canChooseFabrication)return values;const fabrication=data.coating.kind==='fabrication',supported=fabrication?[...values.filter(([name])=>name!=='powderCoating'),['powderCoating','Powder coating']]:stages.filter(([name])=>Object.hasOwn(data.plan.stages,name));return supported.filter(([name])=>name!=='powderCoating'||(fabrication?draft.fabricationCoating==='required':draft.panelCoating!=='already_coated'));}
  function dates(draft,stageDefinitions=stages,workingDays=draft.powderCoatingWorkingDays??5){const values=stageDefinitions.flatMap(([stage,label])=>{const row=draft.stages[stage];if(!row||row.notApplicable||!row.date)return [];return [{stage,label:stage==='powderCoating'?'Powder coating · Send':label,date:row.date},...(stage==='powderCoating'?[{stage:'powderPickup',label:'Powder coating · Pickup',date:draft.powderPickupDateOverride||pickup(row.date,workingDays)}]:[])];});if(draft.scheduledDeliveryDate)values.push({stage:'siteDelivery',label:'Schedule delivery',date:draft.scheduledDeliveryDate});return values.sort((a,b)=>a.date.localeCompare(b.date)||a.stage.localeCompare(b.stage));}
  function rowDates(order,summary){return [{stage:'dateOrdered',label:'Date ordered',date:order.dateOrdered||order.createdAt||''},{stage:'requested',label:'Requested date',date:order.requestedDeliveryDate||''},...(summary?.milestones||[]),{stage:'siteDelivery',label:'Scheduled date',date:order.scheduledDeliveryDate||'',time:order.scheduledDeliveryTime||''}];}
- function draftFrom(data){return {...(data.plan.powderPickupDateOverride&&{powderPickupDateOverride:data.plan.powderPickupDateOverride}),stages:Object.fromEntries(stages.filter(([name])=>Object.hasOwn(data.plan.stages,name)).map(([name])=>{const row=data.plan.stages[name];return [name,{date:row.date,notApplicable:row.notApplicable,notes:row.notes}];})),panelCoating:data.coating?.selection||data.plan.panelCoating||'required',scheduledDeliveryDate:data.order.scheduledDeliveryDate||'',scheduledDeliveryTime:data.order.scheduledDeliveryTime||''};}
+ function draftFrom(data){return {...(data.plan.powderPickupDateOverride&&{powderPickupDateOverride:data.plan.powderPickupDateOverride}),stages:Object.fromEntries(stages.filter(([name])=>Object.hasOwn(data.plan.stages,name)).map(([name])=>{const row=data.plan.stages[name];return [name,{date:row.date,notApplicable:row.notApplicable,notes:row.notes}];})),panelCoating:(data.coating?.kind!=='fabrication'&&data.coating?.selection)||data.plan.panelCoating||'required',fabricationCoating:data.plan.fabricationCoating||'not_required',scheduledDeliveryDate:data.order.scheduledDeliveryDate||'',scheduledDeliveryTime:data.order.scheduledDeliveryTime||''};}
  function createController({client,baseUrl,orderId,onChange,onSaved,uuid=()=>crypto.randomUUID()}){
   const owner=client.username;let live=true,locked=false,pending=null,generation=0;
   const state={loading:true,saving:false,data:null,draft:null,error:'',conflict:false,uncertain:false,dirty:false};
@@ -22,8 +22,9 @@
    if(locked||!current()||!state.data?.canEdit||state.uncertain)return;
    const draft=copy(state.draft);
    if(stage==='plan'){
-    if(field!=='panelCoating'||!state.data.coating?.canChoose||!['required','already_coated'].includes(value))return;
-    draft.panelCoating=value;if(value==='required')draft.stages.powderCoating.notApplicable=false;
+    if(field==='fabricationCoating'){if(state.data.coating?.kind!=='fabrication'||!state.data.coating.canChooseFabrication||!['required','not_required'].includes(value))return;draft.fabricationCoating=value;if(value==='required')draft.stages.powderCoating.notApplicable=false;}
+    else{if(field!=='panelCoating'||!state.data.coating?.canChoose||!['required','already_coated'].includes(value))return;
+    draft.panelCoating=value;if(value==='required')draft.stages.powderCoating.notApplicable=false;}
    }else if(stage==='siteDelivery'){
     if(!state.data.canScheduleDelivery||!['scheduledDeliveryDate','scheduledDeliveryTime'].includes(field))return;
     draft[field]=value;if(field==='scheduledDeliveryDate'&&!value)draft.scheduledDeliveryTime='';

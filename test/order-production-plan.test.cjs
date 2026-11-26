@@ -69,3 +69,12 @@ test('the plan dialog uses a pickup date moved in the schedule instead of recalc
  f.controller.update('powderCoating','date','2026-11-26');
  assert.equal(dates(f.controller.state.draft).find(row=>row.stage==='powderPickup').date,'2026-12-08');
 });
+
+test('Fabrication coating is optional and only adds coating to Order and Fabrication',async()=>{
+ const model=require('../order-production-plan.js'),initial=data();initial.order.orderType='Fabrication';initial.plan.fabricationCoating='not_required';initial.stageDefinitions=[['stockOrder','Order'],['fabrication','Fabrication']];initial.coating={kind:'fabrication',canChoose:false,canChooseFabrication:true,selection:'not_required'};
+ const f=fixture(async()=>Response.json(initial));await f.controller.load();assert.deepEqual(model.definitions(initial,f.controller.state.draft),initial.stageDefinitions);
+ f.controller.update('fabrication','date','2026-11-23');f.controller.update('plan','fabricationCoating','required');f.controller.update('powderCoating','date','2026-11-20');let draft=f.controller.state.draft;
+ assert.deepEqual(model.definitions(initial,draft).map(row=>row[0]),['stockOrder','fabrication','powderCoating']);assert.equal(model.dates(draft,model.definitions(initial,draft)).find(row=>row.stage==='powderPickup').date,'2026-11-27');assert.equal(model.definitions(initial,draft).some(([name])=>name==='drawnCnc'||name==='cnc'),false);
+ await f.controller.save();assert.equal(JSON.parse(f.requests.at(-1).options.body).fabricationCoating,'required');
+ f.controller.update('plan','fabricationCoating','not_required');draft=f.controller.state.draft;assert.equal(model.dates(draft,model.definitions(initial,draft)).some(row=>row.stage==='powderPickup'),false);
+});
