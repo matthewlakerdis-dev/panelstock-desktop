@@ -296,6 +296,7 @@
 <link rel="stylesheet" href="order-materials.css?v=1">
 <script src="schedule-resize.js?v=1"></script>
 <script src="schedule-move.js?v=1"></script>
+<script src="schedule-auto-refresh.js?v=1"></script>
 <script src="order-dispatch-progress.js?v=1"></script>
 <script src="active-orders-report.js?v=1"></script>
 <script src="order-dispatch-reversal.js?v=1"></script>
@@ -17037,7 +17038,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
   function schedulePlaceholderDraft(initial){return {...initial,isPlaceholder:true,assignedUsername:initial.assignedUsername?.startsWith("vehicle:")?"":initial.assignedUsername||"",assignedTo:initial.assignedUsername?.startsWith("vehicle:")?"":initial.assignedTo||"",placeholderBatchId:crypto.randomUUID(),projectId:initial.projectId||"__upcoming__",project:initial.project||"",orderId:"",title:initial.orderId?"":initial.title||"",scheduleType:initial.scheduleType||"general",endDate:initial.date,includeNonWorkingDays:false,assignedUsernames:(initial.assignedUsernames||[initial.assignedUsername]).filter(value=>value&&!value.startsWith("vehicle:"))};}
   function SchedulePage({ canManage,canManageCnc,entryOrder=null,onEntryClose,onEntrySaved }) {
     const e=import_react.createElement,[entries,setEntries]=useState([]),[projects,setProjects]=useState([]),[orders,setOrders]=useState([]),[people,setPeople]=useState([]),[scheduleSettings,setScheduleSettings]=useState({startHour:6,endHour:18}),[filterDate,setFilterDate]=useState(todayStr()),[filterPerson,setFilterPerson]=useState("all"),[viewMode,setViewMode]=useState("day"),[orientation,setOrientation]=useState("horizontal"),[loading,setLoading]=useState(true),[notice,setNotice]=useState(""),[editor,setEditor]=useState(null),[saving,setSaving]=useState(false),[tvAddress,setTvAddress]=useState(""),[tvCopied,setTvCopied]=useState(false);
-    const weeklyViewport=useRef(null),resizeController=useRef(null),moveController=useRef(null);
+    const weeklyViewport=useRef(null),resizeController=useRef(null),moveController=useRef(null),scheduleLive=useRef({revision:"initial",isBusy:null});
     useEffect(()=>()=>{resizeController.current?.destroy();moveController.current?.destroy();},[]);
     const alive=useRef(true),owner=useRef(PanelStock.username),loadVersion=useRef(0),seeded=useRef(false),saveLock=useRef(false),entryDialogRef=useRef(null);
     useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
@@ -17059,44 +17060,53 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
     const canEditEntry=entry=>entry.productionPlanStage?canManage:(entry.scheduleType||"general")==="cnc"?canManageCnc:canManage;
     const moveDate=direction=>{const next=new Date((filterDate||todayStr())+"T00:00:00");next.setDate(next.getDate()+direction*(viewMode==="fortnight"?14:viewMode==="week"?7:1));setFilterDate(localDateStr(next));};
     async function load(){
-      const version=++loadVersion.current;if(entryOrder)setNotice("");
+      const background=arguments[0]===true,signal=arguments[1],version=++loadVersion.current;if(entryOrder&&!background)setNotice("");
       try{
-        const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/schedule"),result=await response.json().catch(()=>({}));
-        if(!current()||version!==loadVersion.current)return false;
-        if(!response.ok)throw Error(result.error||"Schedule could not be loaded.");
+        const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/schedule/updates/"+(background?scheduleLive.current.revision||"initial":"initial"),signal?{signal}:undefined),result=await response.json().catch(()=>({}));
+        if(!current()||version!==loadVersion.current||background&&scheduleLive.current.isBusy?.())return false;
+        if(!response.ok){if(response.status===403){setEntries([]);setOrders([]);setProjects([]);setPeople([]);}throw Error(result.error||"Schedule could not be loaded.");}
+        if(result.unchanged)return true;
+        scheduleLive.current.revision=result.revision||"initial";
         const initial=entryOrder&&!seeded.current?scheduleDraftForOrder(entryOrder.id,result,blank(),orderLabel):null;
         setEntries((result.entries||[]).map(entry=>({...entry,project:projectTitleCase(entry.project)})));setProjects((result.projects||[]).map(project=>({...project,name:projectTitleCase(project.name)})));setOrders(result.orders||[]);setPeople(result.people||[]);setScheduleSettings(result.settings||{startHour:6,endHour:18});
         if(initial){seeded.current=true;setEditor(initial);}return true;
-      }catch(error){if(current()&&version===loadVersion.current)setNotice(error.message||"Schedule could not be loaded.");return false;}
+      }catch(error){if(!background&&current()&&version===loadVersion.current)setNotice(error.message||"Schedule could not be loaded.");return false;}
       finally{if(current()&&version===loadVersion.current)setLoading(false);}
     }
     useEffect(()=>{if(!entryOrder)return window.PanelStockPullRefresh?.subscribe(()=>load());});
     useEffect(()=>{void load();},[]);
+    useEffect(()=>{
+      if(entryOrder||loading)return;
+      const isBusy=()=>!current()||!!editor||saving||saveLock.current||!!document.querySelector('[data-move-preview],[data-resize-preview]');
+      scheduleLive.current.isBusy=isBusy;
+      const auto=window.PanelStockScheduleAutoRefresh?.createController({refresh:signal=>load(true,signal),isBusy});
+      return()=>{++loadVersion.current;auto?.destroy();};
+    },[!!editor,loading,saving]);
     useEffect(()=>{if(entryOrder&&editor)entryDialogRef.current?.querySelector('select')?.focus({preventScroll:true});},[!!editor]);
     const update=(key,value)=>setEditor(current=>({...current,[key]:value,...(key==="date"&&current.isPlaceholder&&!current.id&&(!current.endDate||current.endDate===current.date||current.endDate<value)?{endDate:value}:{})}));
     async function save(event){
       event.preventDefault();if(saveLock.current||!editor||!current())return;
-      saveLock.current=true;setSaving(true);setNotice("");
+      saveLock.current=true;++loadVersion.current;setSaving(true);setNotice("");
       try{
         const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/schedule"+(editor.id?"/"+editor.id:""),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(editor)}),result=await response.json().catch(()=>({}));
         if(!current())return;if(!response.ok)throw Error(result.error||"Schedule entry could not be saved.");
         setEntries(result.entries||[]);setEditor(null);
         if(entryOrder){if(onEntrySaved)onEntrySaved(result);else onEntryClose?.();return;}
-        await load();if(current())setNotice("Schedule saved.");
+        if(current())setNotice("Schedule saved.");
       }catch(error){if(current())setNotice(error.message||"Schedule entry could not be saved.");}
       finally{saveLock.current=false;if(current())setSaving(false);}
     }
     async function commitScheduleResize(entry,change){
       if(!current()||!canEditEntry(entry)||saveLock.current)return;
-      saveLock.current=true;setSaving(true);setNotice("Saving schedule time…");
+      saveLock.current=true;++loadVersion.current;setSaving(true);setNotice("Saving schedule time…");
       try{const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/schedule/"+encodeURIComponent(entry.id),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({timeChange:{edge:change.edge,time:change.time,expectedUpdatedAt:entry.updatedAt||entry.createdAt||""}})}),result=await response.json().catch(()=>({}));if(!current())return;if(!response.ok)throw Error(result.error||"The time change could not be confirmed.");setEntries(result.entries||[]);setNotice(`Schedule updated: ${result.entry.startTime} – ${result.entry.endTime}.`);}
       catch(error){if(current()){const refreshed=await load();if(current())setNotice((error.message||"The time change could not be confirmed.")+(refreshed?" Latest schedule loaded.":" Refresh before retrying."));}}
       finally{saveLock.current=false;if(current())setSaving(false);}
     }
     async function commitScheduleMove(entry,change){
       if(!current()||!canEditEntry(entry)||saveLock.current)return;
-      saveLock.current=true;setSaving(true);setNotice("Moving schedule entry…");
-      try{const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/schedule/"+encodeURIComponent(entry.id),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({moveChange:{...change,expectedUpdatedAt:entry.updatedAt||entry.createdAt||""}})}),result=await response.json().catch(()=>({}));if(!current())return;if(!response.ok)throw Error(result.error||"The task could not be moved.");setEntries(result.entries||[]);if(viewMode==="day"&&change.date!==entry.date)setFilterDate(change.date);await load();if(current())setNotice(entry.productionPlanStage?"Task moved. Production plan date updated.":"Schedule entry moved.");}
+      saveLock.current=true;++loadVersion.current;setSaving(true);setNotice("Moving schedule entry…");
+      try{const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/schedule/"+encodeURIComponent(entry.id),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({moveChange:{...change,expectedUpdatedAt:entry.updatedAt||entry.createdAt||""}})}),result=await response.json().catch(()=>({}));if(!current())return;if(!response.ok)throw Error(result.error||"The task could not be moved.");setEntries(result.entries||[]);if(viewMode==="day"&&change.date!==entry.date)setFilterDate(change.date);if(current())setNotice(entry.productionPlanStage?"Task moved. Production plan date updated.":"Schedule entry moved.");}
       catch(error){if(current()){await load();if(current())setNotice(error.message||"The task could not be moved.");}}
       finally{saveLock.current=false;if(current())setSaving(false);}
     }
@@ -17111,7 +17121,7 @@ return e("div",{className:"relative block text-xs font-medium text-slate-600"},e
       const api=window.PanelStockScheduleResize;if(!api){setNotice("Reload PanelStock to enable resizing.");return;}
       resizeController.current?.destroy();resizeController.current=api.createController({onCommit:commitScheduleResize});resizeController.current.begin(event,entry,edge,{startHour:scheduleSettings.startHour??6,endHour:scheduleSettings.endHour??18});
     }
-    async function remove(entry){if(saving)return;if(!await PanelStock.confirm({title:"Delete schedule entry?",message:`Delete ${entry.title} from the schedule?`,confirmLabel:"Delete entry"}))return;setSaving(true);setNotice("");try{const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/schedule/"+entry.id,{method:"DELETE"}),result=await response.json().catch(()=>({}));if(!response.ok)throw Error(result.error||"Schedule entry could not be deleted.");setEntries(result.entries||[]);setEditor(current=>current?.id===entry.id?null:current);await load();setNotice("Schedule entry deleted.");}catch(error){setNotice(error.message||"Schedule entry could not be deleted.");}finally{setSaving(false);}}
+    async function remove(entry){if(saving)return;if(!await PanelStock.confirm({title:"Delete schedule entry?",message:`Delete ${entry.title} from the schedule?`,confirmLabel:"Delete entry"}))return;setSaving(true);setNotice("");try{const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/schedule/"+entry.id,{method:"DELETE"}),result=await response.json().catch(()=>({}));if(!response.ok)throw Error(result.error||"Schedule entry could not be deleted.");setEntries(result.entries||[]);setEditor(current=>current?.id===entry.id?null:current);++loadVersion.current;setNotice("Schedule entry deleted.");}catch(error){setNotice(error.message||"Schedule entry could not be deleted.");}finally{setSaving(false);}}
     async function openTvDisplay(){try{const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/schedule/share"),result=await response.json().catch(()=>({}));if(!response.ok||(!result.code&&!result.token))throw Error(result.error||"TV address could not be created.");setTvAddress(result.code?"https://cnc.panelstockhq.com/tv/"+encodeURIComponent(result.code):BAKED_WORKER_URL+"/schedule-display/view?token="+encodeURIComponent(result.token));setTvCopied(false);}catch(error){setNotice(error.message||"TV address could not be created.");}}
     async function copyTvAddress(){try{await navigator.clipboard.writeText(tvAddress);setTvCopied(true);}catch{await PanelStock.showCopy({title:"Copy TV display address",message:"Automatic copying is unavailable. Select and copy this address:",value:tvAddress});}}
     const field=(label,key,type="text")=>type==="date"?e(ModernDatePicker,{label,value:editor[key]||"",required:true,onChange:value=>update(key,value)}):e("label",{className:"text-xs font-medium text-slate-600"},label,e("input",{type,value:editor[key]||"",required:["title","date"].includes(key),onChange:event=>update(key,event.target.value),className:"mt-1.5 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm"}));

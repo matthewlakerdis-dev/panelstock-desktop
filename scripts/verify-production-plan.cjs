@@ -23,7 +23,12 @@ async function verify(){
  const moveResponse=await fetch(new URL(moveScript,site),{headers,signal:AbortSignal.timeout(20000)});
  assert.equal(moveResponse.status,200,'Schedule drag controller must be available');
  assert.equal(hash(Buffer.from(await moveResponse.arrayBuffer())),moveDigest,'Schedule drag controller differs from the release build');
- console.log('Verified the released Production plan and schedule drag controllers.');
+ const refreshDigest=hash(readFileSync(join(__dirname,'../schedule-auto-refresh.js'))),refreshScript='schedule-auto-refresh.js?v='+refreshDigest.slice(0,12);
+ assert.ok(html.includes(refreshScript),'Production HTML must load the released automatic schedule refresh controller');
+ const refreshResponse=await fetch(new URL(refreshScript,site),{headers,signal:AbortSignal.timeout(20000)});
+ assert.equal(refreshResponse.status,200,'Automatic schedule refresh controller must be available');
+ assert.equal(hash(Buffer.from(await refreshResponse.arrayBuffer())),refreshDigest,'Automatic schedule refresh controller differs from the release build');
+ console.log('Verified the released Production plan, schedule drag and automatic refresh controllers.');
 }
 
 (async()=>{
