@@ -9,7 +9,7 @@ function importPage(quantity=1){
   const submit=html.slice(start,html.indexOf('    return h(',start));
   vm.runInNewContext(normalizers+submit+';submit();',{
     pages:[{page:1,orderNumber:'Order 07',jobReference:'QA Job',sheetNumber:'1',panelNumbers:'21, 22',quantity,stockItemType:'variant',stockItemId:'stock',stockSku:'QA',sheetWidth:4000,sheetHeight:1500,panelArea:4.2,offcutRows:[]}],
-    project:{name:'QA Job',selected:true},cncPanels:[],busy:false,setError:value=>error=value,onSave:rows=>saved=JSON.parse(JSON.stringify(rows)),onClose:()=>closed=true
+    project:{name:'QA Job',selected:true},cncPanels:[],busy:false,saving:{current:false},stickerState:{attached:false,ready:true,review:null},setError:value=>error=value,onSave:rows=>saved=JSON.parse(JSON.stringify(rows)),onClose:()=>closed=true
   });
   assert.equal(error,undefined);assert.equal(closed,true);return saved;
 }
