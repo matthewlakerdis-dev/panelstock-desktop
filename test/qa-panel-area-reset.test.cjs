@@ -6,19 +6,19 @@ const preview=(snapshot='snapshot-one')=>({ok:true,snapshot,generation:null,pane
 const reply=(result,status=200)=>({response:{ok:status>=200&&status<300,status},result});
 const queue=[{id:'a',kind:'panel',status:'approved',panelArea:null,panelAreaRevision:2},{id:'b',kind:'panel',status:'awaiting',panelArea:null,panelAreaRevision:1}];
 function harness(Component,props){
-  const slots=[],effects=[],dependencies=[];let cursor=0,dirty=false,tree;
+  const slots=[],effects=[],dependencies=[],refs=[];let cursor=0,refCursor=0,dirty=false,tree;
   const React={Fragment:Symbol('fragment'),createElement:(type,props,...children)=>({type,props:{...(props||{}),children}}),
     useState(initial){const index=cursor++;if(!Object.hasOwn(slots,index))slots[index]=typeof initial==='function'?initial():initial;return [slots[index],value=>{slots[index]=typeof value==='function'?value(slots[index]):value;dirty=true;}];},
-    useRef(initial){const index=cursor++;if(!Object.hasOwn(slots,index))slots[index]={current:initial};return slots[index];},
+    useRef(initial){const index=cursor++;if(!Object.hasOwn(slots,index))slots[index]={current:initial};refs[refCursor++]=slots[index];return slots[index];},
     useEffect(effect,deps){const index=cursor++,before=dependencies[index];if(!before||deps.some((value,i)=>!Object.is(value,before[i]))){dependencies[index]=deps;effects.push(effect);}}
   };
-  function render(){cursor=0;dirty=false;tree=Component({...props,React});for(const effect of effects.splice(0))effect();return tree;}
+  function render(){cursor=refCursor=0;dirty=false;tree=Component({...props,React});for(const effect of effects.splice(0))effect();return tree;}
   async function flush(){for(let i=0;i<12;i++){await new Promise(resolve=>setImmediate(resolve));if(dirty)render();}return tree;}
   function all(node=tree,result=[]){if(Array.isArray(node)){node.forEach(child=>all(child??null,result));return result;}if(node&&typeof node==='object'){result.push(node);all(node.props?.children??null,result);}return result;}
   const text=node=>Array.isArray(node)?node.map(text).join(''):node&&typeof node==='object'?text(node.props?.children):node==null||node===false?'':String(node);
   const control=name=>all().find(node=>node.type==='button'&&text(node)===name);
   const checkbox=()=>all().find(node=>node.type==='input'&&node.props.type==='checkbox');
-  render();return {render,flush,all,text:()=>text(tree),control,checkbox,get tree(){return tree;},slots,React};
+  render();return {render,flush,all,text:()=>text(tree),control,checkbox,get tree(){return tree;},slots,refs,React};
 }
 function fixture(customRequest,options={}){
   const calls=[],saved=[],busy=[];
@@ -75,9 +75,9 @@ test('importer clears the old PDF review, selected scope and retry references wh
   const saved=[],h=harness(View,{items:[{id:'a',kind:'panel',project:'Salacia',orderNumber:'25'}],canManage:true,base:'/api',request:async()=>reply({}),onSaved:result=>saved.push(result),onClose(){}});
   const scope=h.all().find(node=>node.type==='select');scope.props.onChange({target:{value:'["Salacia","25"]'}});await h.flush();
   // These represent a PDF review already in progress when the separate reset controls are used.
-  h.slots[0]=[{page:1,reference:'A',areaM2:2.5}];h.slots[1]='stickers.pdf';h.slots[3]=[{page:1,state:'ready',reference:'A',areaM2:2.5,item:{id:'a'}}];h.slots[4]={1:true};h.slots[7]=true;h.slots[10].current='old-import-id';h.slots[11].current='old-payload';h.render();
+  h.slots[0]=[{page:1,reference:'A',areaM2:2.5}];h.slots[1]='stickers.pdf';h.slots[3]=[{page:1,state:'ready',reference:'A',areaM2:2.5,item:{id:'a'}}];h.slots[4]={1:true};h.slots[7]=true;h.slots[9]={1:'a'};h.refs[1].current='old-import-id';h.refs[2].current='old-payload';h.render();
   assert.match(h.text(),/stickers.pdf/);const child=h.all().find(node=>node.type===ResetControls);child.props.onReset({items:queue,reset:{backupId:'backup:one'}});await h.flush();
-  assert.equal(h.text().includes('stickers.pdf'),false);assert.equal(h.all().find(node=>node.type==='select').props.value,'');assert.equal(h.all().some(node=>node.type==='button'&&node.props.children.includes('Save 1 panel areas')),false);assert.equal(h.slots[10].current,null);assert.equal(h.slots[11].current,null);assert.deepEqual(saved[0].items,queue);
+  assert.equal(h.text().includes('stickers.pdf'),false);assert.equal(h.all().find(node=>node.type==='select').props.value,'');assert.equal(h.all().some(node=>node.type==='button'&&node.props.children.includes('Save 1 panel areas')),false);assert.deepEqual(h.slots[9],{});assert.equal(h.refs[1].current,null);assert.equal(h.refs[2].current,null);assert.deepEqual(saved[0].items,queue);
 });
 test('a second click while the reset is in flight cannot start another POST',async()=>{
   let release;const hold=new Promise(resolve=>{release=resolve;});

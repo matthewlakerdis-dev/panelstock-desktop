@@ -8,11 +8,11 @@ test('sticker extraction takes the labelled main panel area and never assigns un
  for(const area of ['0','-1','NaN','Infinity','999999','0.859oops'])assert.ok(parsePage(drawing('A',area),1).error);
  assert.ok(parsePage('Scanned image / no text',1).error);assert.ok(parsePage(drawing()+drawing('B-1'),1).error);
 });
-test('matching is scoped to the chosen project and order, blocks duplicate references and leaves ambiguous remakes for manual review',()=>{
+test('matching is scoped to the chosen project and order, blocks repeated PDF references and requires review of ambiguous QA items',()=>{
  const row=parsePage(drawing(),1),scope={project:'Test tower',orderNumber:'42'};
  assert.equal(matchRows([row],[item('wrong',{project:'Other tower'}),item()],scope,true)[0].item.id,'a');
  assert.equal(matchRows([row],[item('wrong',{orderNumber:'43'})],scope,true)[0].state,'blocked');
- assert.equal(matchRows([row],[item(),item('remake')],scope,true)[0].state,'blocked');
+ assert.equal(matchRows([row],[item(),item('remake')],scope,true)[0].state,'review');
  assert.ok(matchRows([row,{...row,page:2}],[item()],scope,true).every(row=>row.state==='blocked'));
  assert.equal(matchRows([row],[item('case',{reference:'a-1'})],scope,true)[0].state,'ready');
 });
