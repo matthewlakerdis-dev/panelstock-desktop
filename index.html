@@ -286,6 +286,7 @@
 <link rel="stylesheet" href="user-bulk-import.css?v=1">
 <script src="qa-panel-area-import.js?v=20261126-area-reset"></script>
 <script src="cnc-order-id-reupload.js?v=20261126"></script>
+<script src="cnc-order-qa-reset.js?v=20261126"></script>
 <script src="user-bulk-import.js?v=1"></script>
 <script src="order-lead-times.js?v=1"></script>
 <script src="order-production-plan.js?v=2"></script>
@@ -14303,6 +14304,38 @@ ${xrefStart}
       if(newEntries.some(panel=>panel.pendingOffcuts.length)&&globalThis.PanelStockOffcutLabels)printScheduledOffcutLabels(newEntries);
       return true;
     }
+    async function resetCncOrderQaRequest(payload,expectedOwner=null) {
+      if(!isAdmin)throw Error("Only administrators can reset order QA");
+      const owner=PanelStock.username;
+      if(expectedOwner!==null&&owner!==expectedOwner)throw Error("Your account changed. Reopen the tracker.");
+      await PanelStock.outbox?.flush?.(owner);
+      if(PanelStock.username!==owner)throw Error("Your account changed. Reopen the tracker.");
+      if(PanelStock.outbox?.pending?.())throw Error("Sync your saved changes before resetting QA.");
+      const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/qa/panels/order-reset",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}),result=await response.json().catch(()=>({}));
+      if(PanelStock.username!==owner)throw Error("Your account changed. Reopen the tracker.");
+      if(!response.ok){const error=Error(result.error||"Order QA could not be reset.");error.status=response.status;throw error;}
+      if(payload.action==="save"){
+        const summary=result.summary,rows=summary?.rows,ids=new Set(payload.panelIds||[]),seen=new Set();
+        if(result.ok!==true||!Number.isSafeInteger(result.revision)||result.revision<payload.revision||typeof summary?.scope?.project!=="string"||typeof summary?.scope?.orderNumber!=="string"||summary.scope.project.trim().toLowerCase()!==String(payload.project).trim().toLowerCase()||summary.scope.orderNumber.trim().toLowerCase()!==String(payload.orderNumber).trim().toLowerCase()||summary?.resetId!==payload.mutationId||summary?.resetCount!==ids.size||!Array.isArray(rows)||rows.length!==ids.size||rows.some(row=>{const id=row?.panelId||row?.id;if(!ids.has(id)||seen.has(id)||row.status!=="completed"||row.qaStatus!=="awaiting"||row.qaReset?.id!==payload.mutationId||row.qaReset.pending!==true)return true;seen.add(id);return false;}))throw Error("The QA reset response could not be verified. Retry the same reset.");
+        let data=null,queue=null,dispatch=null;
+        try{
+          const refreshed=await Promise.all([PanelStock.snapshot(),PanelStock.apiFetch(BAKED_WORKER_URL+"/qa/queue").then(async response=>{const value=await response.json();if(!response.ok||value.ok!==true||!Array.isArray(value.items)||!Array.isArray(value.dispatches))throw Error("QA refresh failed");return value;}),PanelStock.apiFetch(BAKED_WORKER_URL+"/dispatch/panels").then(async response=>{const value=await response.json();if(!response.ok||value.ok!==true||!Array.isArray(value.loads))throw Error("Dispatch refresh failed");return value;})]);
+          [data,queue,dispatch]=refreshed;
+        }catch{}
+        if(PanelStock.username!==owner)throw Error("Your account changed. Reopen the tracker.");
+        if(PanelStock.outbox?.pending?.())throw Error("The reset was saved. Sync your changes and retry to verify the same reset.");
+        if(!data||!Number.isSafeInteger(data.revision)||data.revision<result.revision||!Array.isArray(data.cncPanels)||!queue||!dispatch)throw Error("The reset was saved, but QA and dispatch could not be refreshed. Retry to verify the same reset.");
+        const changed=rows.some(row=>{const id=row.panelId||row.id,matches=data.cncPanels.filter(panel=>panel.id===id),panel=matches[0],qa=queue.items.filter(item=>item.id===id&&item.kind==="panel");return matches.length!==1||(panel.panelNumber??null)!==(row.panelNumber??null)||panel.status!==row.status||(panel.completedAt??null)!==(row.completedAt??null)||qa.length!==1||qa[0].status!=="awaiting"||qa[0].qaReset?.id!==payload.mutationId||qa[0].qaReset.pending!==true;});
+        if(changed){
+          const later=data.revision>result.revision||queue.items.some(item=>ids.has(item.id)&&item.kind==="panel"&&item.qaReset&&(item.qaReset.id!==payload.mutationId||item.qaReset.pending===false));
+          const error=Error(later?"QA or panel records changed after this reset. Latest tracker loaded; review the current order again.":"The saved QA reset could not be verified. Retry to verify the same reset.");
+          if(later){setCncPanels(data.cncPanels);setTransactions(data.transactions||[]);error.status=409;}throw error;
+        }
+        setCncPanels(data.cncPanels);setTransactions(data.transactions||[]);
+        showToast(result.idempotent?"This QA reset was already saved. Current QA and dispatch loaded.":`${summary.resetCount} panels now await a new QA inspection`);
+      }
+      return result;
+    }
     async function reuploadCncOrderIdsRequest(payload) {
       if(!isAdmin)throw Error("Only administrators can update existing panel IDs from drawings");
       const owner=PanelStock.username;
@@ -14916,6 +14949,7 @@ ${xrefStart}
               onUndoCut: isAdmin ? undoCncCutRequest : null,
               onCorrectPanelId: isAdmin ? correctCncPanelIdRequest : null,
               onReuploadOrderIds: isAdmin ? reuploadCncOrderIdsRequest : null,
+              onResetOrderQa: isAdmin ? resetCncOrderQaRequest : null,
               onCompleteSheet: completeCncSheet,
               onPrintOffcutLabels: isAdmin ? printScheduledOffcutLabels : null,
               onRemovePanel: removeCncPanel,
@@ -16119,7 +16153,7 @@ function compareCncOrders(a, b) {
     const target = scope.kind === "sheet" ? "sheet " + scope.sheetNumber + " in order " + scope.orderNumber : "order " + scope.orderNumber;
     return import_jsx_runtime.jsx("button", { type: "button", disabled: count === 0, "aria-label": "Print offcut labels for " + target, title: count === 0 ? "No retained offcuts recorded for this " + scope.kind : "Print all retained offcuts for this " + scope.kind, onClick: (event) => { event?.stopPropagation?.(); onPrint(panels); }, className: "shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50", children: "Print offcut labels" + (count > 0 ? " (" + count + ")" : "") });
   }
-  function CncJobGroups({ panels, allPanels, query, renderGroup, onCompleteSheet, onRemoveScheduled, onPrintOffcutLabels, onReuploadDrawings }) {
+  function CncJobGroups({ panels, allPanels, query, renderGroup, onCompleteSheet, onRemoveScheduled, onPrintOffcutLabels, onReuploadDrawings, onResetQa }) {
     const [expanded, setExpanded] = useState(() => new Map());
     const groups = new Map();
     const jobKey = panel => normalizeCncInput(panel).jobReference;
@@ -16138,11 +16172,11 @@ function compareCncOrders(a, b) {
           h("span", { className: "min-w-0 break-words font-semibold text-sm text-slate-800", children: job || "No job reference" }),
           h("span", { className: "text-xs text-slate-500", children: (total.length - done) + " pending · " + done + "/" + total.length + " complete " + (open ? "▾" : "▸") })
         ] }),
-        h("div", { hidden: !open, children: h(CncOrderGroups, { panels: rows, allPanels: total, query, renderGroup, onCompleteSheet, onRemoveScheduled, onPrintOffcutLabels, onReuploadDrawings }) })
+        h("div", { hidden: !open, children: h(CncOrderGroups, { panels: rows, allPanels: total, query, renderGroup, onCompleteSheet, onRemoveScheduled, onPrintOffcutLabels, onReuploadDrawings, onResetQa }) })
       ] }, job);
     }) });
   }
-  function CncOrderGroups({ panels, allPanels, query, renderGroup, onCompleteSheet, onRemoveScheduled, onPrintOffcutLabels, onReuploadDrawings }) {
+  function CncOrderGroups({ panels, allPanels, query, renderGroup, onCompleteSheet, onRemoveScheduled, onPrintOffcutLabels, onReuploadDrawings, onResetQa }) {
     const [expanded, setExpanded] = useState(() => new Map());
     const groups = new Map();
     for (const panel of panels) {
@@ -16160,6 +16194,7 @@ function compareCncOrders(a, b) {
           h("span", { className: "min-w-0 break-words font-semibold text-sm text-slate-800", children: "Order " + order }),
           h("span", { className: "shrink-0 text-xs text-slate-500", children: (total.length - done) + " pending · " + done + "/" + total.length + " complete " + (open ? "▾" : "▸") })
         ] }),
+          onResetQa && h("button",{type:"button",disabled:done===0,"aria-label":"Reset QA for order "+order,onClick:()=>onResetQa({project:total[0]?.jobReference||rows[0].jobReference||"",orderNumber:String(order)}),className:"shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-cyan-800 disabled:opacity-50"},"Reset QA"),
           onReuploadDrawings && h("button",{type:"button","aria-label":"Re-upload CNC drawings for order "+order,onClick:()=>onReuploadDrawings({project:total[0]?.jobReference||rows[0].jobReference||"",orderNumber:String(order)}),className:"shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-cyan-800"},"Re-upload CNC drawings"),
           onPrintOffcutLabels && h(CncOffcutPrintButton,{panels:total,onPrint:onPrintOffcutLabels,scope:{kind:"order",orderNumber:order}}),
           onRemoveScheduled && h(CncDeleteGroupButton,{panels:total,scope:{kind:"order",jobReference:rows[0].jobReference||"",orderNumber:order},onRemove:onRemoveScheduled})
@@ -16555,7 +16590,7 @@ function compareCncOrders(a, b) {
     async function save(event){event.preventDefault();setBusy(true);setMessage("");try{const payload=Object.fromEntries(Object.keys(DEFAULT_CNC_SETTINGS).map(key=>[key,Number(form[key])])),response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/cnc-settings",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}),result=await response.json().catch(()=>({}));if(!response.ok)throw Error(result.error||"CNC settings could not be saved.");onSaved(result.settings);setMessage("CNC settings saved.");}catch(error){setMessage(error.message||"CNC settings could not be saved.");}finally{setBusy(false);}}
     return h("div",{className:"mx-auto max-w-3xl px-4 py-6"},[h("div",{className:"mb-5"},[h("h1",{className:"text-2xl font-bold text-slate-900"},"CNC Settings"),h("p",{className:"mt-1 text-sm text-slate-500"},"Control off-cut suggestions and the waste colours used in newly downloaded shared Excel trackers.")]),h("form",{onSubmit:save,className:"space-y-5 rounded-xl border border-slate-200 bg-white p-5"},[field("minimumOffcutSizeMm","Minimum off-cut size (mm)","Both finished sides must be at least this size.",1,10000),field("cutEdgeAllowanceMm","Off-cut allowance on cut edge (mm)","Removed from the newly cut edge before an off-cut is proposed.",0,1000),h("fieldset",{className:"rounded-xl border border-slate-200 p-4"},[h("legend",{className:"px-1 text-sm font-semibold text-slate-800"},"Wastage percentage colours"),h("p",{className:"mb-3 text-xs text-slate-500"},"Set the upper limit for green and yellow. Anything above yellow displays red."),h("div",{className:"grid gap-4 sm:grid-cols-2"},[field("wasteGreenMax","Green up to (%)","Low wastage.",0,100),field("wasteYellowMax","Yellow up to (%)","Moderate wastage.",0,100)])]),message&&h("p",{role:"status",className:message.includes("saved")?"text-sm text-green-700":"text-sm text-red-700"},message),h("button",{type:"submit",disabled:busy,className:"rounded-lg bg-cyan-800 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"},busy?"Saving…":"Save CNC settings")])]);
   }
-  function CncPage({ cncPanels, variants, offcuts, isAdmin, onAddPanel, onEditPanel, onAddPanelsBulk, onCompletePanel, onCompleteSheet, onUndoCut, onCorrectPanelId, onReuploadOrderIds, onRemovePanel, onRemoveScheduled, onBackfillDimensions, onPrintOffcutLabels }) {
+  function CncPage({ cncPanels, variants, offcuts, isAdmin, onAddPanel, onEditPanel, onAddPanelsBulk, onCompletePanel, onCompleteSheet, onUndoCut, onCorrectPanelId, onReuploadOrderIds, onResetOrderQa, onRemovePanel, onRemoveScheduled, onBackfillDimensions, onPrintOffcutLabels }) {
     const h = import_react.createElement;
     const [sheetToComplete, setSheetToComplete] = useState(null);
     const [inputError, setInputError] = useState("");
@@ -16570,6 +16605,7 @@ function compareCncOrders(a, b) {
     const [panelToUndo, setPanelToUndo] = useState(null);
     const [panelIdToCorrect, setPanelIdToCorrect] = useState(null);
     const [orderToReupload, setOrderToReupload] = useState(null);
+    const [orderQaToReset, setOrderQaToReset] = useState(null);
     const [form, setForm] = useState({ orderNumber: "", jobReference: "", sheetNumber: "", panelNumber: "",stockItemType:"",stockItemId:"",stockSku:"",sheetWidth:"",sheetHeight:"",totalPanelArea:"",isRemake:false,isTemplate:false,remakeReason:"" });
     const [linkCopied, setLinkCopied] = useState(false);
     const shareableLink = `https://cnc.panelstockhq.com/cnc-tracker/view?token=${encodeURIComponent(CNC_PUBLIC_TOKEN)}`;
@@ -16597,6 +16633,7 @@ function compareCncOrders(a, b) {
       setAddOpen(false);
     }
     function chooseCncPdf(closeEditor){const input=document.createElement("input");input.type="file";input.accept="application/pdf";input.onchange=()=>{const file=input.files?.[0];if(!file)return;setPdfImportFile(file);closeEditor();setPdfImportOpen(true);};input.click();}
+    if(isAdmin&&orderQaToReset){const view=globalThis.PanelStockCncOrderQaReset?.View;return typeof view==="function"?h(view,{React:import_react,scope:orderQaToReset,owner:PanelStock.username,request:onResetOrderQa,onClose:()=>setOrderQaToReset(null)}):h("div",{className:"px-4 py-5"},h("p",{role:"alert",className:"text-sm text-red-700"},"Order QA reset could not be loaded. Refresh PanelStock and try again."),h("button",{type:"button",onClick:()=>setOrderQaToReset(null),className:"mt-3 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold"},"Back to CNC tracker"));}
     if(isAdmin&&orderToReupload){const view=globalThis.PanelStockCncOrderIdReupload?.View;return typeof view==="function"?h(view,{React:import_react,scope:orderToReupload,request:onReuploadOrderIds,onClose:()=>setOrderToReupload(null)}):h("div",{className:"px-4 py-5"},h("p",{role:"alert",className:"text-sm text-red-700"},"Drawing ID review could not be loaded. Refresh PanelStock and try again."),h("button",{type:"button",onClick:()=>setOrderToReupload(null),className:"mt-3 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold"},"Back to CNC tracker"));}
     if (isAdmin && pdfImportOpen) return h(CncPdfImport,{variants,offcuts,cncPanels,initialFile:pdfImportFile,onSave:onAddPanelsBulk,onClose:()=>{setPdfImportOpen(false);setPdfImportFile(null);}});
     if (isAdmin && panelToEdit) return h(CncPanelEdit,{panel:panelToEdit,variants,offcuts,onSave:onEditPanel,onClose:()=>setPanelToEdit(null)});
@@ -16663,7 +16700,7 @@ function compareCncOrders(a, b) {
             ] })
           ] })
         ] }) }),
-        filtered.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyState, { text: view === "pending" ? "No panels currently scheduled for the CNC." : "No completed panels yet." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncJobGroups, { panels: filtered, allPanels: cncPanels, query: q, onPrintOffcutLabels: isAdmin ? onPrintOffcutLabels : null, onReuploadDrawings: isAdmin && typeof onReuploadOrderIds === "function" ? setOrderToReupload : null, onCompleteSheet: view === "pending" ? setSheetToComplete : null, onRemoveScheduled: isAdmin && view === "pending" ? onRemoveScheduled : null, renderGroup: (groupPanels) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", { className: "w-full text-sm", children: [
+        filtered.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyState, { text: view === "pending" ? "No panels currently scheduled for the CNC." : "No completed panels yet." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CncJobGroups, { panels: filtered, allPanels: cncPanels, query: q, onPrintOffcutLabels: isAdmin ? onPrintOffcutLabels : null, onReuploadDrawings: isAdmin && typeof onReuploadOrderIds === "function" ? setOrderToReupload : null, onResetQa: isAdmin && typeof onResetOrderQa === "function" ? setOrderQaToReset : null, onCompleteSheet: view === "pending" ? setSheetToComplete : null, onRemoveScheduled: isAdmin && view === "pending" ? onRemoveScheduled : null, renderGroup: (groupPanels) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", { className: "w-full text-sm", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: groupPanels.map((p, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { className: `border-t border-slate-100 ${i % 2 === 1 ? "bg-slate-50/30" : ""}`, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: "px-4 py-3", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "min-w-0 flex flex-wrap items-center gap-2 pl-2", children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "font-bold text-slate-800", children: ["Panel ", normalizeCncInput(p).panelNumber] }),
@@ -19253,6 +19290,11 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
   function qaAttemptPhotoCount(attempt,item) {
     return item?.evidenceLoaded===false&&Number.isFinite(attempt?.photoCount)?attempt.photoCount:qaAttemptPhotos(attempt,item).length;
   }
+  function qaInspectionDraft(item,definitions) {
+    const blank=item?.kind==="panel"&&item.qaReset?.pending===true;
+    return {results:Object.fromEntries(definitions.map(([key])=>[key,blank?"":item.latest?.results?.[key]||""])),notes:blank?"":item.latest?.notes||""};
+  }
+  function qaInspectionResetToken(item) {return item?.kind==="panel"?(item.qaReset?.id??null):null;}
   function QaCenter({username,isAdmin,canManage,canDispatch,initialReport=null,onReportBack}) {
     const h=import_react.createElement,inputClass="mt-1.5 h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm";
     const [items,setItems]=useState([]),[dispatches,setDispatches]=useState([]),[checklists,setChecklists]=useState({panel:[],metalwork:[],gate:[]}),[preQaCount,setPreQaCount]=useState(0),[qaSettings,setQaSettings]=useState({}),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[notice,setNotice]=useState(""),[statusFilter,setStatusFilter]=useState("awaiting"),[kindFilter,setKindFilter]=useState("all"),[query,setQuery]=useState(""),[selected,setSelected]=useState(null),[results,setResults]=useState({}),[notes,setNotes]=useState(""),[photo,setPhoto]=useState(""),[overrideReason,setOverrideReason]=useState(""),[dispatchOrder,setDispatchOrder]=useState(null),[dispatchForm,setDispatchForm]=useState({lines:{},destination:"",transport:"",driver:"",notes:"",photo:"",overrideReason:""}),[resolving,setResolving]=useState(null),[report,setReport]=useState(initialReport),[collapsedGroups,setCollapsedGroups]=useState({}),[orderReport,setOrderReport]=useState(null),[reportingOrder,setReportingOrder]=useState(null),[replacementChoice,setReplacementChoice]=useState("");
@@ -19292,16 +19334,17 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
     const savePanelArea=async event=>{event.preventDefault();if(panelAreaLock.current||!panelAreaTarget||!areaValue())return;const item=panelAreaTarget,version=panelAreaVersion.current,current=()=>photoSession.current.active&&(!("username" in PanelStock)||PanelStock.username===username)&&version===panelAreaVersion.current;panelAreaLock.current=true;setPanelAreaBusy(true);setNotice("");try{const {response,result}=await qaFetchJson(BAKED_WORKER_URL+"/qa/panels/area?view=queue",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:item.id,...areaBody(item)})});if(!current())return;if(!response.ok)throw Error(result.error||"Panel area could not be saved.");if(result.item?.id!==item.id||!result.item?.panelArea)throw Error("The saved panel area could not be verified. Refresh QA Centre.");cancelQueue();++loadVersion.current; setLoading(false);setItems(values=>values.map(value=>value.id===item.id&&value.kind==="panel"?{...value,...result.item}:value));setPanelAreaTarget(null);setNotice(item.status==="approved"?"Panel area saved. Fabrication uses this item’s QA completion date.":"Panel area saved for its QA completion.");}catch(error){if(current())setNotice(error.message);}finally{if(current()){panelAreaLock.current=false;setPanelAreaBusy(false);}}};
     const areaAction=item=>item.kind==="panel"&&["awaiting","approved"].includes(item.status)&&(item.status!=="approved"||isAdmin||canManage||!item.panelArea)&&h("button",{type:"button",disabled:saving||panelAreaBusy,onClick:()=>openPanelArea(item),className:"rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-cyan-800"},item.panelArea?"Edit m²":"Add m²");
     const statusLabel=value=>value==="not_required"?"QA not required":value==="approved"?"Approved":value==="replaced"?"Replaced · QA approved":value==="recut"?"Recut required":"Awaiting QA",statusTone=value=>value==="not_required"?"bg-slate-100 text-slate-700":["approved","replaced"].includes(value)?"bg-green-100 text-green-800":value==="recut"?"bg-red-100 text-red-800":"bg-amber-100 text-amber-800",dispatchLabel=item=>item.dispatchStatus==="dispatched"?"Dispatched":item.dispatchStatus==="partial"?`Part dispatched · ${item.remainingQuantity} remaining`:"Ready to dispatch";
-    const beginLoaded=item=>{if(item.kind==="panel"&&item.status==="not_required"){setNotice("QA is not required for this panel. Require QA again before opening an inspection.");return;}if(item.kind==="panel"&&item.status==="replaced"){setNotice("QA-check the replacement panel rather than the failed original.");return;}const definitions=checklists[qaChecklistKind(item)]||[];if(!definitions.length){setNotice("The "+(qaChecklistKind(item)==="gate"?"Gate":"QA")+" checklist is unavailable. Refresh QA Centre before opening this inspection.");return;}resetPhotos();photoSession.current.id=item.id;setSelected(item);setPanelAreaForm(areaFormFor(item));setResults(Object.fromEntries(definitions.map(([key])=>[key,item.latest?.results?.[key]||""])));setNotes(item.latest?.notes||"");setPhoto("");setOverrideReason("");setNotice("");};
+    const beginLoaded=item=>{if(item.kind==="panel"&&item.status==="not_required"){setNotice("QA is not required for this panel. Require QA again before opening an inspection.");return;}if(item.kind==="panel"&&item.status==="replaced"){setNotice("QA-check the replacement panel rather than the failed original.");return;}const definitions=checklists[qaChecklistKind(item)]||[];if(!definitions.length){setNotice("The "+(qaChecklistKind(item)==="gate"?"Gate":"QA")+" checklist is unavailable. Refresh QA Centre before opening this inspection.");return;}resetPhotos();photoSession.current.id=item.id;setSelected(item);setPanelAreaForm(areaFormFor(item));const draft=qaInspectionDraft(item,definitions);setResults(draft.results);setNotes(draft.notes);setPhoto("");setOverrideReason("");setNotice("");};
     const finish=result=>{applyView(result);resetPhotos();setSelected(null);setNotice(result.item?.status==="approved"?"QA check approved.":result.item?.status==="recut"?"Item marked for recut.":"QA check saved.");};
     const submit=async event=>{
       event.preventDefault();const session=photoSession.current;if(session.busy||session.saving||saving)return;
-      const inspectionVersion=session.version,definitions=checklists[qaChecklistKind(selected)]||[],current=()=>session.active&&inspectionVersion===session.version;
+      const inspectionVersion=session.version,definitions=checklists[qaChecklistKind(selected)]||[],current=()=>session.active&&inspectionVersion===session.version&&(!("username" in PanelStock)||PanelStock.username===username);
+      if(!current())return;
       if(!definitions.length){setNotice("The inspection checklist is unavailable. Return to QA Centre and refresh before approving this item.");return;}
       if(selected?.kind==="panel"&&!Object.values(results).includes("fail")&&!areaValue()){setNotice("Enter this panel’s length and width, or actual m², before approving QA.");return;}
       session.saving=true;setSaving(true);setNotice("");
       try{
-        const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/qa/check?view=queue",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:selected.id,kind:selected.kind,results,notes,...(selected.kind==="panel"&&areaValue()?areaBody(selected):{}),...(qaChecklistKind(selected)==="gate"?{photos:session.photos.slice()}:{photo}),overrideReason})}),result=await response.json().catch(()=>({}));
+        const response=await PanelStock.apiFetch(BAKED_WORKER_URL+"/qa/check?view=queue",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:selected.id,kind:selected.kind,...(selected.kind==="panel"?{expectedQaResetId:qaInspectionResetToken(selected)}:{}),results,notes,...(selected.kind==="panel"&&areaValue()?areaBody(selected):{}),...(qaChecklistKind(selected)==="gate"?{photos:session.photos.slice()}:{photo}),overrideReason})}),result=await response.json().catch(()=>({}));
         if(!current())return;if(!response.ok)throw Error(result.error||"QA check could not be saved.");finish(result);
       }catch(error){if(current())setNotice(error.message);}
       finally{if(current()){session.saving=false;setSaving(false);}}
@@ -19340,7 +19383,7 @@ e("div",{className:"ps-delivery-issue-actions"},e("button",{type:"button",classN
         const {response,result}=await qaFetchJson(BAKED_WORKER_URL+"/qa/items/"+encodeURIComponent(item.id),{},controller);
         if(!current())return;if(!response.ok)throw Error(result?.error||"The QA inspection could not be loaded.");
         if(result?.ok!==true||result.evidenceLoaded!==true||result.item?.id!==item.id||result.item.kind!==item.kind)throw Error("The full QA inspection could not be verified. Retry loading it.");
-        const full={...item,...result.item,evidenceLoaded:true};showQaItem(full,action,attemptId);setDetailRequest(null);
+        const full={...item,...result.item,evidenceLoaded:true};if(action==="inspect"&&(full.status!==item.status||(full.latest?.id||null)!==(item.latest?.id||null)||qaInspectionResetToken(full)!==qaInspectionResetToken(item)))throw Error("This QA item changed. Refresh QA Centre before opening its inspection.");showQaItem(full,action,attemptId);setDetailRequest(null);
       }catch(error){if(current())setDetailRequest({item,action,attemptId,loading:false,error:error.message||"The QA inspection could not be loaded."});}
       finally{if(current())state.controller=null;}
     };
