@@ -128,3 +128,11 @@ for uncertain responses. Item quantity/description or project/type/location chan
 require affected materials to be checked again. This checklist does not create a
 purchase order or change production/dispatch status. Deploy the companion Worker
 materials API before publishing this interface.
+
+In **Site Orders → View**, submitted **Panels** orders have an **Add PDFs** action
+for everyone who can view the order, including another team member's order. Choose
+one or more PDFs, then **Upload attachments**. Existing requester/manager file and
+camera controls remain available with their previous permissions. PDFs follow the
+existing per-file/order limits and appended order-sheet/email flow; uploading does
+not edit order items or production progress. Deploy the companion Worker PDF-only
+permission and follow-up-email support before publishing this control.
