@@ -48,7 +48,7 @@ test('account change prevents publication and further requests from the old QA o
 });
 
 test('reports load full evidence lazily and compact polls never replace the active full report',async()=>{
- const item=full(),summary=compact(item);let queues=0;const view=fixture({fetcher:async url=>url.includes('/qa/items/')?Response.json({ok:true,item,evidenceLoaded:true}):Response.json(data([queues++?{...summary,photoAdditions:[]}:summary]))});await settle();let tree=approved(view);assert.equal(view.calls.length,1);button(tree,'View report').props.onClick();await settle();tree=view.render();assert.equal(view.calls[1].url,'https://worker.test/qa/items/panel-one');assert.match(text(tree),/Saved inspection notes/);assert.match(text(tree),/Added by later-inspector/);assert.deepEqual(nodes(tree).filter(node=>node.tag==='img').map(node=>node.props.src),[image('check-old'),image('addition')]);view.win.emit('panelstock-remote-change');await settle();tree=view.render();assert.deepEqual(nodes(tree).filter(node=>node.tag==='img').map(node=>node.props.src),[image('check-old'),image('addition')]);assert.equal(view.states[0][0].evidenceLoaded,false);assert.equal(view.states[21].evidenceLoaded,true);view.unmount();
+ const item=full(),summary=compact(item);let queues=0;const view=fixture({fetcher:async url=>url.includes('/qa/items/')?Response.json({ok:true,item,evidenceLoaded:true}):Response.json(data([queues++?{...summary,photoAdditions:[]}:summary]))});await settle();let tree=approved(view);assert.equal(view.calls.length,1);button(tree,'View report').props.onClick();await settle();tree=view.render();assert.equal(view.calls[1].url,'https://worker.test/qa/items/panel-one');assert.match(text(tree),/Saved inspection notes/);assert.match(text(tree),/Added by later-inspector/);assert.deepEqual(nodes(tree).filter(node=>node.tag==='img').map(node=>node.props.src),[image('check-old'),image('addition')]);view.win.emit('panelstock-remote-change');await settle();tree=view.render();assert.deepEqual(nodes(tree).filter(node=>node.tag==='img').map(node=>node.props.src),[image('check-old'),image('addition')]);assert.equal(view.states[0][0].evidenceLoaded,false);assert.equal(view.states[19].evidenceLoaded,true);view.unmount();
 });
 
 test('Add photos uses the originally clicked inspection ID from fresh full history when latest changed',async()=>{
@@ -72,4 +72,20 @@ test('successful photo save replaces a pending queue read and leaves later autom
  const item=full(),summary=compact(item),oldQueue=deferred(),freshQueue=deferred(),newPhoto={id:'new-addition',attemptId:item.latest.id,photos:[image('new-photo')],addedBy:'manager',addedAt:'2026-11-23T00:00:00Z'},updated={...item,photoAdditions:[...item.photoAdditions,newPhoto]};let queues=0;
  const view=fixture({initialReport:item,fetcher:async url=>{assert.ok(url.endsWith('/qa/queue'));queues++;if(queues===1)return Response.json(data([summary]));if(queues===2)return oldQueue.promise;if(queues===3)return freshQueue.promise;return Response.json(data([compact(updated)]));}});await settle();button(view.render(),'Add photos').props.onClick();const opened=view.render();view.win.emit('panelstock-remote-change');assert.equal(queues,2);opened.props.onSaved({ok:true,item:updated,addition:newPhoto,checklists:data().checklists});assert.equal(queues,3);assert.equal(view.controllers[1].signal.aborted,true);
  oldQueue.resolve(Response.json(data([summary])));await settle();view.win.emit('online');assert.equal(queues,3,'old finally cannot clear the replacement request while it is pending');freshQueue.resolve(Response.json(data([compact(updated)])));await settle();assert.equal(view.clock.deadlines(),0);view.win.emit('panelstock-remote-change');await settle();assert.equal(queues,4,'new automatic polls still run after the mutation and stale response');assert.equal(view.states[0][0].photoAdditions.length,2);assert.match(text(view.render()),/new-addition|Added by manager/);view.unmount();
+});
+
+for (const permissions of [
+ {isAdmin:false,canManage:false},
+ {isAdmin:false,canManage:true},
+ {isAdmin:true,canManage:true}
+]) test(`manual metalwork creation is unavailable for ${JSON.stringify(permissions)}`,async()=>{
+ const view=fixture();
+ await settle();
+ const tree=view.render(permissions);
+ assert.equal(button(tree,'Add metalwork'),undefined);
+ assert.equal(nodes(tree).find(node=>node.tag==='form'),undefined);
+ assert.ok(button(tree,'Refresh'));
+ assert.ok(button(tree,'Import panel m² PDF'));
+ assert.equal(view.calls.filter(call=>call.options?.method==='POST').length,0);
+ view.unmount();
 });
