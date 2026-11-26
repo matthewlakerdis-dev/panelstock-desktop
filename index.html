@@ -16194,8 +16194,8 @@ function compareCncOrders(a, b) {
           h("span", { className: "min-w-0 break-words font-semibold text-sm text-slate-800", children: "Order " + order }),
           h("span", { className: "shrink-0 text-xs text-slate-500", children: (total.length - done) + " pending · " + done + "/" + total.length + " complete " + (open ? "▾" : "▸") })
         ] }),
-          onResetQa && h("button",{type:"button",disabled:done===0,"aria-label":"Reset QA for order "+order,onClick:()=>onResetQa({project:total[0]?.jobReference||rows[0].jobReference||"",orderNumber:String(order)}),className:"shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-cyan-800 disabled:opacity-50"},"Reset QA"),
-          onReuploadDrawings && h("button",{type:"button","aria-label":"Re-upload CNC drawings for order "+order,onClick:()=>onReuploadDrawings({project:total[0]?.jobReference||rows[0].jobReference||"",orderNumber:String(order)}),className:"shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-cyan-800"},"Re-upload CNC drawings"),
+          onResetQa && h("button",{type:"button",disabled:done===0,"aria-label":"Reset QA for order "+order,onClick:()=>onResetQa({project:total[0]?.jobReference||rows[0].jobReference||"",orderNumber:String(order)}),className:"shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-cyan-800 disabled:opacity-50",children:"Reset QA"}),
+          onReuploadDrawings && h("button",{type:"button","aria-label":"Re-upload CNC drawings for order "+order,onClick:()=>onReuploadDrawings({project:total[0]?.jobReference||rows[0].jobReference||"",orderNumber:String(order)}),className:"shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-cyan-800",children:"Re-upload CNC drawings"}),
           onPrintOffcutLabels && h(CncOffcutPrintButton,{panels:total,onPrint:onPrintOffcutLabels,scope:{kind:"order",orderNumber:order}}),
           onRemoveScheduled && h(CncDeleteGroupButton,{panels:total,scope:{kind:"order",jobReference:rows[0].jobReference||"",orderNumber:order},onRemove:onRemoveScheduled})
         ]}),
