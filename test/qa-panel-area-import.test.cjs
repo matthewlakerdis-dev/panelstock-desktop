@@ -24,6 +24,13 @@ test('existing areas are never silently overwritten and approved corrections req
  assert.equal(matchRows([row],[item('a',{status:'approved'})],scope,false)[0].state,'ready');
  for(const status of ['recut','not_required','replaced'])assert.equal(matchRows([row],[item('a',{status})],scope,true)[0].state,'blocked');
 });
+test('caps are excluded from sticker-area matches even when an older cap record shares the main panel ID',()=>{
+ const row=parsePage(drawing(),1),scope={project:'Test tower',orderNumber:'42'},cap=item('old-cap',{qaStandaloneRequired:false,qaAssembly:{role:'cap',mainPanelId:'a'},status:'awaiting'});
+ const matched=matchRows([row],[cap,item()],scope,true)[0];assert.equal(matched.state,'ready');assert.equal(matched.item.id,'a');assert.equal(matched.candidates,undefined);
+ assert.equal(matchRows([row],[cap],scope,true)[0].state,'blocked');
+ assert.equal(require('../qa-panel-area-import.js').candidateState(row,cap,true).state,'blocked');
+ const roleOnly={...cap,qaStandaloneRequired:undefined};assert.equal(matchRows([row],[roleOnly,item()],scope,true)[0].item.id,'a');
+});
 test('production packaging includes the importer and the QA Centre entry point',()=>{
  const root=path.join(__dirname,'..'),html=fs.readFileSync(path.join(root,'index.html'),'utf8'),build=fs.readFileSync(path.join(root,'scripts/build-production.cjs'),'utf8');
  assert.match(html,/qa-panel-area-import\.js\?v=/);assert.match(html,/Import panel m² PDF/);assert.match(build,/'qa-panel-area-import.js'/);

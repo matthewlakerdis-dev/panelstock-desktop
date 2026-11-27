@@ -1,6 +1,7 @@
 (function(root){
   'use strict';
   const normal=value=>String(value||'').trim().toLowerCase();
+  const standalone=item=>item?.kind==='panel'&&item.qaStandaloneRequired!==false&&item.qaAssembly?.role!=='cap';
   function parsePage(text,page){
     const headers=[...text.matchAll(/ORDER:\s*([^]*?)\s*PANEL\s*ID:\s*([^]*?)\s*DATE:\s*([\d/-]+)\s*m(?:2|²):\s*([^\s]+)/gi)];
     if(headers.length!==1)return {page,error:headers.length?'More than one panel header — review this page manually.':'No readable panel ID and m² header — review this page manually.'};
@@ -9,6 +10,7 @@
     return {page,reference:reference.trim(),areaM2,project,order:order.trim(),date};
   }
   function candidateState(row,item,canManage){
+    if(!standalone(item))return {state:'blocked',message:'Caps use the combined area recorded on their main panel.'};
     if(!['awaiting','approved'].includes(item.status))return {state:'blocked',message:'Panel is not awaiting or approved QA.'};
     if(item.panelArea){
       if(Math.abs(item.panelArea.areaM2-row.areaM2)<1e-8)return {state:'same',message:'Area already recorded.'};
@@ -24,7 +26,7 @@
     return [`Sheet ${item.sheetNumber||'—'}`,statuses[item.status]||'Unavailable QA status',`Cut: ${cutDate}${item.cutBy?' · '+item.cutBy:''}`,item.panelArea?`${Number(item.panelArea.areaM2).toFixed(3)} m² recorded`:'No m² recorded',item.isRemake?`Remake${item.remakeReason?' · '+item.remakeReason:''}`:'',`Record: ${item.id}`].filter(Boolean);
   }
   function matchRows(rows,items,scope,canManage,choicesByPage={}){
-    const scoped=items.filter(item=>item.kind==='panel'&&normal(item.project)===normal(scope.project)&&normal(item.orderNumber)===normal(scope.orderNumber));
+    const scoped=items.filter(item=>standalone(item)&&normal(item.project)===normal(scope.project)&&normal(item.orderNumber)===normal(scope.orderNumber));
     return rows.map(row=>{
       if(row.error)return {...row,state:'blocked',message:row.error};
       if(rows.filter(other=>!other.error&&normal(other.reference)===normal(row.reference)).length!==1)return {...row,state:'blocked',message:'Panel ID occurs more than once in this PDF.'};
@@ -133,7 +135,7 @@
     const session=React.useRef({active:true,version:0,busy:false}),importId=React.useRef(null),payload=React.useRef(null);
     const reviewItems=React.useRef(items);
     React.useEffect(()=>{session.current.active=true;return()=>{session.current.active=false;++session.current.version;};},[]);
-    const scopes=Array.from(new Map(items.filter(item=>item.kind==='panel').map(item=>[JSON.stringify([item.project,item.orderNumber]),{project:item.project,orderNumber:item.orderNumber}])).entries()).sort((a,b)=>a[1].project.localeCompare(b[1].project)||a[1].orderNumber.localeCompare(b[1].orderNumber,undefined,{numeric:true}));
+    const scopes=Array.from(new Map(items.filter(standalone).map(item=>[JSON.stringify([item.project,item.orderNumber]),{project:item.project,orderNumber:item.orderNumber}])).entries()).sort((a,b)=>a[1].project.localeCompare(b[1].project)||a[1].orderNumber.localeCompare(b[1].orderNumber,undefined,{numeric:true}));
     const scope=scopeKey?{project:JSON.parse(scopeKey)[0],orderNumber:JSON.parse(scopeKey)[1]}:null;
     function review(nextRows=rows,nextScope=scope,nextItems=reviewItems.current){
       reviewItems.current=nextItems;
@@ -162,7 +164,7 @@
       catch(error){if(session.current.active)setMessage(error.message||'QA matches could not be refreshed.');}
       finally{if(session.current.active){session.current.busy=false;setBusy(false);}}
     }
-    const chosen=preview.filter(row=>selected[row.page]&&['ready','replace'].includes(row.state));
+    const chosen=preview.filter(row=>selected[row.page]&&['ready','replace'].includes(row.state)&&standalone(row.item));
     async function save(){
       if(session.current.busy)return;
       if(!scope||!chosen.length){setSaveMessage('Select at least one matched panel area before saving.');return;}
