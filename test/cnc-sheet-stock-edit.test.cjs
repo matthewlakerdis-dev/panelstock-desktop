@@ -1,0 +1,90 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
+const api=require('../cnc-sheet-stock-edit.js'),stickers=require('../cnc-sticker-review.js'),app=fs.readFileSync(path.join(__dirname,fs.existsSync(path.join(__dirname,'../panelstock-app.modern.js'))?'../panelstock-app.modern.js':'../index.html'),'utf8');
+const plain=value=>JSON.parse(JSON.stringify(value)),originalStock={id:'old-stock',sku:'OLD-3000',qty:8,width:3000,height:1200,color:'Milled',material:'Solid Aluminium',thickness:3},newStock={...originalStock,id:'new-stock',sku:'NEW-2400',qty:1,width:2400},thirdStock={...newStock,id:'third-stock',sku:'THIRD-4000',qty:8,width:4000};
+const row=(id,extra={})=>({id,jobReference:'Demo Tower',orderNumber:'007',sheetNumber:'12',panelNumber:'PANEL-'+id,status:'pending',stockItemType:'variant',stockItemId:originalStock.id,stockSku:originalStock.sku,sheetWidth:3000,sheetHeight:1200,totalPanelArea:1.2,panelAreaScope:'sheet',isRemake:false,isTemplate:false,remakeReason:'',uploadedAt:'2026-11-20T00:00:00Z',uploadedBy:'operator',completedAt:null,completedBy:null,pendingOffcuts:[{length:200,width:1200,status:'pending',labelSku:'OLD-LABEL'}],pendingOffcut:{length:200,width:1200,status:'pending',labelSku:'OLD-LABEL'},...extra});
+const peers=()=>[row('one'),row('two'),row('other-sheet',{sheetNumber:'13'}),row('completed-sheet',{sheetNumber:'14',status:'completed',completedAt:'2026-11-21T00:00:00Z',completedBy:'cutter'})];
+const stockInput=(panel,stock=newStock)=>({...panel,stockItemType:stock.itemType||'variant',stockItemId:stock.id,stockSku:stock.sku,sheetWidth:stock.width,sheetHeight:stock.height});
+const makePlan=(panels=peers(),input,extra={})=>api.plan({panels,panel:panels[0],input:input||stockInput(panels[0]),variants:[originalStock,newStock,thirdStock],offcuts:[],...extra});
+function fn(name,indent=2){const match=new RegExp('^'+' '.repeat(indent)+'(?:async )?function '+name+'\\(','m').exec(app);assert.ok(match,name);const rest=app.slice(match.index+match[0].length),next=new RegExp('\\n'+' '.repeat(indent)+'(?:async )?function ').exec(rest);return app.slice(match.index,next?match.index+match[0].length+next.index:undefined);}
+const normalizers=app.slice(app.indexOf('function normalizeCncInput('),app.indexOf('function compareCncOrders('));
+test('a stock change plans every pending member of the original sheet and only propagates stock fields',()=>{
+ const panels=peers(),before=JSON.stringify(panels),plan=makePlan(panels);assert.equal(plan.stockChanged,true);assert.ok(!plan.error,plan.error);assert.deepEqual([...plan.panelIds].sort(),['one','two']);assert.equal(plan.rows.length,2);assert.equal(plan.affected.length,2);assert.equal(JSON.stringify(panels),before);
+ for(const after of plan.rows){const old=panels.find(row=>row.id===after.id);assert.equal(after.stockItemId,newStock.id);assert.equal(after.stockSku,newStock.sku);assert.equal(after.sheetWidth,2400);assert.equal(after.sheetHeight,1200);assert.equal(after.panelNumber,old.panelNumber);assert.equal(after.totalPanelArea,old.totalPanelArea);assert.equal(after.panelAreaScope,old.panelAreaScope);assert.equal(after.status,'pending');assert.equal(after.uploadedAt,old.uploadedAt);assert.deepEqual(after.pendingOffcuts,[]);assert.equal(after.pendingOffcut,null);}
+});
+test('sheet identity preserves project, order and sheet boundaries including leading zeros',()=>{
+ const panels=[...peers(),row('other-project',{jobReference:'Other Tower'}),row('other-order',{orderNumber:'7'}),row('other-sheet-zero',{sheetNumber:'012'})],plan=makePlan(panels);assert.ok(!plan.error,plan.error);assert.deepEqual([...plan.panelIds].sort(),['one','two']);
+});
+test('partly completed target sheets and a moved edit scope cannot receive a shared stock change',()=>{
+ const panels=peers();panels[1]={...panels[1],status:'completed',completedAt:'2026-11-22T00:00:00Z'};assert.ok(makePlan(panels).error);
+ for(const patch of [{jobReference:'Other Tower'},{orderNumber:'8'},{sheetNumber:'13'}])assert.ok(makePlan(peers(),{...stockInput(peers()[0]),...patch}).error);
+});
+test('stock dimensions are copied in their stored orientation and cannot be forged or taken from unavailable stock',()=>{
+ const panels=peers().map(row=>row.sheetNumber==='12'?{...row,totalPanelArea:.4}:row),offcut={...newStock,id:'offcut',sku:'OFFCUT',itemType:'offcut',width:480,height:1200},plan=makePlan(panels,stockInput(panels[0],offcut),{offcuts:[offcut]});assert.ok(!plan.error,plan.error);assert.ok(plan.rows.every(row=>row.stockItemType==='offcut'&&row.sheetWidth===480&&row.sheetHeight===1200));
+ for(const input of [{...stockInput(panels[0]),sheetWidth:9999},{...stockInput(panels[0]),stockItemId:'missing-stock'}])assert.ok(makePlan(panels,input).error);
+});
+test('correcting dimension order for the same stock still requires one shared-sheet update',()=>{
+ const panels=peers().map(row=>row.sheetNumber==='12'?{...row,sheetWidth:1200,sheetHeight:3000}:row),plan=makePlan(panels,stockInput(panels[0],originalStock));assert.equal(plan.stockChanged,true);assert.ok(!plan.error,plan.error);assert.deepEqual([...plan.panelIds].sort(),['one','two']);assert.ok(plan.rows.every(row=>row.sheetWidth===3000&&row.sheetHeight===1200));
+});
+test('confirmation signatures bind membership, peer details, selected input and stock choice',()=>{
+ const panels=peers(),first=makePlan(panels);assert.ok(first.signature);assert.equal(makePlan([...panels].reverse(),stockInput(panels[0]),{panel:panels[0]}).signature,first.signature);
+ for(const changed of [[...panels,row('new-peer')],panels.map(row=>row.id==='two'?{...row,totalPanelArea:1.3}:row),panels.map(row=>row.id==='two'?{...row,pdfRevision:4}:row)])assert.notEqual(makePlan(changed).signature,first.signature);
+ assert.notEqual(makePlan(panels,stockInput(panels[0],thirdStock)).signature,first.signature);
+});
+test('a stale opening panel cannot overwrite newer selected-row data while applying stock',()=>{
+ const original=peers(),current=original.map(row=>row.id==='one'?{...row,totalPanelArea:1.7,panelNumber:'CURRENT-ID'}:row),plan=api.plan({panels:current,panel:original[0],input:stockInput(original[0]),variants:[originalStock,newStock],offcuts:[]});assert.ok(plan.error);assert.match(plan.error,/changed|reopen|refresh/i);
+});
+
+function callbacks(panels=peers(),options={}){
+ const writes=[],attempts=[],updates=[],messages=[];let counter=0;
+ const context={Map,Set,JSON,Date,cncPanels:panels,transactions:[{id:'existing-audit'}],variants:options.variants||[originalStock,newStock,thirdStock],offcuts:options.offcuts||[],username:'admin',isAdmin:options.isAdmin!==false,uid:()=> 'new-activity-'+(++counter),showToast:message=>messages.push(message),persist:value=>{attempts.push(plain(value));if(options.failPersist)throw Error('Storage unavailable');writes.push(plain(value));},setCncPanels:value=>updates.push({kind:'panels',value:plain(value)}),setTransactions:value=>updates.push({kind:'transactions',value:plain(value)}),PanelStockCncSheetStockEdit:api,PanelStockCncStickerReview:stickers};
+ const source=normalizers+fn('cncReservedSheets')+fn('validateCncSchedule',4)+fn('editCncPanel',4)+';editCncPanel';const edit=vm.runInNewContext(source,context);return {context,writes,attempts,updates,messages,edit};
+}
+const consent=plan=>({sheetStockSignature:plan.signature});
+test('the real edit callback saves one physical-sheet change atomically and reserves one target unit for all members',()=>{
+ const panels=peers(),plan=makePlan(panels),h=callbacks(panels),before=JSON.stringify(panels);assert.equal(h.edit('one',stockInput(panels[0]),consent(plan)),true,h.messages.join(' '));assert.equal(h.writes.length,1);assert.equal(h.updates.length,2);assert.equal(JSON.stringify(panels),before);const saved=h.writes[0];assert.deepEqual(Object.keys(saved).sort(),['cncPanels','transactions']);assert.equal(saved.cncPanels.length,panels.length);
+ for(const id of ['one','two']){const after=saved.cncPanels.find(row=>row.id===id),old=panels.find(row=>row.id===id);assert.equal(after.stockItemId,'new-stock');assert.equal(after.sheetWidth,2400);assert.equal(after.sheetHeight,1200);for(const key of ['panelNumber','totalPanelArea','panelAreaScope','status','uploadedBy','uploadedAt','completedAt','completedBy'])assert.equal(after[key],old[key]);assert.deepEqual(after.pendingOffcuts,[]);assert.equal(after.pendingOffcut,null);}
+ for(const id of ['other-sheet','completed-sheet'])assert.deepEqual(saved.cncPanels.find(row=>row.id===id),panels.find(row=>row.id===id));assert.deepEqual([...saved.transactions[0].panelRecordIds].sort(),['one','two']);assert.equal(saved.transactions[0].source,'cnc-edit');assert.equal(h.context.variants[1].qty,1,'Scheduling does not deduct stock on hand');
+});
+test('legacy case and whitespace variants of one physical sheet reserve one unit without rewriting peer identity fields',()=>{
+ const panels=peers().map((panel,index)=>index===0?{...panel,orderNumber:'Batch 2'}:index===1?{...panel,jobReference:' demo   TOWER ',orderNumber:'bAtCh 2',sheetNumber:'12 '}:panel),plan=makePlan(panels),h=callbacks(panels);assert.ok(!plan.error,plan.error);assert.equal(h.edit('one',stockInput(panels[0]),consent(plan)),true,h.messages.join(' '));assert.equal(h.writes.length,1);for(const id of ['one','two']){const before=panels.find(panel=>panel.id===id),after=h.writes[0].cncPanels.find(panel=>panel.id===id);assert.equal(after.stockItemId,'new-stock');assert.equal(after.sheetWidth,2400);for(const key of ['jobReference','orderNumber','sheetNumber','panelNumber','totalPanelArea','status'])assert.equal(after[key],before[key]);}assert.equal(h.context.variants[1].qty,1);
+});
+test('another reserved sheet can exhaust the target stock; N peers still count as one sheet',()=>{
+ const panels=[...peers(),row('target-already-reserved',{sheetNumber:'15',stockItemId:newStock.id,stockSku:newStock.sku,sheetWidth:newStock.width,sheetHeight:newStock.height})],h=callbacks(panels),plan=makePlan(panels);assert.equal(h.edit('one',stockInput(panels[0]),consent(plan)),false);assert.equal(h.writes.length,0);assert.equal(h.updates.length,0);assert.match(h.messages.at(-1),/unreserved|available|stock/i);
+});
+test('missing or stale stock confirmations, staff and persistence failure never apply optimistic changes',()=>{
+ for(const mode of ['missing','stale','staff','persist']){const panels=peers(),h=callbacks(panels,{isAdmin:mode!=='staff',failPersist:mode==='persist'}),plan=makePlan(panels),options=mode==='missing'?{}:mode==='stale'?{sheetStockSignature:'stale'}:consent(plan);assert.equal(h.edit('one',stockInput(panels[0]),options),false,mode);assert.equal(h.writes.length,0,mode);assert.equal(h.updates.length,0,mode);assert.equal(h.attempts.length,mode==='persist'?1:0,mode);}
+});
+test('a source peer added or completed after review invalidates the real save consent',()=>{
+ const panels=peers(),plan=makePlan(panels);for(const changed of [[...panels,row('late-peer')],panels.map(row=>row.id==='two'?{...row,status:'completed',completedAt:'2026-11-27T00:00:00Z'}:row)]){const h=callbacks(changed);assert.equal(h.edit('one',stockInput(panels[0]),consent(plan)),false);assert.equal(h.writes.length,0);assert.equal(h.updates.length,0);}
+});
+test('the real callback rejects an old opening record after the selected panel changes remotely',()=>{
+ const original=peers(),plan=makePlan(original),current=original.map(row=>row.id==='one'?{...row,panelNumber:'LATEST-ID',totalPanelArea:1.6}:row),h=callbacks(current);assert.equal(h.edit('one',stockInput(original[0]),{...consent(plan),sheetStockOriginalPanel:original[0]}),false);assert.equal(h.writes.length,0);assert.equal(h.updates.length,0);assert.match(h.messages.at(-1),/changed|reopen|refresh/i);
+});
+test('ordinary non-stock edits keep their existing one-panel behavior without a sheet-wide consent',()=>{
+ const panels=peers(),h=callbacks(panels);assert.equal(h.edit('one',{...panels[0],panelNumber:'CORRECTED-ID',totalPanelArea:1.4}),true,h.messages.join(' '));assert.equal(h.writes.length,1);assert.equal(h.writes[0].cncPanels[0].panelNumber,'CORRECTED-ID');assert.equal(h.writes[0].cncPanels[0].totalPanelArea,1.4);assert.deepEqual(h.writes[0].cncPanels[1],panels[1]);
+});
+function withAssemblies(){return [...peers().slice(0,2).map((panel,index)=>({...panel,sticker:{reviewId:'review-'+index,labelId:'main-'+index,role:'main',mainPanelId:panel.id,areaM2:.859}})),row('cap-one',{sheetNumber:'17',sticker:{reviewId:'review-0',labelId:'cap-0',role:'cap',mainPanelId:'one'}}),row('cap-two',{sheetNumber:'18',sticker:{reviewId:'review-1',labelId:'cap-1',role:'cap',mainPanelId:'two'}})];}
+test('stock propagation reviews the union of every affected sticker assembly across other sheets',()=>{
+ const panels=withAssemblies(),plan=makePlan(panels),clear=stickers.assemblyChangePlan(panels,plan.rows),h=callbacks(panels);assert.deepEqual(clear.panelIds,['cap-one','cap-two','one','two']);assert.equal(h.edit('one',stockInput(panels[0]),consent(plan)),false);assert.equal(h.writes.length,0);assert.equal(h.edit('one',stockInput(panels[0]),{...consent(plan),clearStickerPanelIds:clear.panelIds,clearStickerSignature:clear.signature}),true,h.messages.join(' '));const saved=h.writes[0];assert.ok(saved.cncPanels.every(row=>!row.sticker));assert.equal(saved.cncPanels.find(row=>row.id==='cap-one').stockItemId,originalStock.id);assert.equal(saved.cncPanels.find(row=>row.id==='cap-two').sheetWidth,3000);assert.deepEqual([...saved.transactions[0].panelRecordIds].sort(),['cap-one','cap-two','one','two']);
+});
+test('an already-cut linked part outside the resized sheet blocks the entire stock update',()=>{
+ const panels=withAssemblies().map(row=>row.id==='cap-two'?{...row,status:'completed',completedAt:'2026-11-25T00:00:00Z'}:row),plan=makePlan(panels),clear=stickers.assemblyChangePlan(panels,plan.rows),h=callbacks(panels);assert.equal(clear.blocked,true);assert.equal(h.edit('one',stockInput(panels[0]),{...consent(plan),clearStickerPanelIds:clear.panelIds,clearStickerSignature:clear.signature}),false);assert.equal(h.writes.length,0);assert.equal(h.updates.length,0);
+});
+
+function elements(value){return Array.isArray(value)?value.flatMap(elements):value&&typeof value==='object'&&value.props?[value,...elements(value.props.children)]:[];}
+const words=value=>Array.isArray(value)?value.map(words).join(' '):value==null||typeof value==='boolean'?'':typeof value==='object'?words(value.props?.children):String(value);
+function editForm(panels=peers()){
+ const factoryAt=app.indexOf('function jsxProd('),factoryEnd=app.indexOf('\n      exports.Fragment',factoryAt),jsx=vm.runInNewContext(app.slice(factoryAt,factoryEnd)+';jsxProd',{REACT_ELEMENT_TYPE:Symbol.for('react.transitional.element')}),state=[];let cursor=0;
+ const useState=initial=>{const slot=cursor++;if(!(slot in state))state[slot]=typeof initial==='function'?initial():initial;return [state[slot],value=>state[slot]=typeof value==='function'?value(state[slot]):value];},React={createElement:(type,props,...children)=>jsx(type,{...(props||{}),...(children.length?{children:children.length===1?children[0]:children}:{})})},context={Map,Set,JSON,Date,import_react:React,import_jsx_runtime:{jsx,jsxs:jsx},useState,PanelStockCncSheetStockEdit:api,PanelStockCncStickerReview:stickers,PageHeading:'heading',Pencil:'pencil',CncProjectPicker:'project-picker',CncStockPicker:'stock-picker',CncPanelTypeFields:'panel-type',CncStickerClearWarning:'sticker-clear',Field:'field',inputCls:'input',fmtCncOffcutDim:()=> '200 × 1200'};
+ const render=vm.runInNewContext(normalizers+fn('cncStickerRemovalPlan')+fn('CncPanelEdit')+';CncPanelEdit',context),calls=[],props={panel:panels[0],cncPanels:panels,variants:[originalStock,newStock,thirdStock],offcuts:[],onSave:(...args)=>{calls.push(args);return false;},onClose(){throw Error('A failed/captured synchronous save cannot close');}};
+ const draw=()=>{cursor=0;return elements(render(props));},preview=()=>draw().find(node=>node.type===api.Review),submit=()=>draw().find(node=>node.type==='form').props.onSubmit({preventDefault(){}}),choose=stock=>draw().find(node=>node.type==='stock-picker').props.onSelect(stock);
+ function checkbox(){const element=preview();assert.ok(element,'The shared stock preview is rendered');return elements(api.Review({...element.props,React})).find(node=>node.props['aria-label']==='Confirm stock change for all panels on sheet 12');}
+ return {props,calls,draw,preview,submit,choose,checkbox};
+}
+test('the existing pencil shows all sheet members and requires explicit stock confirmation before saving',()=>{
+ const form=editForm();assert.equal(form.draw().find(node=>node.type==='stock-picker').props.cncPanels.length,4);form.choose(newStock);const preview=form.preview();assert.ok(preview);const display=api.Review({...preview.props,React:{createElement:(type,props,...children)=>({type,props:{...props,children}})}});assert.match(words(display),/PANEL-one/);assert.match(words(display),/PANEL-two/);assert.match(words(display),/2400/);assert.match(words(display),/3000/);assert.equal(form.checkbox().props.checked,false);form.submit();assert.equal(form.calls.length,0);form.checkbox().props.onChange({target:{checked:true}});assert.equal(form.checkbox().props.checked,true);form.submit();assert.equal(form.calls.length,1);assert.equal(form.calls[0][0],'one');assert.equal(form.calls[0][1].stockItemId,'new-stock');assert.equal(form.calls[0][2].sheetStockSignature,form.preview().props.plan.signature);
+});
+test('changing stock or receiving a new sheet peer clears effective consent in the real edit form',()=>{
+ const form=editForm();form.choose(newStock);form.checkbox().props.onChange({target:{checked:true}});form.choose(thirdStock);assert.equal(form.checkbox().props.checked,false);form.submit();assert.equal(form.calls.length,0);form.checkbox().props.onChange({target:{checked:true}});form.props.cncPanels=[...form.props.cncPanels,row('new-hidden-peer')];assert.equal(form.checkbox().props.checked,false);form.submit();assert.equal(form.calls.length,0);
+});
