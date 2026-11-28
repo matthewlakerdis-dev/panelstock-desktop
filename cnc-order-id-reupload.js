@@ -118,7 +118,7 @@
   function statusText(panel){return `Cutting: ${panel.status==='completed'?'Completed':panel.status==='pending'?'Pending':panel.status||'Not recorded'} · QA: ${String(panel.qaStatus||'Not recorded').replace(/_/g,' ')} · Fabrication: ${String(panel.fabricationStatus||'Not recorded').replace(/_/g,' ')}`;}
   function View({React,scope,request,onClose,onSaved}){
     const h=React.createElement;
-    const [context,setContext]=React.useState(null),[analysis,setAnalysis]=React.useState(null),[selected,setSelected]=React.useState({}),[combine,setCombine]=React.useState({}),[plan,setPlan]=React.useState(null),[reason,setReason]=React.useState(''),[confirmed,setConfirmed]=React.useState(false),[busy,setBusy]=React.useState(true),[error,setError]=React.useState(''),[message,setMessage]=React.useState('Loading the existing order…');
+    const [context,setContext]=React.useState(null),[analysis,setAnalysis]=React.useState(null),[selected,setSelected]=React.useState({}),[combine,setCombine]=React.useState({}),[plan,setPlan]=React.useState(null),[reason,setReason]=React.useState(''),[confirmed,setConfirmed]=React.useState(false),[busy,setBusy]=React.useState(true),[error,setError]=React.useState(''),[message,setMessage]=React.useState('Loading the existing order…'),[uploadName,setUploadName]=React.useState('');
     const session=React.useRef({active:true,busy:true,version:0}),operation=React.useRef(null),reader=React.useRef(null);
     const chosenScope={project:String(scope?.project??''),orderNumber:String(scope?.orderNumber??'')},scopeKey=JSON.stringify(chosenScope);
     session.current.scopeKey=scopeKey;
@@ -143,7 +143,7 @@
     function changeSelection(occurrenceId,panelId){if(session.current.busy||operation.current)return;setSelected(value=>({...value,[occurrenceId]:panelId}));setCombine({});setPlan(null);setConfirmed(false);setError('');}
     async function chooseFile(event){
       const file=event.target.files?.[0];event.target.value='';if(!file||session.current.busy||operation.current||!context)return;
-      const version=++session.current.version;lock(true);setError('');setMessage('Reading and analysing the drawing PDF…');setAnalysis(null);setSelected({});setCombine({});setPlan(null);setConfirmed(false);setReason('');
+      const version=++session.current.version;lock(true);setUploadName(String(file.name||'Revised drawing PDF'));setError('');setMessage('Reading and analysing the drawing PDF…');setAnalysis(null);setSelected({});setCombine({});setPlan(null);setConfirmed(false);setReason('');
       try{const pdf=await readUploadPdf(file,value=>{reader.current=value;});if(!current(version))return;const result=await request({action:'analyse',...chosenScope,fileName:file.name,pdf});if(!current(version))return;const value=normalizeAnalysis(result,chosenScope);setAnalysis(value);setSelected(autoMappings(value));setContext({...context,scope:value.scope,panels:value.panels});setMessage('Review each detected label. Select the existing panel record for every ID you want to update.');}
       catch(failure){if(current(version)){setError(failure.message||'The PDF could not be analysed.');setMessage('');}}
       finally{reader.current=null;if(current(version))lock(false);}
@@ -155,7 +155,7 @@
       if(session.current.busy||operation.current||!analysis)return;if(draft.issues.length){setError(draft.issues.join(' '));return;}if(!draft.mappings.length){setError('Select at least one existing panel record to review.');return;}
       const version=++session.current.version;lock(true);setError('');setMessage('Checking the current saved panel records…');setPlan(null);setConfirmed(false);
       try{const value=await fetchPreview(draft.mappings,version);if(value)setMessage(value.changedCount?'Review the old and new IDs and their preserved statuses before saving.':'No panel ID changes are needed for the selected records.');}
-      catch(failure){if(current(version))setError(failure.message||'The ID changes could not be reviewed.');}
+      catch(failure){if(current(version)){setError(failure.message||'The ID changes could not be reviewed.');setMessage('');}}
       finally{if(current(version))lock(false);}
     }
     async function save(){
@@ -163,33 +163,40 @@
       const explanation=reason.trim();if(!operation.current){if(!confirmed){setError('Confirm the reviewed ID changes before saving.');return;}if(!explanation||explanation.length>1000||/[\u0000-\u001f\u007f]/.test(explanation)){setError('Enter a reason of 1 to 1000 characters on one line.');return;}if(!plan.changedCount){setError('No panel ID changes are selected.');return;}operation.current={action:'save',analysisId:analysis.analysisId,mappings:JSON.parse(JSON.stringify(draft.mappings)),snapshot:plan.snapshot,revision:plan.revision,restoreEpoch:plan.restoreEpoch,mutationId:requestId(),reason:explanation,confirmed:true};}
       const version=++session.current.version;lock(true);setError('');setMessage('Saving ID corrections…');
       try{const result=await request(operation.current);if(!current(version))return;checkSaved(result,plan);onSaved?.(result);onClose();}
-      catch(failure){if(!current(version))return;setError(failure.message||'The update could not be confirmed. Retry to verify the same update.');
+      catch(failure){if(!current(version))return;setMessage('');setError(failure.message||'The update could not be confirmed. Retry to verify the same update.');
         if(failure.status===409){const mappings=operation.current.mappings;operation.current=null;setPlan(null);setConfirmed(false);try{const value=await fetchPreview(mappings,version);if(value)setMessage('Saved records changed. Review the latest ID changes and confirm again.');}catch(previewFailure){if(current(version)){setError(previewFailure.message||'Choose the PDF again to review current records.');setMessage('Choose the PDF again if its analysis has expired.');}}}
         else if(failure.status>=400&&failure.status<500){operation.current=null;setPlan(null);setConfirmed(false);setMessage('Review the mappings or choose the PDF again before saving.');}
       }finally{if(current(version))lock(false);}
     }
     const button='rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700',selectClass='mt-2 h-11 w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 text-sm',suggestions=analysis?autoMappingSuggestions(analysis):{mappings:{},matchKinds:{}},auto=suggestions.mappings;
     const label=panel=>`Sheet ${panel.sheetNumber||'—'} · ${panel.panelNumber||'No current ID'} · ${panel.status==='completed'?'Cut':panel.status||'Not recorded'}`;
-    return h('section',{className:'mx-auto max-w-5xl px-4 py-5'},
-      h('div',{className:'rounded-xl border border-slate-300 bg-white p-5'},
-        h('div',{className:'flex flex-wrap items-center justify-between gap-3'},h('h2',{className:'text-xl font-semibold text-slate-900'},'Re-upload CNC drawings'),h('button',{type:'button',className:button,disabled:frozen,onClick:close},'Back to CNC tracker')),
-        h('p',{className:'mt-3 text-base font-semibold text-slate-800'},`${chosenScope.project||'No job reference'} · Order ${chosenScope.orderNumber}`),
-        h('p',{className:'mt-2 text-sm text-slate-600'},'Use the PDF to correct panel IDs in this existing order. Cutting, QA and fabrication statuses stay attached to the same records. Sheets, stock, areas and original cutting-source references stay unchanged.'),
-        context&&h('p',{className:'mt-2 text-sm text-slate-600'},`${context.panels.length} existing records in this order. The PDF does not add or remove records.`),
-        h('label',{className:'mt-4 block text-sm font-semibold text-slate-700'},'Revised CNC drawing PDF',h('input',{type:'file',accept:'.pdf,application/pdf','aria-label':'Revised CNC drawing PDF',disabled:busy||frozen||!context,onChange:chooseFile,className:'mt-2 block w-full text-sm'})),
-        h('p',{className:'mt-1 text-sm text-slate-500'},'PDF files up to 8 MB.'),
-        message&&h('p',{role:'status',className:'mt-3 text-sm text-slate-700'},message),error&&h('p',{role:'alert',className:'mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-800'},error),
-        !context&&!analysis&&!frozen&&error&&h('button',{type:'button',className:button+' mt-3',disabled:busy,onClick:retryContext},'Retry loading order')
+    const step=plan?2:analysis?1:0;
+    return h('section',{className:'ps-cnc-reupload'},
+      h('header',{className:'ps-cnc-reupload-heading'},h('div',null,h('p',{className:'ps-cnc-eyebrow'},'CNC TRACKER'),h('h2',null,'Re-upload CNC drawings'),h('p',null,'Correct panel IDs from a revised PDF, then review and confirm the changes.')),h('button',{type:'button',className:button,disabled:frozen,onClick:close},'Back to CNC tracker')),
+      h('div',{className:'ps-cnc-order-summary'},h('div',null,h('h3',null,chosenScope.project||'No job reference'),h('p',null,'Order '+chosenScope.orderNumber)),context&&h('span',{className:'ps-cnc-record-count'},context.panels.length+' existing '+(context.panels.length===1?'record':'records'))),
+      h('ol',{className:'ps-cnc-reupload-steps','aria-label':'Drawing update progress'},['Upload PDF','Match panel IDs','Review & save'].map((title,index)=>h('li',{key:title,'aria-current':index===step?'step':undefined,className:index<step?'is-complete':index===step?'is-current':''},h('span',{'aria-hidden':true},index+1),h('strong',null,title)))),
+      h('div',{className:'ps-cnc-upload-grid'},
+        h('section',{className:'ps-cnc-upload-card','aria-label':'Upload revised drawing PDF'},
+          h('h3',null,'Revised CNC drawing PDF'),h('p',{className:'ps-cnc-section-help'},'Choose the updated drawing for this order. PDF files up to 8 MB.'),
+          h('label',{className:'ps-cnc-upload-zone'+(busy||frozen||!context?' is-disabled':'')},
+            h('input',{type:'file',accept:'.pdf,application/pdf','aria-label':'Revised CNC drawing PDF',disabled:busy||frozen||!context,onChange:chooseFile}),
+            h('svg',{width:36,height:36,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:1.5,'aria-hidden':true},h('path',{d:'M14 2H5v20h14V7zM14 2v5h5M12 18v-7m-3 3 3-3 3 3'})),
+            h('span',{className:'ps-cnc-upload-description'},h('strong',null,analysis?.source.fileName||uploadName||'Choose a revised PDF'),h('small',null,uploadName?'Choose another file to replace it.':'Browse files on your device.')),
+            h('span',{className:'ps-cnc-upload-button','aria-hidden':true},'Choose PDF')),
+          message&&h('p',{role:'status',className:'ps-cnc-load-state'+(busy?' is-loading':'')},busy&&h('span',{className:'ps-cnc-loading-dot','aria-hidden':true}),message),
+          error&&h('div',{role:'alert',className:'ps-cnc-upload-error'},h('div',null,h('strong',null,context?'This step could not be completed':'Order could not be loaded'),h('p',null,error)),!context&&!analysis&&!frozen&&h('button',{type:'button',className:button,disabled:busy,onClick:retryContext},'Retry loading order'))
+        ),
+        h('aside',{className:'ps-cnc-preserved-card'},h('h3',null,'Existing records are preserved'),h('p',null,'The PDF does not add or remove records.'),h('ul',null,h('li',null,'Cutting, QA and fabrication statuses stay attached to the same records.'),h('li',null,'Sheets, stock, areas and original cutting-source references stay unchanged.')))
       ),
       analysis&&h(React.Fragment,null,
-        h('div',{className:'mt-4 rounded-xl border border-slate-300 bg-white p-4'},h('p',{className:'text-sm font-semibold text-slate-800'},`${analysis.source.fileName} · ${analysis.occurrences.length} detected label occurrences`),analysis.warnings.length>0&&h('ul',{className:'mt-2 list-disc space-y-1 pl-5 text-sm text-amber-900'},analysis.warnings.map((warning,index)=>h('li',{key:index},warning)))),
-        h('div',{className:'mt-4 space-y-3'},analysis.occurrences.map(occurrence=>{const target=analysis.panels.find(panel=>panel.id===selected[occurrence.occurrenceId]);return h('article',{key:occurrence.occurrenceId,className:'rounded-xl border border-slate-300 bg-white p-4'},
+        h('div',{className:'ps-cnc-analysis mt-4 rounded-xl border border-slate-300 bg-white p-4'},h('p',{className:'text-sm font-semibold text-slate-800'},`${analysis.source.fileName} · ${analysis.occurrences.length} detected label occurrences`),analysis.warnings.length>0&&h('ul',{className:'mt-2 list-disc space-y-1 pl-5 text-sm text-amber-900'},analysis.warnings.map((warning,index)=>h('li',{key:index},warning)))),
+        h('section',{className:'ps-cnc-match-section','aria-label':'Match detected panel IDs'},h('h3',null,'Match panel IDs'),h('div',{className:'ps-cnc-mappings'},analysis.occurrences.map(occurrence=>{const target=analysis.panels.find(panel=>panel.id===selected[occurrence.occurrenceId]);return h('article',{key:occurrence.occurrenceId,className:'rounded-xl border border-slate-300 bg-white p-4'},
           h('p',{className:'break-words text-base font-semibold text-slate-900'},occurrence.panelNumber||'No readable panel ID'),
           h('p',{className:'mt-1 text-sm text-slate-500'},`PDF page ${occurrence.page} · Printed sheet ${occurrence.sheetNumber||'—'}${occurrence.quantity>1?` · Copy ${occurrence.copyIndex+1} of ${occurrence.quantity}`:''}`),
           occurrence.eligible===false?h('p',{className:'mt-2 text-sm text-amber-900'},occurrence.error||'This label requires review and cannot be selected.'):h('label',{className:'mt-3 block text-sm font-semibold text-slate-700'},'Existing panel record',h('select',{'aria-label':'Existing panel for '+occurrence.occurrenceId,className:selectClass,value:selected[occurrence.occurrenceId]||'',disabled:busy||frozen,onChange:event=>changeSelection(occurrence.occurrenceId,event.target.value)},h('option',{value:''},'Leave this label unmapped'),analysis.panels.map(panel=>h('option',{key:panel.id,value:panel.id},label(panel))))),
           target&&h('p',{className:'mt-2 text-sm text-slate-600'},statusText(target)),
           target&&auto[occurrence.occurrenceId]===target.id&&h('p',{className:suggestions.matchKinds[occurrence.occurrenceId]==='cap-suffix'?'mt-1 text-sm text-amber-900':'mt-1 text-sm text-green-700'},suggestions.matchKinds[occurrence.occurrenceId]==='cap-suffix'?'Suggested cap suffix repair on the same sheet — review before saving.':'Matched the existing ID on the same sheet.')
-        );})),
+        );}))),
         draft.groups.filter(group=>group.occurrences.length>1).map(group=>h('div',{key:group.panelId,className:'mt-3 rounded-xl border border-amber-300 bg-amber-50 p-4'},h('p',{className:'text-sm font-semibold text-slate-800'},`${label(group.panel)} ← ${group.occurrences.map(item=>item.panelNumber).join(', ')}`),h('label',{className:'mt-2 flex items-start gap-2 text-sm text-slate-800'},h('input',{type:'checkbox','aria-label':'Confirm aggregate '+group.panelId,checked:!!combine[group.panelId],disabled:busy||frozen,onChange:event=>{setCombine(value=>({...value,[group.panelId]:event.target.checked}));setPlan(null);setConfirmed(false);setError('');}}),'This existing record represents these labels.'))),
         h('div',{className:'mt-4 rounded-xl border border-slate-300 bg-white p-4'},h('p',{className:'text-sm text-slate-700'},`${draft.mappings.length} existing records selected · ${draft.unmatchedOccurrenceIds.length} PDF labels left unmapped.`),draft.issues.length>0&&h('ul',{className:'mt-2 list-disc pl-5 text-sm text-amber-900'},draft.issues.map((issue,index)=>h('li',{key:index},issue))),h('button',{type:'button',className:button+' mt-3',disabled:busy||frozen||!draft.mappings.length||draft.issues.length>0,onClick:review},'Review ID updates')),
         plan&&h('section',{'aria-label':'Reviewed panel ID updates',className:'mt-4 rounded-xl border border-slate-300 bg-white p-5'},h('h3',{className:'text-lg font-semibold text-slate-900'},`${plan.changedCount} panel ID ${plan.changedCount===1?'change':'changes'}`),
