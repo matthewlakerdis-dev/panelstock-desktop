@@ -1190,6 +1190,9 @@ video {
 .justify-self-start {
   justify-self: start;
 }
+.overflow-auto {
+  overflow: auto;
+}
 .overflow-hidden {
   overflow: hidden;
 }
