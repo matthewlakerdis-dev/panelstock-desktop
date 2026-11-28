@@ -121,15 +121,20 @@
     const [context,setContext]=React.useState(null),[analysis,setAnalysis]=React.useState(null),[selected,setSelected]=React.useState({}),[combine,setCombine]=React.useState({}),[plan,setPlan]=React.useState(null),[reason,setReason]=React.useState(''),[confirmed,setConfirmed]=React.useState(false),[busy,setBusy]=React.useState(true),[error,setError]=React.useState(''),[message,setMessage]=React.useState('Loading the existing order…'),[uploadName,setUploadName]=React.useState('');
     const session=React.useRef({active:true,busy:true,version:0}),operation=React.useRef(null),reader=React.useRef(null);
     const chosenScope={project:String(scope?.project??''),orderNumber:String(scope?.orderNumber??'')},scopeKey=JSON.stringify(chosenScope);
-    const current=version=>session.current.active&&session.current.version===version;
+    session.current.scopeKey=scopeKey;
+    const current=version=>session.current.active&&session.current.version===version&&session.current.scopeKey===scopeKey;
     function lock(value){session.current.busy=value;setBusy(value);}
-    function loadContext(){
-      if(!session.current.active||operation.current)return;
-      const version=++session.current.version;lock(true);setContext(null);setError('');setMessage('Loading the existing order…');
-      return Promise.resolve().then(()=>request({action:'context',...chosenScope})).then(result=>{if(current(version)){setContext(normalizeContext(result,chosenScope));setMessage('Order loaded. Choose the revised drawing PDF to continue.');}}).catch(failure=>{if(current(version)){const timedOut=failure?.name==='TimeoutError'||/timed? ?out|timeout|aborted/i.test(String(failure?.message||''));setError(timedOut?'The order took too long to load. Try loading it again.':failure?.message||'The order could not be loaded.');setMessage('');}}).finally(()=>{if(current(version))lock(false);});
+    function contextError(failure){if(failure?.name==='TimeoutError'||/timed\s*out|time[\s-]*out/i.test(String(failure?.message||'')))return 'Loading the existing order took too long. Retry loading the order.';if(failure?.name==='AbortError')return 'Loading the existing order was interrupted. Retry loading the order.';return failure?.message||'The order could not be loaded.';}
+    async function loadContext(version){
+      if(!current(version))return;
+      try{const result=await request({action:'context',...chosenScope});if(current(version)){setContext(normalizeContext(result,chosenScope));setMessage('Choose the revised drawing PDF for this existing order.');}}
+      catch(failure){if(current(version)){setError(contextError(failure));setMessage('');}}
+      finally{if(current(version))lock(false);}
     }
+    function retryContext(){if(session.current.busy||operation.current||context||analysis)return;const version=++session.current.version;lock(true);setError('');setMessage('Loading the existing order…');return loadContext(version);}
     React.useEffect(()=>{
-      session.current.active=true;void loadContext();
+      session.current.active=true;const version=++session.current.version;lock(true);setError('');setMessage('Loading the existing order…');
+      Promise.resolve().then(()=>loadContext(version));
       return()=>{session.current.active=false;++session.current.version;try{reader.current?.abort();}catch{}};
     },[scopeKey]);
     const draft=analysis?buildMappings(analysis,selected,combine):{mappings:[],groups:[],issues:[],unmatchedOccurrenceIds:[]};
@@ -179,7 +184,7 @@
             h('span',{className:'ps-cnc-upload-description'},h('strong',null,analysis?.source.fileName||uploadName||'Choose a revised PDF'),h('small',null,uploadName?'Choose another file to replace it.':'Browse files on your device.')),
             h('span',{className:'ps-cnc-upload-button','aria-hidden':true},'Choose PDF')),
           message&&h('p',{role:'status',className:'ps-cnc-load-state'+(busy?' is-loading':'')},busy&&h('span',{className:'ps-cnc-loading-dot','aria-hidden':true}),message),
-          error&&h('div',{role:'alert',className:'ps-cnc-upload-error'},h('div',null,h('strong',null,context?'This step could not be completed':'Order could not be loaded'),h('p',null,error)),!context&&h('button',{type:'button',className:button,disabled:busy||frozen,onClick:loadContext},'Retry loading order'))
+          error&&h('div',{role:'alert',className:'ps-cnc-upload-error'},h('div',null,h('strong',null,context?'This step could not be completed':'Order could not be loaded'),h('p',null,error)),!context&&!analysis&&!frozen&&h('button',{type:'button',className:button,disabled:busy,onClick:retryContext},'Retry loading order'))
         ),
         h('aside',{className:'ps-cnc-preserved-card'},h('h3',null,'Existing records are preserved'),h('p',null,'The PDF does not add or remove records.'),h('ul',null,h('li',null,'Cutting, QA and fabrication statuses stay attached to the same records.'),h('li',null,'Sheets, stock, areas and original cutting-source references stay unchanged.')))
       ),
