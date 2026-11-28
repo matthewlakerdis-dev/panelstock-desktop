@@ -44,17 +44,36 @@
     reuploadCheck(value.warnings===undefined||Array.isArray(value.warnings)&&value.warnings.length<=1000&&value.warnings.every(warning=>reuploadText(warning,2000,true)),'The PDF warnings could not be verified.');
     return {analysisId:value.analysisId,scope,source:{fileName:source.fileName,sha256:source.sha256.toLowerCase(),bytes:source.bytes},occurrences,panels:normalizeReuploadPanels(value.panels),warnings:[...(value.warnings||[])]};
   }
-  function autoMappings(analysis){
-    const counts=new Map(),candidates=new Map(),result={};
+  function autoMappingSuggestions(analysis){
+    const counts=new Map(),candidates=new Map(),recordCounts=new Map(),capGroups=new Map(),mappings={},matchKinds={};
     const identity=item=>JSON.stringify([normalId(item.sheetNumber),normalId(item.panelNumber)]);
-    for(const occurrence of analysis.occurrences){const key=identity(occurrence);counts.set(key,(counts.get(key)||0)+1);}
-    for(const panel of analysis.panels){const key=identity(panel),items=candidates.get(key)||[];items.push(panel);candidates.set(key,items);}
+    const capSuffix=value=>{const text=String(value??'').trim();if(/[,;|\/\r\n]/.test(text))return null;const match=text.match(/^(.+?)\s+EP-([LRBT])$/i);return match&&!/\bEP-[A-Za-z0-9]+\b/i.test(match[1])?{base:normalId(match[1]),side:match[2].toUpperCase()}:null;};
+    const assign=(occurrence,panel,kind)=>{Object.defineProperty(mappings,occurrence.occurrenceId,{value:panel.id,enumerable:true,writable:true,configurable:true});Object.defineProperty(matchKinds,occurrence.occurrenceId,{value:kind,enumerable:true,writable:true,configurable:true});};
+    for(const occurrence of analysis.occurrences){
+      const key=identity(occurrence);counts.set(key,(counts.get(key)||0)+1);
+      const cap=capSuffix(occurrence.panelNumber),sheet=normalId(occurrence.sheetNumber);
+      if(cap&&sheet){const key=JSON.stringify([sheet,cap.base]),items=capGroups.get(key)||[];items.push(occurrence);capGroups.set(key,items);}
+    }
+    for(const panel of analysis.panels){const key=identity(panel),items=candidates.get(key)||[];items.push(panel);candidates.set(key,items);recordCounts.set(panel.id,(recordCounts.get(panel.id)||0)+1);}
+    // Existing exact identities have priority over every proposed repair.
     for(const occurrence of analysis.occurrences){
       const key=identity(occurrence),matches=candidates.get(key)||[];
-      if(occurrence.eligible&&occurrence.quantity===1&&counts.get(key)===1&&matches.length===1)Object.defineProperty(result,occurrence.occurrenceId,{value:matches[0].id,enumerable:true,writable:true,configurable:true});
+      if(occurrence.eligible&&occurrence.quantity===1&&counts.get(key)===1&&matches.length===1&&recordCounts.get(matches[0].id)===1)assign(occurrence,matches[0],'exact');
     }
-    return result;
+    const used=new Set(Object.values(mappings));
+    for(const occurrence of analysis.occurrences){
+      if(Object.hasOwn(mappings,occurrence.occurrenceId)||!occurrence.eligible||occurrence.quantity!==1)continue;
+      const cap=capSuffix(occurrence.panelNumber),sheet=normalId(occurrence.sheetNumber);if(!cap||!sheet)continue;
+      const key=JSON.stringify([sheet,cap.base]),matches=candidates.get(key)||[];
+      // A main label on this sheet, more than one cap label, or several saved
+      // bare records requires an explicit choice. Never guess an aggregate.
+      if(counts.has(key)||capGroups.get(key)?.length!==1||matches.length!==1)continue;
+      const panel=matches[0];if(recordCounts.get(panel.id)!==1||used.has(panel.id)||capSuffix(panel.panelNumber))continue;
+      assign(occurrence,panel,'cap-suffix');used.add(panel.id);
+    }
+    return {mappings,matchKinds};
   }
+  function autoMappings(analysis){return autoMappingSuggestions(analysis).mappings;}
   function buildMappings(analysis,selections={},combines={}){
     const issues=[],groupsById=new Map(),panels=new Map(analysis.panels.map(panel=>[panel.id,panel])),occurrences=new Map(analysis.occurrences.map(item=>[item.occurrenceId,item])),unmatchedOccurrenceIds=[];
     if(!reuploadObject(selections)||!reuploadObject(combines))return {mappings:[],groups:[],issues:['Review the selected existing panel records.'],unmatchedOccurrenceIds:analysis.occurrences.map(item=>item.occurrenceId)};
@@ -140,7 +159,7 @@
         else if(failure.status>=400&&failure.status<500){operation.current=null;setPlan(null);setConfirmed(false);setMessage('Review the mappings or choose the PDF again before saving.');}
       }finally{if(current(version))lock(false);}
     }
-    const button='rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700',selectClass='mt-2 h-11 w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 text-sm',auto=analysis?autoMappings(analysis):{};
+    const button='rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700',selectClass='mt-2 h-11 w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 text-sm',suggestions=analysis?autoMappingSuggestions(analysis):{mappings:{},matchKinds:{}},auto=suggestions.mappings;
     const label=panel=>`Sheet ${panel.sheetNumber||'—'} · ${panel.panelNumber||'No current ID'} · ${panel.status==='completed'?'Cut':panel.status||'Not recorded'}`;
     return h('section',{className:'mx-auto max-w-5xl px-4 py-5'},
       h('div',{className:'rounded-xl border border-slate-300 bg-white p-5'},
@@ -159,7 +178,7 @@
           h('p',{className:'mt-1 text-sm text-slate-500'},`PDF page ${occurrence.page} · Printed sheet ${occurrence.sheetNumber||'—'}${occurrence.quantity>1?` · Copy ${occurrence.copyIndex+1} of ${occurrence.quantity}`:''}`),
           occurrence.eligible===false?h('p',{className:'mt-2 text-sm text-amber-900'},occurrence.error||'This label requires review and cannot be selected.'):h('label',{className:'mt-3 block text-sm font-semibold text-slate-700'},'Existing panel record',h('select',{'aria-label':'Existing panel for '+occurrence.occurrenceId,className:selectClass,value:selected[occurrence.occurrenceId]||'',disabled:busy||frozen,onChange:event=>changeSelection(occurrence.occurrenceId,event.target.value)},h('option',{value:''},'Leave this label unmapped'),analysis.panels.map(panel=>h('option',{key:panel.id,value:panel.id},label(panel))))),
           target&&h('p',{className:'mt-2 text-sm text-slate-600'},statusText(target)),
-          target&&auto[occurrence.occurrenceId]===target.id&&h('p',{className:'mt-1 text-sm text-green-700'},'Matched the existing ID on the same sheet.')
+          target&&auto[occurrence.occurrenceId]===target.id&&h('p',{className:suggestions.matchKinds[occurrence.occurrenceId]==='cap-suffix'?'mt-1 text-sm text-amber-900':'mt-1 text-sm text-green-700'},suggestions.matchKinds[occurrence.occurrenceId]==='cap-suffix'?'Suggested cap suffix repair on the same sheet — review before saving.':'Matched the existing ID on the same sheet.')
         );})),
         draft.groups.filter(group=>group.occurrences.length>1).map(group=>h('div',{key:group.panelId,className:'mt-3 rounded-xl border border-amber-300 bg-amber-50 p-4'},h('p',{className:'text-sm font-semibold text-slate-800'},`${label(group.panel)} ← ${group.occurrences.map(item=>item.panelNumber).join(', ')}`),h('label',{className:'mt-2 flex items-start gap-2 text-sm text-slate-800'},h('input',{type:'checkbox','aria-label':'Confirm aggregate '+group.panelId,checked:!!combine[group.panelId],disabled:busy||frozen,onChange:event=>{setCombine(value=>({...value,[group.panelId]:event.target.checked}));setPlan(null);setConfirmed(false);setError('');}}),'This existing record represents these labels.'))),
         h('div',{className:'mt-4 rounded-xl border border-slate-300 bg-white p-4'},h('p',{className:'text-sm text-slate-700'},`${draft.mappings.length} existing records selected · ${draft.unmatchedOccurrenceIds.length} PDF labels left unmapped.`),draft.issues.length>0&&h('ul',{className:'mt-2 list-disc pl-5 text-sm text-amber-900'},draft.issues.map((issue,index)=>h('li',{key:index},issue))),h('button',{type:'button',className:button+' mt-3',disabled:busy||frozen||!draft.mappings.length||draft.issues.length>0,onClick:review},'Review ID updates')),
@@ -174,5 +193,5 @@
       )
     );
   }
-  const api={normalizeContext,normalizeAnalysis,autoMappings,buildMappings,checkPlan,checkSaved,readUploadPdf,View};if(typeof module==='object'&&module.exports)module.exports=api;else root.PanelStockCncOrderIdReupload=api;
+  const api={normalizeContext,normalizeAnalysis,autoMappings,autoMappingSuggestions,buildMappings,checkPlan,checkSaved,readUploadPdf,View};if(typeof module==='object'&&module.exports)module.exports=api;else root.PanelStockCncOrderIdReupload=api;
 })(typeof window==='object'?window:globalThis);
