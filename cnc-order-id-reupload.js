@@ -121,11 +121,20 @@
     const [context,setContext]=React.useState(null),[analysis,setAnalysis]=React.useState(null),[selected,setSelected]=React.useState({}),[combine,setCombine]=React.useState({}),[plan,setPlan]=React.useState(null),[reason,setReason]=React.useState(''),[confirmed,setConfirmed]=React.useState(false),[busy,setBusy]=React.useState(true),[error,setError]=React.useState(''),[message,setMessage]=React.useState('Loading the existing order…');
     const session=React.useRef({active:true,busy:true,version:0}),operation=React.useRef(null),reader=React.useRef(null);
     const chosenScope={project:String(scope?.project??''),orderNumber:String(scope?.orderNumber??'')},scopeKey=JSON.stringify(chosenScope);
-    const current=version=>session.current.active&&session.current.version===version;
+    session.current.scopeKey=scopeKey;
+    const current=version=>session.current.active&&session.current.version===version&&session.current.scopeKey===scopeKey;
     function lock(value){session.current.busy=value;setBusy(value);}
+    function contextError(failure){if(failure?.name==='TimeoutError'||/timed\s*out|time[\s-]*out/i.test(String(failure?.message||'')))return 'Loading the existing order took too long. Retry loading the order.';if(failure?.name==='AbortError')return 'Loading the existing order was interrupted. Retry loading the order.';return failure?.message||'The order could not be loaded.';}
+    async function loadContext(version){
+      if(!current(version))return;
+      try{const result=await request({action:'context',...chosenScope});if(current(version)){setContext(normalizeContext(result,chosenScope));setMessage('Choose the revised drawing PDF for this existing order.');}}
+      catch(failure){if(current(version)){setError(contextError(failure));setMessage('');}}
+      finally{if(current(version))lock(false);}
+    }
+    function retryContext(){if(session.current.busy||operation.current||context||analysis)return;const version=++session.current.version;lock(true);setError('');setMessage('Loading the existing order…');return loadContext(version);}
     React.useEffect(()=>{
-      session.current.active=true;const version=++session.current.version;lock(true);setError('');
-      Promise.resolve().then(()=>request({action:'context',...chosenScope})).then(result=>{if(current(version)){setContext(normalizeContext(result,chosenScope));setMessage('Choose the revised drawing PDF for this existing order.');}},failure=>{if(current(version))setError(failure.message||'The order could not be loaded.');}).catch(failure=>{if(current(version))setError(failure.message||'The order could not be loaded.');}).finally(()=>{if(current(version))lock(false);});
+      session.current.active=true;const version=++session.current.version;lock(true);setError('');setMessage('Loading the existing order…');
+      Promise.resolve().then(()=>loadContext(version));
       return()=>{session.current.active=false;++session.current.version;try{reader.current?.abort();}catch{}};
     },[scopeKey]);
     const draft=analysis?buildMappings(analysis,selected,combine):{mappings:[],groups:[],issues:[],unmatchedOccurrenceIds:[]};
@@ -169,7 +178,8 @@
         context&&h('p',{className:'mt-2 text-sm text-slate-600'},`${context.panels.length} existing records in this order. The PDF does not add or remove records.`),
         h('label',{className:'mt-4 block text-sm font-semibold text-slate-700'},'Revised CNC drawing PDF',h('input',{type:'file',accept:'.pdf,application/pdf','aria-label':'Revised CNC drawing PDF',disabled:busy||frozen||!context,onChange:chooseFile,className:'mt-2 block w-full text-sm'})),
         h('p',{className:'mt-1 text-sm text-slate-500'},'PDF files up to 8 MB.'),
-        message&&h('p',{role:'status',className:'mt-3 text-sm text-slate-700'},message),error&&h('p',{role:'alert',className:'mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-800'},error)
+        message&&h('p',{role:'status',className:'mt-3 text-sm text-slate-700'},message),error&&h('p',{role:'alert',className:'mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-800'},error),
+        !context&&!analysis&&!frozen&&error&&h('button',{type:'button',className:button+' mt-3',disabled:busy,onClick:retryContext},'Retry loading order')
       ),
       analysis&&h(React.Fragment,null,
         h('div',{className:'mt-4 rounded-xl border border-slate-300 bg-white p-4'},h('p',{className:'text-sm font-semibold text-slate-800'},`${analysis.source.fileName} · ${analysis.occurrences.length} detected label occurrences`),analysis.warnings.length>0&&h('ul',{className:'mt-2 list-disc space-y-1 pl-5 text-sm text-amber-900'},analysis.warnings.map((warning,index)=>h('li',{key:index},warning)))),
